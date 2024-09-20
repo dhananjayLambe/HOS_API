@@ -19,7 +19,6 @@ class doctor(models.Model):
         (Anesthesiologists,'Anesthesiologists'),
         (Colon_and_Rectal_Surgeons,'Colon and Rectal Surgeons')
     ]
-    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)  # Add UUID field
     department=models.CharField(max_length=3, choices=department_choices, default=Cardiologist)
     address= models.TextField()
     mobile=models.CharField(max_length=20)
