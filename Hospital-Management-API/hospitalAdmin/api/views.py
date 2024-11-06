@@ -127,7 +127,6 @@ class doctorAccountViewAdmin(APIView):
 class approveDoctorViewAdmin(APIView):
     """API endpoint for getting new doctor approval request, update and delete approval  request.
      - only accessible by Admin"""
-
     permission_classes = [IsAdmin]
 
     def get_object(self, pk):
@@ -137,7 +136,6 @@ class approveDoctorViewAdmin(APIView):
             raise Http404
 
     def get(self, request, pk=None, format=None):
-
         if pk:
             doctor_detail = self.get_object(pk)
             serializer = doctorAccountSerializerAdmin(doctor_detail)

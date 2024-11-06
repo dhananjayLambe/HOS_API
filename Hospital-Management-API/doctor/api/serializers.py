@@ -1,12 +1,8 @@
 from patient.models import Appointment
 from rest_framework import serializers
 from account.models import User
-from doctor.models import doctor
+from doctor.models import doctor , DoctorAdditionalDetails
 from django.contrib.auth.models import Group
-
-
-
-
 
 class doctorRegistrationSerializer(serializers.Serializer):
 
@@ -94,8 +90,6 @@ class doctorProfileSerializer(serializers.Serializer):
         instance.save()
         return instance
 
-
-
 class patientHistorySerializerDoctorView(serializers.Serializer):
     Cardiologist='CL'
     Dermatologists='DL'
@@ -109,8 +103,6 @@ class patientHistorySerializerDoctorView(serializers.Serializer):
     #required=False; if this field is not required to be present during deserialization.
     release_date=serializers.DateField(label="Release Date:", required=False)
     assigned_doctor=serializers.StringRelatedField(label='Assigned Doctor:')
-    
-
 
 class doctorAppointmentSerializer(serializers.Serializer):
     patient_name=serializers.SerializerMethodField('related_patient_name')
@@ -126,7 +118,11 @@ class doctorAppointmentSerializer(serializers.Serializer):
     def related_patient_age(self, obj):
         return obj.patient_history.patient.age
 
-
+class DoctorAdditionalDetailsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DoctorAdditionalDetails
+        fields = '__all__'
+        read_only_fields = ['doctor']
 
 
 

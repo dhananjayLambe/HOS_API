@@ -2,6 +2,7 @@ from django.db import models
 from django.db.models.fields import DateField
 from account.models import User
 import uuid
+from django.conf import settings
 
 class doctor(models.Model):
     Cardiologist='CL'
@@ -33,7 +34,20 @@ class doctor(models.Model):
     def __str__(self):
         return "{} ({})".format(self.user.first_name,self.department)
 
+class DoctorAdditionalDetails(models.Model):
+    doctor = models.OneToOneField(doctor, on_delete=models.CASCADE, related_name="additional_details")
+    medical_registration_number = models.CharField(max_length=100, unique=True, null=True, blank=True)
+    registration_authority = models.CharField(max_length=100, null=True, blank=True)
+    qualifications = models.TextField(null=True, blank=True)
+    specialization = models.CharField(max_length=100, null=True, blank=True)
+    clinic_name = models.CharField(max_length=255, null=True, blank=True)
+    clinic_address = models.TextField(null=True, blank=True)
+    consultation_timings = models.CharField(max_length=255, null=True, blank=True)
+    telemedicine_capability = models.BooleanField(default=False)
+    professional_indemnity_insurance = models.BooleanField(default=False)
 
+    def __str__(self):
+        return f"Additional details for {self.doctor.full_name}"
 
 
 
