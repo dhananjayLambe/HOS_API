@@ -126,3 +126,19 @@ class DoctorAdditionalDetailsView(generics.RetrieveUpdateAPIView):
             return obj
         except doctor.DoesNotExist:
             raise Http404("Doctor not found.")
+
+class LogoutView(APIView):
+    """
+    API endpoint for logging out users.
+    Deletes the user's authentication token.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        try:
+            # Get the user's token and delete it
+            token = Token.objects.get(user=request.user)
+            token.delete()
+            return Response({"message": "Logout successful."}, status=status.HTTP_200_OK)
+        except Token.DoesNotExist:
+            return Response({"error": "Token not found or user already logged out."}, status=status.HTTP_400_BAD_REQUEST)
