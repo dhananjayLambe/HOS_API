@@ -6,6 +6,12 @@ from patient.models import patient, patient_history, Appointment
 from django.contrib.auth.models import Group
 from doctor.models import doctor
 
+# Patient Serializer
+class PatientSerializer(serializers.ModelSerializer):
+    username = serializers.ReadOnlyField(source="user.username")
+    class Meta:
+        model = patient
+        fields = ['id', 'username', 'age', 'created_at']
 
 
 class patientRegistrationSerializer(serializers.Serializer):

@@ -4,6 +4,18 @@ from account.models import User
 from doctor.models import doctor , DoctorAdditionalDetails
 from django.contrib.auth.models import Group
 
+
+
+
+# Doctor Serializer
+class DoctorSerializer(serializers.ModelSerializer):
+    username = serializers.ReadOnlyField(source="user.username")
+
+    class Meta:
+        model = doctor
+        #fields = ['id', 'username', 'specialization', 'created_at','mobile', 'hospital']
+        fields=['id', 'username', 'first_name', 'last_name', 'status', 'hospital_id', 'department', 'address', 'mobile','created_at']
+
 class doctorRegistrationSerializer(serializers.Serializer):
 
     username=serializers.CharField(label='Username:')
@@ -123,9 +135,3 @@ class DoctorAdditionalDetailsSerializer(serializers.ModelSerializer):
         model = DoctorAdditionalDetails
         fields = '__all__'
         read_only_fields = ['doctor']
-
-
-
-
-
-

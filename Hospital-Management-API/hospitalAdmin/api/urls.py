@@ -1,7 +1,7 @@
 from .views import (
 CustomAuthToken,
 doctorAccountViewAdmin,
-docregistrationViewAdmin,
+docregistrationViewAdmin, #old code 
 approveDoctorViewAdmin, 
 appointmentViewAdmin,
 patientRegistrationViewAdmin,
@@ -9,6 +9,7 @@ patientAccountViewAdmin,
 patientHistoryViewAdmin,
 approvePatientViewAdmin,
 approveAppointmentViewAdmin,
+DoctorRegistrationView
 )
 
 from django.urls import path
@@ -34,7 +35,8 @@ urlpatterns = [
     path('approve/appointment/<int:pk>', approveAppointmentViewAdmin.as_view(), name='api_appointment_approve_detail_admin'),
 
     #Doctor management
-    path('doctor/registration/', docregistrationViewAdmin.as_view(), name='api_doctors_registration_admin'),
+    #path('doctor/registration/', docregistrationViewAdmin.as_view(), name='api_doctors_registration_admin'),
+    path('doctor/registration/', DoctorRegistrationView.as_view(), name='api_doctors_registration_admin'),
     path('doctors/', doctorAccountViewAdmin.as_view(), name='api_doctors_admin'),
     path('doctor/<uuid:pk>/', doctorAccountViewAdmin.as_view(), name='api_doctor_detail_admin'),
     

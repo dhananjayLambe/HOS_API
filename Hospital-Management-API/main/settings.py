@@ -27,6 +27,7 @@ DEBUG = True
 
 ALLOWED_HOSTS = []
 
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Application definition
 
@@ -42,6 +43,7 @@ INSTALLED_APPS = [
     'doctor.apps.DoctorConfig',
     'patient.apps.PatientConfig',
     'hospitalAdmin.apps.HospitaladminConfig',
+    'hospital_mgmt.apps.HospitalMgmtConfig',
 
 
     #rest_framework

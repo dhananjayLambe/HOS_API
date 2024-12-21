@@ -7,6 +7,68 @@ from account.models import User
 from doctor.models import doctor
 from django.contrib.auth.models import Group
 from patient.models import patient
+from hospital_mgmt.models import Hospital
+
+
+##############NEW#############
+class UserSerializer(serializers.ModelSerializer):
+    password2 = serializers.CharField(write_only=True)
+
+    class Meta:
+        model = User
+        fields = ["username", "first_name", "last_name", "password", "password2"]
+
+    def validate(self, data):
+        if data["password"] != data["password2"]:
+            raise serializers.ValidationError({"password": "Passwords do not match."})
+        return data
+
+    def create(self, validated_data):
+        validated_data.pop("password2")
+        user = User.objects.create_user(
+            username=validated_data["username"],
+            first_name=validated_data["first_name"],
+            last_name=validated_data["last_name"],
+            password=validated_data["password"],
+        )
+        group_doctor, created = Group.objects.get_or_create(name='doctor')
+        group_doctor.user_set.add(user)
+        return user
+
+
+class DoctorProfileSerializer(serializers.ModelSerializer):
+    hospital_id = serializers.PrimaryKeyRelatedField(queryset=Hospital.objects.all(), source="hospital")
+
+    class Meta:
+        model = doctor
+        fields = ["department", "address", "mobile", "hospital_id"]
+
+    def create(self, validated_data):
+        return doctor.objects.create(**validated_data)
+
+class DoctorRegistrationSerializer(serializers.Serializer):
+    user_data = UserSerializer()
+    profile_data = DoctorProfileSerializer()
+
+    def create(self, validated_data):
+        # Extract nested data
+        user_data = validated_data.pop("user_data")
+        profile_data = validated_data.pop("profile_data")
+
+        # Create User
+        user = UserSerializer().create(user_data)
+
+        # Add the created user to profile data
+        profile_data["user"] = user
+
+        # Create Doctor Profile
+        doctor_profile = DoctorProfileSerializer().create(profile_data)
+
+        return doctor_profile
+
+
+
+#############OLD code reference#################
 
 class doctorRegistrationSerializerAdmin(serializers.Serializer):
 
@@ -17,6 +79,7 @@ class doctorRegistrationSerializerAdmin(serializers.Serializer):
     help_text="Your password must contain at least 8 characters and should not be entirely numeric."
     )
     password2=serializers.CharField(label='Confirm password:',style={'input_type': 'password'},  write_only=True)
+    
     
     
 
@@ -88,7 +151,6 @@ class doctorRegistrationProfileSerializerAdmin(serializers.Serializer):
         )
         return new_doctor
 
-
 class doctorProfileSerializerAdmin(serializers.Serializer):
     Cardiologist='CL'
     Dermatologists='DL'
@@ -112,11 +174,7 @@ class doctorProfileSerializerAdmin(serializers.Serializer):
         if mobile.isdigit()==False:
             raise serializers.ValidationError('Please Enter a valid mobile number!')
         return mobile
-    
-    
-    
-
-
+########################## 
 class doctorAccountSerializerAdmin(serializers.Serializer):
     id=serializers.UUIDField(read_only=True)
     username=serializers.CharField(label='Username:', read_only=True)

@@ -17,7 +17,9 @@ from . serializers import (doctorAccountSerializerAdmin,
                             patientRegistrationSerializerAdmin,
                             patientRegistrationProfileSerializerAdmin,
                             patientAccountSerializerAdmin,
-                            patientHistorySerializerAdmin)
+                            patientHistorySerializerAdmin,
+                            DoctorRegistrationSerializer
+                            )
 from doctor.models import doctor
 
 
@@ -53,7 +55,19 @@ class CustomAuthToken(ObtainAuthToken):
         }, status=status.HTTP_200_OK)
 
 
+######NEW########
 
+class DoctorRegistrationView(APIView):
+    def post(self, request, *args, **kwargs):
+        serializer = DoctorRegistrationSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({"message": "Doctor registered successfully"}, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+
+#######   OLD code ##########
 class docregistrationViewAdmin(APIView):
 
     """API endpoint for creating doctor account- only accessible by Admin"""
@@ -80,8 +94,6 @@ class docregistrationViewAdmin(APIView):
                 'user_data': registrationSerializer.errors,
                 'profile_data': profileSerializer.errors
             }, status=status.HTTP_400_BAD_REQUEST)
-
-
 
 class doctorAccountViewAdmin(APIView):
 
@@ -122,7 +134,7 @@ class doctorAccountViewAdmin(APIView):
         saved_user = self.get_object(pk)
         saved_user.delete()
         return Response({"message": "User with id `{}` has been deleted.".format(pk)}, status=status.HTTP_204_NO_CONTENT)
-
+#################
 
 class approveDoctorViewAdmin(APIView):
     """API endpoint for getting new doctor approval request, update and delete approval  request.

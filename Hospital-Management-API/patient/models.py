@@ -1,6 +1,7 @@
 from django.db import models
 from account.models import User
 from doctor.models import doctor
+from hospital_mgmt.models import Hospital
 
 
 # Create your models here.
@@ -11,6 +12,7 @@ class patient(models.Model):
     address= models.TextField()
     mobile=models.CharField(max_length=20)
     user=models.OneToOneField(User,on_delete=models.CASCADE)
+    hospital = models.ForeignKey(Hospital, on_delete=models.CASCADE, related_name="patients")
     @property
     def get_name(self):
         return self.user.first_name+" "+self.user.last_name
