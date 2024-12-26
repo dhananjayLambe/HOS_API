@@ -7,14 +7,20 @@ from django.contrib.auth.models import Group
 
 
 
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['first_name', 'last_name']
+
 # Doctor Serializer
 class DoctorSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
     username = serializers.ReadOnlyField(source="user.username")
 
     class Meta:
         model = doctor
-        #fields = ['id', 'username', 'specialization', 'created_at','mobile', 'hospital']
-        fields=['id', 'username', 'first_name', 'last_name', 'status', 'hospital_id', 'department', 'address', 'mobile','created_at']
+        fields = ['id', 'username','mobile', 'hospital', 'department', 'address','user']
+        #fields=['id', 'username', 'first_name', 'last_name', 'status', 'hospital_id', 'department', 'address', 'mobile','created_at']
 
 class doctorRegistrationSerializer(serializers.Serializer):
 

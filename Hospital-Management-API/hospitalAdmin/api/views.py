@@ -59,7 +59,7 @@ class CustomAuthToken(ObtainAuthToken):
 
 class DoctorRegistrationView(APIView):
     def post(self, request, *args, **kwargs):
-        serializer = DoctorRegistrationSerializer(data=request.data)
+        serializer = DoctorRegistrationSerializer(data=request.data)      
         if serializer.is_valid():
             serializer.save()
             return Response({"message": "Doctor registered successfully"}, status=status.HTTP_201_CREATED)

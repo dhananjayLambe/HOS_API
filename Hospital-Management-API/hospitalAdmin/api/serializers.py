@@ -63,8 +63,8 @@ class DoctorRegistrationSerializer(serializers.Serializer):
 
         # Create Doctor Profile
         doctor_profile = DoctorProfileSerializer().create(profile_data)
-
         return doctor_profile
+
 
 
 
