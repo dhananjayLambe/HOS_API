@@ -424,4 +424,11 @@ class patientHistoryViewAdmin(APIView):
             return Response({"message": "History with id `{}` has been deleted.".format(hid)}, status=status.HTTP_204_NO_CONTENT)
         return Response({"message: This history id `{}` does not belong to the user".format(hid)}, status=status.HTTP_404_NOT_FOUND)
 
-
+class AdminLogoutView(APIView):
+    def post(self, request):
+        try:
+            token = Token.objects.get(user=request.user)
+            token.delete()
+            return Response({"message": "Logout successful."}, status=200)
+        except Token.DoesNotExist:
+            return Response({"error": "Token not found or user already logged out."}, status=400)

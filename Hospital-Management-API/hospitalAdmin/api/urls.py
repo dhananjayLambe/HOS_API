@@ -9,7 +9,8 @@ patientAccountViewAdmin,
 patientHistoryViewAdmin,
 approvePatientViewAdmin,
 approveAppointmentViewAdmin,
-DoctorRegistrationView
+DoctorRegistrationView,
+AdminLogoutView
 )
 
 from django.urls import path
@@ -20,6 +21,7 @@ app_name='hospitalAdmin'
 urlpatterns = [
     #Admin login
     path('login/', CustomAuthToken.as_view(), name='api_admin_login'),
+    path('logout/', AdminLogoutView.as_view(), name='api_admin_logout'),
 
  
     #Approve Doctor
