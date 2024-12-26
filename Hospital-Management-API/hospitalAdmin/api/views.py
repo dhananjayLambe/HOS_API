@@ -1,3 +1,5 @@
+from django.conf import settings
+from datetime import datetime, timedelta
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from rest_framework.views import APIView
@@ -50,9 +52,32 @@ class CustomAuthToken(ObtainAuthToken):
                 status=status.HTTP_403_FORBIDDEN
             )
         token, created = Token.objects.get_or_create(user=user)
+        '''
         return Response({
-            'token': token.key
+            'token': token.key,
+            'created': token.created
         }, status=status.HTTP_200_OK)
+        '''
+        # Get the token lifetime from the settings file
+        token_lifetime = self.get_token_lifetime(user)
+
+        # Update the token's expires field
+        token.expires = datetime.now() + token_lifetime
+        token.save()
+
+        return Response({
+            'token': token.key,
+        })
+
+    def get_token_lifetime(self, user):
+        # Get the user's group
+        group = user.groups.first()
+
+        # Get the token lifetime from the settings file
+        if group:
+            return settings.REST_FRAMEWORK['DEFAULT_TOKEN_LIFETIME'].get(group.name, timedelta(days=30))
+        else:
+            return timedelta(days=30)
 
 
 ######NEW########

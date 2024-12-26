@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/3.0/ref/settings/
 """
 
 import os
+from datetime import datetime, timedelta
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -64,7 +65,12 @@ REST_FRAMEWORK={
     ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'DEFAULT_FILTER_BACKENDS': ['django_filters.rest_framework.DjangoFilterBackend'],
-    'PAGE_SIZE': 10
+    'PAGE_SIZE': 10,
+    'DEFAULT_TOKEN_LIFETIME': {
+        'admin': timedelta(minutes=30),  # Admin token expires after 30 minutes
+        'doctor': timedelta(days=1),  # Doctor token expires after 1 day
+        'patient': timedelta(days=30),  # Patient token expires after 30 days
+    },
 }
 
 MIDDLEWARE = [
