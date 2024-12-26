@@ -1,5 +1,6 @@
 from rest_framework.views import APIView
 from .serializers import doctorRegistrationSerializer, doctorProfileSerializer, doctorAppointmentSerializer,DoctorAdditionalDetailsSerializer
+from .serializers import DoctorRegistrationSerializer
 from django.http import Http404
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -47,6 +48,7 @@ class CustomAuthToken(ObtainAuthToken):
                 'token': token.key
             },status=status.HTTP_200_OK)
 
+##############OLD Reference###############
 class registrationView(APIView):
 
     """"API endpoint for doctor Registration"""
@@ -101,7 +103,15 @@ class doctorProfileView(APIView):
         return Response({
                 'profile_data':profileSerializer.errors
             }, status=status.HTTP_400_BAD_REQUEST)
-
+#############END################
+class DoctorRegistrationView(APIView):
+    def post(self, request, *args, **kwargs):
+        serializer = DoctorRegistrationSerializer(data=request.data)      
+        if serializer.is_valid():
+            serializer.save()
+            return Response({"message": "Doctor registered successfully"}, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+  
 class doctorAppointmentView(APIView):
     """API endpoint for getting all appointment detail-only accesible by doctor"""
     permission_classes = [IsDoctor]

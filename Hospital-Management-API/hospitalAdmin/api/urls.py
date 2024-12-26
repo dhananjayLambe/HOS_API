@@ -22,6 +22,13 @@ urlpatterns = [
     #Admin login
     path('login/', CustomAuthToken.as_view(), name='api_admin_login'),
     path('logout/', AdminLogoutView.as_view(), name='api_admin_logout'),
+    # Send a password reset link or OTP to the registered email/phone.
+    # * Reset Password API
+    # * Update the password using the token or OTP.
+    # * Change Password API
+    # * Allow logged-in doctors to update their password.
+    # * Token Refresh API
+    # * Refresh expired tokens to maintain session continuity.
 
  
     #Approve Doctor

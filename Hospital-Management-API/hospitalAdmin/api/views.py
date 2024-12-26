@@ -177,7 +177,8 @@ class approveDoctorViewAdmin(APIView):
             doctor_detail = self.get_object(pk)
             serializer = doctorAccountSerializerAdmin(doctor_detail)
             return Response({'doctors': serializer.data}, status=status.HTTP_200_OK)
-        all_doctor = User.objects.filter(groups=1, status=False)
+        doctor_group = Group.objects.get(name='doctor')
+        all_doctor = User.objects.filter(groups=doctor_group, status=False)
         serializer = doctorAccountSerializerAdmin(all_doctor, many=True)
         return Response({'doctors': serializer.data}, status=status.HTTP_200_OK)
 
