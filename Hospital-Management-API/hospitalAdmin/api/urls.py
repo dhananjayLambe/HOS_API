@@ -1,7 +1,6 @@
 from .views import (
 CustomAuthToken,
 doctorAccountViewAdmin,
-docregistrationViewAdmin, #old code 
 approveDoctorViewAdmin, 
 appointmentViewAdmin,
 patientRegistrationViewAdmin,

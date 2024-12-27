@@ -8,20 +8,12 @@ from hospital_mgmt.models import Hospital
 
 
 ##############OLD CODE For Reference###############
+'''
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['first_name', 'last_name']
 
-# Doctor Serializer
-class DoctorSerializer(serializers.ModelSerializer):
-    user = UserSerializer(read_only=True)
-    username = serializers.ReadOnlyField(source="user.username")
-
-    class Meta:
-        model = doctor
-        fields = ['id', 'username','mobile', 'hospital', 'department', 'address','user']
-        #fields=['id', 'username', 'first_name', 'last_name', 'status', 'hospital_id', 'department', 'address', 'mobile','created_at']
 
 class doctorRegistrationSerializer(serializers.Serializer):
 
@@ -86,6 +78,7 @@ class doctorProfileSerializer(serializers.Serializer):
     ])
     address= serializers.CharField(label="Address:")
     mobile=serializers.CharField(label="Mobile Number:", max_length=20)
+    hospital_id = serializers.PrimaryKeyRelatedField(source='user.hospital', read_only=True)
 
 
     def validate_mobile(self, mobile):
@@ -108,9 +101,11 @@ class doctorProfileSerializer(serializers.Serializer):
         instance.mobile=validated_data.get('mobile', instance.mobile)
         instance.save()
         return instance
+'''
 ###################END################
 
 ##############NEW#############
+
 class UserSerializer(serializers.ModelSerializer):
     password2 = serializers.CharField(write_only=True)
 
@@ -137,7 +132,7 @@ class UserSerializer(serializers.ModelSerializer):
         return user
 
 
-class DoctorProfileSerializer(serializers.ModelSerializer):
+class ProfileSerializer(serializers.ModelSerializer):
     hospital_id = serializers.PrimaryKeyRelatedField(queryset=Hospital.objects.all(), source="hospital")
 
     class Meta:
@@ -147,9 +142,22 @@ class DoctorProfileSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         return doctor.objects.create(**validated_data)
 
+# Doctor Serializer
+class DoctorSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
+    username = serializers.ReadOnlyField(source="user.username")
+
+    class Meta:
+        model = doctor
+        fields = ['id', 'username','mobile', 'hospital', 'department', 'address','user']
+        #fields=['id', 'username', 'first_name', 'last_name', 'status', 'hospital_id', 'department', 'address', 'mobile','created_at']
+
+
+
+
 class DoctorRegistrationSerializer(serializers.Serializer):
     user_data = UserSerializer()
-    profile_data = DoctorProfileSerializer()
+    profile_data = ProfileSerializer()
 
     def create(self, validated_data):
         # Extract nested data
@@ -163,7 +171,7 @@ class DoctorRegistrationSerializer(serializers.Serializer):
         profile_data["user"] = user
 
         # Create Doctor Profile
-        doctor_profile = DoctorProfileSerializer().create(profile_data)
+        doctor_profile = ProfileSerializer().create(profile_data)
         return doctor_profile
 
 
