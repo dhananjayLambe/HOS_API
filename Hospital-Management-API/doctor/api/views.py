@@ -109,7 +109,7 @@ class doctorProfileView(APIView):
 
 #############END################
 class DoctorRegistrationView(APIView):
-    permission_classes=[IsDoctor]
+    permission_classes=[]
     def post(self, request, *args, **kwargs):
         serializer = DoctorRegistrationSerializer(data=request.data)      
         if serializer.is_valid():
