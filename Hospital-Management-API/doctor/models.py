@@ -1,13 +1,10 @@
 from django.db import models
-from django.db.models.fields import DateField
 from account.models import User
 import uuid
-from django.conf import settings
 from hospital_mgmt.models import Hospital
-from uuid_pk.models import UUIDModel
 
-
-class doctor(models.Model, UUIDModel):
+class doctor(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     Cardiologist='CL'
     Dermatologists='DL'
     Emergency_Medicine_Specialists='EMC'
@@ -39,7 +36,8 @@ class doctor(models.Model, UUIDModel):
     def __str__(self):
         return "{} ({})".format(self.user.first_name,self.department)
 
-class DoctorAdditionalDetails(models.Model, UUIDModel):
+class DoctorAdditionalDetails(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     doctor = models.OneToOneField(doctor, on_delete=models.CASCADE, related_name="additional_details")
     medical_registration_number = models.CharField(max_length=100, unique=True, null=True, blank=True)
     registration_authority = models.CharField(max_length=100, null=True, blank=True)

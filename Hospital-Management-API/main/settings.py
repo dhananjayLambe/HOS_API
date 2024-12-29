@@ -49,12 +49,7 @@ INSTALLED_APPS = [
 
     #rest_framework
     'rest_framework',
-    'rest_framework.authtoken',
-     'uuid_pk',
-
-
-    
-]
+    'rest_framework.authtoken',]
 
 REST_FRAMEWORK={
 
