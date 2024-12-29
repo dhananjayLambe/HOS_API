@@ -1,8 +1,9 @@
 from django.db import models
 #from django.contrib.auth.models import User
 from account.models import User
+from uuid_pk.models import UUIDModel
 
-class Hospital(models.Model):
+class Hospital(models.Model, UUIDModel):
     name = models.CharField(max_length=255, unique=True)
     address = models.TextField()
     contact_number = models.CharField(max_length=15)
@@ -12,7 +13,7 @@ class Hospital(models.Model):
         
         return self.name
 
-class FrontDeskUser(models.Model):
+class FrontDeskUser(models.Model, UUIDModel):
     hospital = models.ForeignKey(Hospital, on_delete=models.CASCADE, related_name="front_desk_users")
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)

@@ -2,17 +2,19 @@ from django.db import models
 from account.models import User
 from doctor.models import doctor
 from hospital_mgmt.models import Hospital
+from uuid_pk.models import UUIDModel
 
 
 # Create your models here.
 
-class patient(models.Model):
+class patient(models.Model,UUIDModel):
 
     age= models.DecimalField(max_digits=4,decimal_places=1)
     address= models.TextField()
     mobile=models.CharField(max_length=20)
     user=models.OneToOneField(User,on_delete=models.CASCADE)
     hospital = models.ForeignKey(Hospital, on_delete=models.CASCADE, related_name="patients")
+    #hospitals = models.ManyToManyField(Hospital, related_name="patients")
     @property
     def get_name(self):
         return self.user.first_name+" "+self.user.last_name
@@ -22,7 +24,7 @@ class patient(models.Model):
     def __str__(self):
         return self.user.username
 
-class patient_history(models.Model):
+class patient_history(models.Model,UUIDModel):
     Cardiologist='CL'
     Dermatologists='DL'
     Emergency_Medicine_Specialists='EMC'
@@ -49,7 +51,7 @@ class patient_history(models.Model):
         return self.patient.get_name
     
 
-class Appointment(models.Model):
+class Appointment(models.Model,UUIDModel):
     appointment_date=models.DateField(verbose_name="Appointment date",auto_now=False, auto_now_add=False)
     appointment_time=models.TimeField(verbose_name="Appointement time", auto_now=False, auto_now_add=False)
     status=models.BooleanField(default=False)
@@ -66,7 +68,7 @@ class Appointment(models.Model):
 
 
 
-class patient_cost(models.Model):
+class patient_cost(models.Model,UUIDModel):
     room_charge=models.PositiveIntegerField(verbose_name="Room charge", null=False)
     medicine_cost=models.PositiveIntegerField(verbose_name="Medicine cost", null=False)
     doctor_fee=models.PositiveIntegerField(verbose_name="Doctor Fee", null=False)

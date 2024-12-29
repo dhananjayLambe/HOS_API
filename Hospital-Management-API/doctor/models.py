@@ -4,9 +4,10 @@ from account.models import User
 import uuid
 from django.conf import settings
 from hospital_mgmt.models import Hospital
+from uuid_pk.models import UUIDModel
 
 
-class doctor(models.Model):
+class doctor(models.Model, UUIDModel):
     Cardiologist='CL'
     Dermatologists='DL'
     Emergency_Medicine_Specialists='EMC'
@@ -27,6 +28,7 @@ class doctor(models.Model):
     mobile=models.CharField(max_length=20)
     user=models.OneToOneField(User,on_delete=models.CASCADE)
     hospital = models.ForeignKey(Hospital, on_delete=models.CASCADE, related_name="doctors")
+    #hospitals = models.ManyToManyField(Hospital, related_name='doctors')
 
     @property
     def get_name(self):
@@ -37,7 +39,7 @@ class doctor(models.Model):
     def __str__(self):
         return "{} ({})".format(self.user.first_name,self.department)
 
-class DoctorAdditionalDetails(models.Model):
+class DoctorAdditionalDetails(models.Model, UUIDModel):
     doctor = models.OneToOneField(doctor, on_delete=models.CASCADE, related_name="additional_details")
     medical_registration_number = models.CharField(max_length=100, unique=True, null=True, blank=True)
     registration_authority = models.CharField(max_length=100, null=True, blank=True)
