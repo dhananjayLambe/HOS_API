@@ -24,8 +24,8 @@ class doctor(models.Model):
     address= models.TextField()
     mobile=models.CharField(max_length=20)
     user=models.OneToOneField(User,on_delete=models.CASCADE)
-    hospital = models.ForeignKey(Hospital, on_delete=models.CASCADE, related_name="doctors")
-    #hospitals = models.ManyToManyField(Hospital, related_name='doctors')
+    #hospital = models.ForeignKey(Hospital, on_delete=models.CASCADE, related_name="doctors")
+    hospitals = models.ManyToManyField(Hospital, related_name='doctors')
 
     @property
     def get_name(self):

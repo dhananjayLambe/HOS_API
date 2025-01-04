@@ -13,8 +13,8 @@ class patient(models.Model):
     address= models.TextField()
     mobile=models.CharField(max_length=20)
     user=models.OneToOneField(User,on_delete=models.CASCADE)
-    hospital = models.ForeignKey(Hospital, on_delete=models.CASCADE, related_name="patients")
-    #hospitals = models.ManyToManyField(Hospital, related_name="patients")
+    #hospital = models.ForeignKey(Hospital, on_delete=models.CASCADE, related_name="patients")
+    hospitals = models.ManyToManyField(Hospital, related_name="patients")
     @property
     def get_name(self):
         return self.user.first_name+" "+self.user.last_name
