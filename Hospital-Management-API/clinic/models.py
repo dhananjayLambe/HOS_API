@@ -14,6 +14,8 @@ class Clinic(models.Model):
     doctor = models.OneToOneField(doctor, on_delete=models.CASCADE)
     gst_number = models.CharField(max_length=15, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)  # Mandatory
+    def __str__(self):
+        return self.name
 
 class ClinicAddress(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -195,3 +197,26 @@ class ClinicInsurance(models.Model):
 
     def __str__(self):
         return f"Insurance for {self.patient} - {self.insurance_provider}"
+
+class ClinicConsumables(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    clinic = models.ForeignKey(Clinic, on_delete=models.CASCADE, related_name="consumables")
+    doctor = models.ForeignKey(doctor, on_delete=models.CASCADE, related_name="consumables", blank=True, null=True)  # The prescribing doctor
+    patient = models.ForeignKey(patient, on_delete=models.CASCADE, related_name="consumables", blank=True, null=True)  # The patient who received the consumables
+    item_name = models.CharField(max_length=255)  # Name of the consumable item
+    item_description = models.TextField(blank=True, null=True)  # Additional details about the item
+    quantity_used = models.PositiveIntegerField()  # Quantity provided to the patient
+    unit_cost = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)  # Cost per unit
+    total_cost = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)  # Computed total cost
+    usage_date = models.DateTimeField(auto_now_add=True)  # When the consumable was used
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def save(self, *args, **kwargs):
+        # Automatically calculate total_cost if unit_cost and quantity_used are provided
+        if self.unit_cost and self.quantity_used:
+            self.total_cost = self.unit_cost * self.quantity_used
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.item_name} - {self.quantity_used} used for {self.patient or 'Unknown Patient'}"
