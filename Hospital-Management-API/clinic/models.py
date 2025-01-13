@@ -11,7 +11,7 @@ class Clinic(models.Model):
     contact_number_secondary = models.CharField(max_length=15,default='NA')  # Mandatory
     email_address = models.EmailField(max_length=255,default='NA')  # Optional)  # Optional
     registration_number = models.CharField(max_length=255, default='NA')  # Mandatory unique=True,
-    doctor = models.OneToOneField(doctor, on_delete=models.CASCADE)
+    #doctor = models.OneToOneField(doctor, on_delete=models.CASCADE)
     gst_number = models.CharField(max_length=15, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)  # Mandatory
     def __str__(self):
