@@ -1,11 +1,8 @@
+import uuid
 from django.db import models
 from account.models import User
+from clinic.models import Clinic
 from doctor.models import doctor
-from hospital_mgmt.models import Hospital
-import uuid
-
-
-# Create your models here.
 
 class patient(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -14,7 +11,10 @@ class patient(models.Model):
     mobile=models.CharField(max_length=20)
     user=models.OneToOneField(User,on_delete=models.CASCADE)
     #hospital = models.ForeignKey(Hospital, on_delete=models.CASCADE, related_name="patients")
-    hospitals = models.ManyToManyField(Hospital, related_name="patients")
+    clinics = models.ManyToManyField(Clinic, related_name='patients')
+    #hospitals = models.ManyToManyField(Hospital, related_name="patients")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
     @property
     def get_name(self):
         return self.user.first_name+" "+self.user.last_name

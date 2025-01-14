@@ -1,5 +1,6 @@
 from django.db import models
 from account.models import User
+from clinic.models import Clinic
 import uuid
 
 class Hospital(models.Model):
@@ -67,8 +68,10 @@ class HospitalBillingInformation(models.Model):
 
 class FrontDeskUser(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    hospital = models.ForeignKey(Hospital, on_delete=models.CASCADE, related_name="front_desk_users")
     user = models.OneToOneField(User, on_delete=models.CASCADE)
+    #hospital = models.ForeignKey(Hospital, on_delete=models.CASCADE, related_name="front_desk_users")
+    clinic = models.ForeignKey(Clinic, on_delete=models.CASCADE, related_name='helpdesk_users')
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
     def __str__(self):
         return f"{self.user.username} ({self.hospital.name})"

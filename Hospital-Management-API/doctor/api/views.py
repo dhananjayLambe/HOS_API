@@ -7,10 +7,10 @@ from rest_framework.permissions import BasePermission
 from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated
 from django.http import Http404
-from doctor.models import doctor,DoctorAdditionalDetails
+from doctor.models import doctor
 from patient.models import Appointment
 from .serializers import (
-    doctorAppointmentSerializer,DoctorAdditionalDetailsSerializer,
+    doctorAppointmentSerializer,
     DoctorRegistrationSerializer,UserSerializer, ProfileSerializer
 ) 
 
@@ -187,18 +187,7 @@ class doctorAppointmentView(APIView):
         return Response(appointmentSerializer.data, status=status.HTTP_200_OK)
     
 
-class DoctorAdditionalDetailsView(generics.RetrieveUpdateAPIView):
-    queryset = DoctorAdditionalDetails.objects.all()
-    serializer_class = DoctorAdditionalDetailsSerializer
-    permission_classes = [IsDoctor]
 
-    def get_object(self):
-        try:
-            doctor_val = doctor.objects.get(user=self.request.user)
-            obj, created = DoctorAdditionalDetails.objects.get_or_create(doctor=doctor_val)
-            return obj
-        except doctor.DoesNotExist:
-            raise Http404("Doctor not found.")
 
 class LogoutView(APIView):
     """

@@ -1,26 +1,37 @@
+import uuid
 from django.db import models
 from account.models import User
-import uuid
 from clinic.models import Clinic
 
 class doctor(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     #Personal Information
     user=models.OneToOneField(User,on_delete=models.CASCADE)
+    Cardiologist='CL'
+    Dermatologists='DL'
+    Emergency_Medicine_Specialists='EMC'
+    Immunologists='IL'
+    Anesthesiologists='AL'
+    Colon_and_Rectal_Surgeons='CRS'
+
+    #The first element in each tuple is the actual value to be set on the model, and the second element is the human-readable name. 
+    department_choices=[(Cardiologist,'Cardiologist'),
+        (Dermatologists,'Dermatologists'),
+        (Emergency_Medicine_Specialists,'Emergency Medicine Specialists'),
+        (Immunologists,'Immunologists'),
+        (Anesthesiologists,'Anesthesiologists'),
+        (Colon_and_Rectal_Surgeons,'Colon and Rectal Surgeons')
+    ]
+    department=models.CharField(max_length=3, choices=department_choices, default=Cardiologist)
+    address= models.TextField()
+    mobile=models.CharField(max_length=20)
     mobile_number = models.CharField(max_length=15, unique=True)
     dob = models.DateField(verbose_name="Date of Birth", null=True, blank=True)
     about = models.TextField(blank=True, null=True, help_text="Short description displayed to patients")
     photo = models.ImageField(upload_to="doctor_photos/", blank=True, null=True)
     years_of_experience = models.PositiveIntegerField(default=1)
     # Relationships
-    primary_clinic = models.ForeignKey(
-        Clinic,
-        on_delete=models.SET_NULL,
-        related_name='doctors',
-        null=True,
-        blank=True,
-        help_text="Primary clinic where the doctor works"
-    )
+    clinics = models.ManyToManyField(Clinic, related_name='doctors')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     @property
@@ -34,7 +45,7 @@ class doctor(models.Model):
 
 class Registration(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    doctor = models.OneToOneField('Doctor', on_delete=models.CASCADE, related_name='registration')
+    doctor = models.OneToOneField(doctor, on_delete=models.CASCADE, related_name='registration')
     medical_registration_number = models.CharField(max_length=50, unique=True)
     medical_council = models.CharField(max_length=255, help_text="e.g., Medical Council of India")
 
@@ -43,7 +54,7 @@ class Registration(models.Model):
 
 class GovernmentID(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    doctor = models.OneToOneField('Doctor', on_delete=models.CASCADE, related_name='government_ids')
+    doctor = models.OneToOneField(doctor, on_delete=models.CASCADE, related_name='government_ids')
     pan_card_number = models.CharField(max_length=10, unique=True)
     aadhar_card_number = models.CharField(max_length=12, unique=True)
 
@@ -52,7 +63,7 @@ class GovernmentID(models.Model):
 
 class Education(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    doctor = models.ForeignKey('Doctor', on_delete=models.CASCADE, related_name='education')
+    doctor = models.ForeignKey(doctor, on_delete=models.CASCADE, related_name='education')
     qualification = models.CharField(max_length=255, help_text="e.g., MBBS, MD")
     institute = models.CharField(max_length=255, help_text="Name of the institution")
     year_of_completion = models.PositiveIntegerField()
@@ -122,8 +133,8 @@ class Specialization(models.Model):
 
     # Fields for the model
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    doctor = models.ForeignKey('Doctor', on_delete=models.CASCADE, related_name='specializations')
-    specialization = models.CharField(max_length=3, choices=SPECIALIZATION_CHOICES, blank=True, null=True)
+    doctor = models.ForeignKey(doctor, on_delete=models.CASCADE, related_name='specializations')
+    specialization = models.CharField(max_length=5, choices=SPECIALIZATION_CHOICES, blank=True, null=True)
     custom_specialization = models.ForeignKey(CustomSpecialization, on_delete=models.SET_NULL, null=True, blank=True, related_name="specializations")
     is_primary = models.BooleanField(default=False, help_text="Indicates if this is the primary displayed specialization")
 

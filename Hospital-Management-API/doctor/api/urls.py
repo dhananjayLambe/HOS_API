@@ -1,5 +1,5 @@
 from .views import (
-    CustomAuthToken,doctorAppointmentView,DoctorAdditionalDetailsView,
+    CustomAuthToken,doctorAppointmentView,
     LogoutView, DoctorRegistrationView,DoctorProfileView,UserView)
 from django.urls import path
 
@@ -13,5 +13,5 @@ urlpatterns = [
     path('logout/', LogoutView.as_view(), name='api_doctor_logout'),
     
     path('appointments/', doctorAppointmentView.as_view(), name='api_doctor_profile'),
-    path('additional-details/', DoctorAdditionalDetailsView.as_view(), name='doctor-additional-details'),
+    
 ]

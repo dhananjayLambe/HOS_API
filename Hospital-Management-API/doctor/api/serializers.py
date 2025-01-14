@@ -1,7 +1,7 @@
 from patient.models import Appointment
 from rest_framework import serializers
 from account.models import User
-from doctor.models import doctor , DoctorAdditionalDetails
+from doctor.models import doctor
 from django.contrib.auth.models import Group
 from hospital_mgmt.models import Hospital
 
@@ -204,9 +204,3 @@ class doctorAppointmentSerializer(serializers.Serializer):
     
     def related_patient_age(self, obj):
         return obj.patient_history.patient.age
-
-class DoctorAdditionalDetailsSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = DoctorAdditionalDetails
-        fields = '__all__'
-        read_only_fields = ['doctor']
