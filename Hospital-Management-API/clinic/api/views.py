@@ -1,13 +1,26 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework import status
-from clinic.api.serializers import ClinicSerializer
-from clinic.models  import Clinic
+from rest_framework import status, viewsets
+from rest_framework.permissions import AllowAny
+from clinic.api.serializers import (
+    ClinicSerializer,ClinicAddressSerializer,
+    ClinicSpecializationSerializer,
+    ClinicScheduleSerializer,
+    ClinicServiceSerializer,
+    ClinicServiceListSerializer)
+from clinic.models  import (
+    Clinic,ClinicAddress,
+    ClinicSpecialization, ClinicSchedule,
+    ClinicService, ClinicServiceList
+    )
 
 # Create Clinic
 class ClinicCreateView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
     def post(self, request):
         serializer = ClinicSerializer(data=request.data)
+
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -15,6 +28,8 @@ class ClinicCreateView(APIView):
 
 # Get All Clinics
 class ClinicListView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
     def get(self, request):
         clinics = Clinic.objects.all()
         serializer = ClinicSerializer(clinics, many=True)
@@ -22,6 +37,8 @@ class ClinicListView(APIView):
 
 # Get a Single Clinic
 class ClinicDetailView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
     def get(self, request, pk):
         try:
             clinic = Clinic.objects.get(pk=pk)
@@ -54,3 +71,25 @@ class ClinicDeleteView(APIView):
         
         clinic.delete()
         return Response({"detail": "Deleted successfully."}, status=status.HTTP_204_NO_CONTENT)
+
+class ClinicAddressViewSet(viewsets.ModelViewSet):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    queryset = ClinicAddress.objects.all()
+    serializer_class = ClinicAddressSerializer
+
+class ClinicSpecializationViewSet(viewsets.ModelViewSet):
+    queryset = ClinicSpecialization.objects.all()
+    serializer_class = ClinicSpecializationSerializer
+
+class ClinicScheduleViewSet(viewsets.ModelViewSet):
+    queryset = ClinicSchedule.objects.all()
+    serializer_class = ClinicScheduleSerializer
+
+class ClinicServiceViewSet(viewsets.ModelViewSet):
+    queryset = ClinicService.objects.all()
+    serializer_class = ClinicServiceSerializer
+
+class ClinicServiceListViewSet(viewsets.ModelViewSet):
+    queryset = ClinicServiceList.objects.all()
+    serializer_class = ClinicServiceListSerializer

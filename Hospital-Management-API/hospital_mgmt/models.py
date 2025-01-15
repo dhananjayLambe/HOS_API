@@ -70,7 +70,7 @@ class FrontDeskUser(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     #hospital = models.ForeignKey(Hospital, on_delete=models.CASCADE, related_name="front_desk_users")
-    clinic = models.ForeignKey(Clinic, on_delete=models.CASCADE, related_name='helpdesk_users')
+    clinic = models.ForeignKey(Clinic, on_delete=models.CASCADE, related_name='helpdesk_users', default=None, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     def __str__(self):

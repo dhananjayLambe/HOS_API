@@ -1,16 +1,16 @@
 import uuid
+from datetime import time
 from django.db import models
-from django.apps import apps
 
 class Clinic(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     # Basic Information
-    name = models.CharField(max_length=255, unique=True)
+    name = models.CharField(max_length=255,default='NA') #unique=True
     contact_number_primary = models.CharField(max_length=15,default='NA')  # Mandatory
     contact_number_secondary = models.CharField(max_length=15,default='NA')  # Mandatory
     email_address = models.EmailField(max_length=255,default='NA')  # Optional)  # Optional
     registration_number = models.CharField(max_length=255, default='NA')  # Mandatory unique=True,
-    gst_number = models.CharField(max_length=15, blank=True, null=True)
+    gst_number = models.CharField(max_length=15, default='NA')  # Optional
     created_at = models.DateTimeField(auto_now_add=True)  # Mandatory
     updated_at = models.DateTimeField(auto_now=True)  # Mandatory
     def __str__(self):
@@ -19,15 +19,18 @@ class Clinic(models.Model):
 class ClinicAddress(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     clinic = models.OneToOneField(Clinic, on_delete=models.CASCADE, related_name="address")
-    address = models.TextField()
-    city = models.CharField(max_length=100)
-    state = models.CharField(max_length=100)
-    pincode = models.CharField(max_length=10)
+    address = models.TextField(max_length=255,default='NA')  # Address line 1
+    address2 = models.TextField(max_length=255,default='NA')  # Address line 2
+    city = models.CharField(max_length=100,default='NA')
+    state = models.CharField(max_length=100,default='NA')
+    pincode = models.CharField(max_length=10,default='NA')
     country = models.CharField(max_length=100, default="India")
-    latitude = models.DecimalField(max_digits=9, decimal_places=6, blank=True, null=True)  # For geolocation
-    longitude = models.DecimalField(max_digits=9, decimal_places=6, blank=True, null=True)  # For geolocation
-    google_place_id = models.CharField(max_length=255, blank=True, null=True)  # Unique Google Place ID
-    google_maps_url = models.URLField(blank=True, null=True)  # URL for the Google Maps location
+    latitude = models.DecimalField(max_digits=9, decimal_places=6, blank=True, null=True,default='NA')  # For geolocation
+    longitude = models.DecimalField(max_digits=9, decimal_places=6, blank=True, null=True,default='NA')  # For geolocation
+    google_place_id = models.CharField(max_length=255, blank=True, null=True,default='NA')  # Unique Google Place ID
+    google_maps_url = models.URLField(blank=True, null=True,default='NA')  # URL for the Google Maps location
+    created_at = models.DateTimeField(auto_now_add=True)  # Mandatory
+    updated_at = models.DateTimeField(auto_now=True)  # Mandatory
 
     def __str__(self):
         return f"{self.address}, {self.city}, {self.state}, {self.pincode}"
@@ -35,8 +38,10 @@ class ClinicAddress(models.Model):
 class ClinicSpecialization(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     clinic = models.ForeignKey(Clinic, on_delete=models.CASCADE, related_name="specializations")
-    specialization_name = models.CharField(max_length=255)
-    description = models.TextField(blank=True, null=True)
+    specialization_name = models.CharField(max_length=255,default='NA')  # Name of the specialization
+    description = models.TextField(blank=True, null=True,default='NA')  # Description of the specialization
+    created_at = models.DateTimeField(auto_now_add=True)  # Mandatory #auto_now_add=True,
+    updated_at = models.DateTimeField(auto_now=True)  # Mandatory #auto_now=True,
 
     def __str__(self):
         return f"{self.specialization_name} - {self.clinic.name}"
@@ -46,15 +51,15 @@ class ClinicSchedule(models.Model):
     clinic = models.OneToOneField(Clinic, on_delete=models.CASCADE, related_name="schedule")
 
     # Working Hours
-    morning_start = models.TimeField(blank=True, null=True)  # Morning session start time
-    morning_end = models.TimeField(blank=True, null=True)    # Morning session end time
-    afternoon_start = models.TimeField(blank=True, null=True)  # Afternoon session start time
-    afternoon_end = models.TimeField(blank=True, null=True)    # Afternoon session end time
-    evening_start = models.TimeField(blank=True, null=True)    # Evening session start time
-    evening_end = models.TimeField(blank=True, null=True)      # Evening session end time
+    morning_start = models.TimeField(blank=True, null=True, default=time(9, 0))  # Default to 9:00 AM
+    morning_end = models.TimeField(blank=True, null=True, default=time(12, 0))   # Default to 12:00 PM
+    afternoon_start = models.TimeField(blank=True, null=True, default=time(13, 0))  # Default to 1:00 PM
+    afternoon_end = models.TimeField(blank=True, null=True, default=time(17, 0))    # Default to 5:00 PM
+    evening_start = models.TimeField(blank=True, null=True, default=time(18, 0))    # Default to 6:00 PM
+    evening_end = models.TimeField(blank=True, null=True, default=time(21, 0))      # Default to 9:00 PM
 
     # Appointment Slot Details
-    day_of_week = models.CharField(max_length=10, choices=[('Monday', 'Monday'), ('Tuesday', 'Tuesday'), ('Wednesday', 'Wednesday'), ('Thursday', 'Thursday'), ('Friday', 'Friday'), ('Saturday', 'Saturday'), ('Sunday', 'Sunday')])
+    day_of_week = models.CharField(max_length=10, choices=[('Monday', 'Monday'), ('Tuesday', 'Tuesday'), ('Wednesday', 'Wednesday'), ('Thursday', 'Thursday'), ('Friday', 'Friday'), ('Saturday', 'Saturday'), ('Sunday', 'Sunday')],default='Monday')
     slot_duration = models.PositiveIntegerField(default=15)  # Slot duration in minutes (e.g., 15, 30)
 
     # Holidays and Special Dates
@@ -67,7 +72,9 @@ class ClinicSchedule(models.Model):
     doctor_checkout_time = models.DateTimeField(blank=True, null=True)  # Check-out time for the day
 
     # Metadata
-    last_updated = models.DateTimeField(auto_now=True)  # Automatically updates on changes
+    created_at = models.DateTimeField(auto_now_add=True)  # Mandatory #auto_now_add=True,
+    updated_at = models.DateTimeField(auto_now=True)  # Mandatory #auto_now=True,
+
 
     def __str__(self):
         return f"Schedule for {self.clinic.name}"
