@@ -162,8 +162,8 @@ class DoctorService(models.Model):
     name = models.CharField(max_length=255, default="NA", help_text="Service name (e.g., Angioplasty, Skin Treatment)")
     description = models.TextField(blank=True, null=True, default="NA", help_text="Details about the service")
     fee = models.DecimalField(max_digits=10, decimal_places=2,default=0.00, help_text="Fee for the service")
-    created_at = models.DateTimeField(default=now)#auto_now_add=True
-    updated_at = models.DateTimeField(default=now)#auto_now=True
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f"{self.name} - {self.doctor.get_name}"
@@ -175,8 +175,8 @@ class Award(models.Model):
     description = models.TextField(blank=True, null=True, default="NA", help_text="Details about the award")
     awarded_by = models.CharField(max_length=255, default="NA", help_text="Organization granting the award")
     date_awarded = models.DateField(default=now)
-    created_at = models.DateTimeField(default=now)#auto_now_add=True
-    updated_at = models.DateTimeField(default=now)#auto_now=True
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f"{self.name} - {self.awarded_by}"
@@ -188,8 +188,8 @@ class Certification(models.Model):
     issued_by = models.CharField(max_length=255, default="NA", help_text="Organization issuing the certification")
     date_of_issue = models.DateField(default=now)
     expiry_date = models.DateField(blank=True, null=True,default=now, help_text="Leave blank if no expiry")
-    created_at = models.DateTimeField(default=now)#auto_now_add=True
-    updated_at = models.DateTimeField(default=now)#auto_now=True
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f"{self.title} - {self.issued_by}"
