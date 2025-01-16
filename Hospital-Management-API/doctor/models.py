@@ -3,6 +3,7 @@ from django.db import models
 from django.utils import timezone
 from account.models import User
 from clinic.models import Clinic
+from django.utils.timezone import now
 
 class doctor(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -33,8 +34,8 @@ class doctor(models.Model):
     years_of_experience = models.PositiveIntegerField(default=1)
     # Relationships
     clinics = models.ManyToManyField(Clinic, related_name='doctors')
-    #created_at = models.DateTimeField(auto_now_add=True)  # Mandatory #auto_now_add=True,
-    #updated_at = models.DateTimeField(auto_now=True)  # Mandatory #auto_now=True,
+    created_at = models.DateTimeField(auto_now_add=True)  # Mandatory  default=timezone.now
+    updated_at = models.DateTimeField(auto_now=True)  # Mandatory  default=timezone.now
     @property
     def get_name(self):
         return self.user.first_name+" "+self.user.last_name
@@ -49,8 +50,8 @@ class Registration(models.Model):
     doctor = models.OneToOneField(doctor, on_delete=models.CASCADE, related_name='registration')
     medical_registration_number = models.CharField(max_length=50, unique=True)
     medical_council = models.CharField(max_length=255, help_text="e.g., Medical Council of India")
-    #created_at = models.DateTimeField(auto_now_add=True)  # Mandatory #auto_now_add=True,
-    #updated_at = models.DateTimeField(auto_now=True)  # Mandatory #auto_now=True,
+    created_at = models.DateTimeField(auto_now_add=True)  # Mandatory  default=timezone.now
+    updated_at = models.DateTimeField(auto_now=True)  # Mandatory  default=timezone.now
 
     def __str__(self):
         return f"{self.medical_registration_number} - {self.medical_council}"
@@ -60,8 +61,8 @@ class GovernmentID(models.Model):
     doctor = models.OneToOneField(doctor, on_delete=models.CASCADE, related_name='government_ids')
     pan_card_number = models.CharField(max_length=10, unique=True)
     aadhar_card_number = models.CharField(max_length=12, unique=True)
-    #created_at = models.DateTimeField(auto_now_add=True)  # Mandatory #auto_now_add=True,
-    #updated_at = models.DateTimeField(auto_now=True)  # Mandatory #auto_now=True,
+    created_at = models.DateTimeField(auto_now_add=True)  # Mandatory  default=timezone.now
+    updated_at = models.DateTimeField(auto_now=True)  # Mandatory  default=timezone.now
 
     def __str__(self):
         return f"PAN: {self.pan_card_number}, Aadhar: {self.aadhar_card_number}"
@@ -72,8 +73,8 @@ class Education(models.Model):
     qualification = models.CharField(max_length=255, help_text="e.g., MBBS, MD")
     institute = models.CharField(max_length=255, help_text="Name of the institution")
     year_of_completion = models.PositiveIntegerField()
-    #created_at = models.DateTimeField(auto_now_add=True)  # Mandatory #auto_now_add=True,
-    #updated_at = models.DateTimeField(auto_now=True)  # Mandatory #auto_now=True,
+    created_at = models.DateTimeField(auto_now_add=True)  # Mandatory  default=timezone.now
+    updated_at = models.DateTimeField(auto_now=True)  # Mandatory  default=timezone.now
 
     def __str__(self):
         return f"{self.qualification} - {self.institute} ({self.year_of_completion})"
@@ -81,9 +82,8 @@ class Education(models.Model):
 class CustomSpecialization(models.Model):
     name = models.CharField(max_length=255, unique=True, help_text="Enter a custom specialization")
     description = models.TextField(blank=True, null=True, help_text="Provide a description if needed")
-    #created_at = models.DateTimeField(auto_now_add=True)  # Mandatory #auto_now_add=True,
-    #updated_at = models.DateTimeField(auto_now=True)  # Mandatory #auto_now=True,
-
+    created_at = models.DateTimeField(auto_now_add=True)  # Mandatory  default=timezone.now
+    updated_at = models.DateTimeField(auto_now=True)  # Mandatory  default=timezone.now
     def __str__(self):
         return self.name
 
@@ -145,8 +145,8 @@ class Specialization(models.Model):
     specialization = models.CharField(max_length=5, choices=SPECIALIZATION_CHOICES, blank=True, null=True)
     custom_specialization = models.ForeignKey(CustomSpecialization, on_delete=models.SET_NULL, null=True, blank=True, related_name="specializations")
     is_primary = models.BooleanField(default=False, help_text="Indicates if this is the primary displayed specialization")
-    #created_at = models.DateTimeField(auto_now_add=True)  # Mandatory #auto_now_add=True,
-    #updated_at = models.DateTimeField(auto_now=True)  # Mandatory #auto_now=True,
+    created_at = models.DateTimeField(auto_now_add=True)  # Mandatory  default=timezone.now
+    updated_at = models.DateTimeField(auto_now=True)  # Mandatory  default=timezone.now
 
     def __str__(self):
         if self.specialization:
