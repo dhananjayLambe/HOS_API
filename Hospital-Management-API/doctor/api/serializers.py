@@ -131,7 +131,6 @@ class UserSerializer(serializers.ModelSerializer):
         group_doctor.user_set.add(user)
         return user
 
-
 class ProfileSerializer(serializers.ModelSerializer):
     hospital_id = serializers.PrimaryKeyRelatedField(queryset=Hospital.objects.all(), source="hospital")
 
@@ -152,9 +151,6 @@ class DoctorSerializer(serializers.ModelSerializer):
         fields = ['id', 'username','mobile', 'hospital', 'department', 'address','user']
         #fields=['id', 'username', 'first_name', 'last_name', 'status', 'hospital_id', 'department', 'address', 'mobile','created_at']
 
-
-
-
 class DoctorRegistrationSerializer(serializers.Serializer):
     user_data = UserSerializer()
     profile_data = ProfileSerializer()
@@ -173,9 +169,6 @@ class DoctorRegistrationSerializer(serializers.Serializer):
         # Create Doctor Profile
         doctor_profile = ProfileSerializer().create(profile_data)
         return doctor_profile
-
-
-
 
 class patientHistorySerializerDoctorView(serializers.Serializer):
     Cardiologist='CL'

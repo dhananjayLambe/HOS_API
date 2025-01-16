@@ -155,3 +155,41 @@ class Specialization(models.Model):
             return f"Custom: {self.custom_specialization.name} ({'Primary' if self.is_primary else 'Secondary'})"
         else:
             return "No specialization set"
+
+class DoctorService(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    doctor = models.ForeignKey(doctor, on_delete=models.CASCADE, related_name='services')
+    name = models.CharField(max_length=255, default="NA", help_text="Service name (e.g., Angioplasty, Skin Treatment)")
+    description = models.TextField(blank=True, null=True, default="NA", help_text="Details about the service")
+    fee = models.DecimalField(max_digits=10, decimal_places=2,default=0.00, help_text="Fee for the service")
+    created_at = models.DateTimeField(default=now)#auto_now_add=True
+    updated_at = models.DateTimeField(default=now)#auto_now=True
+
+    def __str__(self):
+        return f"{self.name} - {self.doctor.get_name}"
+
+class Award(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    doctor = models.ForeignKey(doctor, on_delete=models.CASCADE, related_name='awards')
+    name = models.CharField(max_length=255, default="NA", help_text="Name of the award")
+    description = models.TextField(blank=True, null=True, default="NA", help_text="Details about the award")
+    awarded_by = models.CharField(max_length=255, default="NA", help_text="Organization granting the award")
+    date_awarded = models.DateField(default=now)
+    created_at = models.DateTimeField(default=now)#auto_now_add=True
+    updated_at = models.DateTimeField(default=now)#auto_now=True
+
+    def __str__(self):
+        return f"{self.name} - {self.awarded_by}"
+
+class Certification(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    doctor = models.ForeignKey(doctor, on_delete=models.CASCADE, related_name='certifications')
+    title = models.CharField(max_length=255, default="NA", help_text="Certification title (e.g., Fellowship in Cardiology)")
+    issued_by = models.CharField(max_length=255, default="NA", help_text="Organization issuing the certification")
+    date_of_issue = models.DateField(default=now)
+    expiry_date = models.DateField(blank=True, null=True,default=now, help_text="Leave blank if no expiry")
+    created_at = models.DateTimeField(default=now)#auto_now_add=True
+    updated_at = models.DateTimeField(default=now)#auto_now=True
+
+    def __str__(self):
+        return f"{self.title} - {self.issued_by}"

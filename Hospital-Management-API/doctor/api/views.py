@@ -185,9 +185,6 @@ class doctorAppointmentView(APIView):
         appointments=Appointment.objects.filter(doctor=user_doctor, status=True).order_by('appointment_date', 'appointment_time')
         appointmentSerializer=doctorAppointmentSerializer(appointments, many=True)
         return Response(appointmentSerializer.data, status=status.HTTP_200_OK)
-    
-
-
 
 class LogoutView(APIView):
     """
