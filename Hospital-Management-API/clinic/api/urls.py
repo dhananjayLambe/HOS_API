@@ -7,7 +7,8 @@ from clinic.api.views import (
     ClinicSpecializationViewSet,
     ClinicScheduleViewSet,
     ClinicServiceViewSet,
-    ClinicServiceListViewSet,)
+    ClinicServiceListViewSet,
+    ClinicRegistrationView,ClinicProfileUpdateView)
 
 router = routers.DefaultRouter()
 router.register(r'clinic-address', ClinicAddressViewSet)
@@ -22,5 +23,11 @@ urlpatterns = [
     path('get/<uuid:pk>/', ClinicDetailView.as_view(), name='clinic-detail'),
     path('update/<uuid:pk>/', ClinicUpdateView.as_view(), name='clinic-update'),
     path('delete/<uuid:pk>/', ClinicDeleteView.as_view(), name='clinic-delete'),
+    path('registration/', ClinicRegistrationView.as_view(), name='clinic-register'),
+    path('profilupdate/<uuid:clinic_id>/', ClinicProfileUpdateView.as_view(), name='clinic-profile-update'),
     path('', include(router.urls)),
-]   
+]
+
+# path("clinic/details/", ClinicDetailView.as_view(), name="clinic-details"),
+# need to get the all the details as when doctor log in to the system he should be able to see the clinic details
+#API need to create for the same
