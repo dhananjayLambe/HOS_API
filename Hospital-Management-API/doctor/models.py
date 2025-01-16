@@ -193,3 +193,37 @@ class Certification(models.Model):
 
     def __str__(self):
         return f"{self.title} - {self.issued_by}"
+
+class DoctorFeedback(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    doctor = models.ForeignKey(doctor, on_delete=models.CASCADE, related_name='feedback')
+    rating = models.PositiveSmallIntegerField(choices=[(i, f"{i} Stars") for i in range(1, 6)], help_text="Rating out of 5", default=5)
+    comments = models.TextField(blank=True, null=True,default="NA", help_text="Feedback from the reviewer")
+    reviewed_by = models.CharField(max_length=255,default="NA", help_text="Name of the patient/clinic (optional)")
+    created_at = models.DateTimeField(default=now) #auto_now_add=True
+    updated_at = models.DateTimeField(default=now)#auto_now=True
+
+    def __str__(self):
+        return f"Rating: {self.rating} - {self.doctor.get_name}"
+
+class DoctorSocialLink(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    doctor = models.ForeignKey(doctor, on_delete=models.CASCADE, related_name='social_links')
+    platform = models.CharField(max_length=50,default="NA", help_text="e.g., LinkedIn, ResearchGate")
+    url = models.URLField(help_text="Link to the profile",default="NA")
+    created_at = models.DateTimeField(default=now) #auto_now_add=True
+    updated_at = models.DateTimeField(default=now)#auto_now=True
+
+    def __str__(self):
+        return f"{self.platform} - {self.url}"
+
+class DoctorLanguage(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    doctor = models.ForeignKey(doctor, on_delete=models.CASCADE, related_name='languages')
+    language = models.CharField(max_length=50,default="NA", help_text="e.g., English, Hindi, Marathi")
+    proficiency = models.CharField(max_length=50, choices=[('Basic', 'Basic'), ('Fluent', 'Fluent'), ('Native', 'Native')], default='Fluent')
+    created_at = models.DateTimeField(default=now) #auto_now_add=True
+    updated_at = models.DateTimeField(default=now)#auto_now=True
+
+    def __str__(self):
+        return f"{self.language} - {self.proficiency} ({self.doctor.get_name})"
