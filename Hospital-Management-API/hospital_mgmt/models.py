@@ -66,6 +66,7 @@ class HospitalBillingInformation(models.Model):
     billing_practices = models.TextField(blank=True, null=True)  # Optional
     discount_policies = models.TextField(blank=True, null=True)  # Optional
 
+
 class FrontDeskUser(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.OneToOneField(User, on_delete=models.CASCADE)
@@ -75,3 +76,4 @@ class FrontDeskUser(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     def __str__(self):
         return f"{self.user.username} ({self.hospital.name})"
+

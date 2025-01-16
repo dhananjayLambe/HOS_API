@@ -1,6 +1,7 @@
 import uuid
 from datetime import time
 from django.db import models
+from account.models import User
 
 class Clinic(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -9,7 +10,7 @@ class Clinic(models.Model):
     contact_number_primary = models.CharField(max_length=15,default='NA')  # Mandatory
     contact_number_secondary = models.CharField(max_length=15,default='NA')  # Mandatory
     email_address = models.EmailField(max_length=255,default='NA')  # Optional)  # Optional
-    registration_number = models.CharField(max_length=255, default='NA')  # Mandatory unique=True,
+    registration_number = models.CharField(max_length=255,unique=True, null=True, blank=True,default=None)  # Mandatory it should be unique
     gst_number = models.CharField(max_length=15, default='NA')  # Optional
     created_at = models.DateTimeField(auto_now_add=True)  # Mandatory
     updated_at = models.DateTimeField(auto_now=True)  # Mandatory
@@ -151,6 +152,31 @@ class ClinicServiceList(models.Model):
 
     def __str__(self):
         return f"{self.service_name} - {self.clinic.name}"
+
+class ClinicFrontDeskUser(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.OneToOneField(User, on_delete=models.CASCADE)  # Link to Django's User model
+    clinic = models.ForeignKey(
+        Clinic,
+        on_delete=models.CASCADE,
+        related_name='clinic_helpdesk_users',
+        null=True,  # Allow nullable initially
+        blank=True,
+        default=None
+    )
+    role = models.CharField(
+        max_length=50,
+        default='helpdesk',
+        choices=[('helpdesk', 'Helpdesk')]
+    )  # Define specific roles for clarity and scalability
+    can_book_appointments = models.BooleanField(default=True)  # Permission to book appointments
+    can_add_patients = models.BooleanField(default=True)  # Permission to add patients
+    can_update_details = models.BooleanField(default=True)  # Permission to modify patient details
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.user.username} ({self.clinic.name if self.clinic else 'No Clinic Assigned'})"
 
 '''
 class ClinicBilling(models.Model):

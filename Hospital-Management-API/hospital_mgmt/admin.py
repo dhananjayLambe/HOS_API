@@ -1,10 +1,9 @@
 from django.contrib import admin
-from . models import (Hospital,FrontDeskUser,HospitalLicensing,\
+from . models import (Hospital,HospitalLicensing,\
     HospitalBillingInformation,HospitalDigitalInformation,\
     HospitalFacility,HospitalOperationalDetails,\
     HospitalStaffDetails)
 admin.site.register(Hospital)
-admin.site.register(FrontDeskUser)
 admin.site.register(HospitalLicensing)
 admin.site.register(HospitalBillingInformation)
 admin.site.register(HospitalDigitalInformation)

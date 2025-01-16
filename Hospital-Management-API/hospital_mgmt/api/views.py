@@ -6,10 +6,10 @@ from hospital_mgmt.models import (
     HospitalOperationalDetails,
     HospitalStaffDetails, HospitalFacility,
     HospitalDigitalInformation, 
-    HospitalBillingInformation, FrontDeskUser
+    HospitalBillingInformation,FrontDeskUser
 )
 from hospital_mgmt.api.serializers import (
-    HospitalSerializer, FrontDeskUserSerializer,
+    HospitalSerializer,
     HospitalLicensingSerializer,
     HospitalOperationalDetailsSerializer, 
     HospitalStaffDetailsSerializer,
