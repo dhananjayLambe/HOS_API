@@ -7,11 +7,17 @@ from rest_framework.permissions import BasePermission
 from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated
 from django.http import Http404
-from doctor.models import doctor
 from patient.models import Appointment
+from doctor.models import (
+    doctor, Registration, GovernmentID, Education,
+    Specialization, Award, Certification, DoctorFeedback, DoctorLanguage)
+
 from .serializers import (
     doctorAppointmentSerializer,
-    DoctorRegistrationSerializer,UserSerializer, ProfileSerializer
+    DoctorRegistrationSerializer,UserSerializer, ProfileSerializer,
+    RegistrationSerializer, GovernmentIDSerializer, EducationSerializer,
+    SpecializationSerializer, AwardSerializer, CertificationSerializer,
+    doctorProfileSerializer, DoctorFeedbackSerializer, DoctorLanguageSerializer
 ) 
 
 class IsDoctor(BasePermission):
@@ -201,3 +207,112 @@ class LogoutView(APIView):
             return Response({"message": "Logout successful."}, status=status.HTTP_200_OK)
         except Token.DoesNotExist:
             return Response({"error": "Token not found or user already logged out."}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class DoctorProfileUpdateView(APIView):
+    def put(self, request, doctor_id):
+        try:
+            doctor_instance = doctor.objects.get(id=doctor_id)
+        except doctor.DoesNotExist:
+            return Response({"error": "Doctor not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        errors = {}
+        success_updates = []
+
+        # Update Registration
+        registration_data = request.data.get("registration")
+        if registration_data:
+            registration_serializer = RegistrationSerializer(
+                data=registration_data, instance=getattr(doctor_instance, 'registration', None)
+            )
+            if registration_serializer.is_valid():
+                registration_serializer.save(doctor=doctor_instance)
+                success_updates.append("registration")
+            else:
+                errors['registration'] = registration_serializer.errors
+
+        # Update Government ID
+        government_id_data = request.data.get("government_ids")
+        if government_id_data:
+            government_id_serializer = GovernmentIDSerializer(
+                data=government_id_data, instance=getattr(doctor_instance, 'government_ids', None)
+            )
+            if government_id_serializer.is_valid():
+                government_id_serializer.save(doctor=doctor_instance)
+                success_updates.append("government_ids")
+            else:
+                errors['government_ids'] = government_id_serializer.errors
+
+        # Update Education
+        education_data = request.data.get("education", [])
+        for edu_data in education_data:
+            edu_serializer = EducationSerializer(data=edu_data)
+            if edu_serializer.is_valid():
+                Education.objects.create(doctor=doctor_instance, **edu_serializer.validated_data)
+                success_updates.append("education")
+            else:
+                errors.setdefault('education', []).append(edu_serializer.errors)
+
+        # Update Specializations
+        specialization_data = request.data.get("specializations", [])
+        for spec_data in specialization_data:
+            spec_serializer = SpecializationSerializer(data=spec_data)
+            if spec_serializer.is_valid():
+                Specialization.objects.create(doctor=doctor_instance, **spec_serializer.validated_data)
+                success_updates.append("specializations")
+            else:
+                errors.setdefault('specializations', []).append(spec_serializer.errors)
+
+        # Update Awards
+        awards_data = request.data.get("awards", [])
+        for award_data in awards_data:
+            award_serializer = AwardSerializer(data=award_data)
+            if award_serializer.is_valid():
+                Award.objects.create(doctor=doctor_instance, **award_serializer.validated_data)
+                success_updates.append("awards")
+            else:
+                errors.setdefault('awards', []).append(award_serializer.errors)
+
+        # Update Certifications
+        certifications_data = request.data.get("certifications", [])
+        for cert_data in certifications_data:
+            cert_serializer = CertificationSerializer(data=cert_data)
+            if cert_serializer.is_valid():
+                Certification.objects.create(doctor=doctor_instance, **cert_serializer.validated_data)
+                success_updates.append("certifications")
+            else:
+                errors.setdefault('certifications', []).append(cert_serializer.errors)
+
+        # Update Feedback
+        feedback_data = request.data.get("feedback", [])
+        for feedback_item in feedback_data:
+            feedback_serializer = DoctorFeedbackSerializer(data=feedback_item)
+            if feedback_serializer.is_valid():
+                DoctorFeedback.objects.create(doctor=doctor_instance, **feedback_serializer.validated_data)
+                success_updates.append("feedback")
+            else:
+                errors.setdefault('feedback', []).append(feedback_serializer.errors)
+
+        # Update Languages
+        languages_data = request.data.get("languages", [])
+        for lang_data in languages_data:
+            lang_serializer = DoctorLanguageSerializer(data=lang_data)
+            if lang_serializer.is_valid():
+                DoctorLanguage.objects.create(doctor=doctor_instance, **lang_serializer.validated_data)
+                success_updates.append("languages")
+            else:
+                errors.setdefault('languages', []).append(lang_serializer.errors)
+
+        if errors:
+            return Response(
+                {
+                    "message": "Some data was invalid.",
+                    "errors": errors,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return Response(
+            {"message": "Doctor profile updated successfully.", "success_updates": success_updates},
+            status=status.HTTP_200_OK,
+        )

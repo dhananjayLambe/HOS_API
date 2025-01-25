@@ -1,9 +1,12 @@
 from patient.models import Appointment
 from rest_framework import serializers
 from account.models import User
-from doctor.models import doctor
 from django.contrib.auth.models import Group
 from hospital_mgmt.models import Hospital
+from doctor.models import (
+    doctor, Registration, GovernmentID, Education,
+    Specialization,Award,Certification,
+    DoctorSocialLink,DoctorFeedback,DoctorLanguage)
 
 
 
@@ -197,3 +200,44 @@ class doctorAppointmentSerializer(serializers.Serializer):
     
     def related_patient_age(self, obj):
         return obj.patient_history.patient.age
+
+
+class RegistrationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Registration
+        fields = '__all__'
+
+class GovernmentIDSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = GovernmentID
+        fields = '__all__'
+
+class EducationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Education
+        fields = '__all__'
+
+class SpecializationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Specialization
+        fields = '__all__'
+
+class AwardSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Award
+        fields = '__all__'
+
+class CertificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Certification
+        fields = '__all__'
+
+class DoctorFeedbackSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DoctorFeedback
+        fields = '__all__'
+
+class DoctorLanguageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DoctorLanguage
+        fields = '__all__'
