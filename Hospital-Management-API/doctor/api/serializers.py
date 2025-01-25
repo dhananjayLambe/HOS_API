@@ -7,6 +7,8 @@ from doctor.models import (
     doctor, Registration, GovernmentID, Education,
     Specialization,Award,Certification,
     DoctorSocialLink,DoctorFeedback,DoctorLanguage)
+from clinic.models import Clinic
+from django.db import transaction
 
 
 
@@ -241,3 +243,52 @@ class DoctorLanguageSerializer(serializers.ModelSerializer):
     class Meta:
         model = DoctorLanguage
         fields = '__all__'
+
+class DoctorRegistrationSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source='user.username')
+    first_name = serializers.CharField(source='user.first_name')
+    last_name = serializers.CharField(source='user.last_name')
+    email = serializers.EmailField(source='user.email', required=False)
+    password = serializers.CharField(source='user.password', write_only=True)
+    #clinics = serializers.PrimaryKeyRelatedField(queryset=Clinic.objects.all(), many=True)
+    clinics = serializers.ListField(
+        child=serializers.UUIDField(),
+        allow_empty=False,
+        error_messages={
+            "required": "The doctor must be associated with at least one clinic.",
+            "empty": "Clinics list cannot be empty.",
+        }
+    )
+
+    class Meta:
+        model = doctor
+        fields = [
+            'username', 'password', 'first_name', 'last_name', 'email', 'clinics', 'department',
+            'address', 'mobile', 'mobile_number', 'dob', 'about', 'photo'
+        ]
+        extra_kwargs = {
+            "password": {"write_only": True}
+        }
+
+    def validate(self, data):
+        username = data['user']['username']
+        if not username.isdigit() or len(username) != 10:
+            raise serializers.ValidationError({"username": "Username must be a 10-digit mobile number."})
+        return data
+
+    @transaction.atomic
+    def create(self, validated_data):
+        user_data = validated_data.pop('user')
+        password = user_data.pop('password')
+        user = User.objects.create(**user_data)
+        user.set_password(password)
+        user.save()
+        clinics_data = validated_data.pop("clinics")
+
+        doctor_instance = doctor.objects.create(user=user, **validated_data)
+        #doctor_instance.clinics.set(validated_data['clinics'])
+        # Handle ManyToMany relationship
+        clinics = Clinic.objects.filter(id__in=clinics_data)
+        doctor_instance.clinics.set(clinics)
+
+        return doctor_instance

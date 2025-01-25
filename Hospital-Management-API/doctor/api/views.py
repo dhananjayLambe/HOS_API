@@ -4,6 +4,7 @@ from rest_framework import serializers, status
 from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.authtoken.models import Token
 from rest_framework.permissions import BasePermission
+from rest_framework.permissions import AllowAny
 from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated
 from django.http import Http404
@@ -17,7 +18,7 @@ from .serializers import (
     DoctorRegistrationSerializer,UserSerializer, ProfileSerializer,
     RegistrationSerializer, GovernmentIDSerializer, EducationSerializer,
     SpecializationSerializer, AwardSerializer, CertificationSerializer,
-    doctorProfileSerializer, DoctorFeedbackSerializer, DoctorLanguageSerializer
+    DoctorFeedbackSerializer, DoctorLanguageSerializer
 ) 
 
 class IsDoctor(BasePermission):
@@ -210,6 +211,8 @@ class LogoutView(APIView):
 
 
 class DoctorProfileUpdateView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
     def put(self, request, doctor_id):
         try:
             doctor_instance = doctor.objects.get(id=doctor_id)
@@ -316,3 +319,16 @@ class DoctorProfileUpdateView(APIView):
             {"message": "Doctor profile updated successfully.", "success_updates": success_updates},
             status=status.HTTP_200_OK,
         )
+
+class DoctorRegistrationAPIView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    def post(self, request):
+        serializer = DoctorRegistrationSerializer(data=request.data)
+        if serializer.is_valid():
+            doctor_instance = serializer.save()
+            return Response({
+                "message": "Doctor registered successfully.",
+                "doctor_id": str(doctor_instance.id)
+            }, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
