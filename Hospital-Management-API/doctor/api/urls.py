@@ -1,12 +1,9 @@
 from django.urls import path, include
-from rest_framework.routers import DefaultRouter
+#from rest_framework.routers import DefaultRouter
 from .views import (
     CustomAuthToken,doctorAppointmentView,DoctorDetailsAPIView,
     LogoutView,DoctorRegistrationAPIView,
     UserView,DoctorProfileUpdateAPIView)
-
-
-
 
 app_name='doctor'
 # Create a router and register the viewset
