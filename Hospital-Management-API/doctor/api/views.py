@@ -23,13 +23,17 @@ from .serializers import (
     RegistrationSerializer, GovernmentIDSerializer, EducationSerializer,
     SpecializationSerializer, AwardSerializer, CertificationSerializer,
     DoctorFeedbackSerializer, DoctorLanguageSerializer, DoctorSerializer,DoctorProfileUpdateSerializer
-) 
+)
+from account.models import User
 
 class IsDoctor(BasePermission):
     """custom Permission class for Doctor"""
     def has_permission(self, request, view):
-        #print(request.user.groups)  # Print the user's groups
-        #print(request.user.get_all_permissions())  # Print the user's permissions
+        print(request.user.groups)  # Print the user's groups
+        print(request.user.get_all_permissions())  # Print the user's permissions
+        print(request.user)
+        print("""Is Doctor""")
+        print(bool(request.user and request.user.groups.filter(name='doctor').exists()))
         return bool(request.user and request.user.groups.filter(name='doctor').exists())
 
 class CustomAuthToken(ObtainAuthToken):
@@ -284,3 +288,26 @@ class DoctorProfileViewSet(viewsets.ModelViewSet):
     #     with transaction.atomic():
     #         serializer.save()
     #     return Response(serializer.data, status=status.HTTP_200_OK)
+
+class DoctorDetailsAPIView(APIView):
+    """
+    API view to fetch doctor details for the authenticated user.
+    """
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated,IsDoctor]
+    def get(self, request):
+        try:
+            # Get the authenticated user
+            user = request.user
+            # Fetch the doctor instance associated with the authenticated user
+            doctor_instance = doctor.objects.get(user=user)
+            # Serialize the doctor details
+            serializer = DoctorSerializer(doctor_instance)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except User.DoesNotExist:
+            return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+        except doctor.DoesNotExist:
+            return Response({"error": "Doctor details not found."}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+

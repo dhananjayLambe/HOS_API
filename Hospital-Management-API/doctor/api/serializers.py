@@ -148,12 +148,16 @@ class ProfileSerializer(serializers.ModelSerializer):
 
 # Doctor Serializer
 class DoctorSerializer(serializers.ModelSerializer):
-    user = UserSerializer(read_only=True)
+    #user = UserSerializer(read_only=True)
     username = serializers.ReadOnlyField(source="user.username")
+    first_name = serializers.CharField(source='user.first_name')
+    last_name = serializers.CharField(source='user.last_name')
+    email = serializers.EmailField(source='user.email', required=False)
+
 
     class Meta:
         model = doctor
-        fields = ['id', 'username','mobile', 'hospital', 'department', 'address','user']
+        fields = ['id', 'username', 'first_name', 'last_name', 'email','mobile','department', 'address']
         #fields=['id', 'username', 'first_name', 'last_name', 'status', 'hospital_id', 'department', 'address', 'mobile','created_at']
 
 class DoctorRegistrationSerializer(serializers.Serializer):
