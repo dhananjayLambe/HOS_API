@@ -1,30 +1,25 @@
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import serializers, status,viewsets
+from rest_framework import status
 from rest_framework.authentication import TokenAuthentication
-from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.authtoken.models import Token
-from rest_framework.permissions import BasePermission
-from rest_framework.permissions import AllowAny
-from rest_framework import generics
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.authtoken.views import ObtainAuthToken
+from rest_framework.permissions import AllowAny, BasePermission, IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
 from django.contrib.auth.models import Group
-from django.http import Http404
-from rest_framework.decorators import action
-from django.db import transaction
+
 from patient.models import Appointment
-from doctor.models import (
-    doctor, Registration, GovernmentID, Education,
-    Specialization, Award, Certification, DoctorFeedback, DoctorLanguage)
+from doctor.models import doctor
+from account.models import User
 
 from .serializers import (
+    DoctorRegistrationSerializer,
     doctorAppointmentSerializer,
-    DoctorRegistrationSerializer,UserSerializer, ProfileSerializer,
-    RegistrationSerializer, GovernmentIDSerializer, EducationSerializer,
-    SpecializationSerializer, AwardSerializer, CertificationSerializer,
-    DoctorFeedbackSerializer, DoctorLanguageSerializer, DoctorSerializer,DoctorProfileUpdateSerializer
+    UserSerializer,
+    ProfileSerializer,
+    DoctorSerializer,
+    DoctorProfileUpdateSerializer
 )
-from account.models import User
 
 class IsDoctor(BasePermission):
     """custom Permission class for Doctor"""
@@ -67,65 +62,6 @@ class CustomAuthToken(ObtainAuthToken):
                 'token': token.key
             },status=status.HTTP_200_OK)
 
-##############OLD Reference###############
-'''
-class registrationView(APIView):
-
-    """"API endpoint for doctor Registration"""
-
-    permission_classes = []
-    def post(self, request, format=None):
-        registrationSerializer = doctorRegistrationSerializer(
-            data=request.data.get('user_data'))
-        profileSerializer = doctorProfileSerializer(
-            data=request.data.get('profile_data'))
-        checkregistration = registrationSerializer.is_valid()
-        checkprofile = profileSerializer.is_valid()
-        if checkregistration and checkprofile:
-            doctor = registrationSerializer.save()
-            profileSerializer.save(user=doctor)
-            return Response({
-                'user_data': registrationSerializer.data,
-                'profile_data': profileSerializer.data
-            }, status=status.HTTP_201_CREATED)
-        else:
-            return Response({
-                'user_data': registrationSerializer.errors,
-                'profile_data': profileSerializer.errors
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-class doctorProfileView(APIView):
-    """"API endpoint for doctor profile view/update-- Only accessble by doctors"""
-
-    permission_classes=[IsDoctor]
-
-    def get(self, request, format=None):
-        user = request.user
-        profile = doctor.objects.filter(user=user).get()
-        userSerializer=doctorRegistrationSerializer(user)
-        profileSerializer = doctorProfileSerializer(profile)
-        return Response({
-            'user_data':userSerializer.data,
-            'profile_data':profileSerializer.data
-
-        }, status=status.HTTP_200_OK)
-
-    def put(self, request, format=None):
-        user = request.user
-        profile = doctor.objects.filter(user=user).get()
-        profileSerializer = doctorProfileSerializer(
-            instance=profile, data=request.data.get('profile_data'), partial=True)
-        if profileSerializer.is_valid():
-            profileSerializer.save()
-            return Response({
-                'profile_data':profileSerializer.data
-            }, status=status.HTTP_200_OK)
-        return Response({
-                'profile_data':profileSerializer.errors
-            }, status=status.HTTP_400_BAD_REQUEST)
-'''
-
-#############END################
 class DoctorRegistrationView(APIView):
     permission_classes=[]
     def post(self, request, *args, **kwargs):
@@ -220,7 +156,6 @@ class LogoutView(APIView):
         except Token.DoesNotExist:
             return Response({"error": "Token not found or user already logged out."}, status=status.HTTP_400_BAD_REQUEST)
 
-
 class DoctorRegistrationAPIView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
@@ -237,87 +172,6 @@ class DoctorRegistrationAPIView(APIView):
             }, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-'''
-class DoctorProfileViewSet(viewsets.ModelViewSet):
-    authentication_classes = [TokenAuthentication]
-    permission_classes = [IsDoctor]
-    #queryset = doctor.objects.all()
-    serializer_class = DoctorProfileUpdateSerializer
-    http_method_names = ['get', 'post', 'put', 'patch', 'delete']  # Explicitly list allowed methods
-    lookup_field = 'id'  # Add this line
-    def get_queryset(self):
-        return doctor.objects.filter(user=self.request.user)
-    def retrieve(self, request, *args, **kwargs):
-        try:
-            instance = self.get_object()
-            serializer = self.get_serializer(instance)
-            return Response(serializer.data)
-        except doctor.DoesNotExist:
-            return Response({"error": "Doctor not found"}, status=status.HTTP_404_NOT_FOUND)
-
-    def update(self, request, *args, **kwargs):
-        try:
-            print(f"Received PK: {kwargs.get('id')}")
-            partial = kwargs.pop('partial', False)
-            #instance = self.get_object()
-            instance =doctor.objects.get(pk=kwargs.get('id'))
-            #instance = self.get_queryset().get(pk=kwargs.get('id'))
-            print(f"Found doctor: {instance}")
-            serializer = self.get_serializer(instance, data=request.data, partial=partial)
-            serializer.is_valid(raise_exception=True)
-            self.perform_update(serializer)
-            return Response(serializer.data)
-        except doctor.DoesNotExist:
-            return Response({"error": "Doctor not found"}, status=status.HTTP_404_NOT_FOUND)
-    # def get_queryset(self):
-    #     #print(self.request.user.groups)  # Print the user's groups
-    #     #print(self.request.user.get_all_permissions())  # Print the user's permissions
-    #     return doctor.objects.all()
-
-    # @action(detail=True, methods=['PUT'], url_path='update-profile')#, url_path='update-profile'
-    # def update_profile(self, request, pk=None):
-    #     print(f"Received PK: {pk}")
-    #     #doctor = self.get_object()
-    #     #doctor = self.get_queryset().get(pk=pk)
-    #     #print(f"Found doctor: {doctor}")
-    #     try:
-    #         doctor_object = doctor.objects.get(pk=pk)
-    #     except doctor.DoesNotExist:
-    #         return Response({"error": "No doctor matches the given query."}, status=status.HTTP_404_NOT_FOUND)
-    #     serializer = self.get_serializer(doctor_object, data=request.data, partial=True)
-    #     serializer.is_valid(raise_exception=True)
-    #     with transaction.atomic():
-    #         serializer.save()
-    #     return Response(serializer.data, status=status.HTTP_200_OK)
-
-class DoctorProfileViewSet(viewsets.ModelViewSet):
-    authentication_classes = [TokenAuthentication]
-    permission_classes = [IsAuthenticated]
-    queryset = doctor.objects.all()
-    serializer_class = DoctorProfileSerializer
-    http_method_names = ['get', 'post', 'put', 'patch', 'delete']
-
-    def get_queryset(self):
-        return doctor.objects.filter(user=self.request.user)
-
-    def retrieve(self, request, *args, **kwargs):
-        try:
-            instance = self.get_object()
-            serializer = self.get_serializer(instance)
-            return Response(serializer.data)
-        except doctor.DoesNotExist:
-            return Response({"error": "Doctor not found"}, status=status.HTTP_404_NOT_FOUND)
-
-    def update(self, request, *args, **kwargs):
-        try:
-            instance = doctor.objects.get(pk=kwargs.get('id'))
-            serializer = DoctorProfileUpdateSerializer(instance, data=request.data, partial=kwargs.pop('partial', False))
-            serializer.is_valid(raise_exception=True)
-            serializer.save()
-            return Response(serializer.data)
-        except doctor.DoesNotExist:
-            return Response({"error": "Doctor not found"}, status=status.HTTP_404_NOT_FOUND)
-'''
 class DoctorDetailsAPIView(APIView):
     """
     API view to fetch doctor details for the authenticated user.
@@ -339,7 +193,6 @@ class DoctorDetailsAPIView(APIView):
             return Response({"error": "Doctor details not found."}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
 class DoctorProfileUpdateAPIView(APIView):
     """

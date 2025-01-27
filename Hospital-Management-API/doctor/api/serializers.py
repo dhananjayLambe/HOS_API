@@ -1,115 +1,24 @@
-from patient.models import Appointment
-from rest_framework import serializers
-from account.models import User
 from django.contrib.auth.models import Group
-from hospital_mgmt.models import Hospital
-from doctor.models import (
-    doctor, Registration, GovernmentID, Education,
-    Specialization,Award,Certification,DoctorService,
-    DoctorSocialLink,DoctorFeedback,DoctorLanguage)
-from clinic.models import Clinic
 from django.db import transaction
 
+from rest_framework import serializers
 
-
-##############OLD CODE For Reference###############
-'''
-class UserSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = User
-        fields = ['first_name', 'last_name']
-
-
-class doctorRegistrationSerializer(serializers.Serializer):
-
-    username=serializers.CharField(label='Username:')
-    first_name=serializers.CharField(label='First name:')
-    last_name=serializers.CharField(label='Last name:', required=False)
-    password = serializers.CharField(label='Password:',style={'input_type': 'password'}, write_only=True,min_length=8,
-    help_text="Your password must contain at least 8 characters and should not be entirely numeric."
-    )
-    password2=serializers.CharField(label='Confirm password:',style={'input_type': 'password'},  write_only=True)
-    
-
-    
-    def validate_username(self, username):
-        username_exists=User.objects.filter(username__iexact=username)
-        if username_exists:
-            raise serializers.ValidationError({'username':'This username already exists'})
-        return username
-
-        
-    def validate_password(self, password):
-        if password.isdigit():
-            raise serializers.ValidationError('Your password should contain letters!')
-        return password  
-
- 
-
-    def validate(self, data):
-        password=data.get('password')
-        password2=data.pop('password2')
-        if password != password2:
-            raise serializers.ValidationError({'password':'password must match'})
-        return data
-
-
-    def create(self, validated_data):
-        user= User.objects.create(
-                username=validated_data['username'],
-                first_name=validated_data['first_name'],
-                last_name=validated_data['last_name'],
-                status=False
-            )
-        user.set_password(validated_data['password'])
-        user.save()
-        group_doctor, created = Group.objects.get_or_create(name='doctor')
-        group_doctor.user_set.add(user)
-        return user
-
-class doctorProfileSerializer(serializers.Serializer):
-    Cardiologist='CL'
-    Dermatologists='DL'
-    Emergency_Medicine_Specialists='EMC'
-    Immunologists='IL'
-    Anesthesiologists='AL'
-    Colon_and_Rectal_Surgeons='CRS'
-    department=serializers.ChoiceField(label='Department:', choices=[(Cardiologist,'Cardiologist'),
-        (Dermatologists,'Dermatologists'),
-        (Emergency_Medicine_Specialists,'Emergency Medicine Specialists'),
-        (Immunologists,'Immunologists'),
-        (Anesthesiologists,'Anesthesiologists'),
-        (Colon_and_Rectal_Surgeons,'Colon and Rectal Surgeons')
-    ])
-    address= serializers.CharField(label="Address:")
-    mobile=serializers.CharField(label="Mobile Number:", max_length=20)
-    hospital_id = serializers.PrimaryKeyRelatedField(source='user.hospital', read_only=True)
-
-
-    def validate_mobile(self, mobile):
-        if mobile.isdigit()==False:
-            raise serializers.ValidationError('Please Enter a valid mobile number!')
-        return mobile
-    
-    def create(self, validated_data):
-        new_doctor= doctor.objects.create(
-            department=validated_data['department'],
-            address=validated_data['address'],
-            mobile=validated_data['mobile'],
-            user=validated_data['user']
-        )
-        return new_doctor
-    
-    def update(self, instance, validated_data):
-        instance.department=validated_data.get('department', instance.department)
-        instance.address=validated_data.get('address', instance.address)
-        instance.mobile=validated_data.get('mobile', instance.mobile)
-        instance.save()
-        return instance
-'''
-###################END################
-
-##############NEW#############
+from account.models import User
+from clinic.models import Clinic
+from doctor.models import (
+    Award,
+    Certification,
+    DoctorFeedback,
+    DoctorLanguage,
+    DoctorService,
+    DoctorSocialLink,
+    Education,
+    GovernmentID,
+    Registration,
+    Specialization,
+    doctor,
+)
+from hospital_mgmt.models import Hospital
 
 class UserSerializer(serializers.ModelSerializer):
     password2 = serializers.CharField(write_only=True)
@@ -256,6 +165,7 @@ class DoctorSocialLinkSerializer(serializers.ModelSerializer):
     class Meta:
         model = DoctorSocialLink
         fields = '__all__'
+
 class DoctorRegistrationSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source='user.username')
     first_name = serializers.CharField(source='user.first_name')
@@ -304,42 +214,6 @@ class DoctorRegistrationSerializer(serializers.ModelSerializer):
         doctor_instance.clinics.set(clinics)
 
         return doctor_instance
-
-
-'''
-class DoctorProfileUpdateSerializer(serializers.ModelSerializer):
-    education = EducationSerializer(many=True, required=False)
-    languages = DoctorLanguageSerializer(many=True, required=False)
-    certifications = CertificationSerializer(many=True, required=False)
-    government_ids = GovernmentIDSerializer(required=False)
-    services = DoctorServiceSerializer(many=True, required=False)
-    awards = AwardSerializer(many=True, required=False)
-    social_links = DoctorSocialLinkSerializer(many=True, required=False)
-    specializations = SpecializationSerializer(many=True, required=False)
-
-    class Meta:
-        model = doctor
-        fields = '__all__'
-
-    def update(self, instance, validated_data):
-        # Handle nested updates
-        nested_fields = [
-            'education', 'languages', 'certifications', 'services', 'awards', 'social_links', 'specializations'
-        ]
-        for field in nested_fields:
-            if field in validated_data:
-                nested_data = validated_data.pop(field)
-                related_manager = getattr(instance, field)
-                related_manager.all().delete()  # Clear existing data
-                for item in nested_data:
-                    related_manager.create(**item)
-
-        # Update simple fields
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-        instance.save()
-        return instance
-'''
 
 class DoctorProfileUpdateSerializer(serializers.ModelSerializer):
     education = EducationSerializer(many=True, required=False)
