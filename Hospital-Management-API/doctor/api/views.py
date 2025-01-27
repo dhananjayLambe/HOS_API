@@ -237,6 +237,7 @@ class DoctorRegistrationAPIView(APIView):
             }, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+'''
 class DoctorProfileViewSet(viewsets.ModelViewSet):
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsDoctor]
@@ -289,6 +290,34 @@ class DoctorProfileViewSet(viewsets.ModelViewSet):
     #         serializer.save()
     #     return Response(serializer.data, status=status.HTTP_200_OK)
 
+class DoctorProfileViewSet(viewsets.ModelViewSet):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+    queryset = doctor.objects.all()
+    serializer_class = DoctorProfileSerializer
+    http_method_names = ['get', 'post', 'put', 'patch', 'delete']
+
+    def get_queryset(self):
+        return doctor.objects.filter(user=self.request.user)
+
+    def retrieve(self, request, *args, **kwargs):
+        try:
+            instance = self.get_object()
+            serializer = self.get_serializer(instance)
+            return Response(serializer.data)
+        except doctor.DoesNotExist:
+            return Response({"error": "Doctor not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    def update(self, request, *args, **kwargs):
+        try:
+            instance = doctor.objects.get(pk=kwargs.get('id'))
+            serializer = DoctorProfileUpdateSerializer(instance, data=request.data, partial=kwargs.pop('partial', False))
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            return Response(serializer.data)
+        except doctor.DoesNotExist:
+            return Response({"error": "Doctor not found"}, status=status.HTTP_404_NOT_FOUND)
+'''
 class DoctorDetailsAPIView(APIView):
     """
     API view to fetch doctor details for the authenticated user.
@@ -311,3 +340,63 @@ class DoctorDetailsAPIView(APIView):
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
+class DoctorProfileUpdateAPIView(APIView):
+    """
+    API view to handle authenticated doctor's profile.
+    """
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctor]
+
+    def get(self, request):
+        try:
+            user = request.user
+            doctor_instance = doctor.objects.get(user=user)
+            serializer = DoctorProfileUpdateSerializer(doctor_instance)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except doctor.DoesNotExist:
+            return Response({"error": "Doctor profile not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    def post(self, request):
+        user = request.user
+        if hasattr(user, 'doctor'):
+            return Response({"error": "Doctor profile already exists"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        serializer = DoctorProfileUpdateSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save(user=user)  # Link doctor to the authenticated user
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def put(self, request):
+        try:
+            user = request.user
+            doctor_instance = doctor.objects.get(user=user)
+            serializer = DoctorProfileUpdateSerializer(doctor_instance, data=request.data)
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data, status=status.HTTP_200_OK)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        except doctor.DoesNotExist:
+            return Response({"error": "Doctor profile not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    def patch(self, request):
+        try:
+            user = request.user
+            doctor_instance = doctor.objects.get(user=user)
+            serializer = DoctorProfileUpdateSerializer(doctor_instance, data=request.data, partial=True)
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data, status=status.HTTP_200_OK)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        except doctor.DoesNotExist:
+            return Response({"error": "Doctor profile not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    def delete(self, request):
+        try:
+            user = request.user
+            doctor_instance = doctor.objects.get(user=user)
+            doctor_instance.delete()
+            return Response({"message": "Doctor profile deleted successfully"}, status=status.HTTP_204_NO_CONTENT)
+        except doctor.DoesNotExist:
+            return Response({"error": "Doctor profile not found"}, status=status.HTTP_404_NOT_FOUND)

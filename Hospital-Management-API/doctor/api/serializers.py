@@ -250,6 +250,7 @@ class DoctorLanguageSerializer(serializers.ModelSerializer):
 class DoctorServiceSerializer(serializers.ModelSerializer):
     class Meta:
         model = DoctorService
+        fields = '__all__'
 
 class DoctorSocialLinkSerializer(serializers.ModelSerializer):
     class Meta:
@@ -305,7 +306,7 @@ class DoctorRegistrationSerializer(serializers.ModelSerializer):
         return doctor_instance
 
 
-
+'''
 class DoctorProfileUpdateSerializer(serializers.ModelSerializer):
     education = EducationSerializer(many=True, required=False)
     languages = DoctorLanguageSerializer(many=True, required=False)
@@ -334,6 +335,40 @@ class DoctorProfileUpdateSerializer(serializers.ModelSerializer):
                     related_manager.create(**item)
 
         # Update simple fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        return instance
+'''
+
+class DoctorProfileUpdateSerializer(serializers.ModelSerializer):
+    education = EducationSerializer(many=True, required=False)
+    languages = DoctorLanguageSerializer(many=True, required=False)
+    certifications = CertificationSerializer(many=True, required=False)
+    government_ids = GovernmentIDSerializer(required=False)
+    services = DoctorServiceSerializer(many=True, required=False)
+    awards = AwardSerializer(many=True, required=False)
+    social_links = DoctorSocialLinkSerializer(many=True, required=False)
+    specializations = SpecializationSerializer(many=True, required=False)
+
+    class Meta:
+        model = doctor
+        fields = '__all__'
+
+    def update(self, instance, validated_data):
+        nested_fields = [
+            'education', 'languages', 'certifications', 'services', 
+            'awards', 'social_links', 'specializations'
+        ]
+
+        for field in nested_fields:
+            if field in validated_data:
+                nested_data = validated_data.pop(field)
+                related_manager = getattr(instance, field)
+                related_manager.all().delete()
+                for item in nested_data:
+                    related_manager.create(**item)
+
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
