@@ -67,6 +67,10 @@ class CustomAuthToken(ObtainAuthToken):
 
         return Response({
             'token': token.key,
+            'created': token.created,
+            'expires': token.expires,
+            'user_id': user.id,
+            'user_name': user.username,
         })
 
     def get_token_lifetime(self, user):

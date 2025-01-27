@@ -5,7 +5,7 @@ from django.contrib.auth.models import Group
 from hospital_mgmt.models import Hospital
 from doctor.models import (
     doctor, Registration, GovernmentID, Education,
-    Specialization,Award,Certification,
+    Specialization,Award,Certification,DoctorService,
     DoctorSocialLink,DoctorFeedback,DoctorLanguage)
 from clinic.models import Clinic
 from django.db import transaction
@@ -243,7 +243,14 @@ class DoctorLanguageSerializer(serializers.ModelSerializer):
     class Meta:
         model = DoctorLanguage
         fields = '__all__'
+class DoctorServiceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DoctorService
 
+class DoctorSocialLinkSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DoctorSocialLink
+        fields = '__all__'
 class DoctorRegistrationSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source='user.username')
     first_name = serializers.CharField(source='user.first_name')
@@ -292,3 +299,47 @@ class DoctorRegistrationSerializer(serializers.ModelSerializer):
         doctor_instance.clinics.set(clinics)
 
         return doctor_instance
+
+
+
+class DoctorProfileUpdateSerializer(serializers.ModelSerializer):
+    education = EducationSerializer(many=True, required=False)
+    languages = DoctorLanguageSerializer(many=True, required=False)
+    certifications = CertificationSerializer(many=True, required=False)
+    government_ids = GovernmentIDSerializer(required=False)
+    services = DoctorServiceSerializer(many=True, required=False)
+    awards = AwardSerializer(many=True, required=False)
+    social_links = DoctorSocialLinkSerializer(many=True, required=False)
+    specializations = SpecializationSerializer(many=True, required=False)
+
+    class Meta:
+        model = doctor
+        fields = '__all__'
+
+    def update(self, instance, validated_data):
+        # Handle nested updates
+        nested_fields = [
+            'education', 'languages', 'certifications', 'services', 'awards', 'social_links', 'specializations'
+        ]
+        for field in nested_fields:
+            if field in validated_data:
+                nested_data = validated_data.pop(field)
+                related_manager = getattr(instance, field)
+                related_manager.all().delete()  # Clear existing data
+                for item in nested_data:
+                    related_manager.create(**item)
+
+        # Update simple fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        return instance
+
+class DoctorDetailsSerializer(serializers.ModelSerializer):
+    first_name = serializers.CharField(source='user.first_name')
+    last_name = serializers.CharField(source='user.last_name')
+    username = serializers.CharField(source='user.username')
+
+    class Meta:
+        model = doctor
+        fields = ['id', 'first_name', 'last_name', 'username', 'department', 'address', 'mobile', 'dob', 'years_of_experience']
