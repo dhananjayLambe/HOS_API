@@ -116,7 +116,6 @@ class doctorAppointmentSerializer(serializers.Serializer):
     def related_patient_age(self, obj):
         return obj.patient_history.patient.age
 
-
 class RegistrationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Registration
@@ -156,6 +155,7 @@ class DoctorLanguageSerializer(serializers.ModelSerializer):
     class Meta:
         model = DoctorLanguage
         fields = '__all__'
+
 class DoctorServiceSerializer(serializers.ModelSerializer):
     class Meta:
         model = DoctorService

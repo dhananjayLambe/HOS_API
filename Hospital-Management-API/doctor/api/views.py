@@ -24,11 +24,6 @@ from .serializers import (
 class IsDoctor(BasePermission):
     """custom Permission class for Doctor"""
     def has_permission(self, request, view):
-        print(request.user.groups)  # Print the user's groups
-        print(request.user.get_all_permissions())  # Print the user's permissions
-        print(request.user)
-        print("""Is Doctor""")
-        print(bool(request.user and request.user.groups.filter(name='doctor').exists()))
         return bool(request.user and request.user.groups.filter(name='doctor').exists())
 
 class CustomAuthToken(ObtainAuthToken):
@@ -209,12 +204,10 @@ class DoctorProfileUpdateAPIView(APIView):
             return Response(serializer.data, status=status.HTTP_200_OK)
         except doctor.DoesNotExist:
             return Response({"error": "Doctor profile not found"}, status=status.HTTP_404_NOT_FOUND)
-
     def post(self, request):
         user = request.user
         if hasattr(user, 'doctor'):
-            return Response({"error": "Doctor profile already exists"}, status=status.HTTP_400_BAD_REQUEST)
-        
+            return Response({"error": "Doctor profile already exists"}, status=status.HTTP_400_BAD_REQUEST)        
         serializer = DoctorProfileUpdateSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save(user=user)  # Link doctor to the authenticated user

@@ -7,7 +7,7 @@ from clinic.models import (
 class ClinicSerializer(serializers.ModelSerializer):
     class Meta:
         model = Clinic
-        fields = '__all__'  # Or specify fields explicitly like: ['id', 'name', 'contact_number_primary', ...]
+        fields = '__all__'
 
 class ClinicAddressSerializer(serializers.ModelSerializer):
     class Meta:

@@ -11,7 +11,7 @@ class patient(models.Model):
     mobile=models.CharField(max_length=20)
     user=models.OneToOneField(User,on_delete=models.CASCADE)
     #hospital = models.ForeignKey(Hospital, on_delete=models.CASCADE, related_name="patients")
-    clinics = models.ManyToManyField(Clinic, related_name='patients')
+    clinics = models.ManyToManyField(Clinic, related_name='patients_all')
     #hospitals = models.ManyToManyField(Hospital, related_name="patients")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
