@@ -28,7 +28,6 @@ class Address(models.Model):
     def __str__(self):
         return f"{self.street}, {self.city}, {self.state}, {self.country}"
 
-
 # 2. PatientAccount: Represents the primary account holder (based on mobile number)
 class PatientAccount(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -41,8 +40,7 @@ class PatientAccount(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return self.username
-
+        return self.user.username
 
 # 3. PatientProfile: Represents individual profiles under a single account (e.g., family members)
 class PatientProfile(models.Model):
@@ -60,7 +58,6 @@ class PatientProfile(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.account.username})"
-
 
 # 4. DoctorConnection: Represents connections between patients and doctors
 class DoctorConnection(models.Model):
