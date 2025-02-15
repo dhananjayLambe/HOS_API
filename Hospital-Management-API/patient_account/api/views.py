@@ -23,10 +23,11 @@ class PatientRegistrationViewSet(viewsets.ViewSet):
             patient_group, created = Group.objects.get_or_create(name="patient")
             patient.user.groups.add(patient_group)
             patient.user.is_active = True
-            #patient.user.Status
-            # patient.status = True
-            # patient.save()
-            # Dummy OTP generation logic
+            patient.user.status = True
+            patient.user.save()
+            patient.status = True
+            patient.save()
+            #Dummy OTP generation logic
             return Response({"message": "OTP sent for verification.", "patient_id": str(patient.id)}, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
