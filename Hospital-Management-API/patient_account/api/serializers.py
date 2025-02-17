@@ -47,3 +47,7 @@ class PatientProfileCompletionSerializer(serializers.ModelSerializer):
             )
             instance.address = address
         return super().update(instance, validated_data)
+
+class PatientLoginSerializer(serializers.Serializer):
+    mobile = serializers.CharField(max_length=15)
+    otp = serializers.CharField(max_length=6, required=False)  # OTP is optional for initial login request
