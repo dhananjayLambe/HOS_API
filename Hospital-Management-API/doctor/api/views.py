@@ -13,6 +13,7 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.views import TokenRefreshView
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.authentication import JWTAuthentication
 
 
 from django.contrib.auth.models import Group
@@ -213,7 +214,7 @@ class DoctorDetailsAPIView(APIView):
     """
     API view to fetch doctor details for the authenticated user.
     """
-    authentication_classes = [TokenAuthentication]
+    authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated,IsDoctor]
     def get(self, request):
         try:
@@ -235,8 +236,8 @@ class DoctorProfileUpdateAPIView(APIView):
     """
     API view to handle authenticated doctor's profile.
     """
-    authentication_classes = [TokenAuthentication]
-    permission_classes = [IsAuthenticated, IsDoctor]
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated,IsDoctor]
 
     def get(self, request):
         try:
@@ -295,6 +296,8 @@ class DoctorTokenRefreshView(TokenRefreshView):
 
 class DoctorLogoutView(APIView):
     """Logout doctor by blacklisting the refresh token"""
+    permission_classes=[]
+    authentication_classes=[]
 
     def post(self, request):
         try:
