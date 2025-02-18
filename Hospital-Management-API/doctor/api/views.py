@@ -6,6 +6,15 @@ from rest_framework.permissions import AllowAny, BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from django.contrib.auth import authenticate
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
+from rest_framework_simplejwt.views import TokenRefreshView
+from rest_framework_simplejwt.tokens import RefreshToken
+
+
 from django.contrib.auth.models import Group
 
 from patient.models import Appointment
@@ -65,6 +74,33 @@ class DoctorRegistrationView(APIView):
             serializer.save()
             return Response({"message": "Doctor registered successfully"}, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class DoctorLoginView(APIView):
+    """Custom JWT login for doctors only"""
+    permission_classes=[]
+    authentication_classes=[]
+    def post(self, request ,*args, **kwargs):
+        username = request.data.get('username')
+        password = request.data.get('password')
+        user = authenticate(username=username, password=password)
+        if not user:
+            return Response({"message": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)
+
+        if not user.groups.filter(name='doctor').exists():
+            return Response({"message": "You are not authorized to log in as a doctor"},
+                            status=status.HTTP_403_FORBIDDEN)
+
+        if not user.status:  # Assuming 'status' is the approval field
+            return Response({"message": "Your account is not approved by admin yet!"},
+                            status=status.HTTP_403_FORBIDDEN)
+
+        # Generate JWT tokens
+        refresh = RefreshToken.for_user(user)
+        return Response({
+            "id": user.id,
+            "access_token": str(refresh.access_token),
+            "refresh_token": str(refresh),
+        }, status=status.HTTP_200_OK)
 
 class DoctorProfileView(APIView):
     """"API endpoint for doctor profile view/update-- Only accessble by doctors will update profile data only"""
@@ -161,9 +197,15 @@ class DoctorRegistrationAPIView(APIView):
             # Add the user to the "doctor" group
             doctor_group, created = Group.objects.get_or_create(name="doctor")
             doctor_instance.user.groups.add(doctor_group)
+            # Generate JWT tokens
+            refresh = RefreshToken.for_user(doctor_instance.user)
+            access_token = str(refresh.access_token)
+            refresh_token = str(refresh)
             return Response({
                 "message": "Doctor registered successfully.",
-                "doctor_id": str(doctor_instance.id)
+                "doctor_id": str(doctor_instance.id),
+                "access_token": access_token,
+                "refresh_token": refresh_token
             }, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -246,3 +288,19 @@ class DoctorProfileUpdateAPIView(APIView):
             return Response({"message": "Doctor profile deleted successfully"}, status=status.HTTP_204_NO_CONTENT)
         except doctor.DoesNotExist:
             return Response({"error": "Doctor profile not found"}, status=status.HTTP_404_NOT_FOUND)
+
+class DoctorTokenRefreshView(TokenRefreshView):
+    """Refresh JWT access token"""
+    pass
+
+class DoctorLogoutView(APIView):
+    """Logout doctor by blacklisting the refresh token"""
+
+    def post(self, request):
+        try:
+            refresh_token = request.data["refresh_token"]
+            token = RefreshToken(refresh_token)
+            token.blacklist()  # Blacklist token so it can't be reused
+            return Response({"message": "Logout successful"}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"error": "Invalid token"}, status=status.HTTP_400_BAD_REQUEST)

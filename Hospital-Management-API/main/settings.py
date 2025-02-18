@@ -51,12 +51,16 @@ INSTALLED_APPS = [
 
     #rest_framework
     'rest_framework',
-    'rest_framework.authtoken',]
+    'rest_framework.authtoken',
+    'rest_framework_simplejwt',  # Add this line
+    'rest_framework_simplejwt.token_blacklist',
+]
 
 REST_FRAMEWORK={
 
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework.authentication.TokenAuthentication',
+        #'rest_framework.authentication.TokenAuthentication',
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
@@ -65,10 +69,21 @@ REST_FRAMEWORK={
     'DEFAULT_FILTER_BACKENDS': ['django_filters.rest_framework.DjangoFilterBackend'],
     'PAGE_SIZE': 10,
     'DEFAULT_TOKEN_LIFETIME': {
-        'admin': timedelta(minutes=30),  # Admin token expires after 30 minutes
-        'doctor': timedelta(days=1),  # Doctor token expires after 1 day
+        'admin': timedelta(minutes=60),  # Admin token expires after 30 minutes
+        'doctor': timedelta(days=60),  # Doctor token expires after 1 day
         'patient': timedelta(days=30),  # Patient token expires after 30 days
     },
+}
+
+# SimpleJWT settings
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(days=30),  # Token valid for 1 day
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=60), # Refresh token valid for 7 days
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
+    'AUTH_HEADER_TYPES': ('Bearer',),  # Authorization: Bearer <token>
+    'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
+    'BLACKLIST_ENABLED': True
 }
 
 MIDDLEWARE = [
@@ -112,7 +127,7 @@ WSGI_APPLICATION = 'main.wsgi.application'
 #         'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
 #     }
 # }
-
+#Postgresql Database
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',

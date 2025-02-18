@@ -23,8 +23,9 @@ from . serializers import (doctorAccountSerializerAdmin,
                             DoctorRegistrationSerializer
                             )
 from doctor.models import doctor
-
-
+from django.contrib.auth import authenticate
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.views import TokenRefreshView
 
 class IsAdmin(BasePermission):
     """custom Permission class for Admin"""
@@ -168,7 +169,9 @@ class doctorAccountViewAdmin(APIView):
 class approveDoctorViewAdmin(APIView):
     """API endpoint for getting new doctor approval request, update and delete approval  request.
      - only accessible by Admin"""
+    
     permission_classes = [IsAdmin]
+    authenticate_classes = []
 
     def get_object(self, pk):
         try:
@@ -177,6 +180,7 @@ class approveDoctorViewAdmin(APIView):
             raise Http404
 
     def get(self, request, pk=None, format=None):
+        print("approveDoctorViewAdmin called")
         if pk:
             doctor_detail = self.get_object(pk)
             serializer = doctorAccountSerializerAdmin(doctor_detail)
@@ -462,3 +466,52 @@ class AdminLogoutView(APIView):
             return Response({"message": "Logout successful."}, status=200)
         except Token.DoesNotExist:
             return Response({"error": "Token not found or user already logged out."}, status=400)
+        
+class AdminLoginJwtView(APIView):
+    """Custom JWT login for Admin only"""
+    permission_classes=[]
+    authentication_classes=[]
+    def post(self, request ,*args, **kwargs):
+        username = request.data.get('username')
+        password = request.data.get('password')
+        user = authenticate(username=username, password=password)
+        if not user:
+            return Response({"message": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)
+
+        if not user.groups.filter(name='admin').exists():
+            return Response({"message": "You are not authorized to log in as a admin"},
+                            status=status.HTTP_403_FORBIDDEN)
+
+        # if not user.status:  # Assuming 'status' is the approval field
+        #     return Response({"message": "Your account is not approved by admin yet!"},
+        #                     status=status.HTTP_403_FORBIDDEN)
+
+        # Generate JWT tokens
+        refresh = RefreshToken.for_user(user)
+        return Response({
+            "id": user.id,
+            "access_token": str(refresh.access_token),
+            "refresh_token": str(refresh),
+        }, status=status.HTTP_200_OK)
+
+
+class AdminTokenRefreshView(TokenRefreshView):
+    """Refresh JWT access token"""
+    permission_classes=[]
+    authentication_classes=[]
+    pass
+class AdminLogoutJwtView(APIView):
+    """Custom JWT logout for Admin only"""
+    permission_classes=[]
+    authentication_classes=[]
+    #print("AdminLogoutJwtView called")
+    def post(self, request):
+        print("Raw request body:", request.body)  # Debugging
+        print("Parsed request data:", request.data)  # Debugging
+        try:
+            refresh_token = request.data["refresh_token"]
+            token = RefreshToken(refresh_token)
+            token.blacklist()  # Blacklist token so it can't be reused
+            return Response({"message": "Logout successful"}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"error": "Invalid token"}, status=status.HTTP_400_BAD_REQUEST)

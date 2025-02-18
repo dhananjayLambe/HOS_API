@@ -9,18 +9,26 @@ patientHistoryViewAdmin,
 approvePatientViewAdmin,
 approveAppointmentViewAdmin,
 DoctorRegistrationView,
-AdminLogoutView
+AdminLogoutView,
+AdminLoginJwtView,
+AdminLogoutJwtView,
+AdminTokenRefreshView
 )
 
-from django.urls import path
 
+from django.urls import path
+from rest_framework_simplejwt.views import TokenVerifyView
 
 
 app_name='hospitalAdmin'
 urlpatterns = [
     #Admin login
-    path('login/', CustomAuthToken.as_view(), name='api_admin_login'),
-    path('logout/', AdminLogoutView.as_view(), name='api_admin_logout'),
+    #path('login/', CustomAuthToken.as_view(), name='api_admin_login'),
+    #path('logout/', AdminLogoutView.as_view(), name='api_admin_logout'),
+    path('login/', AdminLoginJwtView.as_view(), name='admin_login'),
+    path('logout/', AdminLogoutJwtView.as_view(), name='admin_logout'),
+    path('token/refresh/', AdminTokenRefreshView.as_view(), name='doctor_token_refresh'),
+    path('token/verify/', TokenVerifyView.as_view(), name='doctor_token_verify'),
     # Send a password reset link or OTP to the registered email/phone.
     # * Reset Password API
     # * Update the password using the token or OTP.
