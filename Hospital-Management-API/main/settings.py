@@ -81,6 +81,8 @@ SIMPLE_JWT = {
     'REFRESH_TOKEN_LIFETIME': timedelta(days=60), # Refresh token valid for 7 days
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
+    "ALGORITHM": "HS256",
+    "SIGNING_KEY": SECRET_KEY,
     'AUTH_HEADER_TYPES': ('Bearer',),  # Authorization: Bearer <token>
     'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
     'BLACKLIST_ENABLED': True

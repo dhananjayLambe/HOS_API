@@ -141,3 +141,9 @@ class AuditLog(models.Model):
 
     def __str__(self):
         return f"Audit: {self.action} on {self.timestamp}"
+
+class OTP(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    otp = models.CharField(max_length=6)
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_verified = models.BooleanField(default=False)

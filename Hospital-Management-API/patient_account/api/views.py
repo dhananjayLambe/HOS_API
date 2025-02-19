@@ -8,73 +8,118 @@ from datetime import datetime
 from patient_account.models import PatientAccount, Address
 from patient_account.api.serializers import (
     PatientRegistrationSerializer, PatientProfileCompletionSerializer,
-    PatientLoginSerializer)
+    PatientLoginSerializer, RegisterSerializer)
 from account.models import User
 from django.contrib.auth.models import Group
+from django.core.cache import cache
+import random
+import time
+from twilio.rest import Client
+from patient_account.models import OTP
+from rest_framework.views import APIView
+from rest_framework_simplejwt.views import TokenRefreshView
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework_simplejwt.tokens import OutstandingToken, BlacklistedToken
+from rest_framework.permissions import IsAuthenticated
+from rest_framework_simplejwt.token_blacklist.models import OutstandingToken, BlacklistedToken
+from rest_framework_simplejwt.tokens import AccessToken
 
-#User = get_user_model()
-class PatientRegistrationViewSet(viewsets.ViewSet):
+#Determines if the user is new or existing.
+class CheckUserStatusView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
-    @action(detail=False, methods=['post'])
-    def register(self, request):
-        serializer = PatientRegistrationSerializer(data=request.data)
-        if serializer.is_valid():
-            patient = serializer.save()
-            # Add the user to the "patient" group
-            patient_group, created = Group.objects.get_or_create(name="patient")
-            patient.user.groups.add(patient_group)
-            patient.user.is_active = True
-            patient.user.status = True
-            patient.user.save()
-            patient.status = True
-            patient.save()
-            #Dummy OTP generation logic
-            return Response({"message": "OTP sent for verification.", "patient_id": str(patient.id)}, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    @action(detail=False, methods=['post'])
-    def verify_otp(self, request):
-        mobile = request.data.get('mobile')
+    def post(self, request):
+        phone_number = request.data.get('phone_number')
+        if User.objects.filter(username=phone_number).exists():
+            return Response({"status": "existing_user"}, status=status.HTTP_200_OK)
+        return Response({"status": "new_user"}, status=status.HTTP_200_OK)
+
+#Send OTP to the user's phone number.
+class SendOTPView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    def post(self, request):
+        phone_number = request.data.get('phone_number')
+        if not phone_number:
+            return Response({"message": "Phone number is required"}, status=status.HTTP_400_BAD_REQUEST)
+        # Check if an OTP already exists in cache
+        existing_otp = cache.get(phone_number)
+        otp_timestamp = cache.get(f"otp_timestamp_{phone_number}")
+        # If OTP exists and is still within the valid time frame, return the same OTP
+        if existing_otp and otp_timestamp and (time.time() - otp_timestamp) < 60:
+            return Response({
+                "message": "OTP already sent. Please wait before requesting a new one.",
+                "otp": existing_otp  # Show only for debugging; remove in production
+            }, status=status.HTTP_200_OK)
+        # Generate a new OTP since no valid OTP exists
+        new_otp = random.randint(100000, 999999)
+
+        # Store the OTP and the current timestamp
+        cache.set(phone_number, new_otp, timeout=60)  # OTP valid for 1 minute
+        cache.set(f"otp_timestamp_{phone_number}", time.time(), timeout=60)
+
+        return Response({
+            "message": "OTP sent successfully",
+            "otp": new_otp  # Show only for debugging; remove in production
+        }, status=status.HTTP_200_OK)
+
+class VerifyOTPView(APIView):
+    #Permision need to handle the OTP verification
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    def post(self, request):
+        phone_number = request.data.get('phone_number')
         otp = request.data.get('otp')
-        # Dummy OTP verification logic
-        if otp == "123456":
-            user = User.objects.get(username=mobile)
-            user.is_active = True
-            user.save()
-            return Response({"message": "OTP verified successfully!"}, status=status.HTTP_200_OK)
-        return Response({"error": "Invalid OTP"}, status=status.HTTP_400_BAD_REQUEST)
+        cached_otp = cache.get(phone_number)
+
+        if str(cached_otp) != str(otp):
+            return Response({"message": "Invalid OTP"}, status=status.HTTP_400_BAD_REQUEST)
+
+        #user, created = User.objects.get_or_create(username=phone_number, defaults={"is_active": True})
+        user, created = User.objects.get_or_create(username=phone_number)
+        user.is_active = True
+        user.status = True
+        # Add the user to the "patient" group
+        patient_group, created = Group.objects.get_or_create(name="patient")
+        user.groups.add(patient_group)
+        user.save()
+        # Generate JWT tokens
+        refresh = RefreshToken.for_user(user)
+        access_token = str(refresh.access_token)
+        
+        return Response(
+            {
+            "message": "Login successful",
+            "access": access_token,  # Include access token
+            "refresh": str(refresh),  # Include refresh token
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "phone_number": user.username,
+                "is_active": user.is_active
+                }
+        }, status=status.HTTP_200_OK)
     
-    @action(detail=False, methods=['post'])
-    def complete_profile(self, request):
-        user = request.user
-        patient = PatientAccount.objects.get(user=user)
-        serializer = PatientProfileCompletionSerializer(patient, data=request.data, partial=True)
-        if serializer.is_valid():
-            serializer.save()
-            return Response({"message": "Profile updated successfully."}, status=status.HTTP_200_OK)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+class CustomTokenRefreshView(TokenRefreshView):
+    pass
 
-class PatientLoginViewSet(viewsets.ViewSet):
-    @action(detail=False, methods=['post'])
-    def login(self, request):
-        serializer = PatientLoginSerializer(data=request.data)
-        if serializer.is_valid():
-            mobile = serializer.validated_data['mobile']
-            otp = serializer.validated_data.get('otp')
+class LogoutView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
 
-            if otp:
-                # Verify OTP
-                if otp == "123456":  # Replace with actual OTP verification logic
-                    user = User.objects.get(username=mobile)
-                    user.is_active = True
-                    user.save()
-                    token, created = Token.objects.get_or_create(user=user)
-                    return Response({"message": "Login successful", "token": token.key}, status=status.HTTP_200_OK)
-                else:
-                    return Response({"error": "Invalid OTP"}, status=status.HTTP_400_BAD_REQUEST)
-            else:
-                # Send OTP (dummy logic)
-                return Response({"message": "OTP sent to your mobile number"}, status=status.HTTP_200_OK)
+    def post(self, request):
+        print("i am in logout")
+        print(request.data)
+        try:
+            refresh_token = request.data.get('refresh')
 
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            if not refresh_token:
+                return Response({"message": "Refresh token is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+            token = RefreshToken(refresh_token)
+            token.blacklist()  # Blacklist the refresh token
+
+            return Response({"message": "Logged out successfully"}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"message": "Invalid token", "error": str(e)}, status=status.HTTP_400_BAD_REQUEST)

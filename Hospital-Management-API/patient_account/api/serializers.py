@@ -3,6 +3,7 @@ from rest_framework import serializers
 from account.models import User
 from datetime import datetime
 from patient_account.models import PatientAccount, Address
+from django.contrib.auth.models import Group
 #User = get_user_model()
 
 def calculate_dob(age):
@@ -51,3 +52,26 @@ class PatientProfileCompletionSerializer(serializers.ModelSerializer):
 class PatientLoginSerializer(serializers.Serializer):
     mobile = serializers.CharField(max_length=15)
     otp = serializers.CharField(max_length=6, required=False)  # OTP is optional for initial login request
+
+
+class RegisterSerializer(serializers.ModelSerializer):
+    phone_number = serializers.CharField()
+
+    class Meta:
+        model = User
+        fields = ('phone_number',)
+    
+
+    def validate_phone_number(self, value):
+        """Check if the phone number is already registered."""
+        if User.objects.filter(username=value).exists():
+            raise serializers.ValidationError("This phone number is already registered.")
+        return value
+
+    def create(self, validated_data):
+        phone_number = validated_data['phone_number']
+        user = User.objects.create(username=phone_number, is_active=False)
+        # Add user to "Patient" group
+        # patient_group, created = Group.objects.get_or_create(name="patient")
+        # user.groups.add(patient_group)
+        return user

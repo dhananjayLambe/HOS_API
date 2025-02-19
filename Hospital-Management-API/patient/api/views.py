@@ -59,6 +59,7 @@ class registrationView(APIView):
     """"API endpoint for Patient Registration"""
 
     permission_classes = []
+    authentication_classes = []
 
     def post(self, request, format=None):
         registrationSerializer = patientRegistrationSerializer(
