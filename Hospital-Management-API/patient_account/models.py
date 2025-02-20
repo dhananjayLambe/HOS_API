@@ -2,6 +2,7 @@ import uuid
 from django.db import models
 from account.models import User
 from clinic.models import Clinic
+from doctor.models import doctor
 
 # Choices for common fields
 GENDER_CHOICES = [('Male', 'Male'), ('Female', 'Female'), ('Other', 'Other')]
@@ -59,16 +60,19 @@ class PatientProfile(models.Model):
     def __str__(self):
         return f"{self.name} ({self.account.username})"
 
-# 4. DoctorConnection: Represents connections between patients and doctors
-class DoctorConnection(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    patient_profile = models.ForeignKey(PatientProfile, related_name='doctor_connections', on_delete=models.CASCADE)
-    doctor_id = models.PositiveIntegerField()  # Link to the doctor's ID (can be normalized with the Doctor model)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
 
-    def __str__(self):
-        return f"Connection: {self.patient_profile.name} -> Doctor ID {self.doctor_id}"
+# # 4. DoctorConnection: Represents connections between patients and doctors Keeps in Appoinement model
+# # 4. DoctorConnection: Represents connections between patients and doctors
+# class DoctorConnection(models.Model):
+#     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+#     patient_profile = models.ForeignKey(PatientProfile, related_name='doctor_connections', on_delete=models.CASCADE)
+#     doctor = models.ForeignKey(doctor, related_name='patient_connections', on_delete=models.CASCADE)
+#     doctor_id = models.PositiveIntegerField()  # Link to the doctor's ID (can be normalized with the Doctor model)
+#     created_at = models.DateTimeField(auto_now_add=True)
+#     updated_at = models.DateTimeField(auto_now=True)
+
+#     def __str__(self):
+#         return f"Connection: {self.patient_profile.name} -> Doctor ID {self.doctor_id}"
 
 class MedicalHistory(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -81,6 +85,8 @@ class MedicalHistory(models.Model):
     ongoing_medications = models.TextField(blank=True, null=True)  # Example: "Metformin, Aspirin"
     immunizations = models.TextField(blank=True, null=True)  # Example: "COVID-19, Hepatitis B"
     family_history = models.TextField(blank=True, null=True)  # Example: "Heart disease, Cancer"
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f"Medical History for {self.patient_profile.name}"
