@@ -2,7 +2,6 @@ import uuid
 from django.db import models
 from account.models import User
 from clinic.models import Clinic
-from doctor.models import doctor
 
 # Choices for common fields
 GENDER_CHOICES = [('Male', 'Male'), ('Female', 'Female'), ('Other', 'Other')]

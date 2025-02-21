@@ -3,9 +3,8 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter # URL Routing
 from patient_account.api.views import (
     CheckUserStatusView,VerifyOTPView,
-    CustomTokenRefreshView,LogoutView,
+    CustomTokenRefreshView,LogoutView,get_patient_account,RegisterPatientView,
     SendOTPView)
-from rest_framework_simplejwt.views import TokenObtainPairView
 app_name = 'patient_account'
 
 #router = DefaultRouter()
@@ -18,7 +17,8 @@ urlpatterns = [
     path('verify-otp/', VerifyOTPView.as_view(), name='verify-otp'),
     path('refresh-token/', CustomTokenRefreshView.as_view(), name='refresh-token'),
     path('logout/', LogoutView.as_view(), name='logout'),
-    #path('token/', TokenObtainPairView.as_view(), name='token-obtain-pair'),Not required
+    path('register/', RegisterPatientView.as_view(), name='register-patient'),
+    path('patient-account/', get_patient_account, name='patient-account'),
 
 ]
 

@@ -19,6 +19,8 @@ from patient_account.models import OTP
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenRefreshView
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.tokens import OutstandingToken, BlacklistedToken
 from rest_framework.permissions import IsAuthenticated
@@ -81,9 +83,12 @@ class VerifyOTPView(APIView):
         user.is_active = True
         user.status = True
         # Add the user to the "patient" group
-        patient_group, created = Group.objects.get_or_create(name="patient")
+        patient_group, _ = Group.objects.get_or_create(name="patient")
         user.groups.add(patient_group)
         user.save()
+        # # Create patient entry if new user
+        # if created:
+        #     PatientAccount.objects.create(user=user, phone_number=user.username)
         # Generate JWT tokens
         refresh = RefreshToken.for_user(user)
         access_token = str(refresh.access_token)
@@ -98,11 +103,42 @@ class VerifyOTPView(APIView):
                 "username": user.username,
                 "phone_number": user.username,
                 "is_active": user.is_active
-                }
+                },
+            "is_new": created,  # Returns True if the user was created now, False if already exists
         }, status=status.HTTP_200_OK)
     
 class CustomTokenRefreshView(TokenRefreshView):
     pass
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_patient_account(request):
+    print("I am in get_patient_account")
+    try:
+        print(request.user)
+        print(request.data)
+        #patient_account = PatientAccount.objects.get(user=request.user)
+        patient_account = PatientAccount.objects.get(user=request.user)
+        return Response({"id": patient_account.id})
+    except PatientAccount.DoesNotExist:
+        return Response({"error": "Patient account not found"}, status=404)
+
+class RegisterPatientView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [JWTAuthentication]
+    def post(self, request):
+        user = request.user
+        if hasattr(user, "patient"):
+            return Response({"message": "Patient already registered"}, status=status.HTTP_400_BAD_REQUEST)
+
+        patient = PatientAccount.objects.create(user=user)
+        return Response(
+            {"message": "Patient registration successful",
+            "patient_id": patient.id,
+            "phone_number": user.username
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 class LogoutView(APIView):
     permission_classes = [AllowAny]
