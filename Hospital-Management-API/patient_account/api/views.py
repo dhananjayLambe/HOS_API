@@ -26,6 +26,8 @@ from rest_framework_simplejwt.tokens import OutstandingToken, BlacklistedToken
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.token_blacklist.models import OutstandingToken, BlacklistedToken
 from rest_framework_simplejwt.tokens import AccessToken
+from patient_account.api.serializers import PatientProfileSerializer
+from rest_framework.status import HTTP_201_CREATED, HTTP_400_BAD_REQUEST
 
 #Determines if the user is new or existing.
 class CheckUserStatusView(APIView):
@@ -128,10 +130,16 @@ class RegisterPatientView(APIView):
     authentication_classes = [JWTAuthentication]
     def post(self, request):
         user = request.user
-        if hasattr(user, "patient"):
-            return Response({"message": "Patient already registered"}, status=status.HTTP_400_BAD_REQUEST)
+        # if hasattr(user, "patient"):
+        #     return Response({"message": "Patient already registered"}, status=status.HTTP_400_BAD_REQUEST)
+        #Check if the patient account already exists
+        if PatientAccount.objects.filter(user=user).exists():
+            return Response(
+                {"message": "Patient already registered"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-        patient = PatientAccount.objects.create(user=user)
+        patient, created = PatientAccount.objects.get_or_create(user=user)
         return Response(
             {"message": "Patient registration successful",
             "patient_id": patient.id,
@@ -159,3 +167,22 @@ class LogoutView(APIView):
             return Response({"message": "Logged out successfully"}, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"message": "Invalid token", "error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+class AddPatientProfileView(APIView):
+    """
+    API to create a new patient profile under an authenticated patient's account.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = PatientProfileSerializer(data=request.data, context={"request": request})
+        if serializer.is_valid():
+            profile = serializer.save()
+            return Response(
+                {
+                    "message": "Profile added successfully",
+                    "profile": serializer.data
+                }, 
+                status=HTTP_201_CREATED
+            )
+        return Response(serializer.errors, status=HTTP_400_BAD_REQUEST)

@@ -3,7 +3,7 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter # URL Routing
 from patient_account.api.views import (
     CheckUserStatusView,VerifyOTPView,
-    CustomTokenRefreshView,LogoutView,get_patient_account,RegisterPatientView,
+    CustomTokenRefreshView,LogoutView,get_patient_account,RegisterPatientView,AddPatientProfileView,
     SendOTPView)
 app_name = 'patient_account'
 
@@ -19,6 +19,7 @@ urlpatterns = [
     path('logout/', LogoutView.as_view(), name='logout'),
     path('register/', RegisterPatientView.as_view(), name='register-patient'),
     path('patient-account/', get_patient_account, name='patient-account'),
+    path("add-profile/", AddPatientProfileView.as_view(), name="add-profile"),
 
 ]
 

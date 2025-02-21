@@ -2,7 +2,7 @@ from rest_framework import serializers
 #from django.contrib.auth import get_user_model
 from account.models import User
 from datetime import datetime
-from patient_account.models import PatientAccount, Address
+from patient_account.models import PatientAccount, Address,PatientProfile
 from django.contrib.auth.models import Group
 #User = get_user_model()
 
@@ -75,3 +75,23 @@ class RegisterSerializer(serializers.ModelSerializer):
         # patient_group, created = Group.objects.get_or_create(name="patient")
         # user.groups.add(patient_group)
         return user
+
+
+class PatientProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PatientProfile
+        fields = ["id", "first_name", "last_name", "relation", "gender", "date_of_birth"]
+
+    def create(self, validated_data):
+        """
+        Creates a new patient profile under the authenticated user's account.
+        """
+        user = self.context["request"].user
+        print("user", user)
+        print("username", user.username)
+        account, _ = PatientAccount.objects.get_or_create(user=user)
+        validated_data["account"] = account  # Assign the patient account
+        return super().create(validated_data)
+        #account = self.context["request"].user.patient
+        # profile = PatientProfile.objects.create(account=account, **validated_data)
+        # return profile

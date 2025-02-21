@@ -44,20 +44,61 @@ class PatientAccount(models.Model):
 
 # 3. PatientProfile: Represents individual profiles under a single account (e.g., family members)
 class PatientProfile(models.Model):
+    RELATION_CHOICES = [
+        ("self", "Self"),
+        ("spouse", "Spouse"),
+        ("father", "Father"),
+        ("mother", "Mother"),
+        ("child", "Child"),
+    ]
+    GENDER_CHOICES = [("male", "Male"), ("female", "Female"), ("other", "Other")]
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     account = models.ForeignKey(PatientAccount, related_name='profiles', on_delete=models.CASCADE)
-    name = models.CharField(max_length=255)
-    profile_photo = models.ImageField(upload_to='patient_photos/', blank=True, null=True)
+    first_name = models.CharField(max_length=255,default="")
+    last_name = models.CharField(max_length=255,default="")
+    relation = models.CharField(max_length=10, choices=RELATION_CHOICES,default='self')
     gender = models.CharField(max_length=10, choices=GENDER_CHOICES, blank=True)
-    age = models.PositiveIntegerField(blank=True, null=True)
-    blood_group = models.CharField(max_length=5, choices=BLOOD_GROUP_CHOICES, blank=True)
     date_of_birth = models.DateField(blank=True, null=True)
-    address = models.OneToOneField(Address, related_name='patient_profile', on_delete=models.SET_NULL, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"{self.name} ({self.account.username})"
+        return f"{self.full_name} ({self.relation})"
+
+class PatientProfileDetails(models.Model):
+    BLOOD_GROUP_CHOICES = [
+        ("A+", "A+"), ("A-", "A-"), ("B+", "B+"), ("B-", "B-"),
+        ("O+", "O+"), ("O-", "O-"), ("AB+", "AB+"), ("AB-", "AB-")
+    ]
+
+    profile = models.OneToOneField(PatientProfile, related_name="details", on_delete=models.CASCADE)
+    profile_photo = models.ImageField(upload_to='patient_photos/', blank=True, null=True)
+    age = models.PositiveIntegerField(blank=True, null=True)
+    blood_group = models.CharField(max_length=5, choices=BLOOD_GROUP_CHOICES, blank=True, null=True)
+    address = models.TextField(blank=True, null=True)  # Keeping address simple
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Details for {self.profile.full_name}"
+    
+#old one
+# class PatientProfile(models.Model):
+#     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+#     account = models.ForeignKey(PatientAccount, related_name='profiles', on_delete=models.CASCADE)
+#     name = models.CharField(max_length=255)
+#     profile_photo = models.ImageField(upload_to='patient_photos/', blank=True, null=True)
+#     gender = models.CharField(max_length=10, choices=GENDER_CHOICES, blank=True)
+#     age = models.PositiveIntegerField(blank=True, null=True)
+#     blood_group = models.CharField(max_length=5, choices=BLOOD_GROUP_CHOICES, blank=True)
+#     date_of_birth = models.DateField(blank=True, null=True)
+#     address = models.OneToOneField(Address, related_name='patient_profile', on_delete=models.SET_NULL, blank=True, null=True)
+#     created_at = models.DateTimeField(auto_now_add=True)
+#     updated_at = models.DateTimeField(auto_now=True)
+
+#     def __str__(self):
+#         return f"{self.name} ({self.account.username})"
 
 
 # # 4. DoctorConnection: Represents connections between patients and doctors Keeps in Appoinement model
