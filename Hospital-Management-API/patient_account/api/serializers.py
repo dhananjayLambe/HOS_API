@@ -2,7 +2,7 @@ from rest_framework import serializers
 #from django.contrib.auth import get_user_model
 from account.models import User
 from datetime import datetime
-from patient_account.models import PatientAccount, Address,PatientProfile
+from patient_account.models import PatientAccount, Address,PatientProfile,PatientProfileDetails
 from django.contrib.auth.models import Group
 #User = get_user_model()
 
@@ -104,3 +104,8 @@ class PatientProfileUpdateSerializer(serializers.ModelSerializer):
             setattr(instance, attr, value)
         instance.save()
         return instance
+
+class PatientProfileDetailsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PatientProfileDetails
+        fields = '__all__'

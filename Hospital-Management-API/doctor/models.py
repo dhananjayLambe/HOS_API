@@ -1,6 +1,5 @@
 import uuid
 from django.db import models
-from django.utils import timezone
 from account.models import User
 from clinic.models import Clinic
 from django.utils.timezone import now

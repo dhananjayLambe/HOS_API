@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     'hospital_mgmt.apps.HospitalMgmtConfig',
     'clinic.apps.ClinicConfig',
     'patient_account.apps.PatientAccountConfig',
+    'helpdesk.apps.HelpdeskConfig',
 
 
     #rest_framework

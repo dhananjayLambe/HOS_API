@@ -5,15 +5,17 @@ from patient_account.api.views import (
     CheckUserStatusView,VerifyOTPView,
     CustomTokenRefreshView,LogoutView,get_patient_account,RegisterPatientView,AddPatientProfileView,
     GetPatientProfilesView,DeletePatientProfileView,GetProfileByNameView,
-    GetPrimaryProfileView,
+    GetPrimaryProfileView,PatientProfileDetailsViewSet,
     SendOTPView,UpdatePatientProfileView)
 app_name = 'patient_account'
 
-#router = DefaultRouter()
-#router.register(r'', basename='patients')
+router = DefaultRouter()
+#DO the CURD operations for PatientProfileDetails
+router.register(r'patient-profile-details', PatientProfileDetailsViewSet, basename='patient-profile-details')
+
 
 urlpatterns = [
-    #path('', include(router.urls)),
+    path('', include(router.urls)),
     path('check-user/', CheckUserStatusView.as_view(), name='check-user'),
     path('send-otp/', SendOTPView.as_view(), name='send-otp'),
     path('verify-otp/', VerifyOTPView.as_view(), name='verify-otp'),

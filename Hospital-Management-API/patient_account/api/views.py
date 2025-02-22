@@ -26,9 +26,9 @@ from rest_framework_simplejwt.tokens import OutstandingToken, BlacklistedToken
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.token_blacklist.models import OutstandingToken, BlacklistedToken
 from rest_framework_simplejwt.tokens import AccessToken
-from patient_account.api.serializers import PatientProfileSerializer, PatientProfileUpdateSerializer
+from patient_account.api.serializers import PatientProfileSerializer, PatientProfileUpdateSerializer, PatientProfileDetailsSerializer
 from rest_framework.status import HTTP_201_CREATED, HTTP_400_BAD_REQUEST
-from patient_account.models import PatientProfile
+from patient_account.models import PatientProfile,PatientProfileDetails
 
 #Determines if the user is new or existing.
 class CheckUserStatusView(APIView):
@@ -337,3 +337,8 @@ class GetPrimaryProfileView(APIView):
             return Response({"message": "Primary profile retrieved successfully", "profile": serializer.data}, status=status.HTTP_200_OK)
         except PatientProfile.DoesNotExist:
             return Response({"message": "No primary profile found"}, status=status.HTTP_404_NOT_FOUND)
+
+
+class PatientProfileDetailsViewSet(viewsets.ModelViewSet):
+    queryset = PatientProfileDetails.objects.all()
+    serializer_class = PatientProfileDetailsSerializer

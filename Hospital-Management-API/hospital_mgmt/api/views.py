@@ -6,7 +6,7 @@ from hospital_mgmt.models import (
     HospitalOperationalDetails,
     HospitalStaffDetails, HospitalFacility,
     HospitalDigitalInformation, 
-    HospitalBillingInformation,FrontDeskUser
+    HospitalBillingInformation
 )
 from hospital_mgmt.api.serializers import (
     HospitalSerializer,
@@ -16,7 +16,6 @@ from hospital_mgmt.api.serializers import (
     HospitalFacilitySerializer,
     HospitalDigitalInformationSerializer,
     HospitalBillingInformationSerializer,
-    FrontDeskUserSerializer
 )
 
 
@@ -32,10 +31,10 @@ class HospitalViewSet(viewsets.ModelViewSet):
     serializer_class = HospitalSerializer
     permission_classes = [AllowAny]
 
-class FrontDeskUserViewSet(viewsets.ModelViewSet):
-    queryset = FrontDeskUser.objects.all()
-    serializer_class = FrontDeskUserSerializer
-    permission_classes = [AllowAny]
+# class FrontDeskUserViewSet(viewsets.ModelViewSet):
+#     queryset = FrontDeskUser.objects.all()
+#     serializer_class = FrontDeskUserSerializer
+#     permission_classes = [AllowAny]
 
 class HospitalLicensingViewSet(viewsets.ModelViewSet):
     queryset = HospitalLicensing.objects.all()

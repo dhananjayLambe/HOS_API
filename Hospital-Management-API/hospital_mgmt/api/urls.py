@@ -1,11 +1,10 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import(
-    HospitalViewSet, FrontDeskUserViewSet,
+    HospitalViewSet,
     HospitalLicensingViewSet, HospitalOperationalDetailsViewSet, 
     HospitalStaffDetailsViewSet, HospitalFacilityViewSet, 
     HospitalDigitalInformationViewSet, HospitalBillingInformationViewSet, 
-    FrontDeskUserViewSet
 
 )
 
@@ -21,7 +20,7 @@ router.register(r'hospital-digital-information', HospitalDigitalInformationViewS
 router.register(r'hospital-billing-information', HospitalBillingInformationViewSet, basename='hospital-billing-information')
 
 # Front Desk Users Path
-router.register(r'frontdesk-users', FrontDeskUserViewSet, basename='frontdeskuser')
+#router.register(r'frontdesk-users', FrontDeskUserViewSet, basename='frontdeskuser')
 
 urlpatterns = [
     path('', include(router.urls)),
