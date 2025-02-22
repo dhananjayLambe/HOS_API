@@ -64,7 +64,7 @@ class PatientProfile(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"{self.full_name} ({self.relation})"
+        return f"{self.first_name} ({self.relation})"
 
 class PatientProfileDetails(models.Model):
     BLOOD_GROUP_CHOICES = [
@@ -81,7 +81,7 @@ class PatientProfileDetails(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"Details for {self.profile.full_name}"
+        return f"Details for {self.profile.first_name}"
     
 #old one
 # class PatientProfile(models.Model):

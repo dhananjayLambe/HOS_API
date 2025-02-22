@@ -4,7 +4,9 @@ from rest_framework.routers import DefaultRouter # URL Routing
 from patient_account.api.views import (
     CheckUserStatusView,VerifyOTPView,
     CustomTokenRefreshView,LogoutView,get_patient_account,RegisterPatientView,AddPatientProfileView,
-    SendOTPView)
+    GetPatientProfilesView,DeletePatientProfileView,GetProfileByNameView,
+    GetPrimaryProfileView,
+    SendOTPView,UpdatePatientProfileView)
 app_name = 'patient_account'
 
 #router = DefaultRouter()
@@ -20,6 +22,11 @@ urlpatterns = [
     path('register/', RegisterPatientView.as_view(), name='register-patient'),
     path('patient-account/', get_patient_account, name='patient-account'),
     path("add-profile/", AddPatientProfileView.as_view(), name="add-profile"),
+    path("update-profile-details/<uuid:profile_id>/", UpdatePatientProfileView.as_view(), name="update-profile-details"),
+    path("get-patient-profiles/", GetPatientProfilesView.as_view(), name="get-patient-profiles"),
+    path("delete-profile/<uuid:profile_id>/", DeletePatientProfileView.as_view(), name="delete-profile"),
+    path("get-profile-by-name/<str:first_name>/", GetProfileByNameView.as_view(), name="get-profile-by-name"),
+    path("get-primary-profile/", GetPrimaryProfileView.as_view(), name="get-primary-profile"),
 
 ]
 

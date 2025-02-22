@@ -92,6 +92,15 @@ class PatientProfileSerializer(serializers.ModelSerializer):
         account, _ = PatientAccount.objects.get_or_create(user=user)
         validated_data["account"] = account  # Assign the patient account
         return super().create(validated_data)
-        #account = self.context["request"].user.patient
-        # profile = PatientProfile.objects.create(account=account, **validated_data)
-        # return profile
+
+class PatientProfileUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PatientProfile
+        fields = ["first_name", "last_name", "relation", "gender", "date_of_birth"]
+
+    def update(self, instance, validated_data):
+        # Update only provided fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        return instance
