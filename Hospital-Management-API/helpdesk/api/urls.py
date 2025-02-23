@@ -1,6 +1,6 @@
 from django.urls import path
 from helpdesk.api.views import (
-    HelpdeskUserRegisterView,HelpdeskLoginView,
+    HelpdeskUserRegisterView,HelpdeskLoginView,HelpdeskClinicUserDetailView,
     HelpdeskLogoutView)
 
 from rest_framework_simplejwt.views import TokenRefreshView
@@ -11,6 +11,7 @@ urlpatterns = [
      path("register/", HelpdeskUserRegisterView.as_view(), name="helpdesk-register"),
      path("login/", HelpdeskLoginView.as_view(), name="helpdesk-login"),
      path("logout/", HelpdeskLogoutView.as_view(), name="helpdesk-logout"),
-      path("token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
+     path("token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
+     path('user-details/', HelpdeskClinicUserDetailView.as_view(), name='helpdesk-user-detail'),
 
 ]

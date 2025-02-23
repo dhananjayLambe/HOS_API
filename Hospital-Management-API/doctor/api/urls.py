@@ -2,8 +2,9 @@ from django.urls import path
 from .views import (
     CustomAuthToken,doctorAppointmentView,DoctorDetailsAPIView,
     LogoutView,DoctorRegistrationAPIView,PendingHelpdeskRequestsView,
-    UserView,DoctorProfileUpdateAPIView,ApproveHelpdeskUserView
-    ,DoctorLoginView,DoctorLogoutView,DoctorTokenRefreshView)
+    UserView,DoctorProfileUpdateAPIView,ApproveHelpdeskUserView,
+    DeactivateHelpdeskUserView,DeleteHelpdeskUserView,
+    DoctorLoginView,DoctorLogoutView,DoctorTokenRefreshView)
 from rest_framework_simplejwt.views import TokenVerifyView
 
 app_name='doctor'
@@ -21,6 +22,9 @@ urlpatterns = [
     path('proflie-details/', DoctorProfileUpdateAPIView.as_view(), name='doctor-proflie-details'),
     path("helpdesk/pending-requests/", PendingHelpdeskRequestsView.as_view(), name="helpdesk-pending-requests"),
     path("helpdesk/approve/<uuid:helpdesk_user_id>/", ApproveHelpdeskUserView.as_view(), name="approve-helpdesk"),
+    #path('api/helpdesk/<uuid:helpdesk_id>/deactivate/', DeactivateHelpdeskUserView.as_view(), name='deactivate_helpdesk_user'),
+    #path('api/helpdesk/<uuid:helpdesk_id>/delete/', DeleteHelpdeskUserView.as_view(), name='delete_helpdesk_user'),
+
     #path('login/', CustomAuthToken.as_view(), name='api_doctor_login'),
     #path('logout/', LogoutView.as_view(), name='api_doctor_logout'),
     path('appointments/', doctorAppointmentView.as_view(), name='api_doctor_profile'),

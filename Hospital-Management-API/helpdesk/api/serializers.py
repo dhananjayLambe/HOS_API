@@ -7,6 +7,11 @@ from account.models import User
 from clinic.models import Clinic
 from django.contrib.auth.models import Group
 
+class HelpdeskClinicUserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = HelpdeskClinicUser
+        fields = '__all__'  # Include all fields
+
 class HelpdeskUserRegistrationSerializer(serializers.ModelSerializer):
     clinic_id = serializers.UUIDField(write_only=True)  # Clinic ID is required for helpdesk user
 

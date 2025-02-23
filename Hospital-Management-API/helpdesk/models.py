@@ -14,6 +14,7 @@ class HelpdeskClinicUser(models.Model):
     def __str__(self):
         return f"{self.user.first_name} - {self.clinic.name}"
 
+#is_active we are not using now
 class HelpdeskActivityLog(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     helpdesk_user = models.ForeignKey(HelpdeskClinicUser, on_delete=models.CASCADE, related_name="activity_logs")

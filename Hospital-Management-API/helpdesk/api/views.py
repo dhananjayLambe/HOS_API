@@ -4,6 +4,10 @@ from rest_framework.status import HTTP_201_CREATED
 from helpdesk.api.serializers import (
      HelpdeskUserRegistrationSerializer,HelpdeskLoginSerializer,HelpdeskLogoutSerializer
     )
+from helpdesk.models import HelpdeskClinicUser
+from helpdesk.api.serializers import HelpdeskClinicUserSerializer
+from rest_framework.views import APIView
+from rest_framework_simplejwt.authentication import JWTAuthentication
 
 class HelpdeskUserRegisterView(generics.CreateAPIView):
     serializer_class = HelpdeskUserRegistrationSerializer
@@ -34,3 +38,17 @@ class HelpdeskLogoutView(generics.GenericAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         return Response({"message": "Successfully logged out"}, status=status.HTTP_205_RESET_CONTENT)
+
+
+class HelpdeskClinicUserDetailView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        try:
+            # Fetch the helpdesk user details based on the authenticated user
+            helpdesk_user = HelpdeskClinicUser.objects.get(user=request.user)
+            serializer = HelpdeskClinicUserSerializer(helpdesk_user)
+            return Response(serializer.data, status=200)
+        except HelpdeskClinicUser.DoesNotExist:
+            return Response({"error": "Helpdesk user not found"}, status=404)

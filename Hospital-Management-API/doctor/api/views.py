@@ -357,3 +357,34 @@ class ApproveHelpdeskUserView(generics.UpdateAPIView):
             return Response({"message": "Helpdesk user updated successfully."}, status=status.HTTP_200_OK)
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+# Deactivate Helpdesk User (Set status=False)
+class DeactivateHelpdeskUserView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated,IsDoctor]
+
+    def patch(self, request, helpdesk_id):
+        try:
+            helpdesk_user = HelpdeskClinicUser.objects.get(id=helpdesk_id, clinic__doctors=request.user.doctor)
+            helpdesk_user.status = False  # Set status to inactive
+            helpdesk_user.user.status = False  # Set status to inactive
+            helpdesk_user.user.is_active = False  # Set is_active to False
+            helpdesk_user.user.save()
+            helpdesk_user.save()
+            return Response({"message": "Helpdesk user deactivated successfully."}, status=status.HTTP_200_OK)
+        except HelpdeskClinicUser.DoesNotExist:
+            return Response({"error": "Helpdesk user not found or unauthorized."}, status=status.HTTP_404_NOT_FOUND)
+
+# Delete Helpdesk User
+class DeleteHelpdeskUserView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated,IsDoctor]
+
+    def delete(self, request, helpdesk_id):
+        try:
+            helpdesk_user = HelpdeskClinicUser.objects.get(id=helpdesk_id, clinic__doctors=request.user.doctor)
+            helpdesk_user.user.delete()  # Deletes the associated User record
+            helpdesk_user.delete()  # Deletes the HelpdeskClinicUser record
+            return Response({"message": "Helpdesk user deleted successfully."}, status=status.HTTP_204_NO_CONTENT)
+        except HelpdeskClinicUser.DoesNotExist:
+            return Response({"error": "Helpdesk user not found or unauthorized."}, status=status.HTTP_404_NOT_FOUND)
