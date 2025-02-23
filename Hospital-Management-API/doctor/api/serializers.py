@@ -19,6 +19,7 @@ from doctor.models import (
     doctor,
 )
 from hospital_mgmt.models import Hospital
+from helpdesk.models import HelpdeskClinicUser
 
 class UserSerializer(serializers.ModelSerializer):
     password2 = serializers.CharField(write_only=True)
@@ -256,3 +257,47 @@ class DoctorDetailsSerializer(serializers.ModelSerializer):
     class Meta:
         model = doctor
         fields = ['id', 'first_name', 'last_name', 'username', 'department', 'address', 'mobile', 'dob', 'years_of_experience']
+
+class HelpdeskUserApprovalSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ["id", "first_name", "last_name", "username", "is_active"]
+
+    def update(self, instance, validated_data):
+        """Approve Helpdesk user by setting is_active to True"""
+        instance.is_active = validated_data.get("is_active", instance.is_active)
+        instance.save()
+        return instance
+
+class PendingHelpdeskUserSerializer(serializers.ModelSerializer):
+    first_name = serializers.CharField(source="user.first_name")
+    last_name = serializers.CharField(source="user.last_name")
+    username = serializers.CharField(source="user.username")  # Mobile number as login
+    email = serializers.EmailField(source="user.email", required=False)
+    clinic_name = serializers.CharField(source="clinic.name")
+
+    class Meta:
+        model = HelpdeskClinicUser
+        fields = ["id", "first_name", "last_name", "username", "email", "clinic_name"]
+
+class HelpdeskApprovalSerializer(serializers.ModelSerializer):
+    status = serializers.ChoiceField(choices=[("approved", "Approved"), ("rejected", "Rejected")], write_only=True)
+
+    class Meta:
+        model = HelpdeskClinicUser
+        fields = ["id", "user", "clinic", "status"]
+        read_only_fields = ["id", "user", "clinic"]
+
+    def update(self, instance, validated_data):
+        """Approve or Reject a helpdesk user"""
+        status = validated_data.get("status")
+
+        if status == "approved":
+            instance.user.is_active = True  # Activate user
+            instance.user.status = True
+        elif status == "rejected":
+            instance.user.is_active = False  # Keep inactive
+            instance.user.delete()  # Optionally delete user if rejected
+
+        instance.user.save()
+        return instance

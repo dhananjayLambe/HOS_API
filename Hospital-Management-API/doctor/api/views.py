@@ -14,6 +14,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.views import TokenRefreshView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.authentication import JWTAuthentication
+from django.core.exceptions import PermissionDenied
 
 
 from django.contrib.auth.models import Group
@@ -28,8 +29,17 @@ from .serializers import (
     UserSerializer,
     ProfileSerializer,
     DoctorSerializer,
-    DoctorProfileUpdateSerializer
+    DoctorProfileUpdateSerializer,HelpdeskApprovalSerializer,
+    PendingHelpdeskUserSerializer
 )
+from rest_framework import generics
+from rest_framework.response import Response
+from rest_framework.status import HTTP_200_OK
+from django.shortcuts import get_object_or_404
+from helpdesk.models import HelpdeskClinicUser
+from rest_framework import generics, permissions, status
+from rest_framework.response import Response
+
 
 class IsDoctor(BasePermission):
     """custom Permission class for Doctor"""
@@ -307,3 +317,43 @@ class DoctorLogoutView(APIView):
             return Response({"message": "Logout successful"}, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"error": "Invalid token"}, status=status.HTTP_400_BAD_REQUEST)
+
+class PendingHelpdeskRequestsView(generics.ListAPIView):
+    """API to list pending Helpdesk user requests for a doctor's associated clinics"""
+    serializer_class = PendingHelpdeskUserSerializer
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated,IsDoctor]
+
+    def get_queryset(self):
+        """Fetch clinics associated with the doctor and return pending helpdesk users"""
+        doctor = self.request.user.doctor  
+        clinics = doctor.clinics.all()  # Get all clinics where doctor works
+        return HelpdeskClinicUser.objects.filter(clinic__in=clinics, is_active=False)
+
+
+class ApproveHelpdeskUserView(generics.UpdateAPIView):
+    """API for doctors to approve or reject a helpdesk user"""
+    serializer_class = HelpdeskApprovalSerializer
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated,IsDoctor]
+
+    def get_object(self):
+        """Ensure the doctor can only approve users from their associated clinics"""
+        doctor = self.request.user.doctor
+        helpdesk_user = get_object_or_404(HelpdeskClinicUser, id=self.kwargs["helpdesk_user_id"])
+
+        if helpdesk_user.clinic not in doctor.clinics.all():
+            raise PermissionDenied("You can only approve helpdesk users for your clinic.")
+
+        return helpdesk_user
+
+    def patch(self, request, *args, **kwargs):
+        """Handle partial updates (approve/reject helpdesk user)"""
+        helpdesk_user = self.get_object()
+        serializer = self.get_serializer(helpdesk_user, data=request.data, partial=True)
+
+        if serializer.is_valid():
+            serializer.save()
+            return Response({"message": "Helpdesk user updated successfully."}, status=status.HTTP_200_OK)
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

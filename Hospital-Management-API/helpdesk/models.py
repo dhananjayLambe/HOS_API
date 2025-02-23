@@ -7,6 +7,7 @@ class HelpdeskClinicUser(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="helpdesk_profile")
     clinic = models.ForeignKey(Clinic, on_delete=models.CASCADE, related_name="helpdesk_users")  # One-to-Many
+    is_active = models.BooleanField(default=False)  # Pending approval by default
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

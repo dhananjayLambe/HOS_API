@@ -1,5 +1,4 @@
 from .views import (
-CustomAuthToken,
 doctorAccountViewAdmin,
 approveDoctorViewAdmin, 
 appointmentViewAdmin,
@@ -12,8 +11,7 @@ DoctorRegistrationView,
 AdminLogoutView,
 AdminLoginJwtView,
 AdminLogoutJwtView,
-AdminTokenRefreshView,
-HelpdeskUserCreateView
+AdminTokenRefreshView
 )
 
 
@@ -28,7 +26,7 @@ urlpatterns = [
     path('logout/', AdminLogoutJwtView.as_view(), name='admin_logout'),
     path('token/refresh/', AdminTokenRefreshView.as_view(), name='doctor_token_refresh'),
     path('token/verify/', TokenVerifyView.as_view(), name='doctor_token_verify'),
-    path("helpdesk-users/", HelpdeskUserCreateView.as_view(), name="add-helpdesk-user"),
+    
     # Send a password reset link or OTP to the registered email/phone.
     # * Reset Password API
     # * Update the password using the token or OTP.
