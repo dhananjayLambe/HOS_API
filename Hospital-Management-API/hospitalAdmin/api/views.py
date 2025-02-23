@@ -20,12 +20,13 @@ from . serializers import (doctorAccountSerializerAdmin,
                             patientRegistrationProfileSerializerAdmin,
                             patientAccountSerializerAdmin,
                             patientHistorySerializerAdmin,
-                            DoctorRegistrationSerializer
+                            DoctorRegistrationSerializer,
+                            HelpdeskUserSerializer
                             )
-from doctor.models import doctor
 from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenRefreshView
+from rest_framework import generics
 
 class IsAdmin(BasePermission):
     """custom Permission class for Admin"""
@@ -83,7 +84,6 @@ class CustomAuthToken(ObtainAuthToken):
             return settings.REST_FRAMEWORK['DEFAULT_TOKEN_LIFETIME'].get(group.name, timedelta(days=30))
         else:
             return timedelta(days=30)
-
 
 ######NEW########
 
@@ -515,3 +515,11 @@ class AdminLogoutJwtView(APIView):
             return Response({"message": "Logout successful"}, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"error": "Invalid token"}, status=status.HTTP_400_BAD_REQUEST)
+
+class HelpdeskUserCreateView(generics.CreateAPIView):
+    serializer_class = HelpdeskUserSerializer
+    permission_classes = [IsAdmin]
+    def get_queryset(self):
+        """Return users who belong to the Helpdesk group."""
+        helpdesk_group = Group.objects.get(name="helpdesk")
+        return User.objects.filter(groups=helpdesk_group)

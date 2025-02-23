@@ -1,5 +1,3 @@
-
-from rest_framework.exceptions import ValidationError
 from patient.models import (Appointment,
                             patient_history)
 from rest_framework import serializers
@@ -8,6 +6,8 @@ from doctor.models import doctor
 from django.contrib.auth.models import Group
 from patient.models import patient
 from hospital_mgmt.models import Hospital
+from clinic.models import Clinic
+from django.contrib.auth.hashers import make_password
 
 
 ##############NEW#############
@@ -401,4 +401,37 @@ class patientHistorySerializerAdmin(serializers.Serializer):
         saved_cost.save()
 
         return instance
-    
+
+class HelpdeskUserSerializer(serializers.ModelSerializer):
+    clinic_id = serializers.UUIDField(write_only=True)  # Expect Clinic ID from API
+
+    class Meta:
+        model = User
+        fields = ["id", "first_name", "last_name", "email", "username", "clinic_id"]
+        extra_kwargs = {
+            "email": {"required": False},
+        }
+
+    def create(self, validated_data):
+        clinic_id = validated_data.pop("clinic_id")
+        password = User.objects.make_random_password()  # Generate random password
+        validated_data["password"] = make_password(password)
+        user = User.objects.create(**validated_data)
+
+        # Assign user to the "Helpdesk" group for permissions
+        helpdesk_group, created = Group.objects.get_or_create(name="helpdesk")
+        user.groups.add(helpdesk_group)
+
+        # Store Clinic association
+        clinic = Clinic.objects.get(id=clinic_id)
+        user.clinic = clinic
+        user.save()
+
+        # Send login details via email/SMS (Implement actual sending logic)
+        self.send_login_details(user, password)
+
+        return user
+
+    def send_login_details(self, user, password):
+        """Send email or SMS with login credentials"""
+        print(f"Send login details to {user.username} - Password: {password}")  # Replace with actual email/SMS logic   
