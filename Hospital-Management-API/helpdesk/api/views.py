@@ -8,6 +8,7 @@ from helpdesk.models import HelpdeskClinicUser
 from helpdesk.api.serializers import HelpdeskClinicUserSerializer
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
+from account.permissions import IsHelpdesk
 
 class HelpdeskUserRegisterView(generics.CreateAPIView):
     serializer_class = HelpdeskUserRegistrationSerializer
@@ -42,7 +43,7 @@ class HelpdeskLogoutView(generics.GenericAPIView):
 
 class HelpdeskClinicUserDetailView(APIView):
     authentication_classes = [JWTAuthentication]
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated,IsHelpdesk]
 
     def get(self, request):
         try:

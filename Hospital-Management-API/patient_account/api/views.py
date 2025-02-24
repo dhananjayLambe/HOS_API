@@ -18,9 +18,12 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.permissions import IsAuthenticated
+from rest_framework import generics, permissions
 from patient_account.api.serializers import(
-PatientProfileSerializer, PatientProfileUpdateSerializer, PatientProfileDetailsSerializer)
+PatientProfileSerializer, PatientProfileUpdateSerializer, PatientProfileDetailsSerializer,
+PatientAccountSerializer)
 from patient_account.models import PatientProfile,PatientProfileDetails
+from account.permissions import IsDoctorOrHelpdesk
 
 #Determines if the user is new or existing.
 class CheckUserStatusView(APIView):
@@ -278,3 +281,25 @@ class GetPrimaryProfileView(APIView):
 class PatientProfileDetailsViewSet(viewsets.ModelViewSet):
     queryset = PatientProfileDetails.objects.all()
     serializer_class = PatientProfileDetailsSerializer
+
+class CheckPatientView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [JWTAuthentication]
+
+    def post(self, request, *args, **kwargs):
+        mobile_number = request.data.get("phone_number")
+
+        if not mobile_number:
+            return Response({"message": "Mobile number is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = User.objects.filter(username=mobile_number).first()
+        if not user:
+            return Response({"message": "Patient not registered."}, status=status.HTTP_404_NOT_FOUND)
+
+        patient_account = PatientAccount.objects.filter(user=user).first()
+        if not patient_account:
+            return Response({"message": "Patient account not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = PatientAccountSerializer(patient_account)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+

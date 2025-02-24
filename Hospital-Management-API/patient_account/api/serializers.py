@@ -45,6 +45,12 @@ class PatientProfileSerializer(serializers.ModelSerializer):
         validated_data["account"] = account  # Assign the patient account
         return super().create(validated_data)
 
+class PatientAccountSerializer(serializers.ModelSerializer):
+    profiles = PatientProfileSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = PatientAccount
+        fields = ['id', 'user', 'alternate_mobile', 'preferred_language', 'profiles']
 class PatientProfileUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = PatientProfile

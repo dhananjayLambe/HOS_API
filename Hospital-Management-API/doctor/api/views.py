@@ -39,43 +39,43 @@ from django.shortcuts import get_object_or_404
 from helpdesk.models import HelpdeskClinicUser
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
+from account.permissions import IsDoctor
 
+# class IsDoctor(BasePermission):
+#     """custom Permission class for Doctor"""
+#     def has_permission(self, request, view):
+#         return bool(request.user and request.user.groups.filter(name='doctor').exists())
 
-class IsDoctor(BasePermission):
-    """custom Permission class for Doctor"""
-    def has_permission(self, request, view):
-        return bool(request.user and request.user.groups.filter(name='doctor').exists())
+# class CustomAuthToken(ObtainAuthToken):
 
-class CustomAuthToken(ObtainAuthToken):
+#     """This class returns custom Authentication token only for Doctor"""
 
-    """This class returns custom Authentication token only for Doctor"""
-
-    def post(self, request, *args, **kwargs):
-        serializer = self.serializer_class(data=request.data,
-                                           context={'request': request})
-        serializer.is_valid(raise_exception=True)
-        user = serializer.validated_data['user']
-        account_approval = user.groups.filter(name='doctor').exists()
-        if user.status==False:
-            return Response(
-                {
-                    'message': "Your account is not approved by admin yet!"
-                },
-                status=status.HTTP_403_FORBIDDEN
-            )
-        elif account_approval==False:
-            return Response(
-                {
-                    'message': "You are not authorised to login as a doctor"
-                },
-                status=status.HTTP_403_FORBIDDEN
-            )
-        else:
-            token, created = Token.objects.get_or_create(user=user)
-            return Response({
-                'id': user.id,
-                'token': token.key
-            },status=status.HTTP_200_OK)
+#     def post(self, request, *args, **kwargs):
+#         serializer = self.serializer_class(data=request.data,
+#                                            context={'request': request})
+#         serializer.is_valid(raise_exception=True)
+#         user = serializer.validated_data['user']
+#         account_approval = user.groups.filter(name='doctor').exists()
+#         if user.status==False:
+#             return Response(
+#                 {
+#                     'message': "Your account is not approved by admin yet!"
+#                 },
+#                 status=status.HTTP_403_FORBIDDEN
+#             )
+#         elif account_approval==False:
+#             return Response(
+#                 {
+#                     'message': "You are not authorised to login as a doctor"
+#                 },
+#                 status=status.HTTP_403_FORBIDDEN
+#             )
+#         else:
+#             token, created = Token.objects.get_or_create(user=user)
+#             return Response({
+#                 'id': user.id,
+#                 'token': token.key
+#             },status=status.HTTP_200_OK)
 
 class DoctorRegistrationView(APIView):
     permission_classes=[]

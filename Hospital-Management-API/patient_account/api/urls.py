@@ -5,7 +5,7 @@ from patient_account.api.views import (
     CheckUserStatusView,VerifyOTPView,
     CustomTokenRefreshView,LogoutView,get_patient_account,RegisterPatientView,AddPatientProfileView,
     GetPatientProfilesView,DeletePatientProfileView,GetProfileByNameView,
-    GetPrimaryProfileView,PatientProfileDetailsViewSet,
+    GetPrimaryProfileView,PatientProfileDetailsViewSet,CheckPatientView,
     SendOTPView,UpdatePatientProfileView)
 app_name = 'patient_account'
 
@@ -29,6 +29,7 @@ urlpatterns = [
     path("delete-profile/<uuid:profile_id>/", DeletePatientProfileView.as_view(), name="delete-profile"),
     path("get-profile-by-name/<str:first_name>/", GetProfileByNameView.as_view(), name="get-profile-by-name"),
     path("get-primary-profile/", GetPrimaryProfileView.as_view(), name="get-primary-profile"),
+    path("check-patient/", CheckPatientView.as_view(), name="check-patient"),
 
 ]
 

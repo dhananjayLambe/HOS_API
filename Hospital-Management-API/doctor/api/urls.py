@@ -1,9 +1,8 @@
 from django.urls import path
 from .views import (
-    CustomAuthToken,doctorAppointmentView,DoctorDetailsAPIView,
-    LogoutView,DoctorRegistrationAPIView,PendingHelpdeskRequestsView,
+    doctorAppointmentView,DoctorDetailsAPIView,
+    DoctorRegistrationAPIView,PendingHelpdeskRequestsView,
     UserView,DoctorProfileUpdateAPIView,ApproveHelpdeskUserView,
-    DeactivateHelpdeskUserView,DeleteHelpdeskUserView,
     DoctorLoginView,DoctorLogoutView,DoctorTokenRefreshView)
 from rest_framework_simplejwt.views import TokenVerifyView
 
