@@ -1,90 +1,44 @@
-from rest_framework import status
-from rest_framework.authentication import TokenAuthentication
-from rest_framework.authtoken.models import Token
-from rest_framework.authtoken.views import ObtainAuthToken
-from rest_framework.permissions import AllowAny, BasePermission, IsAuthenticated
+# Standard library imports
+from django.contrib.auth import authenticate
+from django.contrib.auth.models import Group
+from django.core.exceptions import PermissionDenied
+from django.shortcuts import get_object_or_404
+
+# Third-party imports
+from rest_framework import generics, status
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-
-from django.contrib.auth import authenticate
-from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework.response import Response
-from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
-from rest_framework_simplejwt.views import TokenRefreshView
-from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.authentication import JWTAuthentication
-from django.core.exceptions import PermissionDenied
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.views import TokenRefreshView
 
-
-from django.contrib.auth.models import Group
-
-from patient.models import Appointment
-from doctor.models import doctor
+# Local application imports
 from account.models import User
-
-from .serializers import (
-    DoctorRegistrationSerializer,
-    doctorAppointmentSerializer,
-    UserSerializer,
-    ProfileSerializer,
-    DoctorSerializer,
-    DoctorProfileUpdateSerializer,HelpdeskApprovalSerializer,
-    PendingHelpdeskUserSerializer
-)
-from rest_framework import generics
-from rest_framework.response import Response
-from rest_framework.status import HTTP_200_OK
-from django.shortcuts import get_object_or_404
-from helpdesk.models import HelpdeskClinicUser
-from rest_framework import generics, permissions, status
-from rest_framework.response import Response
 from account.permissions import IsDoctor
+from doctor.models import doctor
+from helpdesk.models import HelpdeskClinicUser
+#from patient.models import Appointment
 
-# class IsDoctor(BasePermission):
-#     """custom Permission class for Doctor"""
-#     def has_permission(self, request, view):
-#         return bool(request.user and request.user.groups.filter(name='doctor').exists())
+# Local module imports
+from doctor.api.serializers import (
+    DoctorRegistrationSerializer,
+    DoctorProfileUpdateSerializer,
+    DoctorSerializer,
+    HelpdeskApprovalSerializer,
+    PendingHelpdeskUserSerializer,
+    ProfileSerializer,
+    UserSerializer
+)
 
-# class CustomAuthToken(ObtainAuthToken):
-
-#     """This class returns custom Authentication token only for Doctor"""
-
+# class DoctorRegistrationView(APIView):
+#     permission_classes=[]
 #     def post(self, request, *args, **kwargs):
-#         serializer = self.serializer_class(data=request.data,
-#                                            context={'request': request})
-#         serializer.is_valid(raise_exception=True)
-#         user = serializer.validated_data['user']
-#         account_approval = user.groups.filter(name='doctor').exists()
-#         if user.status==False:
-#             return Response(
-#                 {
-#                     'message': "Your account is not approved by admin yet!"
-#                 },
-#                 status=status.HTTP_403_FORBIDDEN
-#             )
-#         elif account_approval==False:
-#             return Response(
-#                 {
-#                     'message': "You are not authorised to login as a doctor"
-#                 },
-#                 status=status.HTTP_403_FORBIDDEN
-#             )
-#         else:
-#             token, created = Token.objects.get_or_create(user=user)
-#             return Response({
-#                 'id': user.id,
-#                 'token': token.key
-#             },status=status.HTTP_200_OK)
-
-class DoctorRegistrationView(APIView):
-    permission_classes=[]
-    def post(self, request, *args, **kwargs):
-        serializer = DoctorRegistrationSerializer(data=request.data)      
-        if serializer.is_valid():
-            serializer.save()
-            return Response({"message": "Doctor registered successfully"}, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+#         serializer = DoctorRegistrationSerializer(data=request.data)      
+#         if serializer.is_valid():
+#             serializer.save()
+#             return Response({"message": "Doctor registered successfully"}, status=status.HTTP_201_CREATED)
+#         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class DoctorLoginView(APIView):
     """Custom JWT login for doctors only"""
@@ -171,32 +125,32 @@ class UserView(APIView):
         user.delete()
         return Response({"message": "User deleted successfully"}, status=status.HTTP_204_NO_CONTENT)
 
-class doctorAppointmentView(APIView):
-    """API endpoint for getting all appointment detail-only accesible by doctor"""
-    permission_classes = [IsDoctor]
+# class doctorAppointmentView(APIView):
+#     """API endpoint for getting all appointment detail-only accesible by doctor"""
+#     permission_classes = [IsDoctor]
 
-    def get(self, request, format=None):
-        user = request.user
-        user_doctor = doctor.objects.filter(user=user).get()
-        appointments=Appointment.objects.filter(doctor=user_doctor, status=True).order_by('appointment_date', 'appointment_time')
-        appointmentSerializer=doctorAppointmentSerializer(appointments, many=True)
-        return Response(appointmentSerializer.data, status=status.HTTP_200_OK)
+#     def get(self, request, format=None):
+#         user = request.user
+#         user_doctor = doctor.objects.filter(user=user).get()
+#         appointments=Appointment.objects.filter(doctor=user_doctor, status=True).order_by('appointment_date', 'appointment_time')
+#         appointmentSerializer=doctorAppointmentSerializer(appointments, many=True)
+#         return Response(appointmentSerializer.data, status=status.HTTP_200_OK)
 
-class LogoutView(APIView):
-    """
-    API endpoint for logging out users.
-    Deletes the user's authentication token.
-    """
-    permission_classes = [IsAuthenticated]
+# class LogoutView(APIView):
+#     """
+#     API endpoint for logging out users.
+#     Deletes the user's authentication token.
+#     """
+#     permission_classes = [IsAuthenticated]
 
-    def post(self, request, *args, **kwargs):
-        try:
-            # Get the user's token and delete it
-            token = Token.objects.get(user=request.user)
-            token.delete()
-            return Response({"message": "Logout successful."}, status=status.HTTP_200_OK)
-        except Token.DoesNotExist:
-            return Response({"error": "Token not found or user already logged out."}, status=status.HTTP_400_BAD_REQUEST)
+#     def post(self, request, *args, **kwargs):
+#         try:
+#             # Get the user's token and delete it
+#             token = Token.objects.get(user=request.user)
+#             token.delete()
+#             return Response({"message": "Logout successful."}, status=status.HTTP_200_OK)
+#         except Token.DoesNotExist:
+#             return Response({"error": "Token not found or user already logged out."}, status=status.HTTP_400_BAD_REQUEST)
 
 class DoctorRegistrationAPIView(APIView):
     permission_classes = [AllowAny]

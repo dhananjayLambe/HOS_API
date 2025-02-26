@@ -1,10 +1,10 @@
 from django.urls import path
-from .views import (
-    doctorAppointmentView,DoctorDetailsAPIView,
+from rest_framework_simplejwt.views import TokenVerifyView
+from doctor.api.views import (
+    DoctorDetailsAPIView,
     DoctorRegistrationAPIView,PendingHelpdeskRequestsView,
     UserView,DoctorProfileUpdateAPIView,ApproveHelpdeskUserView,
     DoctorLoginView,DoctorLogoutView,DoctorTokenRefreshView)
-from rest_framework_simplejwt.views import TokenVerifyView
 
 app_name='doctor'
 
@@ -14,7 +14,6 @@ urlpatterns = [
     path('logout/', DoctorLogoutView.as_view(), name='doctor_logout'),
     path('token/refresh/', DoctorTokenRefreshView.as_view(), name='doctor_token_refresh'),
     path('token/verify/', TokenVerifyView.as_view(), name='doctor_token_verify'),
-
     path('register/', DoctorRegistrationAPIView.as_view(), name='doctor-registration'),
     path('doctor-details/', DoctorDetailsAPIView.as_view(), name='doctor-details'),
     path('user-details/', UserView.as_view(), name='api_doctor_user'),
@@ -26,7 +25,7 @@ urlpatterns = [
 
     #path('login/', CustomAuthToken.as_view(), name='api_doctor_login'),
     #path('logout/', LogoutView.as_view(), name='api_doctor_logout'),
-    path('appointments/', doctorAppointmentView.as_view(), name='api_doctor_profile'),
+    #path('appointments/', doctorAppointmentView.as_view(), name='api_doctor_profile'),
     
 ]
 #helpdesk uuid is user uuid used to approve the helpdesk user

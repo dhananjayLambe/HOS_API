@@ -10,7 +10,7 @@ class DoctorAppointment(admin.TabularInline):
 
 
 class doctorAdmin(admin.ModelAdmin):
-    list_display=['get_name','department', 'address', 'mobile', 'user']
+    list_display=['get_name',  'user'] #'mobile',
     inlines=[DoctorAppointment]
 
 

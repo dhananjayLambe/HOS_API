@@ -8,25 +8,7 @@ class doctor(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     #Personal Information
     user=models.OneToOneField(User,on_delete=models.CASCADE)
-    Cardiologist='CL'
-    Dermatologists='DL'
-    Emergency_Medicine_Specialists='EMC'
-    Immunologists='IL'
-    Anesthesiologists='AL'
-    Colon_and_Rectal_Surgeons='CRS'
-
-    #The first element in each tuple is the actual value to be set on the model, and the second element is the human-readable name. 
-    department_choices=[(Cardiologist,'Cardiologist'),
-        (Dermatologists,'Dermatologists'),
-        (Emergency_Medicine_Specialists,'Emergency Medicine Specialists'),
-        (Immunologists,'Immunologists'),
-        (Anesthesiologists,'Anesthesiologists'),
-        (Colon_and_Rectal_Surgeons,'Colon and Rectal Surgeons')
-    ]
-    department=models.CharField(max_length=3, choices=department_choices, default=Cardiologist)
-    address= models.TextField(default="NA")
-    mobile=models.CharField(max_length=20,default="NA")
-    mobile_number = models.CharField(max_length=15, unique=True,default="NA")
+    secondary_mobile_number = models.CharField(max_length=15, unique=True,default="NA")
     dob = models.DateField(verbose_name="Date of Birth", null=True, blank=True)
     about = models.TextField(blank=True, null=True, help_text="Short description displayed to patients")
     photo = models.ImageField(upload_to="doctor_photos/", blank=True, null=True)

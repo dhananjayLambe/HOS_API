@@ -51,7 +51,7 @@ class ProfileSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = doctor
-        fields = ["department", "address", "mobile", "hospital_id"]
+        fields = [ "hospital_id",'secondary_mobile_number']
 
     def create(self, validated_data):
         return doctor.objects.create(**validated_data)
@@ -67,8 +67,8 @@ class DoctorSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = doctor
-        fields = ['id', 'username', 'first_name', 'last_name', 'email','mobile','department', 'address']
-        #fields=['id', 'username', 'first_name', 'last_name', 'status', 'hospital_id', 'department', 'address', 'mobile','created_at']
+        fields = ['id', 'username', 'first_name', 'last_name', 'email','secondary_mobile_number']
+        #fields=['id', 'username', 'first_name', 'last_name', 'status', 'hospital_id', 'mobile','created_at']
 
 class DoctorRegistrationSerializer(serializers.Serializer):
     user_data = UserSerializer()
@@ -89,33 +89,33 @@ class DoctorRegistrationSerializer(serializers.Serializer):
         doctor_profile = ProfileSerializer().create(profile_data)
         return doctor_profile
 
-class patientHistorySerializerDoctorView(serializers.Serializer):
-    Cardiologist='CL'
-    Dermatologists='DL'
-    Emergency_Medicine_Specialists='EMC'
-    Immunologists='IL'
-    Anesthesiologists='AL'
-    Colon_and_Rectal_Surgeons='CRS'
-    admit_date=serializers.DateField(label="Admit Date:", read_only=True)
-    symptomps=serializers.CharField(label="Symptomps:", style={'base_template': 'textarea.html'})
-    department=serializers.CharField(label='Department: ')
-    #required=False; if this field is not required to be present during deserialization.
-    release_date=serializers.DateField(label="Release Date:", required=False)
-    assigned_doctor=serializers.StringRelatedField(label='Assigned Doctor:')
+# class patientHistorySerializerDoctorView(serializers.Serializer):
+#     Cardiologist='CL'
+#     Dermatologists='DL'
+#     Emergency_Medicine_Specialists='EMC'
+#     Immunologists='IL'
+#     Anesthesiologists='AL'
+#     Colon_and_Rectal_Surgeons='CRS'
+#     admit_date=serializers.DateField(label="Admit Date:", read_only=True)
+#     symptomps=serializers.CharField(label="Symptomps:", style={'base_template': 'textarea.html'})
+#     #department=serializers.CharField(label='Department: ')
+#     #required=False; if this field is not required to be present during deserialization.
+#     release_date=serializers.DateField(label="Release Date:", required=False)
+#     assigned_doctor=serializers.StringRelatedField(label='Assigned Doctor:')
 
-class doctorAppointmentSerializer(serializers.Serializer):
-    patient_name=serializers.SerializerMethodField('related_patient_name')
-    patient_age=serializers.SerializerMethodField('related_patient_age')
-    appointment_date=serializers.DateField(label="Appointment Date:",)
-    appointment_time=serializers.TimeField(label="Appointment Time:")
-    patient_history=patientHistorySerializerDoctorView(label='patient History:')
+# class doctorAppointmentSerializer(serializers.Serializer):
+#     patient_name=serializers.SerializerMethodField('related_patient_name')
+#     patient_age=serializers.SerializerMethodField('related_patient_age')
+#     appointment_date=serializers.DateField(label="Appointment Date:",)
+#     appointment_time=serializers.TimeField(label="Appointment Time:")
+#     patient_history=patientHistorySerializerDoctorView(label='patient History:')
     
 
-    def related_patient_name(self, obj):
-        return obj.patient_history.patient.get_name
+#     def related_patient_name(self, obj):
+#         return obj.patient_history.patient.get_name
     
-    def related_patient_age(self, obj):
-        return obj.patient_history.patient.age
+#     def related_patient_age(self, obj):
+#         return obj.patient_history.patient.age
 
 class RegistrationSerializer(serializers.ModelSerializer):
     class Meta:
@@ -186,8 +186,8 @@ class DoctorRegistrationSerializer(serializers.ModelSerializer):
     class Meta:
         model = doctor
         fields = [
-            'username', 'password', 'first_name', 'last_name', 'email', 'clinics', 'department',
-            'address', 'mobile', 'mobile_number', 'dob', 'about', 'photo'
+            'username', 'password', 'first_name', 'last_name', 'email', 'clinics'
+            ,  'dob', 'about', 'photo','secondary_mobile_number'
         ]
         extra_kwargs = {
             "password": {"write_only": True}
@@ -256,7 +256,7 @@ class DoctorDetailsSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = doctor
-        fields = ['id', 'first_name', 'last_name', 'username', 'department', 'address', 'mobile', 'dob', 'years_of_experience']
+        fields = ['id', 'first_name', 'last_name', 'username',  'dob', 'years_of_experience','secondary_mobile_number']
 
 class HelpdeskUserApprovalSerializer(serializers.ModelSerializer):
     class Meta:
