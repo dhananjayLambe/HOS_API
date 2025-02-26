@@ -26,6 +26,25 @@ class doctor(models.Model):
     def __str__(self):
         return "{} ({})".format(self.user.first_name,self.department)
 
+class DoctorAddress(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    doctor = models.OneToOneField(doctor, on_delete=models.CASCADE, related_name="address")
+    address = models.TextField(max_length=255, default='NA')  # Address line 1
+    address2 = models.TextField(max_length=255, default='NA')  # Address line 2
+    city = models.CharField(max_length=100, default='NA')
+    state = models.CharField(max_length=100, default='NA')
+    pincode = models.CharField(max_length=10, default='NA')
+    country = models.CharField(max_length=100, default="India")
+    latitude = models.DecimalField(max_digits=9, decimal_places=6, blank=True, null=True, default=None)  # Geolocation
+    longitude = models.DecimalField(max_digits=9, decimal_places=6, blank=True, null=True, default=None)  # Geolocation
+    google_place_id = models.CharField(max_length=255, blank=True, null=True, default=None)  # Google Place ID
+    google_maps_url = models.URLField(blank=True, null=True, default=None)  # Google Maps URL
+    created_at = models.DateTimeField(auto_now_add=True)  # Mandatory
+    updated_at = models.DateTimeField(auto_now=True)  # Mandatory
+
+    def __str__(self):
+        return f"{self.address}, {self.city}, {self.state}, {self.pincode}"
+
 class Registration(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     doctor = models.OneToOneField(doctor, on_delete=models.CASCADE, related_name='registration')
