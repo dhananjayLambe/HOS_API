@@ -12,26 +12,9 @@ BLOOD_GROUP_CHOICES = [
     ('O+', 'O+'), ('O-', 'O-')
 ]
 
-# 1. Address: Stores address details, including Google mapping fields
-class Address(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    street = models.CharField(max_length=255, blank=True, null=True)
-    city = models.CharField(max_length=100, blank=True, null=True)
-    state = models.CharField(max_length=100, blank=True, null=True)
-    country = models.CharField(max_length=100, blank=True, null=True)
-    pincode = models.CharField(max_length=10, blank=True, null=True)
-    latitude = models.DecimalField(max_digits=9, decimal_places=6, blank=True, null=True)  # Google Maps Latitude
-    longitude = models.DecimalField(max_digits=9, decimal_places=6, blank=True, null=True)  # Google Maps Longitude
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    def __str__(self):
-        return f"{self.street}, {self.city}, {self.state}, {self.country}"
-
 # 2. PatientAccount: Represents the primary account holder (based on mobile number)
 class PatientAccount(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    #username = models.CharField(max_length=15, unique=True)  # Mobile number
     user=models.OneToOneField(User,on_delete=models.CASCADE)
     clinics = models.ManyToManyField(Clinic, related_name='patients')
     alternate_mobile = models.CharField(max_length=15, blank=True, null=True)
@@ -76,43 +59,38 @@ class PatientProfileDetails(models.Model):
     profile_photo = models.ImageField(upload_to='patient_photos/', blank=True, null=True)
     age = models.PositiveIntegerField(blank=True, null=True)
     blood_group = models.CharField(max_length=5, choices=BLOOD_GROUP_CHOICES, blank=True, null=True)
-    address = models.TextField(blank=True, null=True)  # Keeping address simple
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f"Details for {self.profile.first_name}"
+
+class PatientAddress(models.Model):
+    HOME = "home"
+    WORK = "work"
+    OTHER = "other"
     
-#old one
-# class PatientProfile(models.Model):
-#     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-#     account = models.ForeignKey(PatientAccount, related_name='profiles', on_delete=models.CASCADE)
-#     name = models.CharField(max_length=255)
-#     profile_photo = models.ImageField(upload_to='patient_photos/', blank=True, null=True)
-#     gender = models.CharField(max_length=10, choices=GENDER_CHOICES, blank=True)
-#     age = models.PositiveIntegerField(blank=True, null=True)
-#     blood_group = models.CharField(max_length=5, choices=BLOOD_GROUP_CHOICES, blank=True)
-#     date_of_birth = models.DateField(blank=True, null=True)
-#     address = models.OneToOneField(Address, related_name='patient_profile', on_delete=models.SET_NULL, blank=True, null=True)
-#     created_at = models.DateTimeField(auto_now_add=True)
-#     updated_at = models.DateTimeField(auto_now=True)
+    ADDRESS_CHOICES = [
+        (HOME, "Home"),
+        (WORK, "Work"),
+        (OTHER, "Other"),
+    ]
 
-#     def __str__(self):
-#         return f"{self.name} ({self.account.username})"
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    account = models.ForeignKey(PatientAccount, related_name="addresses", on_delete=models.CASCADE)  # Linked to PatientAccount
+    address_type = models.CharField(max_length=10, choices=ADDRESS_CHOICES, default=HOME)  # Address type field
+    street = models.CharField(max_length=255, blank=True, null=True)
+    city = models.CharField(max_length=100, blank=True, null=True)
+    state = models.CharField(max_length=100, blank=True, null=True)
+    country = models.CharField(max_length=100, blank=True, null=True)
+    pincode = models.CharField(max_length=10, blank=True, null=True)
+    latitude = models.DecimalField(max_digits=9, decimal_places=6, blank=True, null=True)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6, blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
-
-# # 4. DoctorConnection: Represents connections between patients and doctors Keeps in Appoinement model
-# # 4. DoctorConnection: Represents connections between patients and doctors
-# class DoctorConnection(models.Model):
-#     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-#     patient_profile = models.ForeignKey(PatientProfile, related_name='doctor_connections', on_delete=models.CASCADE)
-#     doctor = models.ForeignKey(doctor, related_name='patient_connections', on_delete=models.CASCADE)
-#     doctor_id = models.PositiveIntegerField()  # Link to the doctor's ID (can be normalized with the Doctor model)
-#     created_at = models.DateTimeField(auto_now_add=True)
-#     updated_at = models.DateTimeField(auto_now=True)
-
-#     def __str__(self):
-#         return f"Connection: {self.patient_profile.name} -> Doctor ID {self.doctor_id}"
+    def __str__(self):
+        return f"{self.address_type.capitalize()} - {self.street}, {self.city}"
 
 class MedicalHistory(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

@@ -1,11 +1,8 @@
 from django.contrib import admin
 from patient_account.models import (
-    Address, PatientAccount, PatientProfile, PatientProfileDetails,
-    MedicalHistory, HealthMetrics, AuditLog, OTP,PatientAccount,Address
+     PatientAccount, PatientProfile, PatientProfileDetails,
+    MedicalHistory, HealthMetrics, AuditLog, OTP,PatientAccount
 )
-class AddressAdmin(admin.ModelAdmin):
-    list_display = ('street', 'city', 'state', 'country', 'pincode')
-    search_fields = ('street', 'city', 'state', 'pincode')
 
 class PatientAccountAdmin(admin.ModelAdmin):
     list_display = ('user', 'alternate_mobile', 'preferred_language', 'created_at')
@@ -19,7 +16,7 @@ class PatientProfileAdmin(admin.ModelAdmin):
     list_filter = ('relation', 'gender')
 
 class PatientProfileDetailsAdmin(admin.ModelAdmin):
-    list_display = ('profile', 'profile_photo', 'age', 'blood_group', 'address')
+    list_display = ('profile', 'profile_photo', 'age', 'blood_group')
     search_fields = ('profile__first_name', 'profile__last_name', 'blood_group')
 
 class MedicalHistoryAdmin(admin.ModelAdmin):
@@ -39,7 +36,6 @@ class OTPAdmin(admin.ModelAdmin):
     search_fields = ('user__username',)
 
 # Register Models
-admin.site.register(Address, AddressAdmin)
 admin.site.register(PatientAccount, PatientAccountAdmin)
 admin.site.register(PatientProfile, PatientProfileAdmin)
 admin.site.register(PatientProfileDetails, PatientProfileDetailsAdmin)
