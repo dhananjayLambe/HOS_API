@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     'clinic.apps.ClinicConfig',
     'patient_account.apps.PatientAccountConfig',
     'helpdesk.apps.HelpdeskConfig',
+    'appointments.apps.AppointmentsConfig',
     #rest_framework
     'rest_framework',
     'rest_framework.authtoken',

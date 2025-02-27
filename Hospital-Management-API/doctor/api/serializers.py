@@ -9,7 +9,6 @@ from doctor.models import (
     Award,
     Certification,
     DoctorFeedback,
-    DoctorLanguage,
     DoctorService,
     DoctorSocialLink,
     Education,
@@ -152,11 +151,6 @@ class DoctorFeedbackSerializer(serializers.ModelSerializer):
         model = DoctorFeedback
         fields = '__all__'
 
-class DoctorLanguageSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = DoctorLanguage
-        fields = '__all__'
-
 class DoctorServiceSerializer(serializers.ModelSerializer):
     class Meta:
         model = DoctorService
@@ -218,7 +212,6 @@ class DoctorRegistrationSerializer(serializers.ModelSerializer):
 
 class DoctorProfileUpdateSerializer(serializers.ModelSerializer):
     education = EducationSerializer(many=True, required=False)
-    languages = DoctorLanguageSerializer(many=True, required=False)
     certifications = CertificationSerializer(many=True, required=False)
     government_ids = GovernmentIDSerializer(required=False)
     services = DoctorServiceSerializer(many=True, required=False)

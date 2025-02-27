@@ -216,14 +216,3 @@ class DoctorSocialLink(models.Model):
 
     def __str__(self):
         return f"{self.platform} - {self.url}"
-
-class DoctorLanguage(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    doctor = models.ForeignKey(doctor, on_delete=models.CASCADE, related_name='languages')
-    language = models.CharField(max_length=50,default="NA", help_text="e.g., English, Hindi, Marathi")
-    proficiency = models.CharField(max_length=50, choices=[('Basic', 'Basic'), ('Fluent', 'Fluent'), ('Native', 'Native')], default='Fluent')
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    def __str__(self):
-        return f"{self.language} - {self.proficiency} ({self.doctor.get_name})"
