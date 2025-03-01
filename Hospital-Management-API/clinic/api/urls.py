@@ -28,6 +28,7 @@ urlpatterns = [
     path('', include(router.urls)),
 ]
 
+# profilupdate/<uuid:clinic_id>/ Need to remove the code for schding as it can be added to appointmennt app
 # path("clinic/details/", ClinicDetailView.as_view(), name="clinic-details"),
 # need to get the all the details as when doctor log in to the system he should be able to see the clinic details
 #API need to create for the same

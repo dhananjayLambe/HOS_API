@@ -45,6 +45,38 @@ class DoctorAvailability(models.Model):
         unique_together = ('doctor', 'clinic')  # Ensures one fee structure per doctor per clinic
     def __str__(self):
         return f"Availability of {self.doctor.full_name}"
+    def generate_slots(self, session_start, session_end):
+        """
+        Generate time slots for a given session based on slot duration.
+        """
+        from datetime import datetime, timedelta
+
+        if not session_start or not session_end:
+            return []
+
+        slots = []
+        current_time = datetime.combine(datetime.today(), session_start)
+        end_time = datetime.combine(datetime.today(), session_end)
+
+        while current_time < end_time:
+            slot_start = current_time.time()
+            current_time += timedelta(minutes=self.slot_duration)
+            slot_end = current_time.time()
+
+            if current_time <= end_time:
+                slots.append((slot_start, slot_end))
+        return slots
+
+    def get_all_slots(self):
+        """
+        Get all available slots for morning, afternoon, and evening sessions.
+        """
+        all_slots = {
+            "morning": self.generate_slots(self.morning_start, self.morning_end),
+            "afternoon": self.generate_slots(self.afternoon_start, self.afternoon_end),
+            "evening": self.generate_slots(self.evening_start, self.evening_end),
+        }
+        return all_slots
 
 class DoctorLeave(models.Model):
     """ Stores doctor leave records for specific date ranges """

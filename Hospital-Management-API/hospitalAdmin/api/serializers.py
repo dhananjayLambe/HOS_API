@@ -41,7 +41,7 @@ class DoctorProfileSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = doctor
-        fields = ["department", "address", "mobile", "hospital_id"]
+        fields =  ["secondary_mobile_number", "hospital_id"]
 
     def create(self, validated_data):
         return doctor.objects.create(**validated_data)
