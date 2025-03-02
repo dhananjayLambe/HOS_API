@@ -1,4 +1,6 @@
 import uuid
+import json
+from datetime import datetime, timedelta
 from django.db import models
 from clinic.models import Clinic
 from doctor.models import doctor
@@ -7,76 +9,135 @@ from django.core.exceptions import ValidationError
 from patient_account.models import PatientAccount,PatientProfile
 
 #Patinets Appointments Related Models of Docotors
-
 class DoctorAvailability(models.Model):
-    """ Stores OPD shifts, working days, and scheduling policies """
+    """ Stores OPD shifts with per-day working schedules """
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     doctor = models.ForeignKey(doctor, on_delete=models.CASCADE)
     clinic = models.ForeignKey(Clinic, on_delete=models.CASCADE)
 
-    # Working Days (Monday-Sunday)
-    working_days = ArrayField(models.CharField(max_length=10, choices=[
-        ("Monday", "Monday"), ("Tuesday", "Tuesday"), ("Wednesday", "Wednesday"),
-        ("Thursday", "Thursday"), ("Friday", "Friday"), ("Saturday", "Saturday"),
-        ("Sunday", "Sunday")
-    ]), default=list)
-    # Shift Timings
-    morning_start = models.TimeField(null=True, blank=True)
-    morning_end = models.TimeField(null=True, blank=True)
-    evening_start = models.TimeField(null=True, blank=True)
-    evening_end = models.TimeField(null=True, blank=True)
-    night_start = models.TimeField(null=True, blank=True)
-    night_end = models.TimeField(null=True, blank=True)
-
-    # Break Time
-    break_start = models.TimeField(null=True, blank=True, help_text="Lunch/Personal Break Start Time")
-    break_end = models.TimeField(null=True, blank=True, help_text="Lunch/Personal Break End Time")
+    # Working Days and Timing Slots (Stored as JSON)
+    availability = models.JSONField(default=list, help_text="Stores day-wise availability")
 
     # Appointment Scheduling Rules
-    slot_duration = models.PositiveIntegerField(default=15, help_text="Consultation duration per patient (in minutes)")
-    buffer_time = models.PositiveIntegerField(default=5, help_text="Gap between two appointments (in minutes)")
-    max_appointments_per_day = models.PositiveIntegerField(default=20, help_text="Daily appointment limit")
+    slot_duration = models.PositiveIntegerField(default=10, help_text="Duration per patient (minutes)")
+    buffer_time = models.PositiveIntegerField(default=5, help_text="Gap between appointments (minutes)")
+    max_appointments_per_day = models.PositiveIntegerField(default=20, help_text="Daily limit")
 
-    # Emergency Slot
-    emergency_slots = models.PositiveIntegerField(default=2, help_text="Reserved slots for emergency cases")
+    # Emergency Slots
+    emergency_slots = models.PositiveIntegerField(default=2, help_text="Reserved emergency slots")
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    class Meta:
-        unique_together = ('doctor', 'clinic')  # Ensures one fee structure per doctor per clinic
-    def __str__(self):
-        return f"Availability of {self.doctor.full_name}"
-    def generate_slots(self, session_start, session_end):
-        """
-        Generate time slots for a given session based on slot duration.
-        """
-        from datetime import datetime, timedelta
 
-        if not session_start or not session_end:
+    class Meta:
+        unique_together = ('doctor', 'clinic')  # Ensures one availability per doctor per clinic
+
+    def __str__(self):
+        return f"Availability for {self.doctor.full_name} at {self.clinic.name}"
+
+    def generate_slots(self, start_time, end_time):
+        """ Generate time slots for a given start and end time """
+        if not start_time or not end_time:
             return []
 
         slots = []
-        current_time = datetime.combine(datetime.today(), session_start)
-        end_time = datetime.combine(datetime.today(), session_end)
+        current_time = datetime.combine(datetime.today(), datetime.strptime(start_time, "%H:%M:%S").time())
+        end_time = datetime.combine(datetime.today(), datetime.strptime(end_time, "%H:%M:%S").time())
 
         while current_time < end_time:
             slot_start = current_time.time()
-            current_time += timedelta(minutes=self.slot_duration)
+            current_time += timedelta(minutes=self.slot_duration + self.buffer_time)
             slot_end = current_time.time()
 
             if current_time <= end_time:
-                slots.append((slot_start, slot_end))
+                slots.append({"start_time": slot_start.strftime("%H:%M:%S"), "end_time": slot_end.strftime("%H:%M:%S")})
+        
         return slots
 
     def get_all_slots(self):
-        """
-        Get all available slots for morning, afternoon, and evening sessions.
-        """
-        all_slots = {
-            "morning": self.generate_slots(self.morning_start, self.morning_end),
-            "afternoon": self.generate_slots(self.afternoon_start, self.afternoon_end),
-            "evening": self.generate_slots(self.evening_start, self.evening_end),
-        }
+        """ Get all available slots for each working day """
+        all_slots = {}
+        for day_data in self.availability:
+            day = day_data["day"]
+            slots = {
+                "morning": self.generate_slots(day_data.get("morning_start"), day_data.get("morning_end")),
+                "evening": self.generate_slots(day_data.get("evening_start"), day_data.get("evening_end")),
+                "night": self.generate_slots(day_data.get("night_start"), day_data.get("night_end"))
+            }
+            all_slots[day] = slots
         return all_slots
+
+
+# class DoctorAvailability(models.Model):
+#     """ Stores OPD shifts, working days, and scheduling policies """
+#     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+#     doctor = models.ForeignKey(doctor, on_delete=models.CASCADE)
+#     clinic = models.ForeignKey(Clinic, on_delete=models.CASCADE)
+
+#     # Working Days (Monday-Sunday)
+#     working_days = ArrayField(models.CharField(max_length=10, choices=[
+#         ("Monday", "Monday"), ("Tuesday", "Tuesday"), ("Wednesday", "Wednesday"),
+#         ("Thursday", "Thursday"), ("Friday", "Friday"), ("Saturday", "Saturday"),
+#         ("Sunday", "Sunday")
+#     ]), default=list)
+#     # Shift Timings
+#     morning_start = models.TimeField(null=True, blank=True)
+#     morning_end = models.TimeField(null=True, blank=True)
+#     evening_start = models.TimeField(null=True, blank=True)
+#     evening_end = models.TimeField(null=True, blank=True)
+#     night_start = models.TimeField(null=True, blank=True)
+#     night_end = models.TimeField(null=True, blank=True)
+
+#     # Break Time
+#     break_start = models.TimeField(null=True, blank=True, help_text="Lunch/Personal Break Start Time")
+#     break_end = models.TimeField(null=True, blank=True, help_text="Lunch/Personal Break End Time")
+
+#     # Appointment Scheduling Rules
+#     slot_duration = models.PositiveIntegerField(default=15, help_text="Consultation duration per patient (in minutes)")
+#     buffer_time = models.PositiveIntegerField(default=5, help_text="Gap between two appointments (in minutes)")
+#     max_appointments_per_day = models.PositiveIntegerField(default=20, help_text="Daily appointment limit")
+
+#     # Emergency Slot
+#     emergency_slots = models.PositiveIntegerField(default=2, help_text="Reserved slots for emergency cases")
+#     created_at = models.DateTimeField(auto_now_add=True)
+#     updated_at = models.DateTimeField(auto_now=True)
+#     class Meta:
+#         unique_together = ('doctor', 'clinic')  # Ensures one fee structure per doctor per clinic
+#     def __str__(self):
+#         return f"Availability of {self.doctor.full_name}"
+#     def generate_slots(self, session_start, session_end):
+#         """
+#         Generate time slots for a given session based on slot duration.
+#         """
+#         from datetime import datetime, timedelta
+
+#         if not session_start or not session_end:
+#             return []
+
+#         slots = []
+#         current_time = datetime.combine(datetime.today(), session_start)
+#         end_time = datetime.combine(datetime.today(), session_end)
+
+#         while current_time < end_time:
+#             slot_start = current_time.time()
+#             current_time += timedelta(minutes=self.slot_duration)
+#             slot_end = current_time.time()
+
+#             if current_time <= end_time:
+#                 slots.append((slot_start, slot_end))
+#         return slots
+
+#     def get_all_slots(self):
+#         """
+#         Get all available slots for morning, afternoon, and evening sessions.
+#         """
+#         all_slots = {
+#             "morning": self.generate_slots(self.morning_start, self.morning_end),
+#             "afternoon": self.generate_slots(self.afternoon_start, self.afternoon_end),
+#             "evening": self.generate_slots(self.evening_start, self.evening_end),
+#         }
+#         return all_slots
 
 class DoctorLeave(models.Model):
     """ Stores doctor leave records for specific date ranges """
