@@ -241,7 +241,9 @@ class GetPatientProfilesView(APIView):
             
             # Serialize and return profiles
             serializer = PatientProfileSerializer(profiles, many=True)
-            return Response({"profiles": serializer.data}, status=status.HTTP_200_OK)
+            return Response({
+                "patient_account": patient_account.id,
+                "profiles": serializer.data}, status=status.HTTP_200_OK)
 
         except PatientAccount.DoesNotExist:
             return Response({"message": "Patient account not found"}, status=status.HTTP_404_NOT_FOUND)

@@ -24,3 +24,8 @@ class IsDoctorOrHelpdesk(BasePermission):
     """Custom permission to allow access to Doctors OR Helpdesk users."""
     def has_permission(self, request, view):
         return bool(request.user and request.user.groups.filter(name__in=['doctor', 'helpdesk']).exists())
+    
+class IsDoctorOrHelpdeskOrPatient(BasePermission):
+    """Custom permission to allow access to Doctors OR Helpdesk users."""
+    def has_permission(self, request, view):
+        return bool(request.user and request.user.groups.filter(name__in=['doctor', 'helpdesk', 'patient']).exists())

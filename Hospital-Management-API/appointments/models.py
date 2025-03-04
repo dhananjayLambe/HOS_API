@@ -68,77 +68,6 @@ class DoctorAvailability(models.Model):
             all_slots[day] = slots
         return all_slots
 
-
-# class DoctorAvailability(models.Model):
-#     """ Stores OPD shifts, working days, and scheduling policies """
-#     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-#     doctor = models.ForeignKey(doctor, on_delete=models.CASCADE)
-#     clinic = models.ForeignKey(Clinic, on_delete=models.CASCADE)
-
-#     # Working Days (Monday-Sunday)
-#     working_days = ArrayField(models.CharField(max_length=10, choices=[
-#         ("Monday", "Monday"), ("Tuesday", "Tuesday"), ("Wednesday", "Wednesday"),
-#         ("Thursday", "Thursday"), ("Friday", "Friday"), ("Saturday", "Saturday"),
-#         ("Sunday", "Sunday")
-#     ]), default=list)
-#     # Shift Timings
-#     morning_start = models.TimeField(null=True, blank=True)
-#     morning_end = models.TimeField(null=True, blank=True)
-#     evening_start = models.TimeField(null=True, blank=True)
-#     evening_end = models.TimeField(null=True, blank=True)
-#     night_start = models.TimeField(null=True, blank=True)
-#     night_end = models.TimeField(null=True, blank=True)
-
-#     # Break Time
-#     break_start = models.TimeField(null=True, blank=True, help_text="Lunch/Personal Break Start Time")
-#     break_end = models.TimeField(null=True, blank=True, help_text="Lunch/Personal Break End Time")
-
-#     # Appointment Scheduling Rules
-#     slot_duration = models.PositiveIntegerField(default=15, help_text="Consultation duration per patient (in minutes)")
-#     buffer_time = models.PositiveIntegerField(default=5, help_text="Gap between two appointments (in minutes)")
-#     max_appointments_per_day = models.PositiveIntegerField(default=20, help_text="Daily appointment limit")
-
-#     # Emergency Slot
-#     emergency_slots = models.PositiveIntegerField(default=2, help_text="Reserved slots for emergency cases")
-#     created_at = models.DateTimeField(auto_now_add=True)
-#     updated_at = models.DateTimeField(auto_now=True)
-#     class Meta:
-#         unique_together = ('doctor', 'clinic')  # Ensures one fee structure per doctor per clinic
-#     def __str__(self):
-#         return f"Availability of {self.doctor.full_name}"
-#     def generate_slots(self, session_start, session_end):
-#         """
-#         Generate time slots for a given session based on slot duration.
-#         """
-#         from datetime import datetime, timedelta
-
-#         if not session_start or not session_end:
-#             return []
-
-#         slots = []
-#         current_time = datetime.combine(datetime.today(), session_start)
-#         end_time = datetime.combine(datetime.today(), session_end)
-
-#         while current_time < end_time:
-#             slot_start = current_time.time()
-#             current_time += timedelta(minutes=self.slot_duration)
-#             slot_end = current_time.time()
-
-#             if current_time <= end_time:
-#                 slots.append((slot_start, slot_end))
-#         return slots
-
-#     def get_all_slots(self):
-#         """
-#         Get all available slots for morning, afternoon, and evening sessions.
-#         """
-#         all_slots = {
-#             "morning": self.generate_slots(self.morning_start, self.morning_end),
-#             "afternoon": self.generate_slots(self.afternoon_start, self.afternoon_end),
-#             "evening": self.generate_slots(self.evening_start, self.evening_end),
-#         }
-#         return all_slots
-
 class DoctorLeave(models.Model):
     """ Stores doctor leave records for specific date ranges """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -268,3 +197,23 @@ class Appointment(models.Model):
 
     def __str__(self):
         return f"Appointment for {self.patient_profile.first_name} with Dr. {self.doctor.get_name} on {self.appointment_date}"
+    
+    def clean(self):
+        """ Validate appointment slot availability """
+        if Appointment.objects.filter(
+            doctor=self.doctor, clinic=self.clinic,
+            appointment_date=self.appointment_date,
+            appointment_time=self.appointment_time,
+            status='scheduled'
+        ).exists():
+            raise ValidationError("Selected time slot is already booked.")
+        if Appointment.objects.filter(
+            doctor=self.doctor, clinic=self.clinic,
+            appointment_date=self.appointment_date,
+            status='scheduled'
+        ).count() >= self.doctor.doctoravailability.max_appointments_per_day:
+            raise ValidationError("Doctor has reached the maximum appointments for the day.")
+
+#Additional Model Suggestions (Optional for Future Phases)
+# AppointmentHistory Model – To track status changes of an appointment over time.
+#Waiting List Model – If a time slot is full, maintain a waitlist system.
