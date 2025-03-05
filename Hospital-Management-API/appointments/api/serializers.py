@@ -76,19 +76,38 @@ class AppointmentRescheduleSerializer(serializers.ModelSerializer):
         instance.save()
         return instance
 
-class PatientAppointmentSerializer(serializers.ModelSerializer):
-    doctor_id = serializers.UUIDField(source="doctor.id", read_only=True)
-    doctor_name = serializers.CharField(source="doctor.full_name", read_only=True)
-    clinic_id = serializers.UUIDField(source="clinic.id", read_only=True)
+# class PatientAppointmentSerializer(serializers.ModelSerializer):
+#     doctor_id = serializers.UUIDField(source="doctor.id", read_only=True)
+#     doctor_name = serializers.CharField(source="doctor.full_name", read_only=True)
+#     clinic_id = serializers.UUIDField(source="clinic.id", read_only=True)
+#     clinic_name = serializers.CharField(source="clinic.name", read_only=True)
+
+#     class Meta:
+#         model = Appointment
+#         fields = [
+#             "id",
+#             "doctor_id",
+#             "doctor_name",
+#             "clinic_id",
+#             "clinic_name",
+#             "appointment_date",
+#             "appointment_time",
+#             "status",
+#             "payment_mode",
+#             "payment_status"
+#         ]
+
+class DoctorAppointmentSerializer(serializers.ModelSerializer):
+    patient_name = serializers.CharField(source="patient.full_name", read_only=True)
+    patient_profile_id = serializers.UUIDField(source="patient.id", read_only=True)
     clinic_name = serializers.CharField(source="clinic.name", read_only=True)
 
     class Meta:
         model = Appointment
         fields = [
             "id",
-            "doctor_id",
-            "doctor_name",
-            "clinic_id",
+            "patient_name",
+            "patient_profile_id",
             "clinic_name",
             "appointment_date",
             "appointment_time",
@@ -96,3 +115,34 @@ class PatientAppointmentSerializer(serializers.ModelSerializer):
             "payment_mode",
             "payment_status"
         ]
+
+class DoctorAppointmentFilterSerializer(serializers.Serializer):
+    clinic_id = serializers.UUIDField(required=False)
+    date_filter = serializers.ChoiceField(choices=["today", "tomorrow", "week", "custom"], required=True)
+    custom_start_date = serializers.DateField(required=False)
+    custom_end_date = serializers.DateField(required=False)
+    appointment_status = serializers.ChoiceField(choices=["scheduled", "completed", "canceled"], required=False)
+    payment_status = serializers.BooleanField(required=False)
+    sort_by = serializers.ChoiceField(choices=["appointment_date", "appointment_time", "clinic_name"], required=False, default="appointment_date")
+    page = serializers.IntegerField(min_value=1, required=False, default=1)
+    page_size = serializers.IntegerField(min_value=1, max_value=50, required=False, default=10)
+
+
+class PatientAppointmentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Appointment
+        fields = '__all__'  # Or specify only required fields
+
+class PatientAppointmentFilterSerializer(serializers.Serializer):
+    patient_account_id = serializers.UUIDField(required=True)
+    patient_profile_ids = serializers.ListField(child=serializers.UUIDField(), required=False)
+    doctor_id = serializers.UUIDField(required=False)
+    clinic_id = serializers.UUIDField(required=False)
+    date_filter = serializers.ChoiceField(choices=['today', 'tomorrow', 'week', 'custom'], required=False)
+    custom_start_date = serializers.DateField(required=False)
+    custom_end_date = serializers.DateField(required=False)
+    appointment_status = serializers.ChoiceField(choices=['scheduled', 'cancelled', 'completed'], required=False)
+    payment_status = serializers.BooleanField(required=False)
+    sort_by = serializers.ChoiceField(choices=['appointment_date', 'appointment_time', 'status', 'clinic'], required=False, default='appointment_date')
+    page = serializers.IntegerField(required=False, default=1)
+    page_size = serializers.IntegerField(required=False, default=10)
