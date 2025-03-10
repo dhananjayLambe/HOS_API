@@ -76,7 +76,17 @@ class DoctorLeave(models.Model):
     
     start_date = models.DateField(help_text="Start date of the leave")
     end_date = models.DateField(help_text="End date of the leave")
-    
+    half_day = models.BooleanField(default=False, help_text="Is it a half-day leave?")
+    leave_type = models.CharField(
+        max_length=20,
+        choices=[
+            ("sick", "Sick Leave"),
+            ("vacation", "Vacation"),
+            ("emergency", "Emergency"),
+            ("other", "Other"),
+        ],
+        default="other",
+    )
     reason = models.TextField(blank=True, null=True, help_text="Optional reason for leave")
     
     created_at = models.DateTimeField(auto_now_add=True)
@@ -84,7 +94,7 @@ class DoctorLeave(models.Model):
 
     class Meta:
         unique_together = ('doctor', 'clinic', 'start_date', 'end_date')  # Prevent duplicate entries
-
+        ordering = ["-start_date"]
     def __str__(self):
         return f"Leave from {self.start_date} to {self.end_date} for {self.doctor.get_name} at {self.clinic.name}"
 
@@ -191,6 +201,23 @@ class Appointment(models.Model):
     ]
     payment_mode = models.CharField(max_length=10, choices=payment_mode_choices, default='CASH')
     payment_status = models.BooleanField(default=False)  # True if paid
+
+    #patient wants to consult (In-clinic or Video)
+    CONSULTATION_MODE_CHOICES = [
+        ('clinic', 'Clinic Visit'),
+        ('video', 'Video Consultation'),
+    ]
+    consultation_mode = models.CharField(
+        max_length=10, choices=CONSULTATION_MODE_CHOICES, default='clinic'
+    )
+    # patient booked the appointment (Online or Walk-in)
+    BOOKING_SOURCE_CHOICES = [
+        ('online', 'Online Booking (App/Website)'),
+        ('walk_in', 'Walk-In Booking (At Clinic)'),
+    ]
+    booking_source = models.CharField(
+        max_length=10, choices=BOOKING_SOURCE_CHOICES, default='online'
+    )
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

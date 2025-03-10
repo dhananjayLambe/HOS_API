@@ -1,5 +1,7 @@
 from rest_framework import serializers
-from appointments.models import DoctorAvailability,Appointment
+from datetime import date, timedelta
+from appointments.models import DoctorAvailability,Appointment,DoctorLeave
+
 
 class DoctorAvailabilitySerializer(serializers.ModelSerializer):
     slots = serializers.SerializerMethodField()
@@ -28,6 +30,14 @@ class AppointmentCreateSerializer(serializers.ModelSerializer):
         clinic = data['clinic']
         appointment_date = data['appointment_date']
         appointment_time = data['appointment_time']
+
+        # Ensure consultation_mode is provided (Clinic Visit or Video Consultation)
+        if 'consultation_mode' not in data:
+            raise serializers.ValidationError({"consultation_mode": "Consultation mode is required."})
+
+        # Ensure booking_source is provided (Online or Walk-in)
+        if 'booking_source' not in data:
+            raise serializers.ValidationError({"booking_source": "Booking source is required."})
 
 
         # Check if doctor is associated with the clinic
@@ -76,27 +86,6 @@ class AppointmentRescheduleSerializer(serializers.ModelSerializer):
         instance.save()
         return instance
 
-# class PatientAppointmentSerializer(serializers.ModelSerializer):
-#     doctor_id = serializers.UUIDField(source="doctor.id", read_only=True)
-#     doctor_name = serializers.CharField(source="doctor.full_name", read_only=True)
-#     clinic_id = serializers.UUIDField(source="clinic.id", read_only=True)
-#     clinic_name = serializers.CharField(source="clinic.name", read_only=True)
-
-#     class Meta:
-#         model = Appointment
-#         fields = [
-#             "id",
-#             "doctor_id",
-#             "doctor_name",
-#             "clinic_id",
-#             "clinic_name",
-#             "appointment_date",
-#             "appointment_time",
-#             "status",
-#             "payment_mode",
-#             "payment_status"
-#         ]
-
 class DoctorAppointmentSerializer(serializers.ModelSerializer):
     patient_name = serializers.CharField(source="patient.full_name", read_only=True)
     patient_profile_id = serializers.UUIDField(source="patient.id", read_only=True)
@@ -111,6 +100,8 @@ class DoctorAppointmentSerializer(serializers.ModelSerializer):
             "clinic_name",
             "appointment_date",
             "appointment_time",
+            "consultation_mode",
+            "booking_source",
             "status",
             "payment_mode",
             "payment_status"
@@ -146,3 +137,37 @@ class PatientAppointmentFilterSerializer(serializers.Serializer):
     sort_by = serializers.ChoiceField(choices=['appointment_date', 'appointment_time', 'status', 'clinic'], required=False, default='appointment_date')
     page = serializers.IntegerField(required=False, default=1)
     page_size = serializers.IntegerField(required=False, default=10)
+
+# class DoctorLeaveSerializer(serializers.ModelSerializer):
+#     doctor_id = serializers.UUIDField(write_only=True)
+    
+#     class Meta:
+#         model = DoctorLeave
+#         fields = ['id', 'doctor_id', 'clinic', 'start_date', 'end_date', 'reason']
+
+#     def validate(self, data):
+#         """Ensure start_date is before end_date and prevent overlapping leaves"""
+#         doctor = self.context["doctor"]
+#         start_date = data["start_date"]
+#         end_date = data["end_date"]
+
+#         if start_date > end_date:
+#             raise serializers.ValidationError("Start date cannot be after end date")
+
+#         # Prevent overlapping leave entries
+#         overlapping_leaves = DoctorLeave.objects.filter(
+#             doctor=doctor,
+#             start_date__lte=end_date,
+#             end_date__gte=start_date
+#         ).exists()
+
+#         if overlapping_leaves:
+#             raise serializers.ValidationError("Doctor already has leave scheduled for these dates.")
+
+#         return data
+
+
+class DoctorLeaveSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DoctorLeave
+        fields = ["id", "doctor", "clinic", "start_date", "end_date", "reason"]

@@ -1,20 +1,24 @@
-from rest_framework import status, generics,viewsets
+from datetime import date, timedelta
+from rest_framework import status, generics, filters
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
-from appointments.models import DoctorAvailability,DoctorLeave,Appointment
-from appointments.api.serializers import DoctorAvailabilitySerializer,AppointmentSerializer\
-    ,AppointmentCreateSerializer,AppointmentCancelSerializer,AppointmentRescheduleSerializer \
-    ,PatientAppointmentSerializer,DoctorAppointmentSerializer, DoctorAppointmentFilterSerializer\
-    ,PatientAppointmentFilterSerializer
-from django.shortcuts import get_object_or_404
-from django.utils.timezone import now
-from django.core.exceptions import ValidationError
+from django_filters.rest_framework import DjangoFilterBackend
 from account.permissions import IsDoctorOrHelpdeskOrPatient, IsDoctorOrHelpdesk
 from django.utils.timezone import localdate, timedelta
 from django.core.paginator import Paginator
-from django.utils.timezone import now
+from appointments.models import DoctorLeave
+from appointments.models import (
+    DoctorAvailability,DoctorLeave,
+    Appointment,DoctorLeave)
+from appointments.api.serializers import (DoctorAvailabilitySerializer,AppointmentSerializer\
+    ,AppointmentCreateSerializer,AppointmentCancelSerializer,
+    AppointmentRescheduleSerializer \
+    ,PatientAppointmentSerializer,DoctorAppointmentSerializer,
+    DoctorAppointmentFilterSerializer\
+    ,PatientAppointmentFilterSerializer,DoctorLeaveSerializer)
+
 
 
 class DoctorAvailabilityView(APIView):
@@ -132,34 +136,6 @@ class AppointmentRescheduleView(APIView):
             return Response({"message": "Appointment rescheduled successfully."}, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-# class PatientAppointmentsView(generics.ListAPIView):
-#     serializer_class = PatientAppointmentSerializer
-#     permission_classes = [IsAuthenticated,IsDoctorOrHelpdeskOrPatient]
-#     authentication_classes = [JWTAuthentication]
-
-#     def get_queryset(self):
-#         patient_account_id = self.request.data.get("patient_account")
-#         patient_profile_id = self.request.data.get("patient_profile")
-
-#         if not patient_account_id or not patient_profile_id:
-#             return Appointment.objects.none()
-
-#         return Appointment.objects.filter(
-#             patient_account_id=patient_account_id,
-#             patient_profile_id=patient_profile_id
-#         )
-    
-#     def get(self, request, *args, **kwargs):
-#         patient_account_id = self.request.data.get("patient_account")
-#         patient_profile_id = self.request.data.get("patient_profile")
-
-#         if not patient_account_id or not patient_profile_id:
-#             return Response({"error": "Missing patient_account or patient_profile"}, status=status.HTTP_400_BAD_REQUEST)
-
-#         appointments = self.get_queryset()
-#         serializer = self.get_serializer(appointments, many=True)
-#         return Response(serializer.data, status=status.HTTP_200_OK)
-
 class DoctorAppointmentsView(generics.GenericAPIView):
     serializer_class = DoctorAppointmentSerializer
     permission_classes = [IsAuthenticated,IsDoctorOrHelpdesk]
@@ -226,7 +202,6 @@ class DoctorAppointmentsView(generics.GenericAPIView):
             "current_page": page,
             "appointments": serializer.data
         })
-
 
 class PatientAppointmentsView(generics.GenericAPIView):
     serializer_class = PatientAppointmentSerializer
@@ -303,3 +278,98 @@ class PatientAppointmentsView(generics.GenericAPIView):
             "current_page": page,
             "appointments": serializer.data
         })
+
+# class DoctorLeaveCreateView(generics.CreateAPIView):
+#     """POST /doctors/leave/ - Apply for leave"""
+#     serializer_class = DoctorLeaveSerializer
+#     permission_classes = [IsAuthenticated, IsDoctorOrHelpdesk]
+#     authentication_classes = [JWTAuthentication]
+
+
+#     def perform_create(self, serializer):
+#         serializer.save(doctor=self.request.user.doctor)
+
+# class DoctorLeaveListView(generics.ListAPIView):
+#     """GET /doctors/leaves/ - Fetch leave records with filters"""
+#     serializer_class = DoctorLeaveSerializer
+#     permission_classes = [IsAuthenticated, IsDoctorOrHelpdesk]
+#     authentication_classes = [JWTAuthentication]
+
+#     def get_queryset(self):
+#         doctor_id = self.request.query_params.get("doctor_id")
+#         date_filter = self.request.query_params.get("date_filter")
+#         start_date = self.request.query_params.get("start_date")
+#         end_date = self.request.query_params.get("end_date")
+
+#         queryset = DoctorLeave.objects.filter(doctor_id=doctor_id)
+
+#         if date_filter == "week":
+#             start = date.today()
+#             end = start + timedelta(days=7)
+#             queryset = queryset.filter(start_date__gte=start, end_date__lte=end)
+#         elif date_filter == "month":
+#             start = date.today().replace(day=1)
+#             end = (start + timedelta(days=31)).replace(day=1) - timedelta(days=1)
+#             queryset = queryset.filter(start_date__gte=start, end_date__lte=end)
+#         elif start_date and end_date:
+#             queryset = queryset.filter(start_date__gte=start_date, end_date__lte=end_date)
+
+#         return queryset
+
+# class DoctorLeaveUpdateView(generics.UpdateAPIView):
+#     """PUT /doctors/leave/{leave_id}/ - Update leave"""
+#     serializer_class = DoctorLeaveSerializer
+#     permission_classes = [IsAuthenticated, IsDoctorOrHelpdesk]
+#     authentication_classes = [JWTAuthentication]
+#     queryset = DoctorLeave.objects.all()
+
+# class DoctorLeaveDeleteView(generics.DestroyAPIView):
+#     """DELETE /doctors/leave/{leave_id}/ - Delete leave"""
+#     permission_classes = [IsAuthenticated, IsDoctorOrHelpdesk]
+#     authentication_classes = [JWTAuthentication]
+#     queryset = DoctorLeave.objects.all()
+
+class DoctorLeaveCreateView(generics.CreateAPIView):
+    """POST /doctors/leaves/ - Apply for leave"""
+    queryset = DoctorLeave.objects.all()
+    serializer_class = DoctorLeaveSerializer
+    permission_classes = [IsAuthenticated, IsDoctorOrHelpdesk]
+    authentication_classes = [JWTAuthentication]
+
+class DoctorLeaveListView(generics.ListAPIView):
+    """GET /doctors/leaves/?doctor_id=<id>&date_filter=month - Fetch leave records"""
+    serializer_class = DoctorLeaveSerializer
+    permission_classes = [IsAuthenticated, IsDoctorOrHelpdesk]
+    authentication_classes = [JWTAuthentication]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_fields = ["doctor", "clinic", "start_date", "end_date"]
+    ordering_fields = ["start_date"]
+
+    def get_queryset(self):
+        doctor_id = self.request.query_params.get("doctor_id")
+        date_filter = self.request.query_params.get("date_filter")
+
+        queryset = DoctorLeave.objects.all()
+
+        if doctor_id:
+            queryset = queryset.filter(doctor_id=doctor_id)
+
+        if date_filter == "week":
+            queryset = queryset.filter(start_date__gte=date.today(), end_date__lte=date.today() + timedelta(days=7))
+        elif date_filter == "month":
+            queryset = queryset.filter(start_date__gte=date.today().replace(day=1))
+
+        return queryset
+
+class DoctorLeaveUpdateView(generics.UpdateAPIView):
+    """PATCH /doctors/leaves/{leave_id}/ - Update leave"""
+    queryset = DoctorLeave.objects.all()
+    serializer_class = DoctorLeaveSerializer
+    permission_classes = [IsAuthenticated, IsDoctorOrHelpdesk]
+    authentication_classes = [JWTAuthentication]
+
+class DoctorLeaveDeleteView(generics.DestroyAPIView):
+    """DELETE /doctors/leaves/{leave_id}/ - Delete leave"""
+    queryset = DoctorLeave.objects.all()
+    permission_classes = [IsAuthenticated, IsDoctorOrHelpdesk]
+    authentication_classes = [JWTAuthentication]
