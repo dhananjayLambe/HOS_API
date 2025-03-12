@@ -1,4 +1,5 @@
-from django.urls import path
+from django.urls import path,include
+from rest_framework.routers import DefaultRouter
 from appointments.api.views import (
     DoctorAvailabilityView,
     AppointmentCreateView,
@@ -10,11 +11,18 @@ from appointments.api.views import (
     DoctorLeaveCreateView,
     DoctorLeaveListView,
     DoctorLeaveUpdateView,
-    DoctorLeaveDeleteView
+    DoctorLeaveDeleteView,
+    DoctorFeeStructureViewSet,
+    FollowUpPolicyViewSet
     )
+app_name = 'appointments'
 
+router = DefaultRouter()
+router.register(r'doctor-fees', DoctorFeeStructureViewSet)
+router.register(r'follow-up-policies', FollowUpPolicyViewSet)
 
 urlpatterns = [
+    path('', include(router.urls)),
     path('doctors-availability/',
             DoctorAvailabilityView.as_view(),
             name='doctor-availability'),

@@ -8,18 +8,30 @@ from django_filters.rest_framework import DjangoFilterBackend
 from account.permissions import IsDoctorOrHelpdeskOrPatient, IsDoctorOrHelpdesk
 from django.utils.timezone import localdate, timedelta
 from django.core.paginator import Paginator
+from rest_framework import viewsets
+from rest_framework.response import Response
 from appointments.models import DoctorLeave
 from appointments.models import (
-    DoctorAvailability,DoctorLeave,
+    DoctorAvailability,DoctorLeave,DoctorFeeStructure,FollowUpPolicy,
     Appointment,DoctorLeave)
 from appointments.api.serializers import (DoctorAvailabilitySerializer,AppointmentSerializer\
     ,AppointmentCreateSerializer,AppointmentCancelSerializer,
     AppointmentRescheduleSerializer \
     ,PatientAppointmentSerializer,DoctorAppointmentSerializer,
     DoctorAppointmentFilterSerializer\
-    ,PatientAppointmentFilterSerializer,DoctorLeaveSerializer)
-
-
+    ,PatientAppointmentFilterSerializer,DoctorLeaveSerializer,FollowUpPolicySerializer,
+    DoctorFeeStructureSerializer)
+from rest_framework import serializers, viewsets, filters, permissions
+from rest_framework.pagination import PageNumberPagination
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from rest_framework import status
+# Pagination
+class StandardResultsSetPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = 'page_size'
+    max_page_size = 100
 
 class DoctorAvailabilityView(APIView):
     permission_classes = [IsAuthenticated,IsDoctorOrHelpdeskOrPatient]
@@ -76,8 +88,69 @@ class DoctorAvailabilityView(APIView):
         except DoctorAvailability.DoesNotExist:
             return Response({"error": "Availability not found"}, status=status.HTTP_404_NOT_FOUND)
 
+# #1. Book an Appointment (POST)
+# class AppointmentCreateView(generics.CreateAPIView):
+#     permission_classes = [IsAuthenticated,IsDoctorOrHelpdeskOrPatient]
+#     authentication_classes = [JWTAuthentication]
+#     queryset = Appointment.objects.all()
+#     serializer_class = AppointmentCreateSerializer
+
+# # 2. Fetch Appointment Details (GET)
+# class AppointmentDetailView(generics.RetrieveAPIView):
+#     permission_classes = [IsAuthenticated,IsDoctorOrHelpdeskOrPatient]
+#     authentication_classes = [JWTAuthentication]
+#     queryset = Appointment.objects.all()
+#     serializer_class = AppointmentSerializer
+#     permission_classes = [IsAuthenticated]
+#     #lookup_field = 'id'  # Use appointment ID to fetch details
+#     def post(self, request):
+#         appointment_id = request.data.get('id')
+#         try:
+#             appointment = Appointment.objects.get(id=appointment_id)
+#             serializer = self.serializer_class(appointment)
+#             return Response(serializer.data)
+#         except Appointment.DoesNotExist:
+#             return Response({"error": "Appointment not found"}, status=status.HTTP_404_NOT_FOUND)
+
+# # 3. Cancel an Appointment (PATCH)
+# class AppointmentCancelView(APIView):
+#     permission_classes = [IsAuthenticated,IsDoctorOrHelpdeskOrPatient]
+#     authentication_classes = [JWTAuthentication]
+
+#     def patch(self, request):
+#         try:
+#             appointment_id = request.data.get('id')
+#             appointment = Appointment.objects.get(id=appointment_id, status='scheduled')
+#         except Appointment.DoesNotExist:
+#             return Response({"error": "Appointment not found or already modified."}, status=status.HTTP_404_NOT_FOUND)
+
+#         serializer = AppointmentCancelSerializer(appointment, data={'status': 'cancelled'}, partial=True)
+#         if serializer.is_valid():
+#             serializer.save()
+#             return Response({"message": "Appointment cancelled successfully."}, status=status.HTTP_200_OK)
+#         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+# # 4. Reschedule an Appointment (PATCH)
+# class AppointmentRescheduleView(APIView):
+#     permission_classes = [IsAuthenticated,IsDoctorOrHelpdeskOrPatient]
+#     authentication_classes = [JWTAuthentication]
+
+#     def patch(self, request):
+#         try:
+#             appointment_id = request.data.get('id')
+#             appointment = Appointment.objects.get(id=appointment_id, status='scheduled')
+#         except Appointment.DoesNotExist:
+#             return Response({"error": "Appointment not found or already modified."}, status=status.HTTP_404_NOT_FOUND)
+
+#         serializer = AppointmentRescheduleSerializer(appointment, data=request.data, partial=True)
+#         if serializer.is_valid():
+#             serializer.save()
+#             return Response({"message": "Appointment rescheduled successfully."}, status=status.HTTP_200_OK)
+#         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 #1. Book an Appointment (POST)
 class AppointmentCreateView(generics.CreateAPIView):
+    """ Book an Appointment (POST) """
     permission_classes = [IsAuthenticated,IsDoctorOrHelpdeskOrPatient]
     authentication_classes = [JWTAuthentication]
     queryset = Appointment.objects.all()
@@ -85,12 +158,12 @@ class AppointmentCreateView(generics.CreateAPIView):
 
 # 2. Fetch Appointment Details (GET)
 class AppointmentDetailView(generics.RetrieveAPIView):
+    """ Fetch Appointment Details (GET) """
     permission_classes = [IsAuthenticated,IsDoctorOrHelpdeskOrPatient]
     authentication_classes = [JWTAuthentication]
     queryset = Appointment.objects.all()
     serializer_class = AppointmentSerializer
-    permission_classes = [IsAuthenticated]
-    #lookup_field = 'id'  # Use appointment ID to fetch details
+
     def post(self, request):
         appointment_id = request.data.get('id')
         try:
@@ -102,6 +175,7 @@ class AppointmentDetailView(generics.RetrieveAPIView):
 
 # 3. Cancel an Appointment (PATCH)
 class AppointmentCancelView(APIView):
+    """ Cancel an Appointment (PATCH) """
     permission_classes = [IsAuthenticated,IsDoctorOrHelpdeskOrPatient]
     authentication_classes = [JWTAuthentication]
 
@@ -112,14 +186,13 @@ class AppointmentCancelView(APIView):
         except Appointment.DoesNotExist:
             return Response({"error": "Appointment not found or already modified."}, status=status.HTTP_404_NOT_FOUND)
 
-        serializer = AppointmentCancelSerializer(appointment, data={'status': 'cancelled'}, partial=True)
-        if serializer.is_valid():
-            serializer.save()
-            return Response({"message": "Appointment cancelled successfully."}, status=status.HTTP_200_OK)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        appointment.status = 'cancelled'
+        appointment.save()
+        return Response({"message": "Appointment cancelled successfully."}, status=status.HTTP_200_OK)
 
 # 4. Reschedule an Appointment (PATCH)
 class AppointmentRescheduleView(APIView):
+    """ Reschedule an Appointment (PATCH) """
     permission_classes = [IsAuthenticated,IsDoctorOrHelpdeskOrPatient]
     authentication_classes = [JWTAuthentication]
 
@@ -130,7 +203,7 @@ class AppointmentRescheduleView(APIView):
         except Appointment.DoesNotExist:
             return Response({"error": "Appointment not found or already modified."}, status=status.HTTP_404_NOT_FOUND)
 
-        serializer = AppointmentRescheduleSerializer(appointment, data=request.data, partial=True)
+        serializer = AppointmentCreateSerializer(appointment, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
             return Response({"message": "Appointment rescheduled successfully."}, status=status.HTTP_200_OK)
@@ -373,3 +446,47 @@ class DoctorLeaveDeleteView(generics.DestroyAPIView):
     queryset = DoctorLeave.objects.all()
     permission_classes = [IsAuthenticated, IsDoctorOrHelpdesk]
     authentication_classes = [JWTAuthentication]
+
+
+class DoctorFeeStructureViewSet(viewsets.ModelViewSet):
+    queryset = DoctorFeeStructure.objects.all()
+    permission_classes = [IsAuthenticated, IsDoctorOrHelpdesk]
+    authentication_classes = [JWTAuthentication]
+    serializer_class = DoctorFeeStructureSerializer
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter, filters.SearchFilter]
+    filterset_fields = ['doctor', 'clinic']
+    search_fields = ['doctor__name', 'clinic__name']
+    ordering_fields = ['created_at', 'updated_at', 'first_time_consultation_fee']
+
+class FollowUpPolicyViewSet(viewsets.ModelViewSet):
+    queryset = FollowUpPolicy.objects.all()
+    serializer_class = FollowUpPolicySerializer
+    permission_classes = [IsAuthenticated, IsDoctorOrHelpdesk]
+    authentication_classes = [JWTAuthentication]
+    pagination_class = StandardResultsSetPagination
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['doctor', 'clinic']
+    search_fields = ['doctor__name', 'clinic__name']
+    ordering_fields = ['created_at', 'updated_at', 'follow_up_fee']
+    ordering = ['-created_at']
+
+    def perform_create(self, serializer):
+        serializer.save()
+
+    @action(detail=False, methods=['get'], url_path='by-doctor')
+    def list_by_doctor(self, request):
+        doctor_id = request.query_params.get('doctor_id')
+        if not doctor_id:
+            return Response({"error": "doctor_id is required"}, status=400)
+        policies = self.queryset.filter(doctor_id=doctor_id)
+        page = self.paginate_queryset(policies)
+        return self.get_paginated_response(self.get_serializer(page, many=True).data)
+    
+    @action(detail=False, methods=['get'], url_path='by-clinic')
+    def list_by_clinic(self, request):
+        clinic_id = request.query_params.get('clinic_id')
+        if not clinic_id:
+            return Response({"error": "clinic_id is required"}, status=400)
+        policies = self.queryset.filter(clinic_id=clinic_id)
+        page = self.paginate_queryset(policies)
+        return self.get_paginated_response(self.get_serializer(page, many=True).data)

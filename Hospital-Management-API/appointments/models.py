@@ -201,7 +201,7 @@ class Appointment(models.Model):
     ]
     payment_mode = models.CharField(max_length=10, choices=payment_mode_choices, default='CASH')
     payment_status = models.BooleanField(default=False)  # True if paid
-
+    
     #patient wants to consult (In-clinic or Video)
     CONSULTATION_MODE_CHOICES = [
         ('clinic', 'Clinic Visit'),
@@ -218,28 +218,40 @@ class Appointment(models.Model):
     booking_source = models.CharField(
         max_length=10, choices=BOOKING_SOURCE_CHOICES, default='online'
     )
-    
+    APPOINTMENT_TYPE_CHOICES = [
+        ("new", "New"),
+        ("follow_up", "Follow-up"),
+    ]
+    consultation_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    appointment_type = models.CharField(max_length=20, choices=APPOINTMENT_TYPE_CHOICES, default="new")
+    previous_appointment = models.ForeignKey("self", null=True, blank=True, on_delete=models.SET_NULL)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f"Appointment for {self.patient_profile.first_name} with Dr. {self.doctor.get_name} on {self.appointment_date}"
     
-    def clean(self):
-        """ Validate appointment slot availability """
-        if Appointment.objects.filter(
-            doctor=self.doctor, clinic=self.clinic,
-            appointment_date=self.appointment_date,
-            appointment_time=self.appointment_time,
-            status='scheduled'
-        ).exists():
-            raise ValidationError("Selected time slot is already booked.")
-        if Appointment.objects.filter(
-            doctor=self.doctor, clinic=self.clinic,
-            appointment_date=self.appointment_date,
-            status='scheduled'
-        ).count() >= self.doctor.doctoravailability.max_appointments_per_day:
-            raise ValidationError("Doctor has reached the maximum appointments for the day.")
+    # def clean(self):
+    #     """ Validate appointment slot availability """
+    #     if Appointment.objects.filter(
+    #         doctor=self.doctor, clinic=self.clinic,
+    #         appointment_date=self.appointment_date,
+    #         appointment_time=self.appointment_time,
+    #         status='scheduled'
+    #     ).exists():
+    #         raise ValidationError("Selected time slot is already booked.")
+    #     if Appointment.objects.filter(
+    #         doctor=self.doctor, clinic=self.clinic,
+    #         appointment_date=self.appointment_date,
+    #         status='scheduled'
+    #     ).count() >= self.doctor.doctoravailability.max_appointments_per_day:
+    #         raise ValidationError("Doctor has reached the maximum appointments for the day.")
+
+    # def save(self, *args, **kwargs):
+    #     self.consultation_fee = calculate_consultation_fee(self)
+    #     super().save(*args, **kwargs)
+
+
 
 #Additional Model Suggestions (Optional for Future Phases)
 # AppointmentHistory Model – To track status changes of an appointment over time.

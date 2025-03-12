@@ -49,11 +49,14 @@ INSTALLED_APPS = [
     'patient_account.apps.PatientAccountConfig',
     'helpdesk.apps.HelpdeskConfig',
     'appointments.apps.AppointmentsConfig',
+    'queue_management.apps.QueueManagementConfig',
     #rest_framework
     'rest_framework',
     'rest_framework.authtoken',
     'rest_framework_simplejwt',  # Add this line
     'rest_framework_simplejwt.token_blacklist',
+    'channels',
+    'django_celery_results',
 ]
 
 REST_FRAMEWORK={
@@ -178,3 +181,37 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/3.0/howto/static-files/
 
 STATIC_URL = '/static/'
+
+#REDIS AND CHANNELS SETTINGS
+# Redis settings for caching and WebSockets
+REDIS_HOST = 'localhost'
+REDIS_PORT = 6379
+REDIS_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}/1"
+
+# Caching with Redis
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": REDIS_URL,
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        }
+    }
+}
+
+# Django Channels settings
+ASGI_APPLICATION = "doctorpro.asgi.application"
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [(REDIS_HOST, REDIS_PORT)],
+        },
+    },
+}
+
+# Celery Configuration
+CELERY_BROKER_URL = REDIS_URL
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_BACKEND = 'django-db'
