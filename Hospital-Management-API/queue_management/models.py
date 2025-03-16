@@ -1,11 +1,15 @@
 from django.db import models
+from datetime import timedelta
 from doctor.models import doctor
+from clinic.models import Clinic
 from patient_account.models import PatientAccount, PatientProfile
 from appointments.models import Appointment
-from datetime import timedelta
+
 
 class Queue(models.Model):
-    doctor = models.ForeignKey(doctor, on_delete=models.CASCADE, related_name="queues")
+    doctor = models.ForeignKey(doctor, on_delete=models.CASCADE, related_name="queues", null=True, blank=True)
+    clinic = models.ForeignKey(Clinic, on_delete=models.CASCADE, related_name="queues", default=None)
+    #clinic = models.ForeignKey(Clinic, on_delete=models.CASCADE, related_name="queues", null=True, blank=True)
     patient_account = models.ForeignKey(PatientAccount, on_delete=models.CASCADE, related_name="queues", null=True, blank=True)
     patient = models.ForeignKey(PatientProfile, on_delete=models.CASCADE, related_name="queue")
     appointment = models.OneToOneField(Appointment, on_delete=models.CASCADE, related_name="queue", null=True, blank=True)
@@ -29,6 +33,7 @@ class Queue(models.Model):
         indexes = [
             models.Index(fields=["doctor", "status"]),
             models.Index(fields=["appointment"]),
+            models.Index(fields=["clinic", "status"])
         ]
     def __str__(self):
         return f"{self.patient.first_name} - {self.status}"
