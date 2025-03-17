@@ -24,7 +24,7 @@ class doctor(models.Model):
     def get_id(self):
         return self.user.id
     def __str__(self):
-        return "{} ({})".format(self.user.first_name,self.department)
+        return "{}".format(self.user.first_name)
 
 class DoctorAddress(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

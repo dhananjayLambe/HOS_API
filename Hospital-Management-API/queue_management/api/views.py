@@ -7,46 +7,53 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from queue_management.models import Queue
 from patient_account.models import PatientAccount, PatientProfile
+from clinic.models import Clinic
 from queue_management.api.serializers import QueueSerializer, QueueUpdateSerializer
 from account.permissions import IsDoctorOrHelpdesk
 
 # 1. POST /queue/check-in/ – Add a patient to the queue
 class CheckInQueueAPIView(APIView):
+    print("CheckInQueueAPIView")
     permission_classes = [IsAuthenticated, IsDoctorOrHelpdesk]
     authentication_classes = [JWTAuthentication]
 
     def post(self, request):
+        print("CheckInQueueAPIView.post")
+        clinic_id = request.data.get("clinic_id")
         patient_account_id = request.data.get("patient_account_id")
         patient_profile_id = request.data.get("patient_profile_id")
         doctor_id = request.data.get("doctor_id")
         appointment_id = request.data.get("appointment_id", None)
+        print(clinic_id, patient_account_id, patient_profile_id, doctor_id, appointment_id)
 
-        if not patient_account_id or not patient_profile_id or not doctor_id:
-            return Response({"error": "Patient Account ID, Patient Profile ID, and Doctor ID are required."}, status=status.HTTP_400_BAD_REQUEST)
+        if not clinic_id or not patient_account_id or not patient_profile_id or not doctor_id:
+            return Response({"error": "Clinic ID, Patient Account ID, Patient Profile ID, and Doctor ID are required."}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
+            clinic = Clinic.objects.get(id=clinic_id)
             patient_account = PatientAccount.objects.get(id=patient_account_id)
             patient_profile = PatientProfile.objects.get(id=patient_profile_id, account=patient_account)
+        except Clinic.DoesNotExist:
+            return Response({"error": "Invalid Clinic ID."}, status=status.HTTP_404_NOT_FOUND)
         except PatientAccount.DoesNotExist:
             return Response({"error": "Invalid Patient Account ID."}, status=status.HTTP_404_NOT_FOUND)
         except PatientProfile.DoesNotExist:
             return Response({"error": "Patient Profile does not belong to the given Patient Account."}, status=status.HTTP_404_NOT_FOUND)
 
-        # Ensure the patient is only added to today's queue
         today = localdate()
         existing_entry = Queue.objects.filter(
-            doctor_id=doctor_id, patient=patient_profile, created_at__date=today
+            doctor_id=doctor_id, clinic_id=clinic_id, patient=patient_profile, created_at__date=today
         ).exists()
 
         if existing_entry:
-            return Response({"error": "Patient is already checked in for today's queue."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "Patient is already checked in for today's queue at this clinic."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Calculate new position in queue
-        last_position = Queue.objects.filter(doctor_id=doctor_id, status='waiting', created_at__date=today).count()
+        last_position = Queue.objects.filter(doctor_id=doctor_id, clinic_id=clinic_id, status='waiting', created_at__date=today).count()
         new_position = last_position + 1
 
         queue_entry = Queue.objects.create(
             doctor_id=doctor_id,
+            clinic=clinic,
             patient_account=patient_account,
             patient=patient_profile,
             appointment_id=appointment_id,
@@ -55,14 +62,15 @@ class CheckInQueueAPIView(APIView):
         )
         return Response(QueueSerializer(queue_entry).data, status=status.HTTP_201_CREATED)
 
-# 2. GET /queue/doctor/{id}/ – Get today’s live queue for a doctor
+
+# 2. GET /queue/doctor/{id}/ – Get today’s live queue for a doctor at a clinic
 class DoctorQueueAPIView(APIView):
     permission_classes = [IsAuthenticated, IsDoctorOrHelpdesk]
     authentication_classes = [JWTAuthentication]
 
-    def get(self, request, doctor_id):
+    def get(self, request, doctor_id, clinic_id):
         today = localdate()
-        queue = Queue.objects.filter(doctor_id=doctor_id, created_at__date=today).order_by("position_in_queue")
+        queue = Queue.objects.filter(doctor_id=doctor_id, clinic_id=clinic_id, created_at__date=today).order_by("position_in_queue")
         return Response(QueueSerializer(queue, many=True).data)
 
 
@@ -73,12 +81,14 @@ class StartConsultationAPIView(APIView):
 
     def patch(self, request):
         queue_id = request.data.get("queue_id")
-        if not queue_id:
-            return Response({"error": "Queue ID is required."}, status=status.HTTP_400_BAD_REQUEST)
+        clinic_id = request.data.get("clinic_id")
+
+        if not queue_id or not clinic_id:
+            return Response({"error": "Queue ID and Clinic ID are required."}, status=status.HTTP_400_BAD_REQUEST)
 
         today = localdate()
         try:
-            queue_entry = Queue.objects.get(id=queue_id, created_at__date=today, status="waiting")
+            queue_entry = Queue.objects.get(id=queue_id, clinic_id=clinic_id, created_at__date=today, status="waiting")
             queue_entry.status = "in_consultation"
             queue_entry.save()
             return Response({"message": "Patient is now in consultation."}, status=status.HTTP_200_OK)
@@ -93,18 +103,19 @@ class CompleteConsultationAPIView(APIView):
 
     def patch(self, request):
         queue_id = request.data.get("queue_id")
-        if not queue_id:
-            return Response({"error": "Queue ID is required."}, status=status.HTTP_400_BAD_REQUEST)
+        clinic_id = request.data.get("clinic_id")
+
+        if not queue_id or not clinic_id:
+            return Response({"error": "Queue ID and Clinic ID are required."}, status=status.HTTP_400_BAD_REQUEST)
 
         today = localdate()
         try:
-            queue_entry = Queue.objects.get(id=queue_id, created_at__date=today, status="in_consultation")
+            queue_entry = Queue.objects.get(id=queue_id, clinic_id=clinic_id, created_at__date=today, status="in_consultation")
             queue_entry.status = "completed"
             queue_entry.save()
             return Response({"message": "Consultation completed."}, status=status.HTTP_200_OK)
         except Queue.DoesNotExist:
             return Response({"error": "Patient not found or not in consultation."}, status=status.HTTP_404_NOT_FOUND)
-
 
 # 5. PATCH /queue/skip/ – Move patient to Skipped status
 class SkipPatientAPIView(APIView):
@@ -116,9 +127,8 @@ class SkipPatientAPIView(APIView):
         if not queue_id:
             return Response({"error": "Queue ID is required."}, status=status.HTTP_400_BAD_REQUEST)
 
-        today = localdate()
         try:
-            queue_entry = Queue.objects.get(id=queue_id, created_at__date=today, status="waiting")
+            queue_entry = Queue.objects.get(id=queue_id, status="waiting")
             queue_entry.status = "skipped"
             queue_entry.save()
             return Response({"message": "Patient skipped."}, status=status.HTTP_200_OK)
@@ -136,9 +146,8 @@ class UrgentPatientAPIView(APIView):
         if not queue_id:
             return Response({"error": "Queue ID is required."}, status=status.HTTP_400_BAD_REQUEST)
 
-        today = localdate()
         try:
-            queue_entry = Queue.objects.get(id=queue_id, created_at__date=today, status="waiting")
+            queue_entry = Queue.objects.get(id=queue_id, status="waiting")
 
             # Shift existing patients down
             Queue.objects.filter(

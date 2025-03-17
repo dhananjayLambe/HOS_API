@@ -14,4 +14,4 @@ from . models import doctor
 #     inlines=[DoctorAppointment]
 
 
-# admin.site.register(doctor,doctorAdmin)
+admin.site.register(doctor)

@@ -1,3 +1,4 @@
+import uuid
 from django.db import models
 from datetime import timedelta
 from doctor.models import doctor
@@ -7,9 +8,9 @@ from appointments.models import Appointment
 
 
 class Queue(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)  # Use UUIDField as the new primary key
     doctor = models.ForeignKey(doctor, on_delete=models.CASCADE, related_name="queues", null=True, blank=True)
     clinic = models.ForeignKey(Clinic, on_delete=models.CASCADE, related_name="queues", default=None)
-    #clinic = models.ForeignKey(Clinic, on_delete=models.CASCADE, related_name="queues", null=True, blank=True)
     patient_account = models.ForeignKey(PatientAccount, on_delete=models.CASCADE, related_name="queues", null=True, blank=True)
     patient = models.ForeignKey(PatientProfile, on_delete=models.CASCADE, related_name="queue")
     appointment = models.OneToOneField(Appointment, on_delete=models.CASCADE, related_name="queue", null=True, blank=True)
