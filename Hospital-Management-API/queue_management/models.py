@@ -32,9 +32,9 @@ class Queue(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     class Meta:
         indexes = [
-            models.Index(fields=["doctor", "status"]),
+            models.Index(fields=["clinic", "doctor", "status"]),
             models.Index(fields=["appointment"]),
-            models.Index(fields=["clinic", "status"])
+            models.Index(fields=["clinic", "position_in_queue"])
         ]
     def __str__(self):
         return f"{self.patient.first_name} - {self.status}"
