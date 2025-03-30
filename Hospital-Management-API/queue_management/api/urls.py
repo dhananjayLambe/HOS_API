@@ -3,7 +3,8 @@ from queue_management.api.views import (
     CheckInQueueAPIView, DoctorQueueAPIView, StartConsultationAPIView, 
     CompleteConsultationAPIView, SkipPatientAPIView, UrgentPatientAPIView, 
     QueueDetailsView, UpdateQueuePositionView,
-    QueueReorderAPIView, MarkPatientNotAvailableAPIView, CancelAppointmentAPIView
+    QueueReorderAPIView, MarkPatientNotAvailableAPIView, CancelAppointmentAPIView,
+    QueuePatientView, CancelAppointmentView
 )
 
 urlpatterns = [
@@ -16,10 +17,13 @@ urlpatterns = [
     path("urgent/", UrgentPatientAPIView.as_view(), name="queue-urgent"),
     path("queue-details/", QueueDetailsView.as_view(), name="queue-details"),
     path("update-position/<uuid:queue_id>/", UpdateQueuePositionView.as_view(), name="update-queue-position"),
-    #Helpdesk 
-    #TBD - Need to test the APIS reamainng in this file
+    #Helpdesk API
     path("reorder/", QueueReorderAPIView.as_view(), name="queue-reorder"),
     path("not-available/<uuid:id>/", MarkPatientNotAvailableAPIView.as_view(), name="queue-not-available"),
     path("queue-cancel/<uuid:id>/", CancelAppointmentAPIView.as_view(), name="queue-cancel"),
+    #Patient Self-Service APIs
+    #TBD: Redis cerlry cache and channel layer real time code need to add and test as well is pending
+    path('patient-status/<uuid:id>/', QueuePatientView.as_view(), name='queue-patient-status'),
+    path('patient-cancel/<uuid:id>/', CancelAppointmentView.as_view(), name='queue-patient-cancel'),
 
 ]

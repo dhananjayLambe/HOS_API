@@ -1,3 +1,5 @@
+import redis
+from django.conf import settings
 from django.utils.timezone import now, localdate
 from django.db.models import F
 from rest_framework import generics, status
@@ -7,14 +9,13 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from queue_management.models import Queue
 from patient_account.models import PatientAccount, PatientProfile
-from rest_framework.generics import get_object_or_404
+from rest_framework.generics import get_object_or_404,RetrieveAPIView
 from clinic.models import Clinic
 from queue_management.api.serializers import (
-    QueueSerializer, QueueUpdateSerializer,
+    QueueSerializer, QueueUpdateSerializer,QueuePatientSerializer,
     QueueReorderSerializer)
 from account.permissions import IsDoctorOrHelpdesk,IsHelpdesk
 from django.db import transaction
-
 # 1. POST /queue/check-in/ – Add a patient to the queue
 class CheckInQueueAPIView(APIView):
     permission_classes = [IsAuthenticated, IsDoctorOrHelpdesk]
@@ -190,7 +191,7 @@ class QueueReorderAPIView(APIView):
     PATCH /queue/reorder/
     Updates queue positions dynamically based on provided ordered list of queue IDs.
     """
-    permission_classes = [IsAuthenticated, IsHelpdesk]
+    permission_classes = [IsAuthenticated, IsDoctorOrHelpdesk]
     authentication_classes = [JWTAuthentication]
     def patch(self, request, *args, **kwargs):
         serializer = QueueReorderSerializer(data=request.data)
@@ -244,3 +245,56 @@ class CancelAppointmentAPIView(APIView):
 
         return Response({"message": "Appointment cancelled and removed from queue"},
                         status=status.HTTP_204_NO_CONTENT)
+
+class CancelAppointmentView(APIView):
+    """
+    Cancel the patient's appointment & remove them from the queue.
+    """
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [JWTAuthentication]
+
+    def delete(self, request, id):
+        queue_entry = get_object_or_404(Queue, patient__id=id, status='waiting')
+        queue_entry.status = 'cancelled'
+        queue_entry.save(update_fields=['status'])
+
+        return Response({"message": "Appointment cancelled successfully."}, status=status.HTTP_200_OK)
+
+
+# Initialize Redis connection
+redis_client = redis.StrictRedis(host=settings.REDIS_HOST, port=settings.REDIS_PORT, db=0, decode_responses=True)
+
+class QueuePatientView(RetrieveAPIView):
+    """
+    Get patient's queue position & estimated wait time for a specific doctor and clinic.
+    Data is cached in Redis for real-time updates.
+    """
+    serializer_class = QueuePatientSerializer
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [JWTAuthentication]
+
+    def get(self, request, id):
+        #patient_account = request.user.patientaccount
+        doctor_id = request.query_params.get("doctor_id")
+        clinic_id = request.query_params.get("clinic_id")
+
+        if not doctor_id or not clinic_id:
+            return Response({"error": "doctor_id and clinic_id are required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Try fetching from Redis first
+        redis_key = f"queue:patient:{id}:doctor:{doctor_id}:clinic:{clinic_id}"
+        cached_data = redis_client.get(redis_key)
+
+        if cached_data:
+            return Response(eval(cached_data), status=status.HTTP_200_OK)
+
+        # If not in Redis, fetch from DB
+        queue_entry = get_object_or_404(Queue,patient__id=id, doctor__id=doctor_id, clinic__id=clinic_id, status='waiting')
+        
+        serializer = self.get_serializer(queue_entry)
+        data = serializer.data
+
+        # Cache the data in Redis for 10 seconds (adjustable)
+        redis_client.setex(redis_key, 10, str(data))
+
+        return Response(data, status=status.HTTP_200_OK)

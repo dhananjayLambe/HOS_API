@@ -33,6 +33,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # Application definition
 
 INSTALLED_APPS = [
+    'channels',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -55,7 +56,7 @@ INSTALLED_APPS = [
     'rest_framework.authtoken',
     'rest_framework_simplejwt',  # Add this line
     'rest_framework_simplejwt.token_blacklist',
-    'channels',
+    
     'django_celery_results',
 ]
 
@@ -120,7 +121,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'main.wsgi.application'
+#WSGI_APPLICATION = 'main.wsgi.application'
 
 
 # Database
@@ -200,7 +201,7 @@ CACHES = {
 }
 
 # Django Channels settings
-ASGI_APPLICATION = "doctorpro.asgi.application"
+ASGI_APPLICATION = "main.asgi.application"
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
