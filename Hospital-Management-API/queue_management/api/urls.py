@@ -22,8 +22,19 @@ urlpatterns = [
     path("not-available/<uuid:id>/", MarkPatientNotAvailableAPIView.as_view(), name="queue-not-available"),
     path("queue-cancel/<uuid:id>/", CancelAppointmentAPIView.as_view(), name="queue-cancel"),
     #Patient Self-Service APIs
-    #TBD: Redis cerlry cache and channel layer real time code need to add and test as well is pending
     path('patient-status/<uuid:id>/', QueuePatientView.as_view(), name='queue-patient-status'),
     path('patient-cancel/<uuid:id>/', CancelAppointmentView.as_view(), name='queue-patient-cancel'),
 
 ]
+#Remaining tasks for Queue Management API:
+# 📌 5. Real-Time Updates & Notifications
+# 13. WebSocket Connection for Live Queue – ws://queue/live-updates/
+# • Sends real-time queue updates to doctors & helpdesk.
+# 14. Send Push Notification to Patients (Background Task)
+# • Notifies patients when their turn is near.
+ 
+# 📌 6. Background Jobs (Celery & Redis)
+# 15. Auto-Update Estimated Wait Time
+# • Runs every few minutes to recalculate wait times.
+# 16. Auto-Remove Patients Who Don’t Check-In
+# • Removes patients who haven’t checked in after a set time.

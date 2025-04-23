@@ -16,6 +16,10 @@ from queue_management.api.serializers import (
     QueueReorderSerializer)
 from account.permissions import IsDoctorOrHelpdesk,IsHelpdesk
 from django.db import transaction
+
+# Initialize Redis connection
+redis_client = redis.StrictRedis(host=settings.REDIS_HOST, port=settings.REDIS_PORT, db=0, decode_responses=True)
+
 # 1. POST /queue/check-in/ – Add a patient to the queue
 class CheckInQueueAPIView(APIView):
     permission_classes = [IsAuthenticated, IsDoctorOrHelpdesk]
@@ -261,9 +265,6 @@ class CancelAppointmentView(APIView):
         return Response({"message": "Appointment cancelled successfully."}, status=status.HTTP_200_OK)
 
 
-# Initialize Redis connection
-redis_client = redis.StrictRedis(host=settings.REDIS_HOST, port=settings.REDIS_PORT, db=0, decode_responses=True)
-
 class QueuePatientView(RetrieveAPIView):
     """
     Get patient's queue position & estimated wait time for a specific doctor and clinic.
@@ -283,8 +284,9 @@ class QueuePatientView(RetrieveAPIView):
 
         # Try fetching from Redis first
         redis_key = f"queue:patient:{id}:doctor:{doctor_id}:clinic:{clinic_id}"
+        print(f"Redis Key: {redis_key}")
         cached_data = redis_client.get(redis_key)
-
+        print(f"Cached Data: {cached_data}")
         if cached_data:
             return Response(eval(cached_data), status=status.HTTP_200_OK)
 
