@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     'helpdesk.apps.HelpdeskConfig',
     'appointments.apps.AppointmentsConfig',
     'queue_management.apps.QueueManagementConfig',
+    'consultations.apps.ConsultationsConfig',
     #rest_framework
     'rest_framework',
     'rest_framework.authtoken',
@@ -58,6 +59,7 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt.token_blacklist',
     
     'django_celery_results',
+    'drf_yasg',
 ]
 
 REST_FRAMEWORK={
