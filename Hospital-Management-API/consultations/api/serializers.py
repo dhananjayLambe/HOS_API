@@ -35,13 +35,24 @@ class StartConsultationSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
+        doctor = validated_data["doctor_obj"]
+        patient_profile = validated_data["patient_profile_obj"]
+        existing_consultation = Consultation.objects.filter(
+            doctor=doctor,
+            patient_profile=patient_profile,
+            is_active=True
+        ).first()
+
+        if existing_consultation:
+            return existing_consultation
+
+        # Else create a new consultation
         with transaction.atomic():
             consultation = Consultation.objects.create(
-                doctor=validated_data["doctor_obj"],
-                patient_profile=validated_data["patient_profile_obj"],
+                doctor=doctor,
+                patient_profile=patient_profile,
                 patient_account=validated_data["patient_account_obj"],
                 started_at=timezone.now(),
                 is_active=True
             )
-            # Future scope: Save reason to a Note model
             return consultation
