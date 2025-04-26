@@ -37,11 +37,8 @@ class Consultation(models.Model):
 
     @staticmethod
     def generate_unique_consultation_pnr():
-        prefix = "C"
-        date_str = timezone.now().strftime("%Y%m%d")
         while True:
-            number = str(random.randint(10000, 99999))
-            pnr = f"{prefix}-{date_str}-{number}"
+            pnr = str(random.randint(1000000000, 9999999999))  # 10-digit number
             if not Consultation.objects.filter(consultation_pnr=pnr).exists():
                 return pnr
 

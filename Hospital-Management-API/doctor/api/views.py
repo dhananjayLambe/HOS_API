@@ -58,11 +58,19 @@ class DoctorLoginView(APIView):
         if not user.status:  # Assuming 'status' is the approval field
             return Response({"message": "Your account is not approved by admin yet!"},
                             status=status.HTTP_403_FORBIDDEN)
+        try:
+            doctor_instance = doctor.objects.get(user=user)
+            doctor_id = doctor_instance.id
+        except doctor.DoesNotExist:
+            return Response({"message": "Doctor not found"}, status=status.HTTP_404_NOT_FOUND)
 
         # Generate JWT tokens
         refresh = RefreshToken.for_user(user)
+
         return Response({
             "id": user.id,
+            "doctor_id": doctor_id,
+            "username": user.username,
             "access_token": str(refresh.access_token),
             "refresh_token": str(refresh),
         }, status=status.HTTP_200_OK)
