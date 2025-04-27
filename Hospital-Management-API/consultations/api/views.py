@@ -5,6 +5,9 @@ from consultations.api.serializers import StartConsultationSerializer
 from account.permissions import IsDoctor
 from consultations.models import Consultation
 from django.utils import timezone
+from consultations.models import Consultation, Vitals
+from consultations.api.serializers import VitalsSerializer
+
 class StartConsultationAPIView(views.APIView):
     permission_classes = [IsAuthenticated]
     authourization_classes = [IsDoctor]
@@ -66,3 +69,70 @@ class EndConsultationAPIView(views.APIView):
                 "ended_at": consultation.ended_at
             }
         }, status=status.HTTP_200_OK)
+
+class VitalsAPIView(views.APIView):
+    permission_classes = [IsAuthenticated]
+    authourization_classes = [IsDoctor]
+    def post(self, request, consultation_id):
+        """
+        Create or update vitals for a consultation
+        """
+        try:
+            consultation = Consultation.objects.get(id=consultation_id)
+        except Consultation.DoesNotExist:
+            return Response({
+                "status": False,
+                "message": "Consultation not found."
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            # Try to fetch existing vitals
+            vitals = consultation.vitals
+            # Update vitals (partial update allowed)
+            serializer = VitalsSerializer(vitals, data=request.data, partial=True)
+            action = "updated"
+        except Vitals.DoesNotExist:
+            # Create new vitals
+            serializer = VitalsSerializer(data=request.data)
+            action = "created"
+
+        if serializer.is_valid():
+            if action == "updated":
+                serializer.save()
+            else:
+                serializer.save(consultation=consultation)
+            return Response({
+                "status": True,
+                "message": f"Vitals {action} successfully.",
+                "data": serializer.data
+            }, status=status.HTTP_200_OK if action == "updated" else status.HTTP_201_CREATED)
+
+        return Response({
+            "status": False,
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request, consultation_id):
+        """
+        Delete vitals for a consultation
+        """
+        try:
+            consultation = Consultation.objects.get(id=consultation_id)
+        except Consultation.DoesNotExist:
+            return Response({
+                "status": False,
+                "message": "Consultation not found."
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            vitals = consultation.vitals
+            vitals.delete()
+            return Response({
+                "status": True,
+                "message": "Vitals deleted successfully."
+            }, status=status.HTTP_200_OK)
+        except Vitals.DoesNotExist:
+            return Response({
+                "status": False,
+                "message": "Vitals not found for this consultation."
+            }, status=status.HTTP_404_NOT_FOUND)

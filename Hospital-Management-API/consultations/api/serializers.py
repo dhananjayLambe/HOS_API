@@ -4,6 +4,7 @@ from doctor.models import doctor
 from patient_account.models import PatientProfile
 from django.utils import timezone
 from django.db import transaction
+from consultations.models import Vitals
 
 class StartConsultationSerializer(serializers.ModelSerializer):
     patient_profile_id = serializers.UUIDField(write_only=True)
@@ -56,3 +57,15 @@ class StartConsultationSerializer(serializers.ModelSerializer):
                 is_active=True
             )
             return consultation
+
+
+class VitalsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Vitals
+        fields = ['height_cm', 'weight_kg', 'pulse', 'blood_pressure', 'temperature_c']
+
+    def validate(self, attrs):
+        bp = attrs.get("blood_pressure")
+        if bp and "/" not in bp:
+            raise serializers.ValidationError({"blood_pressure": "Blood pressure must be in format systolic/diastolic (e.g., 120/80)."})
+        return attrs

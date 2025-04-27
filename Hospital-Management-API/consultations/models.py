@@ -49,12 +49,39 @@ class Consultation(models.Model):
             if not Consultation.objects.filter(prescription_pnr=pnr).exists():
                 return pnr
 
+class Vitals(models.Model):
+    consultation = models.OneToOneField(Consultation, on_delete=models.CASCADE, related_name="vitals")
+    height_cm = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    weight_kg = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    pulse = models.IntegerField(null=True, blank=True)
+    blood_pressure = models.CharField(max_length=10, blank=True)  # e.g. 120/80
+    temperature_c = models.DecimalField(max_digits=4, decimal_places=1, null=True, blank=True)
 
 
-# class Vitals(models.Model):
-#     consultation = models.OneToOneField(Consultation, on_delete=models.CASCADE, related_name="vitals")
-#     height_cm = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
-#     weight_kg = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
-#     pulse = models.IntegerField(null=True, blank=True)
-#     blood_pressure = models.CharField(max_length=10, blank=True)  # e.g. 120/80
-#     temperature_c = models.DecimalField(max_digits=4, decimal_places=1, null=True, blank=True)
+# class Complaint(models.Model):
+#     consultation = models.ForeignKey(Consultation, on_delete=models.CASCADE, related_name="complaints")
+#     description = models.TextField()
+#     created_at = models.DateTimeField(auto_now_add=True)
+
+# class Diagnosis(models.Model):
+#     consultation = models.ForeignKey(Consultation, on_delete=models.CASCADE, related_name="diagnoses")
+#     name = models.CharField(max_length=255)
+#     notes = models.TextField(blank=True, null=True)
+
+# class Prescription(models.Model):
+#     consultation = models.ForeignKey(Consultation, on_delete=models.CASCADE, related_name="prescriptions")
+#     medicine_name = models.CharField(max_length=255)
+#     dosage = models.CharField(max_length=255)
+#     frequency = models.CharField(max_length=100)  # e.g. "1-0-1"
+#     duration = models.CharField(max_length=100)  # e.g. "5 days"
+#     notes = models.TextField(blank=True, null=True)
+
+# class Advice(models.Model):
+#     consultation = models.ForeignKey(Consultation, on_delete=models.CASCADE, related_name="advices")
+#     note = models.TextField()
+
+# class LabTest(models.Model):
+#     consultation = models.ForeignKey(Consultation, on_delete=models.CASCADE, related_name="lab_tests")
+#     test_name = models.CharField(max_length=255)
+#     notes = models.TextField(blank=True, null=True)
+#     is_done = models.BooleanField(default=False)
