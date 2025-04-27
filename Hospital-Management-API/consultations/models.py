@@ -4,6 +4,7 @@ from django.db import models
 from django.utils import timezone
 from doctor.models import doctor
 from patient_account.models import PatientAccount, PatientProfile
+from utils.static_data_service import StaticDataService
 
 
 class Consultation(models.Model):
@@ -57,6 +58,67 @@ class Vitals(models.Model):
     blood_pressure = models.CharField(max_length=10, blank=True)  # e.g. 120/80
     temperature_c = models.DecimalField(max_digits=4, decimal_places=1, null=True, blank=True)
 
+class Complaint(models.Model):
+    SEVERITY_CHOICES = [
+        ('mild', 'Mild'),
+        ('moderate', 'Moderate'),
+        ('severe', 'Severe')
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    consultation = models.ForeignKey(Consultation, on_delete=models.CASCADE, related_name='complaints')
+
+    complaint_text = models.CharField(max_length=255)
+    duration = models.PositiveIntegerField(help_text="Duration in days")
+    severity = models.CharField(max_length=10, choices=SEVERITY_CHOICES)
+    is_general = models.BooleanField(default=False)  # Whether selected from general complaints list
+    doctor_note = models.TextField(blank=True, null=True)  # Optional note field
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['created_at']
+        verbose_name = "Complaint"
+        verbose_name_plural = "Complaints"
+
+    def __str__(self):
+        return f"{self.complaint_text} ({self.severity})"
+
+class Diagnosis(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    consultation = models.ForeignKey(Consultation, on_delete=models.CASCADE, related_name='diagnoses')
+
+    code = models.CharField(max_length=20, blank=True, null=True, help_text="ICD-10/11 code (optional)")
+    description = models.CharField(max_length=500, help_text="Diagnosis description")
+
+    location = models.CharField(
+        max_length=20, 
+        choices=StaticDataService.get_location_choices(),
+        blank=True, 
+        null=True,
+        help_text="Diagnosis location in body"
+    )
+    diagnosis_type = models.CharField(
+        max_length=20, 
+        choices=StaticDataService.get_diagnosis_type_choices(),
+        default='confirmed',
+        help_text="Type of diagnosis"
+    )
+
+    is_general = models.BooleanField(default=False, help_text="Selected from predefined general diagnosis list")
+    doctor_note = models.TextField(blank=True, null=True, help_text="Internal notes for doctor")
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['created_at']
+        verbose_name = "Diagnosis"
+        verbose_name_plural = "Diagnoses"
+
+    def __str__(self):
+        return f"{self.description} ({self.diagnosis_type})"
 
 # class Complaint(models.Model):
 #     consultation = models.ForeignKey(Consultation, on_delete=models.CASCADE, related_name="complaints")
