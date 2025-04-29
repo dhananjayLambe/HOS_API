@@ -4,7 +4,9 @@ from doctor.models import doctor
 from patient_account.models import PatientProfile
 from django.utils import timezone
 from django.db import transaction
-from consultations.models import Vitals, Complaint, Diagnosis
+from consultations.models import (
+    Vitals, Complaint, Diagnosis,
+    Advice, AdviceTemplate)
 from utils.static_data_service import StaticDataService
 class StartConsultationSerializer(serializers.ModelSerializer):
     patient_profile_id = serializers.UUIDField(write_only=True)
@@ -58,7 +60,6 @@ class StartConsultationSerializer(serializers.ModelSerializer):
             )
             return consultation
 
-
 class VitalsSerializer(serializers.ModelSerializer):
     class Meta:
         model = Vitals
@@ -69,7 +70,6 @@ class VitalsSerializer(serializers.ModelSerializer):
         if bp and "/" not in bp:
             raise serializers.ValidationError({"blood_pressure": "Blood pressure must be in format systolic/diastolic (e.g., 120/80)."})
         return attrs
-
 
 class ComplaintSerializer(serializers.ModelSerializer):
     class Meta:
@@ -108,4 +108,37 @@ class DiagnosisSerializer(serializers.ModelSerializer):
         """
         if value not in [choice[0] for choice in StaticDataService.get_diagnosis_type_choices()]:
             raise serializers.ValidationError(f"Invalid diagnosis type: {value}. Please select a valid type.")
+        return value
+
+class AdviceTemplateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AdviceTemplate
+        fields = ['id', 'description']
+
+class AdviceSerializer(serializers.ModelSerializer):
+    advice_templates = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=AdviceTemplate.objects.all(),
+        required=False
+    )
+
+    class Meta:
+        model = Advice
+        fields = ['id', 'consultation', 'advice_templates', 'custom_advice', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'consultation']
+
+    def validate(self, attrs):
+        if not attrs.get('advice_templates') and not attrs.get('custom_advice'):
+            raise serializers.ValidationError("Either 'advice_templates' or 'custom_advice' must be provided.")
+        return attrs
+
+
+class EndConsultationSerializer(serializers.Serializer):
+    closure_note = serializers.CharField(required=False, allow_blank=True)
+    follow_up_date = serializers.DateField(required=False, allow_null=True)
+    confirm = serializers.BooleanField(required=False, default=False)
+
+    def validate_closure_note(self, value):
+        if not value.strip():
+            raise serializers.ValidationError("Closure note cannot be empty.")
         return value

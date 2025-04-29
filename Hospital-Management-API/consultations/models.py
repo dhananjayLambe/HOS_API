@@ -17,6 +17,11 @@ class Consultation(models.Model):
     patient_account = models.ForeignKey(PatientAccount, on_delete=models.CASCADE, related_name="consultations")
     patient_profile = models.ForeignKey(PatientProfile, on_delete=models.CASCADE, related_name="consultations")
 
+    closure_note = models.TextField(blank=True, null=True)
+    follow_up_date = models.DateField(blank=True, null=True)
+    is_finalized = models.BooleanField(default=False)
+    prescription_pdf = models.FileField(upload_to="prescriptions/", blank=True, null=True)
+
     started_at = models.DateTimeField(auto_now_add=True)
     ended_at = models.DateTimeField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
@@ -119,6 +124,35 @@ class Diagnosis(models.Model):
 
     def __str__(self):
         return f"{self.description} ({self.diagnosis_type})"
+
+class AdviceTemplate(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    description = models.CharField(max_length=500, help_text="Predefined lifestyle/dietary advice")
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['created_at']
+        verbose_name = "Advice Template"
+        verbose_name_plural = "Advice Templates"
+
+    def __str__(self):
+        return f"Template: {self.description}"
+class Advice(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    consultation = models.ForeignKey(Consultation, on_delete=models.CASCADE, related_name='advices')
+    advice_templates = models.ManyToManyField(AdviceTemplate, blank=True, related_name='custom_advices')
+    custom_advice = models.TextField(blank=True, null=True, help_text="Custom lifestyle/dietary advice")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    class Meta:
+        ordering = ['created_at']
+        verbose_name = "Advice"
+        verbose_name_plural = "Advices"
+
+    def __str__(self):
+        return f"Advice for Consultation {self.consultation.id}"
 
 # class Complaint(models.Model):
 #     consultation = models.ForeignKey(Consultation, on_delete=models.CASCADE, related_name="complaints")

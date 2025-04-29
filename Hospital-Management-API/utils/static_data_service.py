@@ -29,3 +29,19 @@ class StaticDataService:
             ('rule_out', 'Rule Out'),
             ('follow_up', 'Follow-up')
         ]
+    @staticmethod
+    def get_advice_templates():
+        return [
+            "Quit Smoking",
+            "Avoid Sugary Foods",
+            "Exercise Regularly",
+            "Limit Alcohol Intake",
+            "Eat More Vegetables",
+            "Drink More Water",
+            "Get Enough Sleep",
+            "Manage Stress Effectively",
+            "Have Regular Health Checkups",
+            "Reduce Screen Time",
+            "Practice Mindfulness",
+            "Limit Processed Foods"
+        ]
