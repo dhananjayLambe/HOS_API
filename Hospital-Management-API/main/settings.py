@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     'appointments.apps.AppointmentsConfig',
     'queue_management.apps.QueueManagementConfig',
     'consultations.apps.ConsultationsConfig',
+    'prescriptions.apps.PrescriptionsConfig',
     #rest_framework
     'rest_framework',
     'rest_framework.authtoken',

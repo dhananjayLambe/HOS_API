@@ -45,3 +45,64 @@ class StaticDataService:
             "Practice Mindfulness",
             "Limit Processed Foods"
         ]
+
+    @staticmethod
+    def get_medicine_type_choices():
+        return [
+            ('tablet', 'Tablet'),
+            ('syrup', 'Syrup'),
+            ('cream', 'Cream'),
+            ('injection', 'Injection'),
+            ('insulin', 'Insulin'),
+            ('spray', 'Spray'),
+            ('drop', 'Drop'),
+            ('powder', 'Powder'),
+            ('ointment', 'Ointment'),
+            ('gel', 'Gel'),
+            ('patch', 'Patch'),
+            ('lotion', 'Lotion'),
+            ('other', 'Other'),
+        ]
+
+    @staticmethod
+    def get_timing_choices():
+        return [
+            ('before_breakfast', 'Before Breakfast'),
+            ('after_breakfast', 'After Breakfast'),
+            ('before_lunch', 'Before Lunch'),
+            ('after_lunch', 'After Lunch'),
+            ('before_dinner', 'Before Dinner'),
+            ('after_dinner', 'After Dinner'),
+            ('empty_stomach', 'Empty Stomach'),
+            ('bedtime', 'Bedtime'),
+            ('morning', 'Morning'),
+            ('afternoon', 'Afternoon'),
+            ('evening', 'Evening'),
+            ('night', 'Night'),
+        ]
+
+    @staticmethod
+    def get_prescription_status_choices():
+        return [
+            ('active', 'Active'),
+            ('completed', 'Completed'),
+            ('discontinued', 'Discontinued'),
+        ]
+    @staticmethod
+    def get_dosage_unit_choices():
+        return [
+            ('tablet', 'Tablet'),
+            ('ml', 'Milliliter'),
+            ('g', 'Gram'),
+            ('drop', 'Drop'),
+            ('spray', 'Spray'),
+            ('unit', 'Unit'),
+        ]
+    
+    @staticmethod
+    def get_duration_type_choices():
+        return [
+            ('fixed', 'Fixed'),
+            ('stat', 'STAT (Immediate)'),
+            ('sos', 'SOS (As Needed)')
+        ]
