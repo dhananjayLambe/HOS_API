@@ -47,6 +47,7 @@ urlpatterns = [
     path('api/queue/', include('queue_management.api.urls')),
     path('api/consultations/', include('consultations.api.urls')),
     path('api/prescriptions/', include('prescriptions.api.urls')),
+    path('api/diagnostic/', include('diagnostic.api.urls')),
 
     #Swagger API
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),

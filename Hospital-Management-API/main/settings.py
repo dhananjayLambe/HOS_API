@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     'queue_management.apps.QueueManagementConfig',
     'consultations.apps.ConsultationsConfig',
     'prescriptions.apps.PrescriptionsConfig',
+    'diagnostic.apps.DiagnosticConfig',
     #rest_framework
     'rest_framework',
     'rest_framework.authtoken',

@@ -106,3 +106,57 @@ class StaticDataService:
             ('stat', 'STAT (Immediate)'),
             ('sos', 'SOS (As Needed)')
         ]
+
+    @staticmethod
+    def get_test_type_choices():
+        return [
+            ('blood', 'Blood Test'),
+            ('xray', 'X-Ray'),
+            ('ultrasound', 'Ultrasound'),
+            ('ct', 'CT Scan'),
+            ('mri', 'MRI Scan'),
+            ('ecg', 'ECG'),
+            ('echo', 'ECHO'),
+            ('tmt', 'TMT'),
+            ('pet', 'PET Scan'),
+            ('eeg', 'EEG'),
+            ('dexa', 'DEXA Scan'),
+            ('prt', 'PRT Scan'),
+            ('mammo', 'Mammography'),
+            ('urine', 'Urine Test'),
+            ('biopsy', 'Biopsy'),
+            ('other', 'Other'),
+        ]
+
+    @staticmethod
+    def get_test_category_choices():
+        return [
+            ('blood-tests', 'Blood Tests'),
+            ('digital-xray', 'Digital X-Ray'),
+            ('ultrasound', 'Ultrasound (USG)'),
+            ('ct-scan', 'CT Scan'),
+            ('mri-scan', 'MRI Scan'),
+            ('ecg', 'ECG'),
+            ('echo', 'ECHO'),
+            ('tmt', 'TMT'),
+            ('pet-scan', 'PET Scan'),
+            ('eeg', 'EEG'),
+            ('dexa-scan', 'DEXA Scan'),
+            ('mammography', 'Mammography'),
+            ('urine-tests', 'Urine Tests'),
+            ('biopsy', 'Biopsy'),
+            ('wellness', 'Wellness Packages')
+        ]
+
+    @staticmethod
+    def get_imaging_view_choices():
+        return [
+            ('pa', 'PA View'),
+            ('ap', 'AP View'),
+            ('lateral', 'Lateral View'),
+            ('oblique', 'Oblique View'),
+            ('axial', 'Axial View'),
+            ('coronal', 'Coronal View'),
+            ('sagittal', 'Sagittal View'),
+            ('transvaginal', 'Transvaginal View')
+        ]
