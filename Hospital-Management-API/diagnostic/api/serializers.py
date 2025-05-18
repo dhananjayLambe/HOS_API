@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.utils.text import slugify
 from diagnostic.models import (
-    MedicalTest, TestCategory, ImagingView, TestRecommendation
+    MedicalTest, TestCategory, ImagingView, TestRecommendation,PackageRecommendation
     )
 
 class MedicalTestSerializer(serializers.ModelSerializer):
@@ -68,7 +68,6 @@ class ImagingViewSerializer(serializers.ModelSerializer):
 
         return data
 
-
 class TestRecommendationSerializer(serializers.ModelSerializer):
     test_name = serializers.CharField(source='test.name', read_only=True)
 
@@ -81,9 +80,62 @@ class TestRecommendationSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'recommended_by', 'consultation']
 
     def validate(self, data):
+        request = self.context.get('request')
+        consultation_id = self.context['view'].kwargs.get('consultation_id')
         test = data.get('test')
         custom_name = data.get('custom_name')
 
+        # 1. Must provide either test or custom name
         if not test and not custom_name:
             raise serializers.ValidationError("Either a predefined test or custom name must be provided.")
+
+        # 2. Prevent duplicate custom_name for this consultation
+        if custom_name:
+            custom_name = custom_name.strip().lower()
+            qs = TestRecommendation.objects.filter(
+                consultation_id=consultation_id,
+                custom_name__iexact=custom_name
+            )
+            if self.instance:  # Exclude current instance in case of update
+                qs = qs.exclude(id=self.instance.id)
+            if qs.exists():
+                raise serializers.ValidationError("This custom test is already recommended for this consultation.")
+
+        # 3. Optional: Prevent duplicate test (predefined) for same consultation
+        if test:
+            qs = TestRecommendation.objects.filter(
+                consultation_id=consultation_id,
+                test_id=test.id
+            )
+            if self.instance:
+                qs = qs.exclude(id=self.instance.id)
+            if qs.exists():
+                raise serializers.ValidationError("This test is already recommended for this consultation.")
+
         return data
+
+class PackageRecommendationSerializer(serializers.ModelSerializer):
+    package_name = serializers.CharField(source='package.name', read_only=True)
+
+    class Meta:
+        model = PackageRecommendation
+        fields = [
+            'id', 'consultation', 'package', 'package_name', 'notes', 'doctor_comment',
+            'is_completed', 'recommended_by', 'created_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'recommended_by', 'consultation', 'package_name']
+
+    def validate(self, data):
+        request = self.context.get('request')
+        consultation_id = self.context['view'].kwargs.get('consultation_id')
+        package = data.get('package')
+
+        # Check for duplicate
+        qs = PackageRecommendation.objects.filter(consultation_id=consultation_id, package=package)
+        if self.instance:
+            qs = qs.exclude(id=self.instance.id)
+        if qs.exists():
+            raise serializers.ValidationError("This package is already recommended for this consultation.")
+
+        return data
+

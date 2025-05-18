@@ -2,6 +2,7 @@ from rest_framework import status, views, generics
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
+from rest_framework.exceptions import NotFound
 from account.permissions import IsDoctor
 from django.utils import timezone
 from consultations.models import (
@@ -9,7 +10,7 @@ from consultations.models import (
     Complaint, Diagnosis)
 from consultations.api.serializers import (
     VitalsSerializer,StartConsultationSerializer,ComplaintSerializer,
-    DiagnosisSerializer,AdviceSerializer,AdviceTemplateSerializer,
+    DiagnosisSerializer,AdviceSerializer,AdviceTemplateSerializer,ConsultationSummarySerializer,
     EndConsultationSerializer)
 
 class StartConsultationAPIView(views.APIView):
@@ -42,37 +43,6 @@ class StartConsultationAPIView(views.APIView):
                 "message": "Validation failed.",
                 "errors": serializer.errors
             }, status=status.HTTP_400_BAD_REQUEST)
-        
-# class EndConsultationAPIView(views.APIView):
-#     permission_classes = [IsAuthenticated]
-#     authourization_classes = [IsDoctor]
-#     def post(self, request, consultation_id):
-#         try:
-#             consultation = Consultation.objects.get(id=consultation_id)
-#         except Consultation.DoesNotExist:
-#             return Response({
-#                 "status": False,
-#                 "message": "Consultation not found."
-#             }, status=status.HTTP_404_NOT_FOUND)
-
-#         if not consultation.is_active:
-#             return Response({
-#                 "status": False,
-#                 "message": "Consultation is already ended."
-#             }, status=status.HTTP_400_BAD_REQUEST)
-
-#         consultation.is_active = False
-#         consultation.ended_at = timezone.now()
-#         consultation.save()
-
-#         return Response({
-#             "status": True,
-#             "message": "Consultation ended successfully.",
-#             "data": {
-#                 "consultation_id": str(consultation.id),
-#                 "ended_at": consultation.ended_at
-#             }
-#         }, status=status.HTTP_200_OK)
 
 class VitalsAPIView(views.APIView):
     permission_classes = [IsAuthenticated]
@@ -154,7 +124,7 @@ class ComplaintAPIView(views.APIView):
         except Consultation.DoesNotExist:
             return Response({"status": False, "message": "Consultation not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        serializer = ComplaintSerializer(data=request.data)
+        serializer = ComplaintSerializer(data=request.data, context={'consultation_id': consultation_id})
         if serializer.is_valid():
             Complaint.objects.create(
                 consultation=consultation,
@@ -215,6 +185,20 @@ class DiagnosisAPIView(views.APIView):
 
         # Add the consultation_id to the request data implicitly
         request.data['consultation'] = consultation.id
+        # Check if a diagnosis with the same details already exists
+        existing_diagnosis = Diagnosis.objects.filter(
+            consultation_id=consultation_id,
+            code=request.data.get('code'),
+            description=request.data.get('description'),
+            location=request.data.get('location'),
+            diagnosis_type=request.data.get('diagnosis_type')
+        ).exists()
+
+        if existing_diagnosis:
+            return Response({
+                "status": False,
+                "message": "Duplicate diagnosis entry found."
+            }, status=status.HTTP_400_BAD_REQUEST)
 
         # Validate and create diagnosis
         serializer = DiagnosisSerializer(data=request.data)
@@ -269,7 +253,6 @@ class DiagnosisAPIView(views.APIView):
             "message": "Diagnosis deleted successfully."
         }, status=status.HTTP_200_OK)
 
-
 class AdviceTemplateListAPIView(generics.ListAPIView):
     queryset = AdviceTemplate.objects.all().order_by('description')
     serializer_class = AdviceTemplateSerializer
@@ -288,6 +271,19 @@ class AdviceAPIView(views.APIView):
             consultation = Consultation.objects.get(id=consultation_id)
         except Consultation.DoesNotExist:
             return Response({"status": False, "message": "Consultation not found."}, status=status.HTTP_404_NOT_FOUND)
+        # Check if an advice with the same details already exists
+        existing_advice = Advice.objects.filter(
+            consultation_id=consultation_id,
+            custom_advice=request.data.get('custom_advice')
+            ).filter(
+                advice_templates__id__in=request.data.get('advice_templates')
+            ).exists()
+
+        if existing_advice:
+            return Response({
+                "status": False,
+                "message": "Duplicate advice entry found."
+            }, status=status.HTTP_400_BAD_REQUEST)
 
         serializer = AdviceSerializer(data=request.data)
         if serializer.is_valid():
@@ -413,3 +409,27 @@ class EndConsultationAPIView(APIView):
             }, status=status.HTTP_200_OK)
 
         return Response({"status": False, "errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+    
+class ConsultationSummaryView(generics.RetrieveAPIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = ConsultationSummarySerializer
+
+    def get_object(self):
+        consultation_id = self.kwargs.get('pk')
+        try:
+            return (
+                Consultation.objects
+                .select_related('doctor', 'patient_profile')
+                .prefetch_related(
+                    'vitals',
+                    'complaints',
+                    'diagnoses',
+                    'prescriptions',
+                    'advices__advice_templates',
+                    'test_recommendations__test',
+                    'package_recommendations__package'
+                )
+                .get(id=consultation_id)
+            )
+        except Consultation.DoesNotExist:
+            raise NotFound("Consultation not found")

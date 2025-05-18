@@ -6,8 +6,20 @@ from django.utils import timezone
 from django.db import transaction
 from consultations.models import (
     Vitals, Complaint, Diagnosis,
-    Advice, AdviceTemplate)
+    Advice, AdviceTemplate,
+    Consultation)
+from account.models import User
 from utils.static_data_service import StaticDataService
+from prescriptions.models import Prescription
+from diagnostic.models import TestRecommendation, PackageRecommendation
+from doctor.api.serializers import DoctorSerializer
+from patient_account.api.serializers import PatientProfileSerializer
+from diagnostic.api.serializers import (
+    TestRecommendationSerializer,
+    PackageRecommendationSerializer
+)
+from prescriptions.api.serializers import PrescriptionSerializer
+
 class StartConsultationSerializer(serializers.ModelSerializer):
     patient_profile_id = serializers.UUIDField(write_only=True)
     doctor_id = serializers.UUIDField(write_only=True)
@@ -77,11 +89,15 @@ class ComplaintSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'complaint_text', 'duration', 'severity', 'is_general', 'doctor_note'
         ]
-
-    def validate_severity(self, value):
-        if value.lower() not in ['mild', 'moderate', 'severe']:
+    def validate(self, data):
+        consultation_id = self.context['consultation_id']
+        existing_complaint = Complaint.objects.filter(consultation_id=consultation_id, complaint_text=data['complaint_text']).first()
+        if existing_complaint:
+            raise serializers.ValidationError('Complaint with the same details already exists for this consultation.')
+        severity = data.get('severity')
+        if severity and severity.lower() not in ['mild', 'moderate', 'severe']:
             raise serializers.ValidationError("Severity must be one of: mild, moderate, severe.")
-        return value.lower()
+        return data
 
 class DiagnosisSerializer(serializers.ModelSerializer):
     class Meta:
@@ -132,7 +148,6 @@ class AdviceSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Either 'advice_templates' or 'custom_advice' must be provided.")
         return attrs
 
-
 class EndConsultationSerializer(serializers.Serializer):
     closure_note = serializers.CharField(required=False, allow_blank=True)
     follow_up_date = serializers.DateField(required=False, allow_null=True)
@@ -142,3 +157,23 @@ class EndConsultationSerializer(serializers.Serializer):
         if not value.strip():
             raise serializers.ValidationError("Closure note cannot be empty.")
         return value
+
+class ConsultationSummarySerializer(serializers.ModelSerializer):
+    doctor = DoctorSerializer()
+    patient = PatientProfileSerializer(source='patient_profile')
+    vitals = VitalsSerializer()
+    complaints = ComplaintSerializer(many=True)
+    diagnoses = DiagnosisSerializer(many=True)
+    prescriptions = PrescriptionSerializer(many=True)
+    advices = AdviceSerializer(many=True)
+    test_recommendations = TestRecommendationSerializer(many=True)
+    package_recommendations = PackageRecommendationSerializer(many=True)
+
+    class Meta:
+        model = Consultation
+        fields = [
+            'id', 'consultation_pnr', 'prescription_pnr', 'started_at', 'ended_at',
+            'doctor', 'patient', 'follow_up_date', 'is_finalized',
+            'vitals', 'complaints', 'diagnoses', 'prescriptions',
+            'advices', 'test_recommendations', 'package_recommendations'
+        ]

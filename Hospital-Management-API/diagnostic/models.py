@@ -109,6 +109,8 @@ class PackageRecommendation(models.Model):
     is_completed = models.BooleanField(default=False)
     recommended_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    class Meta:
+        unique_together = ('consultation', 'package')
 
     def __str__(self):
         return self.package.name

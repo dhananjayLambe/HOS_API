@@ -3,7 +3,7 @@ from consultations.api.views import(
     StartConsultationAPIView,
     EndConsultationAPIView,
     VitalsAPIView,AdviceTemplateListAPIView,
-    ComplaintAPIView,DiagnosisAPIView,AdviceAPIView
+    ComplaintAPIView,DiagnosisAPIView,AdviceAPIView,ConsultationSummaryView
     )
 
 
@@ -18,5 +18,5 @@ urlpatterns = [
     path('advice/templates/', AdviceTemplateListAPIView.as_view(), name='advice-templates-list'),
     path('advice/<uuid:consultation_id>/', AdviceAPIView.as_view(), name='advice-create'),
     path('advice-update-delete/<uuid:consultation_id>/<uuid:advice_id>/', AdviceAPIView.as_view(), name='advice-update-delete'),
-
+    path('summary/<uuid:pk>/', ConsultationSummaryView.as_view(), name='consultation-summary'),
 ]
