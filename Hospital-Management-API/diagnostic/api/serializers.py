@@ -1,8 +1,10 @@
 from rest_framework import serializers
 from django.utils.text import slugify
 from diagnostic.models import (
-    MedicalTest, TestCategory, ImagingView, TestRecommendation,PackageRecommendation
+    MedicalTest, TestCategory, ImagingView, TestRecommendation,PackageRecommendation,
+    TestPackage
     )
+from django.db import transaction
 
 class MedicalTestSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source="category.name", read_only=True)
@@ -139,3 +141,38 @@ class PackageRecommendationSerializer(serializers.ModelSerializer):
 
         return data
 
+class TestPackageSerializer(serializers.ModelSerializer):
+    tests = serializers.PrimaryKeyRelatedField(queryset=MedicalTest.objects.all(), many=True)
+
+    class Meta:
+        model = TestPackage
+        fields = '__all__'
+        read_only_fields = ['id', 'created_at']
+
+    def validate_name(self, value):
+        if TestPackage.objects.filter(name=value).exclude(id=self.instance.id if self.instance else None).exists():
+            raise serializers.ValidationError("A package with this name already exists.")
+        return value
+
+    def validate(self, data):
+        test_ids = data.get('tests', [])
+        if len(test_ids) != len(set(test_ids)):
+            raise serializers.ValidationError("Duplicate tests in the package are not allowed.")
+        return data
+
+    def create(self, validated_data):
+        tests = validated_data.pop('tests')
+        with transaction.atomic():
+            package = TestPackage.objects.create(**validated_data)
+            package.tests.set(tests)
+        return package
+
+    def update(self, instance, validated_data):
+        tests = validated_data.pop('tests', None)
+        with transaction.atomic():
+            for attr, value in validated_data.items():
+                setattr(instance, attr, value)
+            instance.save()
+            if tests is not None:
+                instance.tests.set(tests)
+        return instance

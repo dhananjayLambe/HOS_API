@@ -5,7 +5,10 @@ from diagnostic.api.views import (
     TestCategoryViewSet,
     ImagingViewViewSet,
     TestRecommendationViewSet,
-    PackageRecommendationViewSet
+    PackageRecommendationViewSet,
+    TestPackageListCreateView,
+    TestPackageDetailView,
+    BulkTestPackageCreateView
 )
 urlpatterns =[]
 router = DefaultRouter()
@@ -39,6 +42,10 @@ router.register(r'imaging-views', ImagingViewViewSet, basename='imaging-view')
 urlpatterns += router.urls
 
 urlpatterns += [
+    path('test-packages/', TestPackageListCreateView.as_view(), name='test-package-list-create'),
+    path('test-packages/bulk-create/', BulkTestPackageCreateView.as_view(), name='bulk-create-test-packages'),
+    path('test-packages/<uuid:pk>/', TestPackageDetailView.as_view(), name='test-package-detail'),
+
     path(
         'test-recommendation/<uuid:consultation_id>/tests/',
         test_recommendation_list,
