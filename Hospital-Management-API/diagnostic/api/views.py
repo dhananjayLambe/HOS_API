@@ -21,7 +21,7 @@ from account.permissions import IsDoctor
 class MedicalTestViewSet(viewsets.ModelViewSet):
     queryset = MedicalTest.objects.filter(is_active=True).order_by('-created_at')
     serializer_class = MedicalTestSerializer
-    authentication_classes = [JWTAuthentication,IsAuthenticated]
+    authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
 
@@ -38,7 +38,7 @@ class MedicalTestViewSet(viewsets.ModelViewSet):
 class TestCategoryViewSet(viewsets.ModelViewSet):
     queryset = TestCategory.objects.all().order_by('-name')
     serializer_class = TestCategorySerializer
-    authentication_classes = [JWTAuthentication,IsAuthenticated]
+    authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['modality']
@@ -56,7 +56,7 @@ class ImagingViewViewSet(viewsets.ModelViewSet):
 
 class TestRecommendationViewSet(viewsets.ModelViewSet):
     serializer_class = TestRecommendationSerializer
-    authentication_classes = [JWTAuthentication,IsAuthenticated]
+    authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
@@ -84,7 +84,7 @@ class TestRecommendationViewSet(viewsets.ModelViewSet):
 
 class PackageRecommendationViewSet(viewsets.ModelViewSet):
     serializer_class = PackageRecommendationSerializer
-    authentication_classes = [JWTAuthentication,IsAuthenticated]
+    authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
     def get_queryset(self):
         consultation_id = self.kwargs.get('consultation_id')
