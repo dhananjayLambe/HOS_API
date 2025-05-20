@@ -1,0 +1,20 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="utf-8">
+    <title>Prescription</title>
+    <link rel="stylesheet" href="{% static 'pdf/style.css' %}">
+</head>
+<body>
+    <h1>डॉक्टर का नाम: {{ doctor.name }}</h1>
+    <p>रोगी: {{ patient.name }}</p>
+    <p>उम्र: {{ patient.age }} वर्ष</p>
+    <h2>दवा:</h2>
+    <ul>
+      {% for med in medicines %}
+        <li>{{ med.name }} - {{ med.dosage }}</li>
+      {% endfor %}
+    </ul>
+</body>
+</html>

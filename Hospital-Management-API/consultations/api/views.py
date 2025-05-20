@@ -1,8 +1,14 @@
+import os
 from rest_framework import status, views, generics
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework.exceptions import NotFound
+from django.http import JsonResponse
+
+from django.http import FileResponse
+from consultations.utils import render_pdf
+from django.views.decorators.csrf import csrf_exempt
 from account.permissions import IsDoctor
 from django.utils import timezone
 from consultations.models import (
@@ -433,3 +439,25 @@ class ConsultationSummaryView(generics.RetrieveAPIView):
             )
         except Consultation.DoesNotExist:
             raise NotFound("Consultation not found")
+
+
+
+@csrf_exempt
+def test_pdf(request):
+    context = {
+        'doctor': {'name': 'डॉ. शर्मा'},
+        'patient': {'name': 'राम', 'age': 30},
+        'medicines': [
+            {'name': 'Paracetamol', 'dosage': '500mg दिन में दो बार'},
+            {'name': 'Cetirizine', 'dosage': 'रात में एक बार'},
+        ]
+    }
+    filename = 'test.pdf'
+    output_path = os.path.join('media', 'prescriptions', 'test.pdf')
+    render_pdf('prescriptions/base.html', context, output_path)
+    #TO get the file donwload
+    #return FileResponse(open(output_path, 'rb'), content_type='application/pdf')
+    return JsonResponse({
+        'status': 'success',
+        'pdf_url': f'/media/prescriptions/{filename}'
+    })
