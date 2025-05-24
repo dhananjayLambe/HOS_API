@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prescription</title>
+    <style>
+        /* Base styles */
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: #fff;
+            color: #333; /* Default text color */
+        }
+
+        /* WeasyPrint Specifics for Page Layout */
+        @page {
+            size: A4;
+            margin: 10; /* Managed by content padding */
+
+            @top-center {
+                content: element(header-running);
+                margin-top: 15mm; /* Space from top edge of the page */
+                width: 190mm; /* A4 width (210mm) - 2*10mm side margins */
+                padding-left: 10mm;
+                padding-right: 10mm;
+                box-sizing: border-box;
+            }
+
+            @bottom-center {
+                content: element(footer-running);
+                margin-bottom: 15mm; /* Space from bottom edge of the page */
+                width: 190mm; /* A4 width (210mm) - 2*10mm side margins */
+                padding-left: 10mm;
+                padding-right: 10mm;
+                box-sizing: border-box;
+            }
+        }
+
+        /* Running Header/Footer content (only visible in print) */
+        #header-running {
+            position: running(header-running);
+            display: none; /* Hidden on screen, shown in print */
+        }
+
+        #footer-running {
+            position: running(footer-running);
+            display: none; /* Hidden on screen, shown in print */
+            text-align: center;
+        }
+
+        /* Main container for screen view and flowing content in print */
+        .prescription-container {
+            width: 210mm; /* A4 width */
+            margin: auto; /* Center on screen */
+            padding: 20mm 15mm 15mm 15mm; /* Matches your desired A4 margin */
+            background: white;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.1); /* Optional: for screen preview */
+            min-height: 297mm; /* Ensure it looks like A4 on screen */
+            display: flex; /* Use flexbox for main content flow */
+            flex-direction: column;
+        }
+
+        /* Header content for screen view (hidden in print) */
+        #screen-header-content {
+            margin-bottom: 10px;
+        }
+
+        /* Footer content for screen view (hidden in print) */
+        #screen-footer-content {
+            margin-top: auto; /* Pushes footer to the bottom */
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 10px;
+        }
+
+        .clinic-info {
+            width: 65%; /* Adjusted for better spacing */
+            padding-right: 10px;
+            text-align: left; /* Explicitly left align */
+        }
+
+        .clinic-name {
+            font-size: 18px;
+            font-weight: bold;
+            color: #4B0082;
+        }
+
+        .doctor-info {
+            width: 35%;
+            text-align: right; /* Explicitly right align */
+            font-size: 12px;
+            line-height: 1.4;
+        }
+
+        .section {
+            font-size: 13px;
+            margin-bottom: 12px;
+        }
+
+        .section-title {
+            font-size: 15px;
+            font-weight: bold;
+            margin: 12px 0 5px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 5px;
+        }
+
+        th, td {
+            border: 1px solid #ccc;
+            padding: 5px 8px;
+            font-size: 12px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f2f2f2;
+        }
+
+        .signature {
+            margin-top: 20px;
+            text-align: right;
+            font-size: 12px;
+            page-break-before: auto; /* Allow break before, but don't force */
+            page-break-inside: avoid; /* Keep signature block together */
+        }
+
+        .note {
+            font-size: 11px;
+            padding: 8px;
+            border: 1px solid #ddd;
+            background-color: #f9f9f9;
+            margin-top: 10px;
+            text-align: center;
+            page-break-inside: avoid; /* Keep note block together */
+        }
+
+        .footer {
+            margin-top: 20px;
+            font-size: 11px;
+            text-align: center;
+            color: #666;
+            page-break-inside: avoid; /* Keep footer block together */
+        }
+
+        ul {
+            margin: 0;
+            padding-left: 20px;
+            page-break-inside: avoid; /* Keep list together if possible */
+        }
+
+        /* Specific print adjustments */
+        @media print {
+            body {
+                padding: 0; /* Reset body padding for print */
+            }
+
+            .prescription-container {
+                /* Reset margin-top here as print-top-spacer will handle it */
+                margin-top: 0; 
+                width: 190mm; /* Inner content width */
+                max-width: 190mm;
+                padding: 10mm 10mm 10mm 10mm; /* Keep internal padding for content */
+                margin-left: auto; /* Center horizontally */
+                margin-right: auto; /* Center horizontally */
+                box-shadow: none; /* No shadow in print */
+                min-height: auto; /* Let height be determined by content */
+                page-break-after: auto; /* Allow content to flow naturally */
+            }
+            
+            /* Show running elements */
+            #header-running, #footer-running {
+                display: block;
+            }
+
+            /* Hide screen-specific header/footer content in print */
+            #screen-header-content, #screen-footer-content {
+                display: none;
+            }
+
+            /* Ensure content colors are dark for print */
+            .clinic-name, .doctor-info, .section, .section-title, table, th, td, .signature, .note, .footer {
+                color: #000 !important;
+            }
+            /* Explicitly set clinic name color to black for print */
+            .clinic-name {
+                color: #000000 !important; 
+                -webkit-print-color-adjust: exact;
+                color-adjust: exact;
+            }
+            /* Explicitly set doctor info text to black for print */
+            #header-running .doctor-info p {
+                color: #000000 !important;
+            }
+
+            .note {
+                background-color: #f9f9f9 !important;
+                -webkit-print-color-adjust: exact;
+                color-adjust: exact;
+            }
+
+            /* Page breaking for content */
+            table, ul {
+                page-break-inside: auto; /* Allow tables/lists to break across pages */
+            }
+            table tr {
+                page-break-inside: avoid; /* Keep individual table rows together */
+            }
+            .section {
+                page-break-inside: avoid; /* Keep sections (advice, investigations) together if possible */
+            }
+            /* Remove page-break-after: always; from .page as content flows */
+            .page {
+                page-break-after: auto;
+            }
+
+            /* Reduce space between Rx title and table */
+            p.section-title {
+                margin-bottom: 0px !important; /* Remove bottom margin from Rx title */
+                page-break-after: avoid; /* Ensure Rx title stays with the table */
+            }
+            table {
+                margin-top: 0px !important; /* Remove top margin from table */
+                padding-top: 5px; /* Add a small padding to separate from Rx title */
+            }
+
+            /* Spacer for top margin in print */
+            .print-top-spacer {
+                height: 70mm; /* This creates the initial top space after the running header */
+                display: block; /* Ensure it takes up space */
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="header-running">
+        <div class="header">
+            <div class="clinic-info">
+                <img src="https://placehold.co/40x40/800080/ffffff?text=Logo" alt="Clinic Logo" style="width: 40px; height: 40px; border-radius: 50%; margin-right: 10px; vertical-align: middle;">
+                <div style="display: inline-block; vertical-align: middle;">
+                    <div class="clinic-name">{{ clinic.name_line1 }}</div>
+                    <div class="clinic-name">{{ clinic.name_line2 }}</div>
+                </div>
+                <p style="margin: 0; text-align: left;">{{ clinic.address }}<br>
+                Contact: {{ clinic.phone }}</p>
+                <p style="margin: 5px 0 0; text-align: left;">Height: {{ patient.height }} cm &nbsp;&nbsp; Weight: {{ patient.weight }} kg</p>
+            </div>
+            <div class="doctor-info">
+                <p style="margin: 0; font-weight: bold; text-align: right;">Dr. {{ doctor.name }}</p>
+                <p style="margin: 0; text-align: right;">{{ doctor.qualification }}</p>
+                <p style="margin: 0; text-align: right;">Reg no: {{ doctor.reg_no }}</p>
+                <p style="margin: 0; text-align: right;">{{ doctor.specialization1 }}</p>
+                <p style="margin: 0; text-align: right;">{{ doctor.specialization2 }}</p>
+                <p style="margin: 0; text-align: right;">{{ doctor.email }}</p>
+                <p style="margin: 0; text-align: right;">{{ doctor.phone }}</p>
+            </div>
+        </div>
+        <hr style="border: 0; border-top: 1px dashed #ccc; margin: 10px 0;">
+        <div class="section" style="margin-bottom: 0;">
+            <strong style="margin-right: 10px;">Patient:</strong> {{ patient.name }} ({{ patient.age }}y, {{ patient.gender }})
+            <span style="float: right;"><strong>Date:</strong> {{ date }}</span>
+            <div style="clear: both;"></div> {# Clear float for next content #}
+        </div>
+        <p class="section-title" style="margin-top: 8px; margin-bottom: 5px;">Rx</p>
+    </div>
+
+    <div id="footer-running">
+        <hr style="border: 0; border-top: 1px dashed #ccc; margin: 10px 0;">
+        <div class="signature" style="margin-top: 10px; text-align: right;">
+            <strong>Dr. {{ doctor.name }}</strong><br>
+            Date: {{ date }}
+        </div>
+        <div class="note" style="margin-top: 10px;">
+            <strong>Note:</strong> In case of emergency, contact: <strong>{{ emergency.email }}</strong> or <strong>{{ emergency.phone }}</strong>
+        </div>
+        <div class="footer" style="margin-top: 5px;">
+            This is a digitally signed prescription.<br>
+            Powered by DoctorProCare.com
+            <div style="text-align: right; margin-top: 5px; font-size: 10px;" class="page-number"></div>
+        </div>
+    </div>
+
+
+    <div class="prescription-container">
+        <div class="print-top-spacer"></div>
+
+        <div id="screen-header-content">
+            <div class="header">
+                <div class="clinic-info">
+                    <img src="https://placehold.co/40x40/800080/ffffff?text=Logo" alt="Clinic Logo" style="width: 40px; height: 40px; border-radius: 50%; margin-right: 10px; vertical-align: middle;">
+                    <div style="display: inline-block; vertical-align: middle;">
+                        <div class="clinic-name">{{ clinic.name_line1 }}</div>
+                        <div class="clinic-name">{{ clinic.name_line2 }}</div>
+                    </div>
+                    <p style="margin: 0; text-align: left;">{{ clinic.address }}<br>
+                    Contact: {{ clinic.phone }}</p>
+                    <p style="margin: 5px 0 0; text-align: left;">Height: {{ patient.height }} cm &nbsp;&nbsp; Weight: {{ patient.weight }} kg</p>
+                </div>
+                <div class="doctor-info">
+                    <p style="margin: 0; font-weight: bold; text-align: right;">Dr. {{ doctor.name }}</p>
+                    <p style="margin: 0; text-align: right;">{{ doctor.qualification }}</p>
+                    <p style="margin: 0; text-align: right;">Reg no: {{ doctor.reg_no }}</p>
+                    <p style="margin: 0; text-align: right;">{{ doctor.specialization1 }}</p>
+                    <p style="margin: 0; text-align: right;">{{ doctor.specialization2 }}</p>
+                    <p style="margin: 0; text-align: right;">{{ doctor.email }}</p>
+                    <p style="margin: 0; text-align: right;">{{ doctor.phone }}</p>
+                </div>
+            </div>
+            <hr style="border: 0; border-top: 1px dashed #ccc; margin: 10px 0;">
+
+            <div class="section">
+                <strong style="margin-right: 10px;">Patient:</strong> {{ patient.name }} ({{ patient.age }}y, {{ patient.gender }})
+                <span style="float: right;"><strong>Date:</strong> {{ date }}</span>
+                <div style="clear: both;"></div> {# Clear float for next content #}
+            </div>
+            <p class="section-title" style="margin-top: 8px; margin-bottom: 5px;">Rx</p>
+        </div>
+
+
+        <div class="section">
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Medicine</th>
+                        <th>Dosage</th>
+                        <th>Duration</th>
+                        <th>Instructions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for med in medicines %}
+                    <tr>
+                        <td>{{ forloop.counter }}</td>
+                        <td>{{ med.name }}</td>
+                        <td>{{ med.dosage }}</td>
+                        <td>{{ med.duration }}</td>
+                        <td>{{ med.instruction }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Advice</div>
+            <p>{{ advice.hi }}</p>
+            <p>{{ advice.en }}</p>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Investigations / Tests Recommended</div>
+            <ul>
+                {% for test in investigations %}
+                <li>{{ test }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        
+        <div class="section">
+            <div class="section-title">Diagnoses</div>
+            <ul>
+                {% for diagnosis in diagnoses %}
+                <li>
+                    <strong>{{ diagnosis.description }}</strong> ({{ diagnosis.type }} - {{ diagnosis.location }})
+                    {% if diagnosis.note %}: {{ diagnosis.note }}{% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Packages</div>
+            <ul>
+                {% for package in packages %}
+                <li>{{ package }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Follow-up Date</div>
+            <p>{{ follow_up_date }}</p>
+        </div>
+
+
+        <div id="screen-footer-content">
+            <hr style="border: 0; border-top: 1px dashed #ccc; margin: 10px 0;">
+            <div class="signature" style="margin-top: 10px;">
+                <strong>Dr. {{ doctor.name }}</strong><br>
+                Date: {{ date }}
+            </div>
+
+            <div class="note" style="margin-top: 10px;">
+                <strong>Note:</strong> In case of emergency, contact: <strong>{{ emergency.email }}</strong> or <strong>{{ emergency.phone }}</strong>
+            </div>
+
+            <div class="footer" style="margin-top: 5px;">
+                This is a digitally signed prescription.<br>
+                Powered by DoctorProCare.com
+                <div style="text-align: right; margin-top: 5px; font-size: 10px;">Page 1</div> {# This will be replaced by running footer for subsequent pages #}
+            </div>
+        </div>
+    </div>
+</body>
+</html>
