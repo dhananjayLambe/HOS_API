@@ -3,6 +3,7 @@ from django.db import models
 from account.models import User
 from clinic.models import Clinic
 from django.utils.timezone import now
+from django.core.validators import RegexValidator
 
 class doctor(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -59,8 +60,10 @@ class Registration(models.Model):
 class GovernmentID(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     doctor = models.OneToOneField(doctor, on_delete=models.CASCADE, related_name='government_ids')
-    pan_card_number = models.CharField(max_length=10, unique=True)
-    aadhar_card_number = models.CharField(max_length=12, unique=True)
+    pan_card_number = models.CharField(max_length=10, unique=True ,
+                                       validators=[RegexValidator(regex='^[A-Z]{5}[0-9]{4}[A-Z]$', message="Invalid PAN format.")])
+    aadhar_card_number = models.CharField(max_length=12, unique=True,
+                            validators=[RegexValidator(regex='^[0-9]{12}$', message="Invalid Aadhar number.")])
     created_at = models.DateTimeField(auto_now_add=True)  # Mandatory  default=timezone.now
     updated_at = models.DateTimeField(auto_now=True)  # Mandatory  default=timezone.now
 
@@ -75,6 +78,9 @@ class Education(models.Model):
     year_of_completion = models.PositiveIntegerField()
     created_at = models.DateTimeField(auto_now_add=True)  # Mandatory  default=timezone.now
     updated_at = models.DateTimeField(auto_now=True)  # Mandatory  default=timezone.now
+
+    class Meta:
+        unique_together = ('doctor', 'qualification', 'institute', 'year_of_completion')
 
     def __str__(self):
         return f"{self.qualification} - {self.institute} ({self.year_of_completion})"

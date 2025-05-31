@@ -5,21 +5,29 @@ from django.core.exceptions import PermissionDenied
 from django.shortcuts import get_object_or_404
 
 # Third-party imports
-from rest_framework import generics, status
+from rest_framework import generics, status, viewsets,permissions
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenRefreshView
+from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError, NotFound
+from rest_framework.permissions import IsAuthenticated
+from django.db import transaction
+
 
 # Local application imports
 from account.models import User
 from account.permissions import IsDoctor
-from doctor.models import doctor
 from helpdesk.models import HelpdeskClinicUser
-#from patient.models import Appointment
 
+from doctor.models import (
+    doctor,DoctorAddress,Registration,GovernmentID,
+    Education, Award, Certification, DoctorFeedback, DoctorService, DoctorSocialLink, Specialization,
+    CustomSpecialization
+    )
 # Local module imports
 from doctor.api.serializers import (
     DoctorRegistrationSerializer,
@@ -28,7 +36,13 @@ from doctor.api.serializers import (
     HelpdeskApprovalSerializer,
     PendingHelpdeskUserSerializer,
     ProfileSerializer,
-    UserSerializer
+    UserSerializer,
+    DoctorAddressSerializer,
+    RegistrationSerializer,
+    GovernmentIDSerializer,
+    EducationSerializer,
+    SpecializationSerializer,
+    CustomSpecializationSerializer,
 )
 
 # class DoctorRegistrationView(APIView):
@@ -350,3 +364,297 @@ class DeleteHelpdeskUserView(APIView):
             return Response({"message": "Helpdesk user deleted successfully."}, status=status.HTTP_204_NO_CONTENT)
         except HelpdeskClinicUser.DoesNotExist:
             return Response({"error": "Helpdesk user not found or unauthorized."}, status=status.HTTP_404_NOT_FOUND)
+
+class DoctorAddressViewSet(viewsets.ViewSet):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctor]
+
+    def get_object(self, doctor):
+        try:
+            return DoctorAddress.objects.get(doctor=doctor)
+        except DoctorAddress.DoesNotExist:
+            return None
+
+    def list(self, request):
+        address = self.get_object(request.user.doctor)
+        if not address:
+            return Response({"status": "error", "message": "Address not found"}, status=404)
+        serializer = DoctorAddressSerializer(address)
+        return Response({"status": "success", "data": serializer.data})
+
+    @transaction.atomic
+    def create(self, request):
+        doctor = request.user.doctor
+        if self.get_object(doctor):
+            return Response({"status": "error", "message": "Address already exists"}, status=409)
+        serializer = DoctorAddressSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save(doctor=doctor)
+            return Response({"status": "success", "message": "Address created", "data": serializer.data}, status=201)
+        return Response({"status": "error", "message": "Validation failed", "errors": serializer.errors}, status=400)
+
+    @transaction.atomic
+    def update(self, request, pk=None):
+        address = self.get_object(request.user.doctor)
+        if not address:
+            return Response({"status": "error", "message": "Address not found"}, status=404)
+        serializer = DoctorAddressSerializer(address, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({"status": "success", "message": "Address updated", "data": serializer.data})
+        return Response({"status": "error", "message": "Validation failed", "errors": serializer.errors}, status=400)
+
+    @transaction.atomic
+    def partial_update(self, request, pk=None):
+        address = self.get_object(request.user.doctor)
+        if not address:
+            return Response({"status": "error", "message": "Address not found"}, status=404)
+        serializer = DoctorAddressSerializer(address, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({"status": "success", "message": "Address partially updated", "data": serializer.data})
+        return Response({"status": "error", "message": "Validation failed", "errors": serializer.errors}, status=400)
+
+    @transaction.atomic
+    def destroy(self, request, pk=None):
+        address = self.get_object(request.user.doctor)
+        if not address:
+            return Response({"status": "error", "message": "Address not found"}, status=404)
+        address.delete()
+        return Response({"status": "success", "message": "Address deleted"}, status=204)
+   
+class RegistrationView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctor]
+
+    def get(self, request):
+        doctor = request.user.doctor
+        try:
+            registration = doctor.registration
+            serializer = RegistrationSerializer(registration)
+            return Response({
+                "status": "success",
+                "message": "Registration data fetched",
+                "data": serializer.data
+            }, status=status.HTTP_200_OK)
+        except Registration.DoesNotExist:
+            raise NotFound("Registration not found")
+
+    @transaction.atomic
+    def post(self, request):
+        doctor = request.user.doctor
+        if hasattr(doctor, 'registration'):
+            return Response({
+                "status": "error",
+                "message": "Registration already exists"
+            }, status=status.HTTP_409_CONFLICT)
+
+        serializer = RegistrationSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save(doctor=doctor)
+            return Response({
+                "status": "success",
+                "message": "Registration created",
+                "data": serializer.data
+            }, status=status.HTTP_201_CREATED)
+        return Response({
+            "status": "error",
+            "message": "Validation failed",
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    @transaction.atomic
+    def put(self, request):
+        doctor = request.user.doctor
+        try:
+            registration = doctor.registration
+        except Registration.DoesNotExist:
+            raise NotFound("Registration not found")
+
+        serializer = RegistrationSerializer(registration, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({
+                "status": "success",
+                "message": "Registration updated",
+                "data": serializer.data
+            }, status=status.HTTP_200_OK)
+        return Response({
+            "status": "error",
+            "message": "Validation failed",
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    @transaction.atomic
+    def patch(self, request):
+        doctor = request.user.doctor
+        try:
+            registration = doctor.registration
+        except Registration.DoesNotExist:
+            raise NotFound("Registration not found")
+
+        serializer = RegistrationSerializer(registration, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({
+                "status": "success",
+                "message": "Registration partially updated",
+                "data": serializer.data
+            }, status=status.HTTP_200_OK)
+        return Response({
+            "status": "error",
+            "message": "Validation failed",
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    @transaction.atomic
+    def delete(self, request):
+        doctor = request.user.doctor
+        try:
+            registration = doctor.registration
+            registration.delete()
+            return Response({
+                "status": "success",
+                "message": "Registration deleted"
+            }, status=status.HTTP_204_NO_CONTENT)
+        except Registration.DoesNotExist:
+            raise NotFound("Registration not found")
+
+class GovernmentIDViewSet(viewsets.ViewSet):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctor]
+
+    def get_object(self, doctor):
+        try:
+            return doctor.government_ids
+        except GovernmentID.DoesNotExist:
+            raise NotFound("Government ID not found.")
+
+    def create(self, request):
+        doctor = request.user.doctor
+        if hasattr(doctor, 'government_ids'):
+            return Response(
+                {"status": "error", "message": "Government ID already exists."},
+                status=status.HTTP_409_CONFLICT
+            )
+
+        serializer = GovernmentIDSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        with transaction.atomic():
+            serializer.save(doctor=doctor)
+
+        return Response(
+            {"status": "success", "message": "Government ID added successfully.", "data": serializer.data},
+            status=status.HTTP_201_CREATED
+        )
+
+    def retrieve(self, request):
+        doctor = request.user.doctor
+        government_id = self.get_object(doctor)
+        serializer = GovernmentIDSerializer(government_id)
+        return Response(
+            {"status": "success", "data": serializer.data},
+            status=status.HTTP_200_OK
+        )
+
+    def update(self, request):
+        doctor = request.user.doctor
+        government_id = self.get_object(doctor)
+
+        serializer = GovernmentIDSerializer(government_id, data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        with transaction.atomic():
+            serializer.save()
+
+        return Response(
+            {"status": "success", "message": "Government ID updated successfully.", "data": serializer.data},
+            status=status.HTTP_200_OK
+        )
+
+    def partial_update(self, request):
+        doctor = request.user.doctor
+        government_id = self.get_object(doctor)
+
+        serializer = GovernmentIDSerializer(government_id, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+
+        with transaction.atomic():
+            serializer.save()
+
+        return Response(
+            {"status": "success", "message": "Government ID updated successfully.", "data": serializer.data},
+            status=status.HTTP_200_OK
+        )
+
+    def destroy(self, request):
+        doctor = request.user.doctor
+        government_id = self.get_object(doctor)
+        government_id.delete()
+
+        return Response(
+            {"status": "success", "message": "Government ID deleted successfully."},
+            status=status.HTTP_204_NO_CONTENT
+        )
+
+class EducationViewSet(viewsets.ModelViewSet):
+    serializer_class = EducationSerializer
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctor]
+
+    def get_queryset(self):
+        return Education.objects.filter(doctor=self.request.user.doctor)
+
+    def perform_create(self, serializer):
+        serializer.save(doctor=self.request.user.doctor)
+
+    def perform_update(self, serializer):
+        serializer.save()
+
+class CustomSpecializationViewSet(viewsets.ModelViewSet):
+    queryset = CustomSpecialization.objects.all()
+    serializer_class = CustomSpecializationSerializer
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctor]
+
+
+class SpecializationViewSet(viewsets.ModelViewSet):
+    serializer_class = SpecializationSerializer
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctor]
+
+    def get_queryset(self):
+        return Specialization.objects.filter(doctor=self.request.user.doctor)
+
+    @transaction.atomic
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        instance = serializer.save(doctor=request.user.doctor)
+        return Response({
+            "status": "success",
+            "message": "Specialization created successfully",
+            "data": SpecializationSerializer(instance).data
+        }, status=status.HTTP_201_CREATED)
+
+    @transaction.atomic
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        instance = serializer.save()
+        return Response({
+            "status": "success",
+            "message": "Specialization updated successfully",
+            "data": SpecializationSerializer(instance).data
+        }, status=status.HTTP_200_OK)
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        instance.delete()
+        return Response({
+            "status": "success",
+            "message": "Specialization deleted successfully"
+        }, status=status.HTTP_204_NO_CONTENT)

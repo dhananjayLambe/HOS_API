@@ -7,6 +7,7 @@ from account.models import User
 from clinic.models import Clinic
 from doctor.models import (
     Award,
+    DoctorAddress,
     Certification,
     DoctorFeedback,
     DoctorService,
@@ -15,6 +16,7 @@ from doctor.models import (
     GovernmentID,
     Registration,
     Specialization,
+    CustomSpecialization,
     doctor,
 )
 from hospital_mgmt.models import Hospital
@@ -88,53 +90,99 @@ class DoctorRegistrationSerializer(serializers.Serializer):
         doctor_profile = ProfileSerializer().create(profile_data)
         return doctor_profile
 
-# class patientHistorySerializerDoctorView(serializers.Serializer):
-#     Cardiologist='CL'
-#     Dermatologists='DL'
-#     Emergency_Medicine_Specialists='EMC'
-#     Immunologists='IL'
-#     Anesthesiologists='AL'
-#     Colon_and_Rectal_Surgeons='CRS'
-#     admit_date=serializers.DateField(label="Admit Date:", read_only=True)
-#     symptomps=serializers.CharField(label="Symptomps:", style={'base_template': 'textarea.html'})
-#     #department=serializers.CharField(label='Department: ')
-#     #required=False; if this field is not required to be present during deserialization.
-#     release_date=serializers.DateField(label="Release Date:", required=False)
-#     assigned_doctor=serializers.StringRelatedField(label='Assigned Doctor:')
-
-# class doctorAppointmentSerializer(serializers.Serializer):
-#     patient_name=serializers.SerializerMethodField('related_patient_name')
-#     patient_age=serializers.SerializerMethodField('related_patient_age')
-#     appointment_date=serializers.DateField(label="Appointment Date:",)
-#     appointment_time=serializers.TimeField(label="Appointment Time:")
-#     patient_history=patientHistorySerializerDoctorView(label='patient History:')
-    
-
-#     def related_patient_name(self, obj):
-#         return obj.patient_history.patient.get_name
-    
-#     def related_patient_age(self, obj):
-#         return obj.patient_history.patient.age
-
 class RegistrationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Registration
-        fields = '__all__'
+        fields = ['id','medical_registration_number', 'medical_council', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def validate_medical_registration_number(self, value):
+        if Registration.objects.filter(medical_registration_number=value).exclude(doctor=self.context['request'].user.doctor).exists():
+            raise serializers.ValidationError("This medical registration number is already in use.")
+        return value
 
 class GovernmentIDSerializer(serializers.ModelSerializer):
     class Meta:
         model = GovernmentID
+        fields = [
+            'id', 'pan_card_number', 'aadhar_card_number',
+            'created_at', 'updated_at'
+        ]
+
+    def validate_pan_card_number(self, value):
+        if len(value) != 10:
+            raise serializers.ValidationError("PAN card number must be 10 characters long.")
+        return value.upper()
+
+    def validate_aadhar_card_number(self, value):
+        if len(value) != 12 or not value.isdigit():
+            raise serializers.ValidationError("Aadhar card number must be a 12-digit number.")
+        return value
+
+class DoctorAddressSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DoctorAddress
         fields = '__all__'
+        read_only_fields = ['id', 'created_at', 'updated_at', 'doctor']
 
 class EducationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Education
-        fields = '__all__'
+        fields = ['id', 'qualification', 'institute', 'year_of_completion', 'created_at', 'updated_at']
+
+    def create(self, validated_data):
+        request = self.context['request']
+        validated_data['doctor'] = request.user.doctor
+        return super().create(validated_data)
+    
+    def validate(self, attrs):
+        doctor = self.context['request'].user.doctor
+        if Education.objects.filter(
+            doctor=doctor,
+            qualification=attrs.get('qualification'),
+            institute=attrs.get('institute'),
+            year_of_completion=attrs.get('year_of_completion')
+        ).exists():
+            raise serializers.ValidationError("Duplicate education entry already exists.")
+        return attrs
+
+class CustomSpecializationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CustomSpecialization
+        fields = ['id', 'name', 'description', 'created_at', 'updated_at']
+
+    def validate_name(self, value):
+        if CustomSpecialization.objects.filter(name__iexact=value).exists():
+            raise serializers.ValidationError("Custom specialization with this name already exists.")
+        return value
+
 
 class SpecializationSerializer(serializers.ModelSerializer):
+    specialization_display = serializers.CharField(source='get_specialization_display', read_only=True)
+
     class Meta:
         model = Specialization
-        fields = '__all__'
+        fields = [
+            'id', 'specialization', 'specialization_display', 'custom_specialization',
+            'is_primary', 'created_at', 'updated_at'
+        ]
+
+    def validate(self, attrs):
+        doctor = self.context['request'].user.doctor
+        specialization = attrs.get('specialization')
+        custom_specialization = attrs.get('custom_specialization')
+
+        if not specialization and not custom_specialization:
+            raise serializers.ValidationError("Either specialization or custom_specialization must be provided.")
+
+        if Specialization.objects.filter(
+            doctor=doctor,
+            specialization=specialization,
+            custom_specialization=custom_specialization
+        ).exists():
+            raise serializers.ValidationError("Duplicate specialization entry for this doctor.")
+
+        return attrs
 
 class AwardSerializer(serializers.ModelSerializer):
     class Meta:
@@ -213,29 +261,51 @@ class DoctorRegistrationSerializer(serializers.ModelSerializer):
 class DoctorProfileUpdateSerializer(serializers.ModelSerializer):
     education = EducationSerializer(many=True, required=False)
     certifications = CertificationSerializer(many=True, required=False)
-    government_ids = GovernmentIDSerializer(required=False)
+    government_ids = GovernmentIDSerializer(required=False, source='government_id')
     services = DoctorServiceSerializer(many=True, required=False)
     awards = AwardSerializer(many=True, required=False)
     social_links = DoctorSocialLinkSerializer(many=True, required=False)
     specializations = SpecializationSerializer(many=True, required=False)
+    registration = RegistrationSerializer(required=False)
 
     class Meta:
         model = doctor
         fields = '__all__'
+        #extra_fields = ['government_id']
 
     def update(self, instance, validated_data):
         nested_fields = [
             'education', 'languages', 'certifications', 'services', 
-            'awards', 'social_links', 'specializations'
+            'awards', 'social_links', 'specializations','government_ids',
+            'registration'
         ]
+        if 'registration' in validated_data:
+            registration_data = validated_data.pop('registration')
+            try:
+                registration = instance.registration
+            except Registration.DoesNotExist:
+                registration = Registration.objects.create(doctor=instance)
+            registration.medical_registration_number = registration_data.get('medical_registration_number', '')
+            registration.medical_council = registration_data.get('medical_council', '')
+            registration.save()
 
-        for field in nested_fields:
+        print(validated_data)
+        for field in nested_fields:            
             if field in validated_data:
+                print("field", field)
                 nested_data = validated_data.pop(field)
                 related_manager = getattr(instance, field)
-                related_manager.all().delete()
-                for item in nested_data:
-                    related_manager.create(**item)
+                if field == 'government_ids':
+                    print("i am in government_ids")
+                    related_manager = instance.government_id
+                    if nested_data:
+                        related_manager.pan_card_number = nested_data['pan_card_number']
+                        related_manager.aadhar_card_number = nested_data['aadhar_card_number']
+                        related_manager.save()
+                else:
+                    related_manager.all().delete()
+                    for item in nested_data:
+                        related_manager.create(**item)
 
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
@@ -294,3 +364,52 @@ class HelpdeskApprovalSerializer(serializers.ModelSerializer):
 
         instance.user.save()
         return instance
+
+class DoctorSummarySerializer(serializers.ModelSerializer):
+    user = serializers.SerializerMethodField()
+    registration = serializers.SerializerMethodField()
+    education = serializers.SerializerMethodField()
+    specializations = serializers.SerializerMethodField()
+    secondary_mobile_number = serializers.CharField()
+    designation = serializers.CharField(source='user.designation', default='', read_only=True)  # optional
+    class Meta:
+        model = doctor
+        fields = [
+            'id',
+            'user',
+            'secondary_mobile_number',
+            'designation',
+            'registration',
+            'education',
+            'specializations',
+        ]
+
+    def get_user(self, obj):
+        user = obj.user
+        return {
+            'id': user.id,
+            'username': user.username,
+            'first_name': user.first_name,
+            'last_name': user.last_name,
+            'email': user.email
+        }
+
+    def get_registration(self, obj):
+        if hasattr(obj, 'registration'):
+            return {
+                'medical_registration_number': obj.registration.medical_registration_number,
+                'medical_council': obj.registration.medical_council
+            }
+        return None
+
+    def get_education(self, obj):
+        return [{'qualification': edu.qualification} for edu in obj.education.all()]
+
+    def get_specializations(self, obj):
+        return [
+            {
+                'specialization': s.get_specialization_display(),
+                'custom_specialization': s.custom_specialization.name if s.custom_specialization else ''
+            }
+            for s in obj.specializations.all()
+        ]

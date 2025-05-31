@@ -521,7 +521,6 @@ def header_footer_template_common(canvas_obj, doc, doctor_data):
     """
     Draws the header and footer on each page using dynamic doctor data.
     """
-    print(f"DEBUG: header_footer_template_common called for page {doc.page}") # Debug print
     canvas_obj.saveState()
     styles = getSampleStyleSheet()
 

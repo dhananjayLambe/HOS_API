@@ -1,14 +1,35 @@
-from django.urls import path
+from django.urls import path, include
 from rest_framework_simplejwt.views import TokenVerifyView
+from rest_framework.routers import DefaultRouter
 from doctor.api.views import (
-    DoctorDetailsAPIView,
+    DoctorDetailsAPIView,DoctorAddressViewSet,
     DoctorRegistrationAPIView,PendingHelpdeskRequestsView,
     UserView,DoctorProfileUpdateAPIView,ApproveHelpdeskUserView,
-    DoctorLoginView,DoctorLogoutView,DoctorTokenRefreshView)
+    DoctorLoginView,DoctorLogoutView,DoctorTokenRefreshView,
+    RegistrationView,GovernmentIDViewSet,EducationViewSet,
+    SpecializationViewSet,CustomSpecializationViewSet
+   )
 
 app_name='doctor'
+router = DefaultRouter()
+router.register(r'address', DoctorAddressViewSet, basename='doctor-address')
+router.register(r'education', EducationViewSet, basename='education')
+router.register(r'specializations', SpecializationViewSet, basename='specialization')
+router.register(r'custom-specializations', CustomSpecializationViewSet, basename='custom-specialization')
+
+
+government_id_view = GovernmentIDViewSet.as_view({
+    'post': 'create',
+    'get': 'retrieve',
+    'put': 'update',
+    'patch': 'partial_update',
+    'delete': 'destroy',
+})
+
+
 
 urlpatterns = [
+    path('', include(router.urls)),
     # Doctor Authentication Endpoints
     path('login/', DoctorLoginView.as_view(), name='doctor_login'),
     path('logout/', DoctorLogoutView.as_view(), name='doctor_logout'),
@@ -22,11 +43,9 @@ urlpatterns = [
     path("helpdesk/approve/<uuid:helpdesk_user_id>/", ApproveHelpdeskUserView.as_view(), name="approve-helpdesk"),
     #path('api/helpdesk/<uuid:helpdesk_id>/deactivate/', DeactivateHelpdeskUserView.as_view(), name='deactivate_helpdesk_user'),
     #path('api/helpdesk/<uuid:helpdesk_id>/delete/', DeleteHelpdeskUserView.as_view(), name='delete_helpdesk_user'),
+    path('registration/', RegistrationView.as_view(), name='doctor-registration'),
+    path('government-id/', government_id_view, name='doctor-government-id'),
 
-    #path('login/', CustomAuthToken.as_view(), name='api_doctor_login'),
-    #path('logout/', LogoutView.as_view(), name='api_doctor_logout'),
-    #path('appointments/', doctorAppointmentView.as_view(), name='api_doctor_profile'),
-    
 ]
 #helpdesk uuid is user uuid used to approve the helpdesk user
 

@@ -12,7 +12,7 @@ from account.models import User
 from utils.static_data_service import StaticDataService
 from prescriptions.models import Prescription
 from diagnostic.models import TestRecommendation, PackageRecommendation
-from doctor.api.serializers import DoctorSerializer
+from doctor.api.serializers import DoctorSerializer,DoctorSummarySerializer
 from patient_account.api.serializers import PatientProfileSerializer
 from diagnostic.api.serializers import (
     TestRecommendationSerializer,
@@ -159,7 +159,7 @@ class EndConsultationSerializer(serializers.Serializer):
         return value
 
 class ConsultationSummarySerializer(serializers.ModelSerializer):
-    doctor = DoctorSerializer()
+    doctor = DoctorSummarySerializer()
     patient = PatientProfileSerializer(source='patient_profile')
     vitals = VitalsSerializer()
     complaints = ComplaintSerializer(many=True)
