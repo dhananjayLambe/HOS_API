@@ -41,8 +41,12 @@ from doctor.api.serializers import (
     RegistrationSerializer,
     GovernmentIDSerializer,
     EducationSerializer,
-    SpecializationSerializer,
     CustomSpecializationSerializer,
+    SpecializationSerializer,
+    DoctorServiceSerializer,
+    AwardSerializer,CertificationSerializer,
+    
+
 )
 
 # class DoctorRegistrationView(APIView):
@@ -612,12 +616,6 @@ class EducationViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         serializer.save()
 
-class CustomSpecializationViewSet(viewsets.ModelViewSet):
-    queryset = CustomSpecialization.objects.all()
-    serializer_class = CustomSpecializationSerializer
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAuthenticated, IsDoctor]
-
 
 class SpecializationViewSet(viewsets.ModelViewSet):
     serializer_class = SpecializationSerializer
@@ -625,7 +623,95 @@ class SpecializationViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, IsDoctor]
 
     def get_queryset(self):
-        return Specialization.objects.filter(doctor=self.request.user.doctor)
+        return Specialization.objects.filter(doctor=self.request.user.doctor).order_by('-created_at')
+
+    @transaction.atomic
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        return Response({
+            "status": "success",
+            "message": "Specialization created successfully",
+            "data": serializer.data
+        }, status=status.HTTP_201_CREATED)
+
+    @transaction.atomic
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        return Response({
+            "status": "success",
+            "message": "Specialization updated successfully",
+            "data": serializer.data
+        })
+
+    @transaction.atomic
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        self.perform_destroy(instance)
+        return Response({
+            "status": "success",
+            "message": "Specialization deleted successfully"
+        }, status=status.HTTP_204_NO_CONTENT)
+
+class CustomSpecializationViewSet(viewsets.ModelViewSet):
+    queryset = CustomSpecialization.objects.all().order_by('name')
+    serializer_class = CustomSpecializationSerializer
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctor]
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({
+            "status": "success",
+            "message": "Custom specializations fetched successfully",
+            "data": serializer.data
+        })
+
+    @transaction.atomic
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        instance = serializer.save()
+        return Response({
+            "status": "success",
+            "message": "Custom specialization created successfully",
+            "data": self.get_serializer(instance).data
+        }, status=status.HTTP_201_CREATED)
+
+    @transaction.atomic
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        instance = serializer.save()
+        return Response({
+            "status": "success",
+            "message": "Custom specialization updated successfully",
+            "data": self.get_serializer(instance).data
+        })
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        instance.delete()
+        return Response({
+            "status": "success",
+            "message": "Custom specialization deleted successfully"
+        }, status=status.HTTP_204_NO_CONTENT)
+
+class DoctorServiceViewSet(viewsets.ModelViewSet):
+    serializer_class = DoctorServiceSerializer
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctor]
+
+    def get_queryset(self):
+        return DoctorService.objects.filter(doctor=self.request.user.doctor).order_by('-created_at')
 
     @transaction.atomic
     def create(self, request, *args, **kwargs):
@@ -634,8 +720,49 @@ class SpecializationViewSet(viewsets.ModelViewSet):
         instance = serializer.save(doctor=request.user.doctor)
         return Response({
             "status": "success",
-            "message": "Specialization created successfully",
-            "data": SpecializationSerializer(instance).data
+            "message": "Service created successfully",
+            "data": self.get_serializer(instance).data
+        }, status=status.HTTP_201_CREATED)
+
+    @transaction.atomic
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response({
+            "status": "success",
+            "message": "Service updated successfully",
+            "data": serializer.data
+        }, status=status.HTTP_200_OK)
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        instance.delete()
+        return Response({
+            "status": "success",
+            "message": "Service deleted successfully"
+        }, status=status.HTTP_204_NO_CONTENT)
+
+
+class AwardViewSet(viewsets.ModelViewSet):
+    serializer_class = AwardSerializer
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctor]
+
+    def get_queryset(self):
+        return Award.objects.filter(doctor=self.request.user.doctor).order_by('-date_awarded')
+
+    @transaction.atomic
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        instance = serializer.save(doctor=request.user.doctor)
+        return Response({
+            "status": "success",
+            "message": "Award created successfully",
+            "data": self.get_serializer(instance).data
         }, status=status.HTTP_201_CREATED)
 
     @transaction.atomic
@@ -647,14 +774,54 @@ class SpecializationViewSet(viewsets.ModelViewSet):
         instance = serializer.save()
         return Response({
             "status": "success",
-            "message": "Specialization updated successfully",
-            "data": SpecializationSerializer(instance).data
-        }, status=status.HTTP_200_OK)
+            "message": "Award updated successfully",
+            "data": serializer.data
+        })
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
         instance.delete()
         return Response({
             "status": "success",
-            "message": "Specialization deleted successfully"
+            "message": "Award deleted successfully"
+        }, status=status.HTTP_204_NO_CONTENT)
+
+class CertificationViewSet(viewsets.ModelViewSet):
+    serializer_class = CertificationSerializer
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctor]
+
+    def get_queryset(self):
+        return Certification.objects.filter(doctor=self.request.user.doctor).order_by('-date_of_issue')
+
+    @transaction.atomic
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        instance = serializer.save(doctor=request.user.doctor)
+        return Response({
+            "status": "success",
+            "message": "Certification created successfully",
+            "data": self.get_serializer(instance).data
+        }, status=status.HTTP_201_CREATED)
+
+    @transaction.atomic
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        instance = serializer.save()
+        return Response({
+            "status": "success",
+            "message": "Certification updated successfully",
+            "data": serializer.data
+        })
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        instance.delete()
+        return Response({
+            "status": "success",
+            "message": "Certification deleted successfully"
         }, status=status.HTTP_204_NO_CONTENT)

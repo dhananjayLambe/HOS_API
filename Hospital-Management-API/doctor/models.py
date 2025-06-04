@@ -90,6 +90,9 @@ class CustomSpecialization(models.Model):
     description = models.TextField(blank=True, null=True, help_text="Provide a description if needed")
     created_at = models.DateTimeField(auto_now_add=True)  # Mandatory  default=timezone.now
     updated_at = models.DateTimeField(auto_now=True)  # Mandatory  default=timezone.now
+    class Meta:
+        unique_together = ('name',)  # Enforces uniqueness
+        ordering = ['name']
     def __str__(self):
         return self.name
 
@@ -153,7 +156,10 @@ class Specialization(models.Model):
     is_primary = models.BooleanField(default=False, help_text="Indicates if this is the primary displayed specialization")
     created_at = models.DateTimeField(auto_now_add=True)  # Mandatory  default=timezone.now
     updated_at = models.DateTimeField(auto_now=True)  # Mandatory  default=timezone.now
-
+    
+    class Meta:
+        unique_together = ('doctor', 'specialization', 'custom_specialization')
+    
     def __str__(self):
         if self.specialization:
             return f"{self.get_specialization_display()} ({'Primary' if self.is_primary else 'Secondary'})"

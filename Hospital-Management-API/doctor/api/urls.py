@@ -7,7 +7,9 @@ from doctor.api.views import (
     UserView,DoctorProfileUpdateAPIView,ApproveHelpdeskUserView,
     DoctorLoginView,DoctorLogoutView,DoctorTokenRefreshView,
     RegistrationView,GovernmentIDViewSet,EducationViewSet,
-    SpecializationViewSet,CustomSpecializationViewSet
+    SpecializationViewSet,CustomSpecializationViewSet,
+    DoctorServiceViewSet,AwardViewSet,CertificationViewSet,
+    
    )
 
 app_name='doctor'
@@ -16,6 +18,12 @@ router.register(r'address', DoctorAddressViewSet, basename='doctor-address')
 router.register(r'education', EducationViewSet, basename='education')
 router.register(r'specializations', SpecializationViewSet, basename='specialization')
 router.register(r'custom-specializations', CustomSpecializationViewSet, basename='custom-specialization')
+router.register(r'services', DoctorServiceViewSet, basename='doctor-service')
+router.register(r'awards', AwardViewSet, basename='doctor-award')
+router.register(r'certifications', CertificationViewSet, basename='doctor-certification')
+
+
+
 
 
 government_id_view = GovernmentIDViewSet.as_view({

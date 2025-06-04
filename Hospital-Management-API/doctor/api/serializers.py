@@ -413,3 +413,106 @@ class DoctorSummarySerializer(serializers.ModelSerializer):
             }
             for s in obj.specializations.all()
         ]
+
+class SpecializationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Specialization
+        fields = [
+            'id', 'specialization', 'custom_specialization',
+            'is_primary', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def validate(self, attrs):
+        request = self.context['request']
+        doctor = request.user.doctor  # assuming OneToOneField from User to Doctor
+        specialization = attrs.get('specialization')
+        custom_specialization = attrs.get('custom_specialization')
+
+        if not specialization and not custom_specialization:
+            raise serializers.ValidationError("Either specialization or custom_specialization must be provided.")
+
+        # Prevent duplicate specialization
+        if self.instance is None:  # Creation
+            if specialization:
+                if Specialization.objects.filter(doctor=doctor, specialization=specialization).exists():
+                    raise serializers.ValidationError("Specialization already exists.")
+            elif custom_specialization:
+                if Specialization.objects.filter(doctor=doctor, custom_specialization=custom_specialization).exists():
+                    raise serializers.ValidationError("Custom specialization already exists.")
+        return attrs
+
+    def create(self, validated_data):
+        doctor = self.context['request'].user.doctor
+        return Specialization.objects.create(doctor=doctor, **validated_data)
+
+    def update(self, instance, validated_data):
+        # Partial update handled by DRF automatically
+        return super().update(instance, validated_data)
+
+class CustomSpecializationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CustomSpecialization
+        fields = ['id', 'name', 'description', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def validate_name(self, value):
+        qs = CustomSpecialization.objects.filter(name__iexact=value)
+        if self.instance:
+            qs = qs.exclude(id=self.instance.id)
+        if qs.exists():
+            raise serializers.ValidationError("Custom specialization with this name already exists.")
+        return value
+
+class DoctorServiceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DoctorService
+        fields = ['id', 'name', 'description', 'fee', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def validate_name(self, value):
+        doctor = self.context['request'].user.doctor
+        qs = DoctorService.objects.filter(name__iexact=value, doctor=doctor)
+        if self.instance:
+            qs = qs.exclude(id=self.instance.id)
+        if qs.exists():
+            raise serializers.ValidationError("This service already exists for the doctor.")
+        return value
+
+class AwardSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Award
+        fields = ['id', 'name', 'description', 'awarded_by', 'date_awarded', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def validate(self, data):
+        doctor = self.context['request'].user.doctor
+        name = data.get('name')
+        awarded_by = data.get('awarded_by')
+        date_awarded = data.get('date_awarded')
+
+        qs = Award.objects.filter(doctor=doctor, name__iexact=name, awarded_by__iexact=awarded_by, date_awarded=date_awarded)
+        if self.instance:
+            qs = qs.exclude(id=self.instance.id)
+        if qs.exists():
+            raise serializers.ValidationError("This award already exists for this doctor.")
+        return data
+
+class CertificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Certification
+        fields = ['id', 'title', 'issued_by', 'date_of_issue', 'expiry_date', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def validate(self, data):
+        doctor = self.context['request'].user.doctor
+        title = data.get('title')
+        issued_by = data.get('issued_by')
+        date_of_issue = data.get('date_of_issue')
+
+        qs = Certification.objects.filter(doctor=doctor, title__iexact=title, issued_by__iexact=issued_by, date_of_issue=date_of_issue)
+        if self.instance:
+            qs = qs.exclude(id=self.instance.id)
+        if qs.exists():
+            raise serializers.ValidationError("This certification already exists for this doctor.")
+        return data
