@@ -24,3 +24,9 @@ urlpatterns = [
     path('test-pdf/',test_pdf, name='test-pdf'),
     path("generate-pdf/<uuid:consultation_id>/", GeneratePrescriptionPDFView.as_view(), name="generate-prescription-pdf"),
 ]
+
+
+# Unique File Name
+# RX_<PNR>_<YYYYMMDD_HHMM>.pdf
+# Folder Structure
+# prescriptions/<doctor_id>/<patient_id>/filename.pdf

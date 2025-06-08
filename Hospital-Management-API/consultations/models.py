@@ -20,7 +20,7 @@ class Consultation(models.Model):
     closure_note = models.TextField(blank=True, null=True)
     follow_up_date = models.DateField(blank=True, null=True)
     is_finalized = models.BooleanField(default=False)
-    prescription_pdf = models.FileField(upload_to="prescriptions/", blank=True, null=True)
+    prescription_pdf = models.FileField(upload_to="prescriptions/", blank=True, null=True,max_length=255)
 
     started_at = models.DateTimeField(auto_now_add=True)
     ended_at = models.DateTimeField(null=True, blank=True)
