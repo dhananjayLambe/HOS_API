@@ -22,6 +22,15 @@ class Consultation(models.Model):
     is_finalized = models.BooleanField(default=False)
     prescription_pdf = models.FileField(upload_to="prescriptions/", blank=True, null=True,max_length=255)
 
+    tag = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        choices=StaticDataService.get_consultation_tag_choices(),
+        help_text="Optional tag like Follow-Up, Critical, etc."
+    )
+    is_important = models.BooleanField(default=False, help_text="Mark consultation as important")
+
     started_at = models.DateTimeField(auto_now_add=True)
     ended_at = models.DateTimeField(null=True, blank=True)
     is_active = models.BooleanField(default=True)

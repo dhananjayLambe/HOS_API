@@ -1,54 +1,62 @@
-import os
-from rest_framework import status, views, generics
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.views import APIView
-from rest_framework.exceptions import NotFound
-from django.http import JsonResponse
-
-from django.http import FileResponse
-from consultations.utils import render_pdf
-from django.views.decorators.csrf import csrf_exempt
-from account.permissions import IsDoctor
-from django.utils import timezone
-from consultations.models import (
-    Consultation, Vitals,Advice, AdviceTemplate,
-    Complaint, Diagnosis)
-from consultations.api.serializers import (
-    VitalsSerializer,StartConsultationSerializer,ComplaintSerializer,
-    DiagnosisSerializer,AdviceSerializer,AdviceTemplateSerializer,ConsultationSummarySerializer,
-    EndConsultationSerializer)
-from datetime import date
-from datetime import datetime
-from django.conf import settings
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-from django.template.loader import get_template
-from weasyprint import HTML
-from rest_framework.permissions import AllowAny
-
-import os
+# Standard Library Imports
 import io
+import logging
+import os
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
-from django.conf import settings
-from django.http import FileResponse, HttpResponse
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-from django.shortcuts import get_object_or_404
-
-
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, PageBreak, Table, TableStyle, Frame, PageTemplate
+# Third-Party Imports
+from reportlab.lib.colors import black
+from reportlab.lib.colors import HexColor
+from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT
-from reportlab.lib.units import inch, cm
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.colors import black, blue, red, green, HexColor
+from reportlab.lib.units import cm, inch
 from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import landscape # Import landscape if needed for future use
+from reportlab.platypus import (
+    Frame, Image, PageBreak, PageTemplate, Paragraph,
+    SimpleDocTemplate, Spacer, Table, TableStyle
+)
+from rest_framework import generics, permissions, status, views
+from rest_framework.exceptions import NotFound
+from rest_framework.permissions import (
+    AllowAny, IsAuthenticated
+)
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework_simplejwt.authentication import JWTAuthentication
+from weasyprint import HTML
+
+# Django Imports
+from django.conf import settings
+from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
+from django.db import transaction
+from django.db.models import Q
+from django.http import FileResponse, HttpResponse, JsonResponse
+from django.shortcuts import get_object_or_404
+from django.template.loader import get_template
+from django.utils import timezone
+from django.utils.dateparse import parse_date
+from django.views.decorators.csrf import csrf_exempt
+
+# Local App Imports
+from account.permissions import IsDoctor, IsDoctorOrHelpdeskOrOwnerOrAdmin
+from consultations.models import (
+    Advice, AdviceTemplate, Complaint,
+    Consultation, Diagnosis, Vitals
+)
+from consultations.api.serializers import (
+    AdviceSerializer, AdviceTemplateSerializer,
+    ComplaintSerializer, ConsultationSummarySerializer,
+    DiagnosisSerializer, EndConsultationSerializer,
+    StartConsultationSerializer, VitalsSerializer,
+    ConsultationTagSerializer,PatientTimelineSerializer,
+)
+from consultations.utils import render_pdf
+
+# Logger
+logger = logging.getLogger(__name__)
 
 class StartConsultationAPIView(views.APIView):
     permission_classes = [IsAuthenticated]
@@ -932,7 +940,11 @@ class GeneratePrescriptionPDFView(APIView):
             # Build filename and path
             timestamp = datetime.now().strftime("%Y%m%d_%H%M")
             pdf_filename = f"RX_{prescription_pnr}_{timestamp}.pdf"
-            relative_path = os.path.join("prescriptions", doctor_id, patient_id, pdf_filename)
+            current_time = datetime.now()
+            year = current_time.strftime("%Y")
+            month = current_time.strftime("%m")
+            relative_path = os.path.join("prescriptions", doctor_id, patient_id, year, month, pdf_filename)
+            #relative_path = os.path.join("prescriptions", doctor_id, patient_id, pdf_filename)
             absolute_path = os.path.join(settings.MEDIA_ROOT, relative_path)
 
             # Ensure directory exists
@@ -969,3 +981,187 @@ class GeneratePrescriptionPDFView(APIView):
                 "status": "error",
                 "message": f"Failed to generate PDF: {str(e)}"
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
+class ConsultationHistoryAPIView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [permissions.IsAuthenticated, IsDoctorOrHelpdeskOrOwnerOrAdmin]
+
+    def get(self, request, *args, **kwargs):
+        try:
+            patient_id = request.query_params.get('patient_id')
+            doctor_id = request.query_params.get('doctor_id')
+            start_date = request.query_params.get('start_date')
+            end_date = request.query_params.get('end_date')
+            page = request.query_params.get('page', 1)
+            page_size = request.query_params.get('page_size', 10)
+
+            filters = Q()
+
+            if patient_id:
+                filters &= Q(patient_profile__id=patient_id)
+
+            if doctor_id:
+                filters &= Q(doctor__id=doctor_id)
+
+            if start_date:
+                filters &= Q(started_at__date__gte=parse_date(start_date))
+
+            if end_date:
+                filters &= Q(started_at__date__lte=parse_date(end_date))
+
+            consultations = Consultation.objects.filter(filters).select_related(
+                'doctor', 'patient_profile'
+            ).order_by('-started_at').distinct()
+
+            paginator = Paginator(consultations, page_size)
+            try:
+                consultations_page = paginator.page(page)
+            except PageNotAnInteger:
+                consultations_page = paginator.page(1)
+            except EmptyPage:
+                consultations_page = paginator.page(paginator.num_pages)
+
+            serialized_data = ConsultationSummarySerializer(consultations_page, many=True).data
+
+            return Response({
+                "status": "success",
+                "message": "Consultation history fetched successfully",
+                "count": paginator.count,
+                "num_pages": paginator.num_pages,
+                "current_page": consultations_page.number,
+                "data": serialized_data
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error(f"Error fetching consultation history: {str(e)}")
+            return Response({
+                "status": "error",
+                "message": f"Failed to fetch consultation history: {str(e)}"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class GlobalConsultationSearchView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            query = request.query_params.get("query", "")
+            doctor_id = request.query_params.get("doctor_id")
+            date_from = parse_date(request.query_params.get("date_from"))
+            date_to = parse_date(request.query_params.get("date_to"))
+
+            filters = Q()
+
+            if query:
+                filters &= Q(complaints__complaint_text__icontains=query) |\
+                           Q(diagnoses__description__icontains=query) |\
+                           Q(prescriptions__drug_name__icontains=query) |\
+                           Q(patient_profile__first_name__icontains=query) |\
+                           Q(patient_profile__last_name__icontains=query)
+
+            if doctor_id:
+                filters &= Q(doctor__id=doctor_id)
+
+            if date_from:
+                filters &= Q(started_at__date__gte=date_from)
+
+            if date_to:
+                filters &= Q(started_at__date__lte=date_to)
+
+            consultations = Consultation.objects.filter(filters).distinct().order_by("-started_at")
+
+            serializer = ConsultationSummarySerializer(consultations, many=True)
+
+            return Response({
+                "status": "success",
+                "message": "Search results fetched successfully",
+                "data": serializer.data
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error(f"GlobalConsultationSearchView Error: {str(e)}")
+            return Response({
+                "status": "error",
+                "message": f"Failed to perform global search: {str(e)}"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class TagConsultationView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    @transaction.atomic
+    def post(self, request, consultation_id):
+        try:
+            consultation = get_object_or_404(Consultation, id=consultation_id)
+
+            serializer = ConsultationTagSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+
+            consultation.tag = serializer.validated_data.get("tag")
+            consultation.is_important = serializer.validated_data.get("is_important", False)
+            consultation.save()
+
+            logger.info(f"Consultation {consultation_id} tagged by {request.user}")
+
+            return Response({
+                "status": "success",
+                "message": "Consultation tagged successfully",
+                "data": {
+                    "consultation_id": str(consultation.id),
+                    "tag": consultation.tag,
+                    "is_important": consultation.is_important
+                }
+            }, status=status.HTTP_200_OK)
+
+        except Consultation.DoesNotExist:
+            logger.error(f"Consultation {consultation_id} not found.")
+            return Response({
+                "status": "error",
+                "message": "Consultation not found"
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.exception("Error tagging consultation")
+            return Response({
+                "status": "error",
+                "message": f"Something went wrong: {str(e)}"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class PatientTimelineView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, ] #IsDoctorOrPatient
+
+    def get(self, request, patient_id):
+        try:
+            start_date = request.GET.get("start_date")
+            end_date = request.GET.get("end_date")
+
+            consultations = Consultation.objects.filter(
+                patient_profile__id=patient_id
+            ).select_related("doctor", "patient_profile") \
+             .prefetch_related("complaints", "diagnoses", "prescriptions")
+
+            if start_date:
+                consultations = consultations.filter(started_at__date__gte=parse_date(start_date))
+            if end_date:
+                consultations = consultations.filter(started_at__date__lte=parse_date(end_date))
+
+            # Sort by date desc
+            consultations = consultations.order_by("-started_at")
+
+            serializer = PatientTimelineSerializer(consultations, many=True)
+            return Response({
+                "status": "success",
+                "message": "Patient timeline fetched successfully",
+                "data": serializer.data
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error(f"Timeline fetch failed: {e}")
+            return Response({
+                "status": "error",
+                "message": f"Failed to fetch timeline: {str(e)}"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+

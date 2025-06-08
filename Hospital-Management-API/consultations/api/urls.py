@@ -4,7 +4,9 @@ from consultations.api.views import(
     EndConsultationAPIView,
     VitalsAPIView,AdviceTemplateListAPIView,
     ComplaintAPIView,DiagnosisAPIView,AdviceAPIView,ConsultationSummaryView,
-    GeneratePrescriptionPDFView,
+    GeneratePrescriptionPDFView,ConsultationHistoryAPIView,
+    GlobalConsultationSearchView,TagConsultationView,
+    PatientTimelineView,
     test_pdf
     )
 
@@ -23,6 +25,12 @@ urlpatterns = [
     path('summary/<uuid:pk>/', ConsultationSummaryView.as_view(), name='consultation-summary'),
     path('test-pdf/',test_pdf, name='test-pdf'),
     path("generate-pdf/<uuid:consultation_id>/", GeneratePrescriptionPDFView.as_view(), name="generate-prescription-pdf"),
+    
+    #Meduical Records management API
+    path('history/', ConsultationHistoryAPIView.as_view(), name='consultation-history'),
+    path("global-consultation-search/", GlobalConsultationSearchView.as_view(), name="global-consultation-search"),
+    path("tag/<uuid:consultation_id>/", TagConsultationView.as_view(), name="consultation-tag"),
+    path('patient-timeline/<uuid:patient_id>/', PatientTimelineView.as_view(), name='patient-timeline'),
 ]
 
 
@@ -30,3 +38,4 @@ urlpatterns = [
 # RX_<PNR>_<YYYYMMDD_HHMM>.pdf
 # Folder Structure
 # prescriptions/<doctor_id>/<patient_id>/filename.pdf
+#prescriptions/<doctor_id>/<patient_id>/<YYYY>/<MM>/filename.pdf

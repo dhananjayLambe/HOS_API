@@ -160,3 +160,20 @@ class StaticDataService:
             ('sagittal', 'Sagittal View'),
             ('transvaginal', 'Transvaginal View')
         ]
+
+    @staticmethod
+    def get_diagnosis_type_choices():
+        return [
+            ('suspected', 'Suspected'),
+            ('confirmed', 'Confirmed'),
+            ('rule_out', 'Rule Out'),
+            ('follow_up', 'Follow-up')
+        ]
+
+    @staticmethod
+    def get_consultation_tag_choices():
+        return [
+            ('follow_up', 'Follow-Up'),
+            ('critical', 'Critical'),
+            ('review', 'Review')
+        ]

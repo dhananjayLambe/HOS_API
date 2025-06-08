@@ -19,6 +19,8 @@ from diagnostic.api.serializers import (
     PackageRecommendationSerializer
 )
 from prescriptions.api.serializers import PrescriptionSerializer
+from utils.static_data_service import StaticDataService
+
 
 class StartConsultationSerializer(serializers.ModelSerializer):
     patient_profile_id = serializers.UUIDField(write_only=True)
@@ -177,3 +179,41 @@ class ConsultationSummarySerializer(serializers.ModelSerializer):
             'vitals', 'complaints', 'diagnoses', 'prescriptions',
             'advices', 'test_recommendations', 'package_recommendations'
         ]
+
+class ConsultationTagSerializer(serializers.ModelSerializer):
+    tag = serializers.ChoiceField(choices=StaticDataService.get_consultation_tag_choices(), required=True)
+    is_important = serializers.BooleanField(required=False)
+
+    class Meta:
+        model = Consultation
+        fields = ['tag', 'is_important']
+
+    def validate(self, data):
+        # Optional: Add more complex business rules here
+        return data
+
+class PatientTimelineSerializer(serializers.ModelSerializer):
+    doctor_name = serializers.SerializerMethodField()
+    primary_diagnosis = serializers.SerializerMethodField()
+    prescription_summary = serializers.SerializerMethodField()
+    complaints_summary = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Consultation
+        fields = [
+            'id', 'started_at', 'tag', 'is_important', 'follow_up_date',
+            'doctor_name', 'primary_diagnosis', 'prescription_summary', 'complaints_summary'
+        ]
+
+    def get_doctor_name(self, obj):
+        return f"Dr. {obj.doctor.user.get_full_name()}" if obj.doctor else "N/A"
+
+    def get_primary_diagnosis(self, obj):
+        diagnosis = obj.diagnoses.filter(diagnosis_type='confirmed').first()
+        return diagnosis.description if diagnosis else None
+
+    def get_prescription_summary(self, obj):
+        return [f"{p.drug_name} {p.strength}" for p in obj.prescriptions.all()[:3]]
+
+    def get_complaints_summary(self, obj):
+        return [c.complaint_text for c in obj.complaints.all()[:3]]
