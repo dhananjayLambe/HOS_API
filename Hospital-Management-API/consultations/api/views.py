@@ -54,6 +54,7 @@ from consultations.api.serializers import (
     ConsultationTagSerializer,PatientTimelineSerializer,
 )
 from consultations.utils import render_pdf
+from patient_account.models import PatientProfile
 
 # Logger
 logger = logging.getLogger(__name__)
@@ -1165,3 +1166,70 @@ class PatientTimelineView(APIView):
                 "message": f"Failed to fetch timeline: {str(e)}"
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+class ListPrescriptionPDFsView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, patient_id):
+        user = request.user
+
+        # --- Role-based access check ---
+        if not (user.is_superuser or user.groups.filter(name__in=['doctor', 'patient']).exists()):
+            return Response({
+                "status": "error",
+                "message": "You do not have permission to view this data."
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            # Validate patient
+            patient = get_object_or_404(PatientProfile, id=patient_id)
+
+            # Only allow patient to view their own PDFs
+            if user.groups.filter(name='patient').exists() and patient.user != user:
+                return Response({
+                    "status": "error",
+                    "message": "You are not allowed to access this patient's records."
+                }, status=status.HTTP_403_FORBIDDEN)
+
+            # Fetch consultations with PDFs
+            consultations = Consultation.objects.filter(
+                patient_profile=patient,
+                prescription_pdf__isnull=False
+            ).order_by('-started_at')
+
+            # Pagination
+            page_number = request.GET.get('page', 1)
+            paginator = Paginator(consultations, 10)
+            page = paginator.get_page(page_number)
+
+            pdf_data = []
+            for consult in page.object_list:
+                pdf_data.append({
+                    "consultation_id": str(consult.id),
+                    "prescription_pnr": consult.prescription_pnr,
+                    "doctor_id": str(consult.doctor.id),
+                    "doctor_name": consult.doctor.user.first_name + " " + consult.doctor.user.last_name,
+                    "started_at": consult.started_at,
+                    "pdf_url": request.build_absolute_uri(consult.prescription_pdf.url) if consult.prescription_pdf else None
+                })
+
+            return Response({
+                "status": "success",
+                "message": "Prescription PDFs fetched successfully.",
+                "total": paginator.count,
+                "page": page.number,
+                "pages": paginator.num_pages,
+                "data": pdf_data
+            }, status=status.HTTP_200_OK)
+
+        except PatientProfile.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "Invalid patient ID."
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.exception("Error fetching PDF list")
+            return Response({
+                "status": "error",
+                "message": f"Something went wrong: {str(e)}"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

@@ -6,7 +6,7 @@ from consultations.api.views import(
     ComplaintAPIView,DiagnosisAPIView,AdviceAPIView,ConsultationSummaryView,
     GeneratePrescriptionPDFView,ConsultationHistoryAPIView,
     GlobalConsultationSearchView,TagConsultationView,
-    PatientTimelineView,
+    PatientTimelineView,ListPrescriptionPDFsView,
     test_pdf
     )
 
@@ -31,6 +31,8 @@ urlpatterns = [
     path("global-consultation-search/", GlobalConsultationSearchView.as_view(), name="global-consultation-search"),
     path("tag/<uuid:consultation_id>/", TagConsultationView.as_view(), name="consultation-tag"),
     path('patient-timeline/<uuid:patient_id>/', PatientTimelineView.as_view(), name='patient-timeline'),
+    path('list-patient-pdfs/<uuid:patient_id>/', ListPrescriptionPDFsView.as_view(), name='list-patient-pdfs'),
+
 ]
 
 
