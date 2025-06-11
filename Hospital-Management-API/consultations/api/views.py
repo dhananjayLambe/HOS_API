@@ -18,7 +18,7 @@ from reportlab.platypus import (
     Frame, Image, PageBreak, PageTemplate, Paragraph,
     SimpleDocTemplate, Spacer, Table, TableStyle
 )
-from rest_framework import generics, permissions, status, views
+from rest_framework import generics, permissions, status, views,viewsets
 from rest_framework.exceptions import NotFound
 from rest_framework.permissions import (
     AllowAny, IsAuthenticated
@@ -44,14 +44,14 @@ from django.views.decorators.csrf import csrf_exempt
 from account.permissions import IsDoctor, IsDoctorOrHelpdeskOrOwnerOrAdmin
 from consultations.models import (
     Advice, AdviceTemplate, Complaint,
-    Consultation, Diagnosis, Vitals
+    Consultation, Diagnosis, Vitals,PatientFeedback,
 )
 from consultations.api.serializers import (
     AdviceSerializer, AdviceTemplateSerializer,
     ComplaintSerializer, ConsultationSummarySerializer,
     DiagnosisSerializer, EndConsultationSerializer,
     StartConsultationSerializer, VitalsSerializer,
-    ConsultationTagSerializer,PatientTimelineSerializer,
+    ConsultationTagSerializer,PatientTimelineSerializer,PatientFeedbackSerializer
 )
 from consultations.utils import render_pdf
 from patient_account.models import PatientProfile
@@ -1233,3 +1233,15 @@ class ListPrescriptionPDFsView(APIView):
                 "status": "error",
                 "message": f"Something went wrong: {str(e)}"
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class PatientFeedbackViewSet(viewsets.ModelViewSet):
+    queryset = PatientFeedback.objects.all()
+    serializer_class = PatientFeedbackSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    authentication_classes = [JWTAuthentication]
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_superuser:
+            return PatientFeedback.objects.all()
+        return PatientFeedback.objects.filter(created_by=user)

@@ -5,6 +5,7 @@ from django.utils import timezone
 from doctor.models import doctor
 from patient_account.models import PatientAccount, PatientProfile
 from utils.static_data_service import StaticDataService
+from account.models import User
 
 
 class Consultation(models.Model):
@@ -162,3 +163,32 @@ class Advice(models.Model):
 
     def __str__(self):
         return f"Advice for Consultation {self.consultation.id}"
+
+class PatientFeedback(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    consultation = models.OneToOneField(Consultation, on_delete=models.CASCADE, related_name='patient_feedback')
+
+    rating = models.IntegerField(
+        choices=[(i, str(i)) for i in range(1, 6)],
+        help_text="Rating from 1 to 5"
+    )
+    comments = models.TextField(blank=True, null=True, help_text="Optional comment by patient")
+    is_anonymous = models.BooleanField(default=False, help_text="Hide patient's identity if True")
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='feedbacks_created'
+    )
+
+    class Meta:
+        verbose_name = "Patient Feedback"
+        verbose_name_plural = "Patient Feedbacks"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Feedback for Consultation {self.consultation.consultation_pnr} - Rating {self.rating}"

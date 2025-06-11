@@ -6,7 +6,7 @@ from django.utils import timezone
 from django.db import transaction
 from consultations.models import (
     Vitals, Complaint, Diagnosis,
-    Advice, AdviceTemplate,
+    Advice, AdviceTemplate,PatientFeedback,
     Consultation)
 from account.models import User
 from utils.static_data_service import StaticDataService
@@ -217,3 +217,22 @@ class PatientTimelineSerializer(serializers.ModelSerializer):
 
     def get_complaints_summary(self, obj):
         return [c.complaint_text for c in obj.complaints.all()[:3]]
+
+
+class PatientFeedbackSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PatientFeedback
+        fields = [
+            'id',
+            'consultation',
+            'rating',
+            'comments',
+            'is_anonymous',
+            'created_at',
+            'created_by',
+        ]
+        read_only_fields = ['id', 'created_at', 'created_by']
+    
+    def create(self, validated_data):
+        validated_data['created_by'] = self.context['request'].user
+        return super().create(validated_data)

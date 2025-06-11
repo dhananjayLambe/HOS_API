@@ -1,4 +1,5 @@
-from django.urls import path
+from django.urls import path,include
+from rest_framework.routers import DefaultRouter
 from consultations.api.views import(
     StartConsultationAPIView,
     EndConsultationAPIView,
@@ -7,11 +8,16 @@ from consultations.api.views import(
     GeneratePrescriptionPDFView,ConsultationHistoryAPIView,
     GlobalConsultationSearchView,TagConsultationView,
     PatientTimelineView,ListPrescriptionPDFsView,
+    PatientFeedbackViewSet,
     test_pdf
     )
+# urlpatterns = []
+router = DefaultRouter()
+router.register(r'feedbacks', PatientFeedbackViewSet, basename='feedback')
 
-
+# urlpatterns += router.urls
 urlpatterns = [
+    path('', include(router.urls)),
     path('start/', StartConsultationAPIView.as_view(), name='start-consultation'),
     path('end/<uuid:consultation_id>/', EndConsultationAPIView.as_view(), name='end-consultation'),
     path('vitals/<uuid:consultation_id>/', VitalsAPIView.as_view(), name='consultation-vitals'),
@@ -32,7 +38,7 @@ urlpatterns = [
     path("tag/<uuid:consultation_id>/", TagConsultationView.as_view(), name="consultation-tag"),
     path('patient-timeline/<uuid:patient_id>/', PatientTimelineView.as_view(), name='patient-timeline'),
     path('list-patient-pdfs/<uuid:patient_id>/', ListPrescriptionPDFsView.as_view(), name='list-patient-pdfs'),
-
+    
 ]
 
 
