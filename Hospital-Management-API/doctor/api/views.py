@@ -1,4 +1,5 @@
 # Standard library imports
+import logging
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import Group
 from django.core.exceptions import PermissionDenied
@@ -45,9 +46,16 @@ from doctor.api.serializers import (
     SpecializationSerializer,
     DoctorServiceSerializer,
     AwardSerializer,CertificationSerializer,
-    
-
+    DoctorDashboardSummarySerializer,
 )
+from consultations.models import Consultation, PatientFeedback
+from appointments.models import Appointment
+from prescriptions.models import Prescription
+from account.permissions import IsDoctor
+from django.utils.timezone import now
+from django.db.models import Avg, Sum, Count, Q
+from django.db import transaction
+logger = logging.getLogger(__name__)
 
 # class DoctorRegistrationView(APIView):
 #     permission_classes=[]
@@ -825,3 +833,120 @@ class CertificationViewSet(viewsets.ModelViewSet):
             "status": "success",
             "message": "Certification deleted successfully"
         }, status=status.HTTP_204_NO_CONTENT)
+    
+class DoctorDashboardSummaryView(APIView):
+    permission_classes = [permissions.IsAuthenticated, IsDoctor]
+    authentication_classes = [JWTAuthentication]
+    def get(self, request):
+        doctor = request.user.doctor
+        today = now().date()
+
+        try:
+            with transaction.atomic():
+                total_patients_today = Appointment.objects.filter(
+                    doctor=doctor,
+                    appointment_date=today
+                ).values('patient_profile').distinct().count()
+
+                total_consultations = Consultation.objects.filter(
+                    doctor=doctor,
+                    started_at__date=today,
+                    is_finalized=True
+                ).count()
+
+                pending_followups = Appointment.objects.filter(
+                    doctor=doctor,
+                    appointment_date=today,
+                    appointment_type='follow_up',
+                    status='scheduled'
+                ).count()
+
+                consultations_today = Consultation.objects.filter(
+                    doctor=doctor,
+                    started_at__date=today,
+                    ended_at__isnull=False
+                )
+
+                total_duration_minutes = sum([
+                    (c.ended_at - c.started_at).total_seconds() / 60.0
+                    for c in consultations_today if c.ended_at and c.started_at
+                ])
+
+                average_consultation_time = (
+                    total_duration_minutes / consultations_today.count()
+                    if consultations_today.count() > 0 else 0
+                )
+
+                upcoming_appointments = Appointment.objects.filter(
+                    doctor=doctor,
+                    appointment_date=today,
+                    appointment_time__gt=now().time(),
+                    status='scheduled'
+                ).count()
+
+                new_patients_today = Appointment.objects.filter(
+                    doctor=doctor,
+                    appointment_date=today,
+                    appointment_type='new'
+                ).values('patient_profile').distinct().count()
+
+                cancelled_appointments_today = Appointment.objects.filter(
+                    doctor=doctor,
+                    appointment_date=today,
+                    status='cancelled'
+                ).count()
+
+                patients_waiting_now = Appointment.objects.filter(
+                    doctor=doctor,
+                    appointment_date=today,
+                    status='scheduled'
+                ).count()
+
+                total_revenue_today = Appointment.objects.filter(
+                    doctor=doctor,
+                    appointment_date=today,
+                    status='completed'
+                ).aggregate(revenue=Sum('consultation_fee'))['revenue'] or 0
+
+                last_consultation = consultations_today.order_by('-ended_at').first()
+
+                average_rating = PatientFeedback.objects.filter(
+                    consultation__doctor=doctor,
+                    created_at__date=today
+                ).aggregate(avg=Avg('rating'))['avg'] or 0
+
+                prescriptions_today = Prescription.objects.filter(
+                    consultation__doctor=doctor,
+                    created_at__date=today
+                ).count()
+
+                data = {
+                    "total_patients_today": total_patients_today,
+                    "total_consultations": total_consultations,
+                    "pending_followups": pending_followups,
+                    "average_consultation_time_minutes": round(average_consultation_time, 2),
+                    "upcoming_appointments": upcoming_appointments,
+                    "new_patients_today": new_patients_today,
+                    "cancelled_appointments_today": cancelled_appointments_today,
+                    "patients_waiting_now": patients_waiting_now,
+                    "total_consultation_time_minutes": round(total_duration_minutes, 2),
+                    "total_revenue_today": float(total_revenue_today),
+                    "last_consultation_end_time": last_consultation.ended_at if last_consultation else None,
+                    "average_patient_rating": round(average_rating, 2),
+                    "total_prescriptions_issued": prescriptions_today
+                }
+
+                serializer = DoctorDashboardSummarySerializer(data)
+                return Response({
+                    "status": "success",
+                    "message": "Dashboard summary fetched successfully",
+                    "data": serializer.data
+                }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error(f"Error fetching dashboard summary: {str(e)}")
+            return Response({
+                "status": "error",
+                "message": "Failed to fetch dashboard summary",
+                "data": None
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

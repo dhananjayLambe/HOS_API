@@ -9,6 +9,7 @@ from doctor.api.views import (
     RegistrationView,GovernmentIDViewSet,EducationViewSet,
     SpecializationViewSet,CustomSpecializationViewSet,
     DoctorServiceViewSet,AwardViewSet,CertificationViewSet,
+    DoctorDashboardSummaryView,
     
    )
 
@@ -53,6 +54,7 @@ urlpatterns = [
     #path('api/helpdesk/<uuid:helpdesk_id>/delete/', DeleteHelpdeskUserView.as_view(), name='delete_helpdesk_user'),
     path('registration/', RegistrationView.as_view(), name='doctor-registration'),
     path('government-id/', government_id_view, name='doctor-government-id'),
+    path('dashboard/summary/', DoctorDashboardSummaryView.as_view(), name='doctor-dashboard-summary')
 
 ]
 #helpdesk uuid is user uuid used to approve the helpdesk user

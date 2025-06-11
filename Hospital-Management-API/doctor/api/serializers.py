@@ -516,3 +516,18 @@ class CertificationSerializer(serializers.ModelSerializer):
         if qs.exists():
             raise serializers.ValidationError("This certification already exists for this doctor.")
         return data
+
+class DoctorDashboardSummarySerializer(serializers.Serializer):
+    total_patients_today = serializers.IntegerField()
+    total_consultations = serializers.IntegerField()
+    pending_followups = serializers.IntegerField()
+    average_consultation_time_minutes = serializers.FloatField()
+    upcoming_appointments = serializers.IntegerField()
+    new_patients_today = serializers.IntegerField()
+    cancelled_appointments_today = serializers.IntegerField()
+    patients_waiting_now = serializers.IntegerField()
+    total_consultation_time_minutes = serializers.FloatField()
+    total_revenue_today = serializers.FloatField()
+    last_consultation_end_time = serializers.DateTimeField(allow_null=True)
+    average_patient_rating = serializers.FloatField()
+    total_prescriptions_issued = serializers.IntegerField()
