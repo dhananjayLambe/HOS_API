@@ -58,9 +58,11 @@ INSTALLED_APPS = [
     'rest_framework.authtoken',
     'rest_framework_simplejwt',  # Add this line
     'rest_framework_simplejwt.token_blacklist',
-    
+    'django.contrib.postgres',
     'django_celery_results',
+    
     'drf_yasg',
+    'core',
 ]
 
 REST_FRAMEWORK={

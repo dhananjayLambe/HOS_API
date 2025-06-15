@@ -67,3 +67,20 @@ class PatientProfileDetailsSerializer(serializers.ModelSerializer):
     class Meta:
         model = PatientProfileDetails
         fields = '__all__'
+
+class PatientProfileSearchSerializer(serializers.ModelSerializer):
+    mobile = serializers.SerializerMethodField()
+    full_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PatientProfile
+        fields = ['id', 'first_name', 'last_name', 'full_name', 'relation', 'gender', 'date_of_birth', 'mobile']
+
+    def get_mobile(self, obj):
+        try:
+            return obj.account.user.username  # change this to whatever field you're using (e.g., obj.account.user.phone_number)
+        except AttributeError:
+            return None
+
+    def get_full_name(self, obj):
+        return f"{obj.first_name} {obj.last_name}".strip()

@@ -19,12 +19,18 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import generics, permissions
+from django.contrib.postgres.search import TrigramSimilarity
 from patient_account.api.serializers import(
 PatientProfileSerializer, PatientProfileUpdateSerializer, PatientProfileDetailsSerializer,
-PatientAccountSerializer)
+PatientAccountSerializer,
+PatientProfileSearchSerializer)
 from patient_account.models import PatientProfile,PatientProfileDetails
 from account.permissions import IsDoctorOrHelpdesk
-
+from patient_account.tasks import invalidate_patient_search_cache
+CACHE_TIMEOUT = 300  # 5 minutes
+from django.core.cache import cache
+from django.db.models import Q
+from rest_framework.generics import ListAPIView
 #Determines if the user is new or existing.
 class CheckUserStatusView(APIView):
     permission_classes = [AllowAny]
@@ -305,3 +311,66 @@ class CheckPatientView(APIView):
         serializer = PatientAccountSerializer(patient_account)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
+
+# class PatientSearchView(APIView):
+#     permission_classes = [permissions.IsAuthenticated]  # Customize with IsDoctor if needed
+
+#     def get(self, request):
+#         query = request.GET.get("query", "").strip()
+
+#         if not query:
+#             return Response({
+#                 "status": "error",
+#                 "message": "Query parameter is required"
+#             }, status=status.HTTP_400_BAD_REQUEST)
+
+#         cache_key = f"patient_search:{query}"
+#         cached_data = cache.get(cache_key)
+
+#         if cached_data:
+#             return Response({
+#                 "status": "success",
+#                 "message": "Patient search results (cached)",
+#                 "data": cached_data
+#             }, status=status.HTTP_200_OK)
+
+#         if query.isdigit():  # Search by mobile
+#             accounts = PatientAccount.objects.filter(
+#                 Q(user__username__icontains=query) | Q(user__phone_number__icontains=query)
+#             ).prefetch_related("profiles")
+
+#             profiles = PatientProfile.objects.filter(account__in=accounts)
+#         else:  # Fuzzy name search
+#             profiles = PatientProfile.objects.annotate(
+#                 similarity=TrigramSimilarity('first_name', query)
+#             ).filter(similarity__gt=0.3).order_by('-similarity')
+
+#         serialized = PatientProfileSearchSerializer(profiles, many=True)
+#         cache.set(cache_key, serialized.data, CACHE_TIMEOUT)
+
+#         return Response({
+#             "status": "success",
+#             "message": "Patient search results",
+#             "data": serialized.data
+#         }, status=status.HTTP_200_OK)
+
+class PatientProfileSearchView(ListAPIView):
+    serializer_class = PatientProfileSearchSerializer
+
+    def get(self, request, *args, **kwargs):
+        query = request.query_params.get('query', '').strip()
+        cache_key = f"patient_search_{query}"
+        cached_data = cache.get(cache_key)
+
+        if cached_data:
+            return Response(cached_data)
+
+        queryset = PatientProfile.objects.select_related('account__user').annotate(
+            similarity=TrigramSimilarity('first_name', query) +
+                      TrigramSimilarity('last_name', query) +
+                      TrigramSimilarity('account__user__username', query)
+        ).filter(similarity__gt=0.2).order_by('-similarity')
+
+        serializer = self.get_serializer(queryset, many=True)
+        cache.set(cache_key, serializer.data, timeout=300)  # cache for 5 minutes
+        return Response(serializer.data, status=status.HTTP_200_OK)

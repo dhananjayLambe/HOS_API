@@ -6,7 +6,8 @@ from patient_account.api.views import (
     CustomTokenRefreshView,LogoutView,get_patient_account,RegisterPatientView,AddPatientProfileView,
     GetPatientProfilesView,DeletePatientProfileView,GetProfileByNameView,
     GetPrimaryProfileView,PatientProfileDetailsViewSet,CheckPatientView,
-    SendOTPView,UpdatePatientProfileView)
+    SendOTPView,UpdatePatientProfileView,PatientProfileSearchView
+    )
 app_name = 'patient_account'
 
 router = DefaultRouter()
@@ -30,7 +31,7 @@ urlpatterns = [
     path("get-profile-by-name/<str:first_name>/", GetProfileByNameView.as_view(), name="get-profile-by-name"),
     path("get-primary-profile/", GetPrimaryProfileView.as_view(), name="get-primary-profile"),
     path("check-patient/", CheckPatientView.as_view(), name="check-patient"),
-
+    path("search/", PatientProfileSearchView.as_view(), name="patient-search"),
 ]
 
 # Authentication Flow
