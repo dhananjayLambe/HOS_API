@@ -4,7 +4,7 @@ from django.contrib.auth import authenticate
 from django.contrib.auth.models import Group
 from django.core.exceptions import PermissionDenied
 from django.shortcuts import get_object_or_404
-
+from django_ratelimit.decorators import ratelimit
 # Third-party imports
 from rest_framework import generics, status, viewsets,permissions
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -47,6 +47,7 @@ from doctor.api.serializers import (
     DoctorServiceSerializer,
     AwardSerializer,CertificationSerializer,
     DoctorDashboardSummarySerializer,
+    RegistrationSerializer,
 )
 from consultations.models import Consultation, PatientFeedback
 from appointments.models import Appointment
@@ -56,7 +57,7 @@ from django.utils.timezone import now
 from django.db.models import Avg, Sum, Count, Q
 from django.db import transaction
 logger = logging.getLogger(__name__)
-
+from account.permissions import IsAdminUser, IsDoctor
 # class DoctorRegistrationView(APIView):
 #     permission_classes=[]
 #     def post(self, request, *args, **kwargs):
@@ -950,3 +951,82 @@ class DoctorDashboardSummaryView(APIView):
                 "message": "Failed to fetch dashboard summary",
                 "data": None
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# class RegistrationViewSet(viewsets.ModelViewSet):
+#     serializer_class = RegistrationSerializer
+#     authentication_classes = [JWTAuthentication]
+#     permission_classes = [IsAuthenticated, IsDoctor]
+
+#     def get_queryset(self):
+#         # Doctor can only access their own registration
+#         return Registration.objects.filter(doctor__user=self.request.user)
+
+#     def perform_create(self, serializer):
+#         serializer.save(doctor=self.request.user.doctor)
+
+#     def get_serializer_class(self):
+#         if self.action == 'verify':
+#             return RegistrationVerificationSerializer
+#         return RegistrationSerializer
+
+#     @action(detail=True, methods=['patch'], permission_classes=[IsAdminUser])
+#     def verify(self, request, pk=None):
+#         reg = self.get_object()
+#         serializer = self.get_serializer(reg, data=request.data, partial=True)
+#         serializer.is_valid(raise_exception=True)
+#         serializer.save()
+#         return Response({'status': 'verified', 'data': serializer.data})
+
+class RegistrationViewSet(viewsets.ModelViewSet):
+    serializer_class = RegistrationSerializer
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctor]
+    http_method_names = ['get', 'post', 'put', 'patch', 'delete']  # restrict to allowed methods
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_superuser:
+            return Registration.objects.all()
+        return Registration.objects.filter(doctor=user.doctor)
+
+    def get_object(self):
+        obj = super().get_object()
+        if obj.doctor != self.request.user.doctor and not self.request.user.is_superuser:
+            raise PermissionDenied("You do not have permission to access this registration.")
+        return obj
+
+    def perform_create(self, serializer):
+        instance = serializer.save(doctor=self.request.user.doctor)
+        logger.info(f"Registration created by doctor {self.request.user.doctor.id}: {instance.id}")
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=False, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        logger.info(f"Registration updated by doctor {self.request.user.doctor.id}: {instance.id}")
+        return Response(serializer.data)
+
+    def partial_update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=True, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        logger.info(f"Registration partially updated by doctor {self.request.user.doctor.id}: {instance.id}")
+        return Response(serializer.data)
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        self.perform_destroy(instance)
+        logger.info(f"Registration deleted by doctor {self.request.user.doctor.id}: {instance.id}")
+        return Response({"detail": "Medical license deleted successfully."}, status=status.HTTP_204_NO_CONTENT)
+
+    def perform_destroy(self, instance):
+        instance.delete()

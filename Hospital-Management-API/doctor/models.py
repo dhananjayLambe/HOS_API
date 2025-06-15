@@ -51,9 +51,19 @@ class Registration(models.Model):
     doctor = models.OneToOneField(doctor, on_delete=models.CASCADE, related_name='registration')
     medical_registration_number = models.CharField(max_length=50, unique=True)
     medical_council = models.CharField(max_length=255, help_text="e.g., Medical Council of India")
+    registration_certificate = models.FileField(upload_to='doctor_registration_certificates/', null=True, blank=True)
+    registration_date = models.DateField(null=True, blank=True)
+    valid_upto = models.DateField(null=True, blank=True, help_text="License expiry date if applicable")
+    is_verified = models.BooleanField(default=False, help_text="Admin verified medical license?")
+    verification_notes = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)  # Mandatory  default=timezone.now
     updated_at = models.DateTimeField(auto_now=True)  # Mandatory  default=timezone.now
-
+    class Meta:
+        verbose_name = "Medical Registration"
+        verbose_name_plural = "Medical Registrations"
+        constraints = [
+            models.UniqueConstraint(fields=['doctor'], name='unique_doctor_registration')
+        ]
     def __str__(self):
         return f"{self.medical_registration_number} - {self.medical_council}"
 

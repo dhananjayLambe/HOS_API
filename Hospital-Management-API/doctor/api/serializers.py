@@ -531,3 +531,69 @@ class DoctorDashboardSummarySerializer(serializers.Serializer):
     last_consultation_end_time = serializers.DateTimeField(allow_null=True)
     average_patient_rating = serializers.FloatField()
     total_prescriptions_issued = serializers.IntegerField()
+
+
+# class RegistrationSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = Registration
+#         fields = [
+#             'id', 'medical_registration_number', 'medical_council',
+#             'registration_certificate', 'registration_date', 'valid_upto',
+#             'is_verified', 'verification_notes', 'created_at', 'updated_at'
+#         ]
+#         read_only_fields = ['is_verified', 'verification_notes', 'created_at', 'updated_at']
+
+#     def create(self, validated_data):
+#         user = self.context['request'].user
+#         validated_data['doctor'] = user.doctor  # auto-link the doctor
+#         return super().create(validated_data)
+
+#     def update(self, instance, validated_data):
+#         # Prevent doctors from changing verified fields
+#         for field in ['is_verified', 'verification_notes']:
+#             validated_data.pop(field, None)
+#         return super().update(instance, validated_data)
+
+# class RegistrationVerificationSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = Registration
+#         fields = ['is_verified', 'verification_notes']
+
+
+class RegistrationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Registration
+        fields = '__all__'
+        read_only_fields = ['id', 'created_at', 'updated_at', 'is_verified', 'verification_notes', 'doctor']
+
+    def validate_medical_registration_number(self, value):
+        """
+        Ensure the registration number is unique across all doctors.
+        """
+        request = self.context.get('request')
+        doctor = getattr(request.user, 'doctor', None) if request else None
+
+        if doctor and Registration.objects.exclude(doctor=doctor).filter(medical_registration_number=value).exists():
+            raise serializers.ValidationError("This medical registration number is already in use.")
+        return value
+
+    def create(self, validated_data):
+        request = self.context.get('request')
+        doctor = getattr(request.user, 'doctor', None) if request else None
+
+        if doctor and Registration.objects.filter(doctor=doctor).exists():
+            raise serializers.ValidationError("A registration already exists for this doctor.")
+
+        validated_data['doctor'] = doctor
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        request = self.context.get('request')
+        doctor = getattr(request.user, 'doctor', None) if request else None
+
+        if 'medical_registration_number' in validated_data:
+            reg_no = validated_data['medical_registration_number']
+            if Registration.objects.exclude(pk=instance.pk).filter(medical_registration_number=reg_no).exists():
+                raise serializers.ValidationError("This medical registration number is already in use by another doctor.")
+
+        return super().update(instance, validated_data)

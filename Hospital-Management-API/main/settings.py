@@ -60,7 +60,7 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt.token_blacklist',
     'django.contrib.postgres',
     'django_celery_results',
-    
+    'django_ratelimit', 
     'drf_yasg',
     'core',
 ]
@@ -81,6 +81,14 @@ REST_FRAMEWORK={
         'admin': timedelta(minutes=60),  # Admin token expires after 30 minutes
         'doctor': timedelta(days=60),  # Doctor token expires after 1 day
         'patient': timedelta(days=30),  # Patient token expires after 30 days
+    },
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.UserRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'registration': '10/min',
+        'user': '1000/day',   # Set this to whatever rate limit you prefer
+        'anon': '100/day',
     },
 }
 

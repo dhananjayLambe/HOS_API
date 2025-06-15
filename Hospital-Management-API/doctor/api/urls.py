@@ -9,7 +9,7 @@ from doctor.api.views import (
     RegistrationView,GovernmentIDViewSet,EducationViewSet,
     SpecializationViewSet,CustomSpecializationViewSet,
     DoctorServiceViewSet,AwardViewSet,CertificationViewSet,
-    DoctorDashboardSummaryView,
+    DoctorDashboardSummaryView,RegistrationViewSet,
     
    )
 
@@ -22,7 +22,7 @@ router.register(r'custom-specializations', CustomSpecializationViewSet, basename
 router.register(r'services', DoctorServiceViewSet, basename='doctor-service')
 router.register(r'awards', AwardViewSet, basename='doctor-award')
 router.register(r'certifications', CertificationViewSet, basename='doctor-certification')
-
+router.register(r'medical-license', RegistrationViewSet, basename='medical-license')
 
 
 
