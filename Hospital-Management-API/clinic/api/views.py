@@ -2,18 +2,30 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, viewsets
 from rest_framework.permissions import AllowAny
+from rest_framework.permissions import IsAuthenticated
 from clinic.api.serializers import (
     ClinicSerializer,ClinicAddressSerializer,
     ClinicSpecializationSerializer,
-    ClinicScheduleSerializer,
+    ClinicScheduleSerializer,ClinicAdminRegistrationSerializer,
     ClinicServiceSerializer,
-    ClinicServiceListSerializer)
+    ClinicServiceListSerializer,
+    ClinicAdminTokenObtainPairSerializer)
 from clinic.models  import (
     Clinic,ClinicAddress,
     ClinicSpecialization, ClinicSchedule,
     ClinicService, ClinicServiceList
     )
-
+from rest_framework.permissions import AllowAny
+from rest_framework_simplejwt.tokens import RefreshToken
+from django.db import transaction
+import logging
+from rest_framework.throttling import AnonRateThrottle
+logger = logging.getLogger(__name__)
+from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework import status
+from rest_framework_simplejwt.tokens import RefreshToken, TokenError
+from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
+from account.permissions import IsClinicAdmin
 # Create Clinic
 class ClinicCreateView(APIView):
     permission_classes = [AllowAny]
@@ -162,3 +174,64 @@ class ClinicProfileUpdateView(APIView):
                 ClinicServiceList.objects.create(clinic=clinic, **service_list_serializer.validated_data)
 
         return Response({"message": "Clinic profile updated successfully."}, status=status.HTTP_200_OK)
+    
+class ClinicAdminRegisterView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def post(self, request):
+        serializer = ClinicAdminRegistrationSerializer(data=request.data)
+        if serializer.is_valid():
+            user = serializer.save()
+            return Response({
+                "status": "success",
+                "message": "Clinic Admin created successfully",
+                "data": {
+                    "id": user.id,
+                    "username": user.username,
+                    "email": user.email
+                }
+            }, status=status.HTTP_201_CREATED)
+        return Response({
+            "status": "error",
+            "message": "Validation failed",
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ClinicAdminLoginView(TokenObtainPairView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    serializer_class = ClinicAdminTokenObtainPairSerializer
+
+class ClinicAdminLogoutView(APIView):
+    """
+    Logout ClinicAdmin by blacklisting the refresh token.
+    """
+    permission_classes = [IsAuthenticated,IsClinicAdmin]
+
+
+    def post(self, request):
+        print("Request data:", request.data)  # Debugging line to check request data
+        refresh_token = request.data.get("refresh")
+
+        if not refresh_token:
+            return Response({
+                "status": "error",
+                "message": "Refresh token is required."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            token = RefreshToken(refresh_token)
+            token.blacklist()
+
+            return Response({
+                "status": "success",
+                "message": "Successfully logged out."
+            }, status=status.HTTP_200_OK)
+
+        except TokenError:
+            return Response({
+                "status": "error",
+                "message": "Token is invalid or already blacklisted."
+            }, status=status.HTTP_400_BAD_REQUEST)

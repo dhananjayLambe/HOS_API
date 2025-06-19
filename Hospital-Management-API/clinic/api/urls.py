@@ -4,11 +4,12 @@ from clinic.api.views import (
     ClinicCreateView, ClinicListView,
     ClinicDetailView, ClinicUpdateView,
     ClinicDeleteView,ClinicAddressViewSet,
-    ClinicSpecializationViewSet,
+    ClinicSpecializationViewSet,ClinicAdminRegisterView,
     ClinicScheduleViewSet,
     ClinicServiceViewSet,
-    ClinicServiceListViewSet,
-    ClinicRegistrationView,ClinicProfileUpdateView)
+    ClinicServiceListViewSet,ClinicAdminLoginView,
+    ClinicRegistrationView,ClinicProfileUpdateView,
+    ClinicAdminLogoutView)
 
 router = routers.DefaultRouter()
 router.register(r'clinic-address', ClinicAddressViewSet)
@@ -26,6 +27,10 @@ urlpatterns = [
     path('registration/', ClinicRegistrationView.as_view(), name='clinic-register'),
     path('profilupdate/<uuid:clinic_id>/', ClinicProfileUpdateView.as_view(), name='clinic-profile-update'),
     path('', include(router.urls)),
+    path('clinic-admin/register/', ClinicAdminRegisterView.as_view(), name='clinic-admin-register'),
+    path('clinic-admin/login/', ClinicAdminLoginView.as_view(), name='clinic-admin-login'),
+    path('clinic-admin/logout/', ClinicAdminLogoutView.as_view(), name='clinic-admin-logout'),
+
 ]
 
 # profilupdate/<uuid:clinic_id>/ Need to remove the code for schding as it can be added to appointmennt app

@@ -13,7 +13,7 @@ from appointments.api.views import (
     DoctorLeaveUpdateView,
     DoctorLeaveDeleteView,
     DoctorFeeStructureViewSet,
-    FollowUpPolicyViewSet
+    FollowUpPolicyViewSet,AppointmentSlotView,
     )
 app_name = 'appointments'
 
@@ -38,5 +38,6 @@ urlpatterns = [
     path("doctor-leave-list/", DoctorLeaveListView.as_view(), name="doctor-leave-list"),
     path("doctor-leave-update/<uuid:pk>/", DoctorLeaveUpdateView.as_view(), name="doctor-leave-update"),
     path("doctor-leave-delete/<uuid:pk>/", DoctorLeaveDeleteView.as_view(), name="doctor-leave-delete"),
+    path("slots/", AppointmentSlotView.as_view(), name="appointment-slots"),
 
 ]

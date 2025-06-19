@@ -43,3 +43,49 @@ class IsDoctorOrHelpdeskOrOwnerOrAdmin(BasePermission):
             return True
         return False
     
+class IsDoctorOrHelpdeskSameClinic(BasePermission):
+    def has_object_permission(self, request, view, obj):
+        user = request.user
+        if hasattr(user, 'doctor'):
+            return obj.clinic == user.doctor.clinic
+        if hasattr(user, 'helpdesk'):
+            return obj.clinic in user.helpdesk.clinics.all()
+        return False
+    
+class IsHelpdeskOfSameClinic(BasePermission):
+    def has_object_permission(self, request, view, obj):
+        if hasattr(request.user, 'helpdesk'):
+            return obj.clinic in request.user.helpdesk.clinics.all()
+        return False
+
+class IsDoctorAndClinicMatch(BasePermission):
+    def has_object_permission(self, request, view, obj):
+        if hasattr(request.user, 'doctor'):
+            return obj.clinic == request.user.doctor.clinic
+        return False
+
+class IsHelpdeskOrOwner(BasePermission):
+    def has_object_permission(self, request, view, obj):
+        if hasattr(request.user, 'helpdesk'):
+            return True
+        if hasattr(obj, 'user') and obj.user == request.user:
+            return True
+        return False
+
+class IsDoctorOrOwner(BasePermission):
+    def has_object_permission(self, request, view, obj):
+        if hasattr(request.user, 'doctor'):
+            return True
+        if hasattr(obj, 'user') and obj.user == request.user:
+            return True
+        return False
+
+class IsClinicAdmin(BasePermission):
+    def has_permission(self, request, view):
+        user = request.user
+        print("User:", user)
+        print("Is Authenticated:", user.is_authenticated)
+        print("User Groups:", user.groups.values_list("name", flat=True))
+
+        return user and user.is_authenticated and \
+               user.groups.filter(name='clinic_admin').exists()

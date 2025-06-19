@@ -533,33 +533,6 @@ class DoctorDashboardSummarySerializer(serializers.Serializer):
     total_prescriptions_issued = serializers.IntegerField()
 
 
-# class RegistrationSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = Registration
-#         fields = [
-#             'id', 'medical_registration_number', 'medical_council',
-#             'registration_certificate', 'registration_date', 'valid_upto',
-#             'is_verified', 'verification_notes', 'created_at', 'updated_at'
-#         ]
-#         read_only_fields = ['is_verified', 'verification_notes', 'created_at', 'updated_at']
-
-#     def create(self, validated_data):
-#         user = self.context['request'].user
-#         validated_data['doctor'] = user.doctor  # auto-link the doctor
-#         return super().create(validated_data)
-
-#     def update(self, instance, validated_data):
-#         # Prevent doctors from changing verified fields
-#         for field in ['is_verified', 'verification_notes']:
-#             validated_data.pop(field, None)
-#         return super().update(instance, validated_data)
-
-# class RegistrationVerificationSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = Registration
-#         fields = ['is_verified', 'verification_notes']
-
-
 class RegistrationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Registration

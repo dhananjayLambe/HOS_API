@@ -58,14 +58,6 @@ from django.db.models import Avg, Sum, Count, Q
 from django.db import transaction
 logger = logging.getLogger(__name__)
 from account.permissions import IsAdminUser, IsDoctor
-# class DoctorRegistrationView(APIView):
-#     permission_classes=[]
-#     def post(self, request, *args, **kwargs):
-#         serializer = DoctorRegistrationSerializer(data=request.data)      
-#         if serializer.is_valid():
-#             serializer.save()
-#             return Response({"message": "Doctor registered successfully"}, status=status.HTTP_201_CREATED)
-#         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class DoctorLoginView(APIView):
     """Custom JWT login for doctors only"""
@@ -159,33 +151,6 @@ class UserView(APIView):
         user = request.user
         user.delete()
         return Response({"message": "User deleted successfully"}, status=status.HTTP_204_NO_CONTENT)
-
-# class doctorAppointmentView(APIView):
-#     """API endpoint for getting all appointment detail-only accesible by doctor"""
-#     permission_classes = [IsDoctor]
-
-#     def get(self, request, format=None):
-#         user = request.user
-#         user_doctor = doctor.objects.filter(user=user).get()
-#         appointments=Appointment.objects.filter(doctor=user_doctor, status=True).order_by('appointment_date', 'appointment_time')
-#         appointmentSerializer=doctorAppointmentSerializer(appointments, many=True)
-#         return Response(appointmentSerializer.data, status=status.HTTP_200_OK)
-
-# class LogoutView(APIView):
-#     """
-#     API endpoint for logging out users.
-#     Deletes the user's authentication token.
-#     """
-#     permission_classes = [IsAuthenticated]
-
-#     def post(self, request, *args, **kwargs):
-#         try:
-#             # Get the user's token and delete it
-#             token = Token.objects.get(user=request.user)
-#             token.delete()
-#             return Response({"message": "Logout successful."}, status=status.HTTP_200_OK)
-#         except Token.DoesNotExist:
-#             return Response({"error": "Token not found or user already logged out."}, status=status.HTTP_400_BAD_REQUEST)
 
 class DoctorRegistrationAPIView(APIView):
     permission_classes = [AllowAny]
@@ -318,7 +283,6 @@ class PendingHelpdeskRequestsView(generics.ListAPIView):
         doctor = self.request.user.doctor  
         clinics = doctor.clinics.all()  # Get all clinics where doctor works
         return HelpdeskClinicUser.objects.filter(clinic__in=clinics, is_active=False)
-
 
 class ApproveHelpdeskUserView(generics.UpdateAPIView):
     """API for doctors to approve or reject a helpdesk user"""
@@ -951,32 +915,6 @@ class DoctorDashboardSummaryView(APIView):
                 "message": "Failed to fetch dashboard summary",
                 "data": None
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-# class RegistrationViewSet(viewsets.ModelViewSet):
-#     serializer_class = RegistrationSerializer
-#     authentication_classes = [JWTAuthentication]
-#     permission_classes = [IsAuthenticated, IsDoctor]
-
-#     def get_queryset(self):
-#         # Doctor can only access their own registration
-#         return Registration.objects.filter(doctor__user=self.request.user)
-
-#     def perform_create(self, serializer):
-#         serializer.save(doctor=self.request.user.doctor)
-
-#     def get_serializer_class(self):
-#         if self.action == 'verify':
-#             return RegistrationVerificationSerializer
-#         return RegistrationSerializer
-
-#     @action(detail=True, methods=['patch'], permission_classes=[IsAdminUser])
-#     def verify(self, request, pk=None):
-#         reg = self.get_object()
-#         serializer = self.get_serializer(reg, data=request.data, partial=True)
-#         serializer.is_valid(raise_exception=True)
-#         serializer.save()
-#         return Response({'status': 'verified', 'data': serializer.data})
 
 class RegistrationViewSet(viewsets.ModelViewSet):
     serializer_class = RegistrationSerializer

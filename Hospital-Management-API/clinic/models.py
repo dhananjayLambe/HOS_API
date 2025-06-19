@@ -1,7 +1,7 @@
 import uuid
 from datetime import time
 from django.db import models
-#from account.models import User
+from account.models import User
 
 class Clinic(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -152,6 +152,23 @@ class ClinicServiceList(models.Model):
 
     def __str__(self):
         return f"{self.service_name} - {self.clinic.name}"
+
+class ClinicAdminProfile(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='clinic_admin_profile')
+    clinic = models.OneToOneField(Clinic, on_delete=models.CASCADE, related_name='admin_profile')
+
+    # KYA = Know Your Admin fields
+    kya_completed = models.BooleanField(default=False)
+    kya_verified = models.BooleanField(default=False)
+    approval_date = models.DateTimeField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Clinic Admin: {self.user.get_full_name()} for {self.clinic.name}"
+
 
 # class ClinicFrontDeskUser(models.Model):
 #     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
