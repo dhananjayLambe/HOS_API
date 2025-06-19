@@ -9,7 +9,8 @@ from clinic.api.views import (
     ClinicServiceViewSet,
     ClinicServiceListViewSet,ClinicAdminLoginView,
     ClinicRegistrationView,ClinicProfileUpdateView,
-    ClinicAdminLogoutView)
+    ClinicAdminLogoutView,
+    ClinicAdminTokenRefreshView,ClinicAdminTokenVerifyView)
 
 router = routers.DefaultRouter()
 router.register(r'clinic-address', ClinicAddressViewSet)
@@ -30,6 +31,8 @@ urlpatterns = [
     path('clinic-admin/register/', ClinicAdminRegisterView.as_view(), name='clinic-admin-register'),
     path('clinic-admin/login/', ClinicAdminLoginView.as_view(), name='clinic-admin-login'),
     path('clinic-admin/logout/', ClinicAdminLogoutView.as_view(), name='clinic-admin-logout'),
+    path('api/clinic-admin/token/refresh/', ClinicAdminTokenRefreshView.as_view(), name='clinic_admin_token_refresh'),
+    path('api/clinic-admin/token/verify/', ClinicAdminTokenVerifyView.as_view(), name='clinic_admin_token_verify'),
 
 ]
 

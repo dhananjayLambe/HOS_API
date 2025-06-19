@@ -14,6 +14,9 @@ from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
 from clinic.models import ClinicAdminProfile
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework_simplejwt.serializers import TokenVerifySerializer
+from rest_framework_simplejwt.tokens import UntypedToken
+from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 class ClinicSerializer(serializers.ModelSerializer):
     class Meta:
         model = Clinic
@@ -120,6 +123,16 @@ class ClinicAdminTokenObtainPairSerializer(TokenObtainPairSerializer):
                 "non_field_errors": ["ClinicAdmin profile not found."]
             })
 
+        # KYA Checks
+        if not clinic_admin.kya_completed:
+            raise serializers.ValidationError({
+                "non_field_errors": ["KYA process not completed."]
+            })
+
+        if not clinic_admin.kya_verified:
+            raise serializers.ValidationError({
+                "non_field_errors": ["KYA verification pending. Contact support."]
+            })
         # Generate token
         data = super().validate(attrs)
 
@@ -134,3 +147,61 @@ class ClinicAdminTokenObtainPairSerializer(TokenObtainPairSerializer):
         })
 
         return data
+
+
+class ClinicAdminTokenRefreshSerializer(TokenRefreshSerializer):
+    def validate(self, attrs):
+        data = super().validate(attrs)
+
+        refresh = self.token_class(attrs["refresh"])
+        user_id = refresh["user_id"]
+
+        try:
+            user = User.objects.get(id=user_id)
+            clinic_admin = user.clinic_admin_profile
+        except (User.DoesNotExist, ClinicAdminProfile.DoesNotExist):
+            raise serializers.ValidationError({"detail": "ClinicAdmin profile not found."})
+
+        if not clinic_admin.kya_completed:
+            raise serializers.ValidationError({"detail": "KYA process not completed."})
+
+        if not clinic_admin.kya_verified:
+            raise serializers.ValidationError({"detail": "KYA not verified. Contact support."})
+
+        return data
+
+class ClinicAdminTokenVerifySerializer(TokenVerifySerializer):
+    def validate(self, attrs):
+        token = attrs.get("token")
+
+        try:
+            validated_token = UntypedToken(token)
+        except Exception:
+            raise serializers.ValidationError({"detail": "Token is invalid or expired"})
+
+        user_id = validated_token.get("user_id")
+        try:
+            user = User.objects.get(id=user_id)
+            clinic_admin = user.clinic_admin_profile
+        except (User.DoesNotExist, ClinicAdminProfile.DoesNotExist):
+            raise serializers.ValidationError({"detail": "ClinicAdmin profile not found."})
+
+        if not clinic_admin.kya_completed:
+            raise serializers.ValidationError({"detail": "KYA process not completed."})
+
+        if not clinic_admin.kya_verified:
+            raise serializers.ValidationError({"detail": "KYA not verified. Contact support."})
+
+        return {}
+
+class PendingClinicAdminSerializer(serializers.ModelSerializer):
+    mobile = serializers.CharField(source='user.username')
+    full_name = serializers.SerializerMethodField()
+    email = serializers.EmailField(source='user.email')
+
+    class Meta:
+        model = ClinicAdminProfile
+        fields = ['id', 'full_name', 'mobile', 'email', 'kya_completed', 'kya_verified', 'approval_date']
+
+    def get_full_name(self, obj):
+        return f"{obj.user.first_name} {obj.user.last_name}"

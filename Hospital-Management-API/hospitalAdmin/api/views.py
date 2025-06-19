@@ -4,7 +4,9 @@ from django.http import Http404
 from django.shortcuts import get_object_or_404
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework import status
+from rest_framework.decorators import action
+from rest_framework import status,viewsets
+from django.utils import timezone
 from patient.models import (patient_history,
                             Appointment)
 from rest_framework.authtoken.views import ObtainAuthToken
@@ -22,6 +24,8 @@ from . serializers import (doctorAccountSerializerAdmin,
                             patientHistorySerializerAdmin,
                             DoctorRegistrationSerializer,
                             )
+from clinic.models import ClinicAdminProfile
+from clinic.api.serializers import PendingClinicAdminSerializer
 from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenRefreshView
@@ -514,3 +518,32 @@ class AdminLogoutJwtView(APIView):
             return Response({"message": "Logout successful"}, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"error": "Invalid token"}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ClinicAdminApprovalViewSet(viewsets.ViewSet):
+    permission_classes = [IsAdmin]  # or [IsSuperAdmin]
+
+    @action(detail=False, methods=["get"], url_path="pending")
+    def list_pending(self, request):
+        queryset = ClinicAdminProfile.objects.filter(kya_completed=False, kya_verified=False)
+        serializer = PendingClinicAdminSerializer(queryset, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=["post"], url_path="approve")
+    def approve(self, request, pk=None):
+        try:
+            profile = ClinicAdminProfile.objects.get(pk=pk)
+        except ClinicAdminProfile.DoesNotExist:
+            return Response({"detail": "Clinic Admin not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        #if not profile.kya_completed:
+        #    return Response({"detail": "KYA is not completed yet."}, status=status.HTTP_400_BAD_REQUEST)
+
+        profile.kya_verified = True
+        profile.kya_completed = True
+        profile.approval_date = timezone.now()
+        profile.user.is_active = True  # optional if you're deactivating unverified accounts
+        profile.user.save()
+        profile.save()
+
+        return Response({"detail": "Clinic Admin approved successfully."}, status=status.HTTP_200_OK)

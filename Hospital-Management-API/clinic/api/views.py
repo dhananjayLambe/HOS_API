@@ -1,32 +1,44 @@
-from rest_framework.views import APIView
-from rest_framework.response import Response
+import logging
+from django.db import transaction
+
 from rest_framework import status, viewsets
-from rest_framework.permissions import AllowAny
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.throttling import AnonRateThrottle
+
+from rest_framework_simplejwt.tokens import RefreshToken, TokenError
+from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
+
 from clinic.api.serializers import (
-    ClinicSerializer,ClinicAddressSerializer,
+    ClinicSerializer,
+    ClinicAddressSerializer,
     ClinicSpecializationSerializer,
-    ClinicScheduleSerializer,ClinicAdminRegistrationSerializer,
+    ClinicScheduleSerializer,
+    ClinicAdminRegistrationSerializer,
     ClinicServiceSerializer,
     ClinicServiceListSerializer,
-    ClinicAdminTokenObtainPairSerializer)
-from clinic.models  import (
-    Clinic,ClinicAddress,
-    ClinicSpecialization, ClinicSchedule,
-    ClinicService, ClinicServiceList
-    )
-from rest_framework.permissions import AllowAny
-from rest_framework_simplejwt.tokens import RefreshToken
-from django.db import transaction
-import logging
-from rest_framework.throttling import AnonRateThrottle
-logger = logging.getLogger(__name__)
-from rest_framework_simplejwt.views import TokenObtainPairView
-from rest_framework import status
-from rest_framework_simplejwt.tokens import RefreshToken, TokenError
-from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
+    ClinicAdminTokenObtainPairSerializer,
+    ClinicAdminTokenRefreshSerializer,
+    ClinicAdminTokenVerifySerializer,
+)
+
+from clinic.models import (
+    Clinic,
+    ClinicAddress,
+    ClinicSpecialization,
+    ClinicSchedule,
+    ClinicService,
+    ClinicServiceList,
+)
+
 from account.permissions import IsClinicAdmin
-# Create Clinic
+from rest_framework_simplejwt.views import TokenRefreshView
+from rest_framework_simplejwt.views import TokenVerifyView
+logger = logging.getLogger(__name__)
+
+
 class ClinicCreateView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
@@ -235,3 +247,10 @@ class ClinicAdminLogoutView(APIView):
                 "status": "error",
                 "message": "Token is invalid or already blacklisted."
             }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ClinicAdminTokenRefreshView(TokenRefreshView):
+    serializer_class = ClinicAdminTokenRefreshSerializer
+
+class ClinicAdminTokenVerifyView(TokenVerifyView):
+    serializer_class = ClinicAdminTokenVerifySerializer

@@ -11,15 +11,21 @@ DoctorRegistrationView,
 AdminLogoutView,
 AdminLoginJwtView,
 AdminLogoutJwtView,
-AdminTokenRefreshView
+AdminTokenRefreshView,
+ClinicAdminApprovalViewSet
 )
 
 
-from django.urls import path
+from django.urls import path, include
 from rest_framework_simplejwt.views import TokenVerifyView
+from rest_framework.routers import DefaultRouter
 
 
 app_name='hospitalAdmin'
+
+router = DefaultRouter()
+router.register(r'clinic-admin', ClinicAdminApprovalViewSet, basename='clinic-admin-approval')
+
 urlpatterns = [
     #Admin login
     path('login/', AdminLoginJwtView.as_view(), name='admin_login'),
@@ -64,5 +70,5 @@ urlpatterns = [
     #Appointment Management
     path('appointments/', appointmentViewAdmin.as_view(), name='api_appointments_admin'),
     path('appointment/<int:pk>/', appointmentViewAdmin.as_view(), name='api_appointment_detail_admin'),
-
+    path('', include(router.urls)),
 ]
