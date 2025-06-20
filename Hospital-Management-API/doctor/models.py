@@ -8,7 +8,7 @@ from django.core.validators import RegexValidator
 class doctor(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     #Personal Information
-    user=models.OneToOneField(User,on_delete=models.CASCADE)
+    user=models.OneToOneField(User,on_delete=models.CASCADE, related_name='doctor')
     secondary_mobile_number = models.CharField(max_length=15, unique=True,default="NA")
     dob = models.DateField(verbose_name="Date of Birth", null=True, blank=True)
     about = models.TextField(blank=True, null=True, help_text="Short description displayed to patients")

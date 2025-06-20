@@ -426,7 +426,8 @@ class RegistrationView(APIView):
                 "message": "Registration already exists"
             }, status=status.HTTP_409_CONFLICT)
 
-        serializer = RegistrationSerializer(data=request.data)
+        #serializer = RegistrationSerializer(data=request.data)
+        serializer = RegistrationSerializer(data=request.data, context={'request': request})
         if serializer.is_valid():
             serializer.save(doctor=doctor)
             return Response({
@@ -448,7 +449,8 @@ class RegistrationView(APIView):
         except Registration.DoesNotExist:
             raise NotFound("Registration not found")
 
-        serializer = RegistrationSerializer(registration, data=request.data)
+        #serializer = RegistrationSerializer(registration, data=request.data)
+        serializer = RegistrationSerializer(registration, data=request.data, context={'request': request})
         if serializer.is_valid():
             serializer.save()
             return Response({
@@ -470,7 +472,8 @@ class RegistrationView(APIView):
         except Registration.DoesNotExist:
             raise NotFound("Registration not found")
 
-        serializer = RegistrationSerializer(registration, data=request.data, partial=True)
+        #serializer = RegistrationSerializer(registration, data=request.data, partial=True)
+        serializer = RegistrationSerializer(registration, data=request.data, partial=True, context={'request': request})
         if serializer.is_valid():
             serializer.save()
             return Response({

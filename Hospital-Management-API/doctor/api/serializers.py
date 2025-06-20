@@ -289,15 +289,11 @@ class DoctorProfileUpdateSerializer(serializers.ModelSerializer):
             registration.medical_registration_number = registration_data.get('medical_registration_number', '')
             registration.medical_council = registration_data.get('medical_council', '')
             registration.save()
-
-        print(validated_data)
         for field in nested_fields:            
             if field in validated_data:
-                print("field", field)
                 nested_data = validated_data.pop(field)
                 related_manager = getattr(instance, field)
                 if field == 'government_ids':
-                    print("i am in government_ids")
                     related_manager = instance.government_id
                     if nested_data:
                         related_manager.pan_card_number = nested_data['pan_card_number']
@@ -554,7 +550,6 @@ class RegistrationSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         request = self.context.get('request')
         doctor = getattr(request.user, 'doctor', None) if request else None
-
         if doctor and Registration.objects.filter(doctor=doctor).exists():
             raise serializers.ValidationError("A registration already exists for this doctor.")
 
