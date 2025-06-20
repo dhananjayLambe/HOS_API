@@ -136,12 +136,14 @@ class UserView(APIView):
 
     def get(self, request):
         user = request.user
-        serializer = UserSerializer(user)
+        #serializer = UserSerializer(user)
+        serializer = UserSerializer(user, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     def put(self, request):
         user = request.user
-        serializer = UserSerializer(user, data=request.data)
+        #serializer = UserSerializer(user, data=request.data)
+        serializer = UserSerializer(user, data=request.data, context={'request': request})
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data, status=status.HTTP_200_OK)
@@ -197,27 +199,25 @@ class DoctorDetailsAPIView(APIView):
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class DoctorProfileUpdateAPIView(APIView):
-    """
-    API view to handle authenticated doctor's profile.
-    """
     authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAuthenticated,IsDoctor]
+    permission_classes = [IsAuthenticated, IsDoctor]
 
     def get(self, request):
         try:
             user = request.user
             doctor_instance = doctor.objects.get(user=user)
-            serializer = DoctorProfileUpdateSerializer(doctor_instance)
+            serializer = DoctorProfileUpdateSerializer(doctor_instance, context={'request': request})
             return Response(serializer.data, status=status.HTTP_200_OK)
         except doctor.DoesNotExist:
             return Response({"error": "Doctor profile not found"}, status=status.HTTP_404_NOT_FOUND)
+
     def post(self, request):
         user = request.user
         if hasattr(user, 'doctor'):
-            return Response({"error": "Doctor profile already exists"}, status=status.HTTP_400_BAD_REQUEST)        
-        serializer = DoctorProfileUpdateSerializer(data=request.data)
+            return Response({"error": "Doctor profile already exists"}, status=status.HTTP_400_BAD_REQUEST)
+        serializer = DoctorProfileUpdateSerializer(data=request.data, context={'request': request})
         if serializer.is_valid():
-            serializer.save(user=user)  # Link doctor to the authenticated user
+            serializer.save(user=user)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -225,7 +225,7 @@ class DoctorProfileUpdateAPIView(APIView):
         try:
             user = request.user
             doctor_instance = doctor.objects.get(user=user)
-            serializer = DoctorProfileUpdateSerializer(doctor_instance, data=request.data)
+            serializer = DoctorProfileUpdateSerializer(doctor_instance, data=request.data, context={'request': request})
             if serializer.is_valid():
                 serializer.save()
                 return Response(serializer.data, status=status.HTTP_200_OK)
@@ -237,7 +237,7 @@ class DoctorProfileUpdateAPIView(APIView):
         try:
             user = request.user
             doctor_instance = doctor.objects.get(user=user)
-            serializer = DoctorProfileUpdateSerializer(doctor_instance, data=request.data, partial=True)
+            serializer = DoctorProfileUpdateSerializer(doctor_instance, data=request.data, partial=True, context={'request': request})
             if serializer.is_valid():
                 serializer.save()
                 return Response(serializer.data, status=status.HTTP_200_OK)
@@ -253,7 +253,7 @@ class DoctorProfileUpdateAPIView(APIView):
             return Response({"message": "Doctor profile deleted successfully"}, status=status.HTTP_204_NO_CONTENT)
         except doctor.DoesNotExist:
             return Response({"error": "Doctor profile not found"}, status=status.HTTP_404_NOT_FOUND)
-
+      
 class DoctorTokenRefreshView(TokenRefreshView):
     """Refresh JWT access token"""
     pass
