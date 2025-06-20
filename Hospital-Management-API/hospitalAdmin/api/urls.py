@@ -1,6 +1,5 @@
 from .views import (
 doctorAccountViewAdmin,
-approveDoctorViewAdmin, 
 appointmentViewAdmin,
 patientRegistrationViewAdmin,
 patientAccountViewAdmin,
@@ -12,7 +11,9 @@ AdminLogoutView,
 AdminLoginJwtView,
 AdminLogoutJwtView,
 AdminTokenRefreshView,
-ClinicAdminApprovalViewSet
+ClinicAdminApprovalViewSet,
+PendingDoctorListAPIView,
+ApproveDoctorAPIView,
 )
 
 
@@ -43,8 +44,8 @@ urlpatterns = [
 
  
     #Approve Doctor
-    path('approve/doctors/', approveDoctorViewAdmin.as_view(), name='api_doctors_approve_admin'),
-    path('approve/doctor/<uuid:pk>/', approveDoctorViewAdmin.as_view(), name='api_doctor_detail_approve_admin'),
+    path('doctors/pending/', PendingDoctorListAPIView.as_view(), name='pending-doctors'),
+    path('approve/doctors/<uuid:doctor_id>/', ApproveDoctorAPIView.as_view(), name='approve-doctor'),
 
     #Approve Patient
     path('approve/patients/', approvePatientViewAdmin.as_view(), name='api_patients_approve_admin'),

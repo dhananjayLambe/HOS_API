@@ -21,6 +21,7 @@ from doctor.models import (
 )
 from hospital_mgmt.models import Hospital
 from helpdesk.models import HelpdeskClinicUser
+from account.models import User
 
 class UserSerializer(serializers.ModelSerializer):
     password2 = serializers.CharField(write_only=True)
@@ -570,3 +571,26 @@ class RegistrationSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError("This medical registration number is already in use by another doctor.")
 
         return super().update(instance, validated_data)
+
+
+class DoctorDetailSerializer(serializers.ModelSerializer):
+    user = serializers.SerializerMethodField()
+
+    class Meta:
+        model = doctor
+        fields = ['id', 'user',   'is_approved']
+
+    def get_user(self, obj):
+        return {
+            "id": obj.user.id,
+            "username": obj.user.username,
+            "email": obj.user.email,
+            "first_name": obj.user.first_name,
+            "last_name": obj.user.last_name,
+           
+        }
+
+class DoctorApprovalSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = doctor
+        fields = ['is_approved']

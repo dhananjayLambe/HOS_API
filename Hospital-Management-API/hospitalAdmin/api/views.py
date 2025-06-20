@@ -11,10 +11,10 @@ from patient.models import (patient_history,
                             Appointment)
 from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.authtoken.models import Token
-from rest_framework.permissions import BasePermission
+from rest_framework.permissions import BasePermission, IsAuthenticated
 from django.contrib.auth.models import Group
 from account.models import User
-from . serializers import (doctorAccountSerializerAdmin,
+from . serializers import (
                            doctorRegistrationSerializerAdmin,
                            doctorRegistrationProfileSerializerAdmin,
                            appointmentSerializerAdmin,
@@ -31,12 +31,13 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenRefreshView
 from rest_framework import generics
 
+from doctor.models import doctor as Doctor
+from doctor.api.serializers import DoctorDetailSerializer,DoctorApprovalSerializer
 class IsAdmin(BasePermission):
     """custom Permission class for Admin"""
 
     def has_permission(self, request, view):
         return bool(request.user and request.user.groups.filter(name='admin').exists())
-
 
 #Custom Auth token for Admin
 class CustomAuthToken(ObtainAuthToken):
@@ -88,8 +89,6 @@ class CustomAuthToken(ObtainAuthToken):
         else:
             return timedelta(days=30)
 
-######NEW########
-
 class DoctorRegistrationView(APIView):
     def post(self, request, *args, **kwargs):
         serializer = DoctorRegistrationSerializer(data=request.data)      
@@ -98,9 +97,6 @@ class DoctorRegistrationView(APIView):
             return Response({"message": "Doctor registered successfully"}, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-
-
-#######   OLD code ##########
 class docregistrationViewAdmin(APIView):
 
     """API endpoint for creating doctor account- only accessible by Admin"""
@@ -167,49 +163,6 @@ class doctorAccountViewAdmin(APIView):
         saved_user = self.get_object(pk)
         saved_user.delete()
         return Response({"message": "User with id `{}` has been deleted.".format(pk)}, status=status.HTTP_204_NO_CONTENT)
-#################
-
-class approveDoctorViewAdmin(APIView):
-    """API endpoint for getting new doctor approval request, update and delete approval  request.
-     - only accessible by Admin"""
-    
-    permission_classes = [IsAdmin]
-    authenticate_classes = []
-
-    def get_object(self, pk):
-        try:
-            return User.objects.get(pk=pk)
-        except User.DoesNotExist:
-            raise Http404
-
-    def get(self, request, pk=None, format=None):
-        print("approveDoctorViewAdmin called")
-        if pk:
-            doctor_detail = self.get_object(pk)
-            serializer = doctorAccountSerializerAdmin(doctor_detail)
-            return Response({'doctors': serializer.data}, status=status.HTTP_200_OK)
-        doctor_group = Group.objects.get(name='doctor')
-        all_doctor = User.objects.filter(groups=doctor_group, status=False)
-        serializer = doctorAccountSerializerAdmin(all_doctor, many=True)
-        return Response({'doctors': serializer.data}, status=status.HTTP_200_OK)
-
-    def put(self, request, pk):
-        saved_user = self.get_object(pk)
-        serializer = doctorAccountSerializerAdmin(
-            instance=saved_user, data=request.data.get('doctors'), partial=True)
-        if serializer.is_valid():
-            serializer.save()
-            return Response({'doctors': serializer.data}, status=status.HTTP_200_OK)
-        return Response({
-            'doctors': serializer.errors
-        }, status=status.HTTP_400_BAD_REQUEST)
-    
-    def delete(self, request, pk):
-        saved_user = self.get_object(pk)
-        saved_user.delete()
-        return Response({"message": "Doctor approval request with id `{}` has been deleted.".format(pk)}, status=status.HTTP_204_NO_CONTENT)
-
-
 
 class approvePatientViewAdmin(APIView):
     """API endpoint for getting new patient request,
@@ -248,7 +201,6 @@ class approvePatientViewAdmin(APIView):
         saved_user = self.get_object(pk)
         saved_user.delete()
         return Response({"message": "Patient approval request with id `{}` has been deleted.".format(pk)}, status=status.HTTP_204_NO_CONTENT)
-
 
 
 class appointmentViewAdmin(APIView):
@@ -366,8 +318,6 @@ class patientRegistrationViewAdmin(APIView):
                 'user_data': registrationSerializer.errors,
                 'profile_data': profileSerializer.errors
             }, status=status.HTTP_400_BAD_REQUEST)
-
-
 
 
 class patientAccountViewAdmin(APIView):
@@ -547,3 +497,24 @@ class ClinicAdminApprovalViewSet(viewsets.ViewSet):
         profile.save()
 
         return Response({"detail": "Clinic Admin approved successfully."}, status=status.HTTP_200_OK)
+
+class PendingDoctorListAPIView(APIView):
+    permission_classes = [IsAuthenticated, IsAdmin]
+
+    def get(self, request):
+        pending_doctors = Doctor.objects.filter(is_approved=False)
+        serializer = DoctorDetailSerializer(pending_doctors, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+class ApproveDoctorAPIView(APIView):
+    permission_classes = [IsAuthenticated, IsAdmin]
+
+    def patch(self, request, doctor_id):
+        doctor = get_object_or_404(Doctor, id=doctor_id)
+        serializer = DoctorApprovalSerializer(doctor, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            response_data = DoctorDetailSerializer(doctor).data
+            return Response(response_data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+

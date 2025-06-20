@@ -14,6 +14,7 @@ class doctor(models.Model):
     about = models.TextField(blank=True, null=True, help_text="Short description displayed to patients")
     photo = models.ImageField(upload_to="doctor_photos/", blank=True, null=True)
     years_of_experience = models.PositiveIntegerField(default=1)
+    is_approved = models.BooleanField(default=False)
     # Relationships
     clinics = models.ManyToManyField(Clinic, related_name='doctors')
     created_at = models.DateTimeField(auto_now_add=True)  # Mandatory  default=timezone.now
