@@ -17,7 +17,7 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError, NotFound
 from rest_framework.permissions import IsAuthenticated
 from django.db import transaction
-
+from rest_framework.parsers import MultiPartParser, FormParser
 
 # Local application imports
 from account.models import User
@@ -47,8 +47,9 @@ from doctor.api.serializers import (
     DoctorServiceSerializer,
     AwardSerializer,CertificationSerializer,
     DoctorDashboardSummarySerializer,
-    RegistrationSerializer,
-    DoctorProfilePhotoUploadSerializer,DoctorProfileSerializer,
+    RegistrationSerializer,EducationCertificateUploadSerializer,
+    DoctorProfilePhotoUploadSerializer,DoctorProfileSerializer,RegistrationDocumentUploadSerializer,
+    GovernmentIDUploadSerializer,
 )
 from consultations.models import Consultation, PatientFeedback
 from appointments.models import Appointment
@@ -1010,3 +1011,94 @@ class DoctorProfileView(APIView):
             "message": "Doctor profile fetched successfully.",
             "data": serializer.data
         }, status=status.HTTP_200_OK)
+
+class UploadRegistrationCertificateView(APIView):
+    permission_classes = [IsAuthenticated, IsDoctor]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def patch(self, request):
+        try:
+            doctor_instance = request.user.doctor
+        except doctor.DoesNotExist:
+            return Response({"error": "Doctor profile not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        registration, _ = Registration.objects.get_or_create(doctor=doctor_instance)
+        serializer = RegistrationDocumentUploadSerializer(registration, data=request.data, partial=True)
+
+        if serializer.is_valid():
+            serializer.save()
+            return Response({
+                "status": "success",
+                "message": "Registration document uploaded successfully.",
+                "data": serializer.data
+            }, status=status.HTTP_200_OK)
+
+        return Response({
+            "status": "error",
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+class UploadEducationCertificateView(APIView):
+    permission_classes = [IsAuthenticated, IsDoctor]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def patch(self, request, *args, **kwargs):
+        try:
+            doctor_instance = request.user.doctor
+        except doctor.DoesNotExist:
+            return Response({"error": "Doctor profile not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        qualification = request.data.get('qualification')
+        institute = request.data.get('institute')
+        year = request.data.get('year_of_completion')
+
+        if not qualification or not institute or not year:
+            return Response({"error": "qualification, institute, and year_of_completion are required."}, status=400)
+
+        try:
+            education = Education.objects.get(
+                doctor=doctor_instance,
+                qualification=qualification,
+                institute=institute,
+                year_of_completion=year
+            )
+        except Education.DoesNotExist:
+            return Response({"error": "Education record not found."}, status=404)
+
+        serializer = EducationCertificateUploadSerializer(education, data=request.data, partial=True)
+
+        if serializer.is_valid():
+            serializer.save()
+            return Response({
+                "status": "success",
+                "message": "Education certificate uploaded successfully.",
+                "data": serializer.data
+            }, status=200)
+
+        return Response({"status": "error", "errors": serializer.errors}, status=400)
+
+class UploadGovernmentIDView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctor]
+
+    def patch(self, request):
+        doctor = request.user.doctor
+        try:
+            gov_id = doctor.government_ids
+        except GovernmentID.DoesNotExist:
+            return Response({
+                "error": "Government ID record not found."
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = GovernmentIDUploadSerializer(gov_id, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({
+                "status": "success",
+                "message": "Government ID updated.",
+                "data": serializer.data
+            }, status=status.HTTP_200_OK)
+        return Response({
+            "status": "error",
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)

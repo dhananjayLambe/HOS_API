@@ -634,3 +634,91 @@ class DoctorProfileSerializer(serializers.ModelSerializer):
         if obj.photo:
             return request.build_absolute_uri(obj.photo.url)
         return None
+
+class RegistrationDocumentUploadSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Registration
+        fields = ['medical_registration_number', 'medical_council', 'registration_certificate']
+
+    def validate_registration_certificate(self, value):
+        if value is None:
+            raise serializers.ValidationError("No file uploaded.")
+
+        if not hasattr(value, 'size'):
+            raise serializers.ValidationError("Invalid file or corrupt upload.")
+
+        if value.size > 5 * 1024 * 1024:
+            raise serializers.ValidationError("File size must be under 5MB.")
+
+        valid_extensions = ['pdf', 'jpg', 'jpeg', 'png']
+        ext = value.name.split('.')[-1].lower()
+        if ext not in valid_extensions:
+            raise serializers.ValidationError("Only PDF, JPG, JPEG, PNG files are allowed.")
+
+        return value
+
+    def update(self, instance, validated_data):
+        # Delete old file if exists
+        if validated_data.get('registration_certificate') and instance.registration_certificate:
+            instance.registration_certificate.delete(save=False)
+
+        return super().update(instance, validated_data)
+
+
+class EducationCertificateUploadSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Education
+        fields = ['id', 'qualification', 'institute', 'year_of_completion', 'certificate']
+        read_only_fields = ['id']
+
+    def validate_certificate(self, value):
+        if value is None:
+            raise serializers.ValidationError("No file uploaded.")
+
+        if not hasattr(value, 'size'):
+            raise serializers.ValidationError("Invalid or corrupt file.")
+
+        if value.size > 5 * 1024 * 1024:
+            raise serializers.ValidationError("File size must be under 5MB.")
+
+        valid_extensions = ['pdf', 'jpg', 'jpeg', 'png']
+        ext = value.name.split('.')[-1].lower()
+        if ext not in valid_extensions:
+            raise serializers.ValidationError("Only PDF, JPG, JPEG, PNG files are allowed.")
+
+        return value
+
+    def update(self, instance, validated_data):
+        if validated_data.get('certificate') and instance.certificate:
+            instance.certificate.delete(save=False)
+        return super().update(instance, validated_data)
+
+
+class GovernmentIDUploadSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = GovernmentID
+        fields = [
+            'pan_card_number', 'aadhar_card_number',
+            'pan_card_file', 'aadhar_card_file'
+        ]
+
+    def validate(self, data):
+        pan_file = data.get("pan_card_file")
+        aadhaar_file = data.get("aadhar_card_file")
+
+        if pan_file and pan_file.size > 2 * 1024 * 1024:
+            raise serializers.ValidationError({"pan_card_file": "PAN file size should be under 2MB."})
+
+        if aadhaar_file and aadhaar_file.size > 2 * 1024 * 1024:
+            raise serializers.ValidationError({"aadhar_card_file": "Aadhar file size should be under 2MB."})
+
+        return data
+
+    def update(self, instance, validated_data):
+        # Optional: delete old files
+        if validated_data.get("pan_card_file") and instance.pan_card_file:
+            instance.pan_card_file.delete(save=False)
+        if validated_data.get("aadhar_card_file") and instance.aadhar_card_file:
+            instance.aadhar_card_file.delete(save=False)
+
+        return super().update(instance, validated_data)

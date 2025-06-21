@@ -10,7 +10,9 @@ from doctor.api.views import (
     SpecializationViewSet,CustomSpecializationViewSet,
     DoctorServiceViewSet,AwardViewSet,CertificationViewSet,
     DoctorDashboardSummaryView,RegistrationViewSet,
-    UploadDoctorPhotoView,DoctorProfileView
+    UploadDoctorPhotoView,DoctorProfileView,
+    UploadRegistrationCertificateView,
+    UploadEducationCertificateView,UploadGovernmentIDView,
    )
 
 app_name='doctor'
@@ -57,6 +59,12 @@ urlpatterns = [
     path('dashboard/summary/', DoctorDashboardSummaryView.as_view(), name='doctor-dashboard-summary'),
     path('upload-photo/', UploadDoctorPhotoView.as_view(), name='upload-doctor-photo'),
     path('me/', DoctorProfileView.as_view(), name='doctor-profile'),
+
+    #KYC 
+    path('kyc/upload/registration/', UploadRegistrationCertificateView.as_view(), name='doctor-kyc-registration-upload'),
+    path('kyc/upload/education/', UploadEducationCertificateView.as_view(), name='doctor-kyc-education-upload'),
+    path('kyc/upload/govt-id/', UploadGovernmentIDView.as_view(), name='upload-govt-id'),
+
 ]
 #helpdesk uuid is user uuid used to approve the helpdesk user
 

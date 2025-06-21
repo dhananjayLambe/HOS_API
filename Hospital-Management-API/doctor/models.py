@@ -4,7 +4,9 @@ from account.models import User
 from clinic.models import Clinic
 from django.utils.timezone import now
 from django.core.validators import RegexValidator
-from doctor.utils.uploads import doctor_photo_upload_path
+from doctor.utils.uploads import(
+    doctor_photo_upload_path,doctor_kyc_upload_path,
+    doctor_education_upload_path,pan_card_upload_path,aadhar_card_upload_path)
 
 class doctor(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -53,13 +55,13 @@ class Registration(models.Model):
     doctor = models.OneToOneField(doctor, on_delete=models.CASCADE, related_name='registration')
     medical_registration_number = models.CharField(max_length=50, unique=True)
     medical_council = models.CharField(max_length=255, help_text="e.g., Medical Council of India")
-    registration_certificate = models.FileField(upload_to='doctor_registration_certificates/', null=True, blank=True)
+    registration_certificate = models.FileField(upload_to=doctor_kyc_upload_path, null=True, blank=True)
     registration_date = models.DateField(null=True, blank=True)
     valid_upto = models.DateField(null=True, blank=True, help_text="License expiry date if applicable")
     is_verified = models.BooleanField(default=False, help_text="Admin verified medical license?")
     verification_notes = models.TextField(blank=True, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)  # Mandatory  default=timezone.now
-    updated_at = models.DateTimeField(auto_now=True)  # Mandatory  default=timezone.now
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
     class Meta:
         verbose_name = "Medical Registration"
         verbose_name_plural = "Medical Registrations"
@@ -74,8 +76,10 @@ class GovernmentID(models.Model):
     doctor = models.OneToOneField(doctor, on_delete=models.CASCADE, related_name='government_ids')
     pan_card_number = models.CharField(max_length=10, unique=True ,
                                        validators=[RegexValidator(regex='^[A-Z]{5}[0-9]{4}[A-Z]$', message="Invalid PAN format.")])
+    pan_card_file = models.FileField(upload_to=pan_card_upload_path, null=True, blank=True)
     aadhar_card_number = models.CharField(max_length=12, unique=True,
                             validators=[RegexValidator(regex='^[0-9]{12}$', message="Invalid Aadhar number.")])
+    aadhar_card_file = models.FileField(upload_to=aadhar_card_upload_path, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)  # Mandatory  default=timezone.now
     updated_at = models.DateTimeField(auto_now=True)  # Mandatory  default=timezone.now
 
@@ -88,6 +92,7 @@ class Education(models.Model):
     qualification = models.CharField(max_length=255, help_text="e.g., MBBS, MD")
     institute = models.CharField(max_length=255, help_text="Name of the institution")
     year_of_completion = models.PositiveIntegerField()
+    certificate = models.FileField(upload_to=doctor_education_upload_path, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)  # Mandatory  default=timezone.now
     updated_at = models.DateTimeField(auto_now=True)  # Mandatory  default=timezone.now
 
