@@ -589,3 +589,48 @@ class DoctorApprovalSerializer(serializers.ModelSerializer):
     class Meta:
         model = doctor
         fields = ['is_approved']
+
+class DoctorProfilePhotoUploadSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = doctor
+        fields = ['photo']
+
+    def validate_photo(self, value):
+        if value is None:
+            raise serializers.ValidationError("No file was provided.")
+
+        if value.size > 2 * 1024 * 1024:
+            raise serializers.ValidationError("Image size must be less than 2MB.")
+
+        if not value.name.lower().endswith(('.jpg', '.jpeg', '.png')):
+            raise serializers.ValidationError("Only .jpg, .jpeg, and .png files are allowed.")
+
+        return value
+
+
+class DoctorProfileSerializer(serializers.ModelSerializer):
+    first_name = serializers.CharField(source='user.first_name')
+    last_name = serializers.CharField(source='user.last_name')
+    email = serializers.EmailField(source='user.email')
+    mobile = serializers.CharField(source='user.username')
+    photo_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = doctor
+        fields = [
+            'id',
+            'first_name',
+            'last_name',
+            'email',
+            'mobile',
+            'dob',
+            'about',
+            'years_of_experience',
+            'photo_url'
+        ]
+
+    def get_photo_url(self, obj):
+        request = self.context.get('request')
+        if obj.photo:
+            return request.build_absolute_uri(obj.photo.url)
+        return None

@@ -48,6 +48,7 @@ from doctor.api.serializers import (
     AwardSerializer,CertificationSerializer,
     DoctorDashboardSummarySerializer,
     RegistrationSerializer,
+    DoctorProfilePhotoUploadSerializer,DoctorProfileSerializer,
 )
 from consultations.models import Consultation, PatientFeedback
 from appointments.models import Appointment
@@ -971,3 +972,41 @@ class RegistrationViewSet(viewsets.ModelViewSet):
 
     def perform_destroy(self, instance):
         instance.delete()
+
+class UploadDoctorPhotoView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctor]
+
+    def patch(self, request):
+        doctor_instance = request.user.doctor
+        serializer = DoctorProfilePhotoUploadSerializer(
+            doctor_instance, data=request.data, partial=True
+        )
+        if serializer.is_valid():
+            serializer.save()
+            return Response({
+                "status": "success",
+                "message": "Profile photo updated successfully.",
+                "data": {
+                    "doctor_id": str(doctor_instance.id),
+                    "photo_url": request.build_absolute_uri(doctor_instance.photo.url)
+                }
+            }, status=status.HTTP_200_OK)
+        return Response({
+            "status": "error",
+            "message": "Failed to upload photo.",
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+class DoctorProfileView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctor]
+
+    def get(self, request):
+        doctor_instance = request.user.doctor
+        serializer = DoctorProfileSerializer(doctor_instance, context={'request': request})
+        return Response({
+            "status": "success",
+            "message": "Doctor profile fetched successfully.",
+            "data": serializer.data
+        }, status=status.HTTP_200_OK)

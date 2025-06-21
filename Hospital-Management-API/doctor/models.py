@@ -4,6 +4,7 @@ from account.models import User
 from clinic.models import Clinic
 from django.utils.timezone import now
 from django.core.validators import RegexValidator
+from doctor.utils.uploads import doctor_photo_upload_path
 
 class doctor(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -12,7 +13,7 @@ class doctor(models.Model):
     secondary_mobile_number = models.CharField(max_length=15, unique=True,default="NA")
     dob = models.DateField(verbose_name="Date of Birth", null=True, blank=True)
     about = models.TextField(blank=True, null=True, help_text="Short description displayed to patients")
-    photo = models.ImageField(upload_to="doctor_photos/", blank=True, null=True)
+    photo = models.ImageField(upload_to=doctor_photo_upload_path, blank=True, null=True)
     years_of_experience = models.PositiveIntegerField(default=1)
     is_approved = models.BooleanField(default=False)
     # Relationships
