@@ -27,7 +27,7 @@ from helpdesk.models import HelpdeskClinicUser
 from doctor.models import (
     doctor,DoctorAddress,Registration,GovernmentID,
     Education, Award, Certification, DoctorFeedback, DoctorService, DoctorSocialLink, Specialization,
-    CustomSpecialization
+    CustomSpecialization, KYCStatus
     )
 # Local module imports
 from doctor.api.serializers import (
@@ -49,7 +49,7 @@ from doctor.api.serializers import (
     DoctorDashboardSummarySerializer,
     RegistrationSerializer,EducationCertificateUploadSerializer,
     DoctorProfilePhotoUploadSerializer,DoctorProfileSerializer,RegistrationDocumentUploadSerializer,
-    GovernmentIDUploadSerializer,
+    GovernmentIDUploadSerializer,KYCStatusSerializer,KYCVerifySerializer,
 )
 from consultations.models import Consultation, PatientFeedback
 from appointments.models import Appointment
@@ -1102,3 +1102,50 @@ class UploadGovernmentIDView(APIView):
             "status": "error",
             "errors": serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
+
+class DoctorKYCStatusView(APIView):
+    permission_classes = [IsAuthenticated, IsDoctor]
+
+    def get(self, request):
+        user = request.user
+
+        try:
+            doc = user.doctor
+        except doctor.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "Doctor profile not found."
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = KYCStatusSerializer(doc)
+        return Response({
+            "status": "success",
+            "message": "KYC status fetched successfully.",
+            "data": serializer.data
+        }, status=status.HTTP_200_OK)
+
+
+class KYCVerifyView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def patch(self, request, doctor_id):
+        try:
+            doctor_obj = doctor.objects.get(id=doctor_id)
+            kyc_status, _ = KYCStatus.objects.get_or_create(doctor=doctor_obj)
+        except doctor.DoesNotExist:
+            return Response({"error": "Doctor not found."}, status=404)
+
+        serializer = KYCVerifySerializer(instance=kyc_status, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({
+                "status": "success",
+                "message": "KYC verification updated successfully.",
+                "data": KYCVerifySerializer(instance=kyc_status).data
+            })
+        return Response({
+            "status": "error",
+            "message": "Validation failed",
+            "errors": serializer.errors
+        }, status=400)

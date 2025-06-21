@@ -18,9 +18,11 @@ class doctor(models.Model):
     photo = models.ImageField(upload_to=doctor_photo_upload_path, blank=True, null=True)
     years_of_experience = models.PositiveIntegerField(default=1)
     is_approved = models.BooleanField(default=False)
+    kyc_completed = models.BooleanField(default=False)
+    kyc_verified = models.BooleanField(default=False)
     # Relationships
     clinics = models.ManyToManyField(Clinic, related_name='doctors')
-    created_at = models.DateTimeField(auto_now_add=True)  # Mandatory  default=timezone.now
+    created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)  # Mandatory  default=timezone.now
     @property
     def get_name(self):
@@ -80,9 +82,8 @@ class GovernmentID(models.Model):
     aadhar_card_number = models.CharField(max_length=12, unique=True,
                             validators=[RegexValidator(regex='^[0-9]{12}$', message="Invalid Aadhar number.")])
     aadhar_card_file = models.FileField(upload_to=aadhar_card_upload_path, null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)  # Mandatory  default=timezone.now
-    updated_at = models.DateTimeField(auto_now=True)  # Mandatory  default=timezone.now
-
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
     def __str__(self):
         return f"PAN: {self.pan_card_number}, Aadhar: {self.aadhar_card_number}"
 
@@ -247,3 +248,26 @@ class DoctorSocialLink(models.Model):
 
     def __str__(self):
         return f"{self.platform} - {self.url}"
+
+
+class KYCStatus(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    doctor = models.OneToOneField("doctor.doctor", on_delete=models.CASCADE, related_name="kyc_status")
+    registration_status = models.CharField(max_length=10, choices=[("pending", "Pending"), ("approved", "Approved"), ("rejected", "Rejected")], default="pending")
+    registration_reason = models.TextField(null=True, blank=True)
+
+    education_status = models.CharField(max_length=10, choices=[("pending", "Pending"), ("approved", "Approved"), ("rejected", "Rejected")], default="pending")
+    education_reason = models.TextField(null=True, blank=True)
+
+    photo_status = models.CharField(max_length=10, choices=[("pending", "Pending"), ("approved", "Approved"), ("rejected", "Rejected")], default="pending")
+    photo_reason = models.TextField(null=True, blank=True)
+
+    aadhar_status = models.CharField(max_length=10, choices=[("pending", "Pending"), ("approved", "Approved"), ("rejected", "Rejected")], default="pending")
+    aadhar_reason = models.TextField(null=True, blank=True)
+
+    pan_status = models.CharField(max_length=10, choices=[("pending", "Pending"), ("approved", "Approved"), ("rejected", "Rejected")], default="pending")
+    pan_reason = models.TextField(null=True, blank=True)
+
+    kya_verified = models.BooleanField(default=False)
+    verified_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)

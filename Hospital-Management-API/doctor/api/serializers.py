@@ -17,11 +17,12 @@ from doctor.models import (
     Registration,
     Specialization,
     CustomSpecialization,
-    doctor,
+    doctor,KYCStatus,
 )
 from hospital_mgmt.models import Hospital
 from helpdesk.models import HelpdeskClinicUser
 from account.models import User
+from django.utils import timezone
 
 class UserSerializer(serializers.ModelSerializer):
     password2 = serializers.CharField(write_only=True)
@@ -722,3 +723,95 @@ class GovernmentIDUploadSerializer(serializers.ModelSerializer):
             instance.aadhar_card_file.delete(save=False)
 
         return super().update(instance, validated_data)
+
+class KYCStatusSerializer(serializers.ModelSerializer):
+    kyc_status = serializers.SerializerMethodField()
+    sections = serializers.SerializerMethodField()
+
+    class Meta:
+        model = doctor
+        fields = ['id', 'kyc_completed', 'kyc_verified', 'kyc_status', 'sections']
+
+    def get_kyc_status(self, obj):
+        if not obj.kyc_completed:
+            return "Incomplete"
+        if not obj.kyc_verified:
+            return "Pending Verification"
+        return "Verified"
+
+    def get_sections(self, obj):
+        reg_cert_uploaded = hasattr(obj, 'registration') and bool(obj.registration.registration_certificate)
+        reg_verified = hasattr(obj, 'registration') and obj.registration.is_verified
+        gov_id = getattr(obj, 'government_ids', None)
+
+        return {
+            "photo_uploaded": bool(obj.photo),
+            "registration_verified": reg_verified,
+            "registration_certificate_uploaded": reg_cert_uploaded,
+            "pan_uploaded": bool(gov_id and gov_id.pan_card_file),
+            "aadhar_uploaded": bool(gov_id and gov_id.aadhar_card_file),
+            "education_uploaded": obj.education.exists()
+        }
+
+class KYCVerifySerializer(serializers.ModelSerializer):
+    registration_status = serializers.ChoiceField(
+        choices=[("pending", "Pending"), ("approved", "Approved"), ("rejected", "Rejected")]
+    )
+    education_status = serializers.ChoiceField(
+        choices=[("pending", "Pending"), ("approved", "Approved"), ("rejected", "Rejected")]
+    )
+    pan_status = serializers.ChoiceField(
+        choices=[("pending", "Pending"), ("approved", "Approved"), ("rejected", "Rejected")]
+    )
+    aadhar_status = serializers.ChoiceField(
+        choices=[("pending", "Pending"), ("approved", "Approved"), ("rejected", "Rejected")]
+    )
+    photo_status = serializers.ChoiceField(
+        choices=[("pending", "Pending"), ("approved", "Approved"), ("rejected", "Rejected")]
+    )
+
+    rejection_reasons = serializers.DictField(
+        child=serializers.CharField(allow_blank=True, required=False),
+        required=False
+    )
+
+    class Meta:
+        model = KYCStatus
+        fields = [
+            "registration_status",
+            "education_status",
+            "pan_status",
+            "aadhar_status",
+            "photo_status",
+            "rejection_reasons",
+        ]
+
+    def update(self, instance, validated_data):
+        # Set statuses
+        for field in [
+            "registration_status", "education_status", "pan_status",
+            "aadhar_status", "photo_status"
+        ]:
+            setattr(instance, field, validated_data.get(field, getattr(instance, field)))
+
+        # Set rejection reasons if any
+        reasons = validated_data.get("rejection_reasons", {})
+        for key, reason in reasons.items():
+            field_name = f"{key}_reason"
+            if hasattr(instance, field_name):
+                setattr(instance, field_name, reason)
+
+        # Determine overall verification
+        if all(
+            getattr(instance, f) == "approved"
+            for f in [
+                "registration_status", "education_status", "pan_status",
+                "aadhar_status", "photo_status"
+            ]
+        ):
+            instance.kya_verified = True
+        else:
+            instance.kya_verified = False
+
+        instance.save()
+        return instance

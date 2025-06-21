@@ -14,6 +14,8 @@ class HelpdeskClinicUser(models.Model):
 
     def __str__(self):
         return f"{self.user.first_name} - {self.clinic.name}"
+    class Meta:
+        ordering = ['-created_at']
 
 #is_active we are not using now
 class HelpdeskActivityLog(models.Model):

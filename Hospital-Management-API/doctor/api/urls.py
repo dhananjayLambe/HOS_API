@@ -12,7 +12,8 @@ from doctor.api.views import (
     DoctorDashboardSummaryView,RegistrationViewSet,
     UploadDoctorPhotoView,DoctorProfileView,
     UploadRegistrationCertificateView,
-    UploadEducationCertificateView,UploadGovernmentIDView,
+    UploadEducationCertificateView,UploadGovernmentIDView,DoctorKYCStatusView,
+    KYCVerifyView,
    )
 
 app_name='doctor'
@@ -64,6 +65,8 @@ urlpatterns = [
     path('kyc/upload/registration/', UploadRegistrationCertificateView.as_view(), name='doctor-kyc-registration-upload'),
     path('kyc/upload/education/', UploadEducationCertificateView.as_view(), name='doctor-kyc-education-upload'),
     path('kyc/upload/govt-id/', UploadGovernmentIDView.as_view(), name='upload-govt-id'),
+    path('kyc/status/', DoctorKYCStatusView.as_view(), name='doctor-kyc-status'),
+    path("kyc/admin-verify/<uuid:doctor_id>/", KYCVerifyView.as_view(), name="kyc-admin-verify"),
 
 ]
 #helpdesk uuid is user uuid used to approve the helpdesk user
