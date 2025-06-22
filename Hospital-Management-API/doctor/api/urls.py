@@ -14,7 +14,8 @@ from doctor.api.views import (
     UploadRegistrationCertificateView,
     UploadEducationCertificateView,UploadGovernmentIDView,DoctorKYCStatusView,
     KYCVerifyView,
-   )
+    DoctorSearchView,
+)
 
 app_name='doctor'
 router = DefaultRouter()
@@ -68,6 +69,7 @@ urlpatterns = [
     path('kyc/status/', DoctorKYCStatusView.as_view(), name='doctor-kyc-status'),
     path("kyc/admin-verify/<uuid:doctor_id>/", KYCVerifyView.as_view(), name="kyc-admin-verify"),
 
+    path("search-doctors/", DoctorSearchView.as_view(), name="search-doctors"),
 ]
 #helpdesk uuid is user uuid used to approve the helpdesk user
 

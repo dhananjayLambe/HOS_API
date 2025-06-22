@@ -27,10 +27,10 @@ PatientProfileSearchSerializer)
 from patient_account.models import PatientProfile,PatientProfileDetails
 from account.permissions import IsDoctorOrHelpdesk
 from patient_account.tasks import invalidate_patient_search_cache
-CACHE_TIMEOUT = 300  # 5 minutes
 from django.core.cache import cache
 from django.db.models import Q
 from rest_framework.generics import ListAPIView
+
 #Determines if the user is new or existing.
 class CheckUserStatusView(APIView):
     permission_classes = [AllowAny]

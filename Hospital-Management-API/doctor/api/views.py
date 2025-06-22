@@ -1,65 +1,62 @@
 # Standard library imports
 import logging
+
+# Django imports
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import Group
+from django.core.cache import cache
 from django.core.exceptions import PermissionDenied
+from django.db import transaction
+from django.db.models import (
+    Q, F, Avg, Sum, Value, FloatField, ExpressionWrapper
+)
+from django.db.models.functions import (
+    Coalesce, Radians, Sin, Cos, ACos, Concat
+)
 from django.shortcuts import get_object_or_404
-from django_ratelimit.decorators import ratelimit
+from django.utils.timezone import now
+
 # Third-party imports
-from rest_framework import generics, status, viewsets,permissions
+from rest_framework import generics, status, viewsets, permissions
+from rest_framework.exceptions import NotFound
+from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenRefreshView
-from rest_framework.decorators import action
-from rest_framework.exceptions import ValidationError, NotFound
-from rest_framework.permissions import IsAuthenticated
-from django.db import transaction
-from rest_framework.parsers import MultiPartParser, FormParser
 
 # Local application imports
 from account.models import User
-from account.permissions import IsDoctor
+from account.permissions import IsAdminUser, IsDoctor
 from helpdesk.models import HelpdeskClinicUser
-
 from doctor.models import (
-    doctor,DoctorAddress,Registration,GovernmentID,
-    Education, Award, Certification, DoctorFeedback, DoctorService, DoctorSocialLink, Specialization,
-    CustomSpecialization, KYCStatus
-    )
-# Local module imports
+    doctor, DoctorAddress, Registration, GovernmentID, Education,
+    Award, Certification, DoctorFeedback, DoctorService,
+    DoctorSocialLink, Specialization, CustomSpecialization, KYCStatus
+)
 from doctor.api.serializers import (
-    DoctorRegistrationSerializer,
-    DoctorProfileUpdateSerializer,
-    DoctorSerializer,
-    HelpdeskApprovalSerializer,
-    PendingHelpdeskUserSerializer,
-    ProfileSerializer,
-    UserSerializer,
-    DoctorAddressSerializer,
-    RegistrationSerializer,
-    GovernmentIDSerializer,
-    EducationSerializer,
-    CustomSpecializationSerializer,
-    SpecializationSerializer,
-    DoctorServiceSerializer,
-    AwardSerializer,CertificationSerializer,
-    DoctorDashboardSummarySerializer,
-    RegistrationSerializer,EducationCertificateUploadSerializer,
-    DoctorProfilePhotoUploadSerializer,DoctorProfileSerializer,RegistrationDocumentUploadSerializer,
-    GovernmentIDUploadSerializer,KYCStatusSerializer,KYCVerifySerializer,
+    DoctorRegistrationSerializer, DoctorProfileUpdateSerializer, DoctorSerializer,
+    HelpdeskApprovalSerializer, PendingHelpdeskUserSerializer, ProfileSerializer,
+    UserSerializer, DoctorAddressSerializer, RegistrationSerializer,
+    GovernmentIDSerializer, EducationSerializer, CustomSpecializationSerializer,
+    SpecializationSerializer, DoctorServiceSerializer, AwardSerializer,
+    CertificationSerializer, DoctorDashboardSummarySerializer,
+    EducationCertificateUploadSerializer, DoctorProfilePhotoUploadSerializer,
+    DoctorProfileSerializer, RegistrationDocumentUploadSerializer,
+    GovernmentIDUploadSerializer, KYCStatusSerializer, KYCVerifySerializer,
+    DoctorSearchSerializer
 )
 from consultations.models import Consultation, PatientFeedback
 from appointments.models import Appointment
 from prescriptions.models import Prescription
-from account.permissions import IsDoctor
-from django.utils.timezone import now
-from django.db.models import Avg, Sum, Count, Q
-from django.db import transaction
+
+# Constants
+CACHE_TIMEOUT = 300  # 5 minutes
+
+# Logger
 logger = logging.getLogger(__name__)
-from account.permissions import IsAdminUser, IsDoctor
 
 class DoctorLoginView(APIView):
     """Custom JWT login for doctors only"""
@@ -1149,3 +1146,84 @@ class KYCVerifyView(APIView):
             "message": "Validation failed",
             "errors": serializer.errors
         }, status=400)
+
+class DoctorSearchView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        query = request.query_params.get("query", "").strip().lower()
+        experience_min = request.query_params.get("min_experience")
+        experience_max = request.query_params.get("max_experience")
+        cost_min = request.query_params.get("min_cost")
+        cost_max = request.query_params.get("max_cost")
+        distance_limit = request.query_params.get("distance")  # in KM
+        ordering = request.query_params.get("ordering")  # cost_asc, cost_desc, experience_asc, experience_desc, distance
+
+        # Static user location (in real case, get from frontend or user profile)
+        user_lat = 17.6840
+        user_lon = 74.0080
+
+        cache_key = f"doctor_search:{query}:{experience_min}:{experience_max}:{cost_min}:{cost_max}:{distance_limit}:{ordering}"
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            return Response({"status": "success", "data": cached_data}, status=status.HTTP_200_OK)
+
+        queryset = doctor.objects.select_related("user", "address").prefetch_related("clinics", "specializations", "services")
+
+        if query:
+            queryset = queryset.annotate(
+                full_name=Concat(F("user__first_name"), Value(" "), F("user__last_name"))
+            ).filter(
+                Q(user__first_name__icontains=query) |
+                Q(user__last_name__icontains=query) |
+                Q(full_name__icontains=query) |
+                Q(about__icontains=query) |
+                Q(clinics__name__icontains=query) |
+                Q(specializations__specialization__icontains=query) |
+                Q(specializations__custom_specialization__name__icontains=query)
+            ).distinct()
+
+        # Experience filters
+        if experience_min:
+            queryset = queryset.filter(years_of_experience__gte=experience_min)
+        if experience_max:
+            queryset = queryset.filter(years_of_experience__lte=experience_max)
+
+        # Cost (average service fee)
+        queryset = queryset.annotate(
+            avg_fee=Coalesce(Avg("services__fee"), 0.0, output_field=FloatField())
+        )
+        if cost_min:
+            queryset = queryset.filter(avg_fee__gte=cost_min)
+        if cost_max:
+            queryset = queryset.filter(avg_fee__lte=cost_max)
+
+        # Distance (Haversine)
+        queryset = queryset.annotate(
+            distance=ExpressionWrapper(
+                6371 * ACos(
+                    Cos(Radians(Value(user_lat))) * Cos(Radians(F("address__latitude"))) *
+                    Cos(Radians(F("address__longitude")) - Radians(Value(user_lon))) +
+                    Sin(Radians(Value(user_lat))) * Sin(Radians(F("address__latitude")))
+                ),
+                output_field=FloatField()
+            )
+        )
+        if distance_limit:
+            queryset = queryset.filter(distance__lte=float(distance_limit))
+
+        # Sorting
+        if ordering == "cost_asc":
+            queryset = queryset.order_by("avg_fee")
+        elif ordering == "cost_desc":
+            queryset = queryset.order_by("-avg_fee")
+        elif ordering == "experience_asc":
+            queryset = queryset.order_by("years_of_experience")
+        elif ordering == "experience_desc":
+            queryset = queryset.order_by("-years_of_experience")
+        elif ordering == "distance":
+            queryset = queryset.order_by("distance")
+
+        serializer = DoctorSearchSerializer(queryset, many=True, context={"request": request})
+        cache.set(cache_key, serializer.data, timeout=300)
+        return Response({"status": "success", "data": serializer.data}, status=status.HTTP_200_OK)

@@ -815,3 +815,36 @@ class KYCVerifySerializer(serializers.ModelSerializer):
 
         instance.save()
         return instance
+
+
+class DoctorSearchSerializer(serializers.ModelSerializer):
+    full_name = serializers.SerializerMethodField()
+    specializations = serializers.SerializerMethodField()
+    photo_url = serializers.SerializerMethodField()
+    clinics = serializers.SerializerMethodField()
+    avg_fee = serializers.SerializerMethodField()
+
+    class Meta:
+        model = doctor
+        fields = ["id", "full_name", "specializations", "photo_url", "years_of_experience", "clinics", "avg_fee"]
+
+    def get_full_name(self, obj):
+        return f"{obj.user.first_name} {obj.user.last_name}"
+
+    def get_specializations(self, obj):
+        return [s.get_specialization_display() for s in obj.specializations.all() if s.specialization]
+
+    def get_photo_url(self, obj):
+        request = self.context.get("request")
+        if obj.photo and hasattr(obj.photo, "url"):
+            return request.build_absolute_uri(obj.photo.url)
+        return None
+
+    def get_clinics(self, obj):
+        return [clinic.name for clinic in obj.clinics.all()]
+
+    def get_avg_fee(self, obj):
+        fees = obj.services.values_list("fee", flat=True)
+        if fees:
+            return round(sum(fees) / len(fees), 2)
+        return 0.0
