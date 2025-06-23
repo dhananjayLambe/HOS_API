@@ -1,132 +1,114 @@
 from rest_framework import serializers
-from datetime import date, timedelta
 from appointments.models import (
-    DoctorAvailability,Appointment,DoctorLeave,
-    DoctorFeeStructure,FollowUpPolicy
+    Appointment,
     )
+from django.utils.timezone import now, localdate
+from django.utils import timezone
+from doctor.models import DoctorLeave, DoctorFeeStructure
 
-
-class DoctorAvailabilitySerializer(serializers.ModelSerializer):
-    slots = serializers.SerializerMethodField()
-
-    class Meta:
-        model = DoctorAvailability
-        fields = "__all__"
-
-    def get_slots(self, obj):
-        return obj.get_all_slots()
 
 class AppointmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Appointment
         fields = '__all__'  # Includes all fields
 
-# class AppointmentCreateSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = Appointment
-#         #fields = ['patient_account', 'patient_profile', 'doctor', 'clinic', 'appointment_date', 'appointment_time', 'payment_mode']
-#         fields = '__all__'  # Includes all fields
-
-#     def validate(self, data):
-#         """ Validate if the appointment slot is available """
-#         doctor = data['doctor']
-#         clinic = data['clinic']
-#         appointment_date = data['appointment_date']
-#         appointment_time = data['appointment_time']
-
-#         # Ensure consultation_mode is provided (Clinic Visit or Video Consultation)
-#         if 'consultation_mode' not in data:
-#             raise serializers.ValidationError({"consultation_mode": "Consultation mode is required."})
-
-#         # Ensure booking_source is provided (Online or Walk-in)
-#         if 'booking_source' not in data:
-#             raise serializers.ValidationError({"booking_source": "Booking source is required."})
-
-
-#         # Check if doctor is associated with the clinic
-#         if clinic not in doctor.clinics.all():
-#             raise serializers.ValidationError("Doctor is not associated with the selected clinic.")
-
-#         # Check if doctor is on leave NEED TO Correct it
-#         # if doctor.doctoravailability.filter(date=appointment_date, is_leave=True).exists():
-#         #     raise serializers.ValidationError("Doctor is on leave on the selected date.")
-
-#         if Appointment.objects.filter(
-#             doctor=doctor, clinic=clinic, appointment_date=appointment_date, appointment_time=appointment_time, status='scheduled'
-#         ).exists():
-#             raise serializers.ValidationError("Selected time slot is already booked.")
-
-#         return data
-
 class AppointmentCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Appointment
-        fields = '__all__'  
+        fields = '__all__'
 
     def validate(self, data):
-        """ Validate appointment slot availability """
         doctor = data['doctor']
         clinic = data['clinic']
+        patient_profile = data['patient_profile']
         appointment_date = data['appointment_date']
         appointment_time = data['appointment_time']
-        patient_profile = data['patient_profile']
+        consultation_mode = data.get('consultation_mode')
+        booking_source = data.get('booking_source')
 
-        # Ensure consultation_mode is provided
-        if 'consultation_mode' not in data:
+        today = timezone.localdate()
+        now_time = timezone.localtime().time()
+
+        # ✅ 1. Required fields
+        if not consultation_mode:
             raise serializers.ValidationError({"consultation_mode": "Consultation mode is required."})
-
-        # Ensure booking_source is provided
-        if 'booking_source' not in data:
+        if not booking_source:
             raise serializers.ValidationError({"booking_source": "Booking source is required."})
 
-        # Check if doctor is associated with the clinic
+        # ✅ 2. Doctor-clinic association check
         if clinic not in doctor.clinics.all():
             raise serializers.ValidationError("Doctor is not associated with the selected clinic.")
 
-        # Check if slot is available
+        # ✅ 3. Prevent booking in the past
+        if appointment_date < today:
+            raise serializers.ValidationError("Appointment date cannot be in the past.")
+        if appointment_date == today and appointment_time < now_time:
+            raise serializers.ValidationError("Appointment time cannot be in the past.")
+
+        # ✅ 4. Doctor on leave check
+        leave_exists = DoctorLeave.objects.filter(
+            doctor=doctor,
+            clinic=clinic,
+            start_date__lte=appointment_date,
+            end_date__gte=appointment_date,
+        ).exists()
+        if leave_exists:
+            raise serializers.ValidationError("Doctor is on leave for the selected date.")
+
+        # ✅ 5. Prevent double booking (same time slot)
         if Appointment.objects.filter(
-            doctor=doctor, clinic=clinic,
+            doctor=doctor,
+            clinic=clinic,
             appointment_date=appointment_date,
             appointment_time=appointment_time,
             status='scheduled'
         ).exists():
             raise serializers.ValidationError("Selected time slot is already booked.")
 
+        # ✅ 6. Prevent multiple appointments same day with same time if previous is not cancelled/no_show
+        conflict = Appointment.objects.filter(
+            doctor=doctor,
+            clinic=clinic,
+            patient_profile=patient_profile,
+            appointment_date=appointment_date,
+            appointment_time=appointment_time,
+        ).exclude(status__in=['cancelled', 'no_show']).exists()
+        if conflict:
+            raise serializers.ValidationError("You already have an appointment with this doctor at this time.")
+
         return data
 
     def create(self, validated_data):
-        """ Assign consultation fee and determine if it's a follow-up appointment """
-        doctor = validated_data.get("doctor")
-        clinic = validated_data.get("clinic")
-        patient_profile = validated_data.get("patient_profile")
-        appointment_date = validated_data.get("appointment_date")
+        doctor = validated_data["doctor"]
+        clinic = validated_data["clinic"]
+        patient_profile = validated_data["patient_profile"]
+        appointment_date = validated_data["appointment_date"]
 
-        # Fetch doctor's fee structure
+        # ✅ 7. Fee structure required
         fee_structure = DoctorFeeStructure.objects.filter(
             doctor=doctor, clinic=clinic
         ).first()
-
         if not fee_structure:
             raise serializers.ValidationError("Doctor fee structure is missing.")
 
-        # Check for the last appointment
+        # ✅ 8. Determine if this is a follow-up
         last_appointment = Appointment.objects.filter(
-            patient_profile=patient_profile, doctor=doctor, clinic=clinic
-        ).order_by("-appointment_date").first()
+            patient_profile=patient_profile,
+            doctor=doctor,
+            clinic=clinic,
+            status='completed'
+        ).order_by('-appointment_date').first()
 
-        # Default values
-        consultation_fee = fee_structure.first_time_consultation_fee
         appointment_type = "new"
+        consultation_fee = fee_structure.first_time_consultation_fee
 
         if last_appointment:
-            case_paper_validity = fee_structure.case_paper_duration
-            days_since_last_visit = (appointment_date - last_appointment.appointment_date).days
-
-            if days_since_last_visit <= case_paper_validity:
+            delta_days = (appointment_date - last_appointment.appointment_date).days
+            if delta_days <= fee_structure.case_paper_duration:
                 appointment_type = "follow_up"
                 consultation_fee = fee_structure.follow_up_fee
 
-        # Assign calculated fields
+        # ✅ 9. Assign to validated_data
         validated_data["appointment_type"] = appointment_type
         validated_data["consultation_fee"] = consultation_fee
 
@@ -195,7 +177,6 @@ class DoctorAppointmentFilterSerializer(serializers.Serializer):
     page = serializers.IntegerField(min_value=1, required=False, default=1)
     page_size = serializers.IntegerField(min_value=1, max_value=50, required=False, default=10)
 
-
 class PatientAppointmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Appointment
@@ -215,48 +196,3 @@ class PatientAppointmentFilterSerializer(serializers.Serializer):
     page = serializers.IntegerField(required=False, default=1)
     page_size = serializers.IntegerField(required=False, default=10)
 
-# class DoctorLeaveSerializer(serializers.ModelSerializer):
-#     doctor_id = serializers.UUIDField(write_only=True)
-    
-#     class Meta:
-#         model = DoctorLeave
-#         fields = ['id', 'doctor_id', 'clinic', 'start_date', 'end_date', 'reason']
-
-#     def validate(self, data):
-#         """Ensure start_date is before end_date and prevent overlapping leaves"""
-#         doctor = self.context["doctor"]
-#         start_date = data["start_date"]
-#         end_date = data["end_date"]
-
-#         if start_date > end_date:
-#             raise serializers.ValidationError("Start date cannot be after end date")
-
-#         # Prevent overlapping leave entries
-#         overlapping_leaves = DoctorLeave.objects.filter(
-#             doctor=doctor,
-#             start_date__lte=end_date,
-#             end_date__gte=start_date
-#         ).exists()
-
-#         if overlapping_leaves:
-#             raise serializers.ValidationError("Doctor already has leave scheduled for these dates.")
-
-#         return data
-
-
-class DoctorLeaveSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = DoctorLeave
-        fields = ["id", "doctor", "clinic", "start_date", "end_date", "reason"]
-
-class DoctorFeeStructureSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = DoctorFeeStructure
-        fields = '__all__'
-        read_only_fields = ['id', 'created_at', 'updated_at']
-
-class FollowUpPolicySerializer(serializers.ModelSerializer):
-    class Meta:
-        model = FollowUpPolicy
-        fields = '__all__'
-        read_only_fields = ['id', 'created_at', 'updated_at']

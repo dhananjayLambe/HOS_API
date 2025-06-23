@@ -3,7 +3,11 @@ from django.db import models
 from account.models import User
 from clinic.models import Clinic
 from django.utils.timezone import now
+from django.utils import timezone
+from datetime import datetime
+from django.core.exceptions import ValidationError
 from django.core.validators import RegexValidator
+from datetime import datetime, timedelta
 from doctor.utils.uploads import(
     doctor_photo_upload_path,doctor_kyc_upload_path,
     doctor_education_upload_path,pan_card_upload_path,aadhar_card_upload_path)
@@ -276,3 +280,171 @@ class KYCStatus(models.Model):
     kya_verified = models.BooleanField(default=False)
     verified_at = models.DateTimeField(null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+class DoctorFeeStructure(models.Model):
+    """ Stores doctor fees and case paper rules per clinic """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    doctor = models.ForeignKey(doctor, on_delete=models.CASCADE)
+    clinic = models.ForeignKey(Clinic, on_delete=models.CASCADE)
+
+    first_time_consultation_fee = models.DecimalField(max_digits=10, decimal_places=2)
+    follow_up_fee = models.DecimalField(max_digits=10, decimal_places=2)
+    case_paper_duration = models.PositiveIntegerField(help_text="Case paper validity in days")
+    case_paper_renewal_fee = models.DecimalField(max_digits=10, decimal_places=2)
+
+    # Additional Fees
+    emergency_consultation_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    online_consultation_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    cancellation_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    rescheduling_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    class Meta:
+        unique_together = ('doctor', 'clinic')  # Ensures one fee structure per doctor per clinic
+
+    def __str__(self):
+        return f"Fees for {self.doctor.get_name} at {self.clinic.name}"
+
+
+class FollowUpPolicy(models.Model):
+    """ Defines follow-up rules and history access for doctors """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    doctor = models.ForeignKey(doctor, on_delete=models.CASCADE)
+    clinic = models.ForeignKey(Clinic, on_delete=models.CASCADE)
+
+    follow_up_duration = models.PositiveIntegerField(help_text="Follow-up validity in days (e.g., 7, 15, 30)")
+    follow_up_fee = models.DecimalField(max_digits=10, decimal_places=2)
+    max_follow_up_visits = models.PositiveIntegerField(default=1, help_text="Maximum follow-ups allowed in duration")
+
+    allow_online_follow_up = models.BooleanField(default=True, help_text="Can follow-up be done online?")
+    online_follow_up_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+
+    # Patient History Access
+    access_past_appointments = models.BooleanField(default=True, help_text="Can doctor view past visits?")
+    access_past_prescriptions = models.BooleanField(default=True, help_text="Can doctor view old prescriptions?")
+    access_past_reports = models.BooleanField(default=True, help_text="Can doctor view test reports?")
+    access_other_clinic_history = models.BooleanField(default=False, help_text="Can doctor see history from other clinics?")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    class Meta:
+        unique_together = ('doctor', 'clinic')  # Ensures follow-up policy is unique per doctor per clinic
+
+    def __str__(self):
+        return f"Follow-up policy for {self.doctor.get_name} at {self.clinic.name}"
+
+class DoctorAvailability(models.Model):
+    """ Stores OPD shifts with per-day working schedules """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    doctor = models.ForeignKey(doctor, on_delete=models.CASCADE)
+    clinic = models.ForeignKey(Clinic, on_delete=models.CASCADE)
+
+    # Working Days and Timing Slots (Stored as JSON)
+    availability = models.JSONField(default=list, help_text="Stores day-wise availability")
+
+    # Appointment Scheduling Rules
+    slot_duration = models.PositiveIntegerField(default=10, help_text="Duration per patient (minutes)")
+    buffer_time = models.PositiveIntegerField(default=5, help_text="Gap between appointments (minutes)")
+    max_appointments_per_day = models.PositiveIntegerField(default=20, help_text="Daily limit")
+
+    # Emergency Slots
+    emergency_slots = models.PositiveIntegerField(default=2, help_text="Reserved emergency slots")
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('doctor', 'clinic')  # Ensures one availability per doctor per clinic
+
+    def __str__(self):
+        return f"Availability for {self.doctor.full_name} at {self.clinic.name}"
+
+    def generate_slots(self, start_time, end_time):
+        """ Generate time slots for a given start and end time """
+        if not start_time or not end_time:
+            return []
+
+        slots = []
+        current_time = datetime.combine(datetime.today(), datetime.strptime(start_time, "%H:%M:%S").time())
+        end_time = datetime.combine(datetime.today(), datetime.strptime(end_time, "%H:%M:%S").time())
+
+        while current_time < end_time:
+            slot_start = current_time.time()
+            current_time += timedelta(minutes=self.slot_duration + self.buffer_time)
+            slot_end = current_time.time()
+
+            if current_time <= end_time:
+                slots.append({"start_time": slot_start.strftime("%H:%M:%S"), "end_time": slot_end.strftime("%H:%M:%S")})
+        
+        return slots
+
+    def get_all_slots(self):
+        """ Get all available slots for each working day """
+        all_slots = {}
+        for day_data in self.availability:
+            day = day_data["day"]
+            slots = {
+                "morning": self.generate_slots(day_data.get("morning_start"), day_data.get("morning_end")),
+                "evening": self.generate_slots(day_data.get("evening_start"), day_data.get("evening_end")),
+                "night": self.generate_slots(day_data.get("night_start"), day_data.get("night_end"))
+            }
+            all_slots[day] = slots
+        return all_slots
+
+
+class DoctorLeave(models.Model):
+    """ Stores doctor leave records for specific date ranges """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    doctor = models.ForeignKey(doctor, on_delete=models.CASCADE, related_name="leaves")
+    clinic = models.ForeignKey(Clinic, on_delete=models.CASCADE, related_name="clinic_leaves")
+    
+    start_date = models.DateField(help_text="Start date of the leave")
+    end_date = models.DateField(help_text="End date of the leave")
+    half_day = models.BooleanField(default=False, help_text="Is it a half-day leave?")
+    leave_type = models.CharField(
+        max_length=20,
+        choices=[
+            ("sick", "Sick Leave"),
+            ("vacation", "Vacation"),
+            ("emergency", "Emergency"),
+            ("other", "Other"),
+        ],
+        default="other",
+    )
+    reason = models.TextField(blank=True, null=True, help_text="Optional reason for leave")
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('doctor', 'clinic', 'start_date', 'end_date')  # Prevent duplicate entries
+        ordering = ["-start_date"]
+    def __str__(self):
+        return f"Leave from {self.start_date} to {self.end_date} for {self.doctor.get_name} at {self.clinic.name}"
+
+    def clean(self):
+        """ Ensure start_date is before or same as end_date """
+        if self.start_date > self.end_date:
+            raise ValidationError("Start date cannot be after end date")
+
+
+class DoctorOPDStatus(models.Model):
+    """ Tracks if a doctor is available in OPD (Live Status) """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
+    doctor = models.OneToOneField(doctor, on_delete=models.CASCADE, related_name='opd_status')
+    clinic = models.ForeignKey(Clinic, on_delete=models.CASCADE, related_name='opd_status')
+    
+    is_available = models.BooleanField(default=False, help_text="True if doctor is in OPD, False if away")
+    
+    check_in_time = models.DateTimeField(null=True, blank=True, help_text="When doctor starts OPD")
+    check_out_time = models.DateTimeField(null=True, blank=True, help_text="When doctor leaves OPD")
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    class Meta:
+        unique_together = ('doctor', 'clinic')  # Ensures one fee structure per doctor per clinic
+
+    def __str__(self):
+        status = "Available" if self.is_available else "Away"
+        return f"Dr. {self.doctor.get_name} - {status}"

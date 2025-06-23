@@ -6,23 +6,14 @@ from rest_framework import serializers
 from account.models import User
 from clinic.models import Clinic
 from doctor.models import (
-    Award,
-    DoctorAddress,
-    Certification,
-    DoctorFeedback,
-    DoctorService,
-    DoctorSocialLink,
-    Education,
-    GovernmentID,
-    Registration,
-    Specialization,
-    CustomSpecialization,
-    doctor,KYCStatus,
+    Award,DoctorAddress,Certification, DoctorFeedback,
+    DoctorService,DoctorSocialLink, Education, GovernmentID,
+    Registration, Specialization, CustomSpecialization,
+    doctor,KYCStatus,DoctorFeeStructure,FollowUpPolicy,DoctorAvailability,DoctorLeave,
 )
 from hospital_mgmt.models import Hospital
 from helpdesk.models import HelpdeskClinicUser
 from account.models import User
-from django.utils import timezone
 
 class UserSerializer(serializers.ModelSerializer):
     password2 = serializers.CharField(write_only=True)
@@ -848,3 +839,33 @@ class DoctorSearchSerializer(serializers.ModelSerializer):
         if fees:
             return round(sum(fees) / len(fees), 2)
         return 0.0
+
+
+class DoctorFeeStructureSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DoctorFeeStructure
+        fields = '__all__'
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+class FollowUpPolicySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FollowUpPolicy
+        fields = '__all__'
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+
+class DoctorAvailabilitySerializer(serializers.ModelSerializer):
+    slots = serializers.SerializerMethodField()
+
+    class Meta:
+        model = DoctorAvailability
+        fields = "__all__"
+
+    def get_slots(self, obj):
+        return obj.get_all_slots()
+
+class DoctorLeaveSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DoctorLeave
+        fields = ["id", "doctor", "clinic", "start_date", "end_date", "reason"]

@@ -34,7 +34,8 @@ from helpdesk.models import HelpdeskClinicUser
 from doctor.models import (
     doctor, DoctorAddress, Registration, GovernmentID, Education,
     Award, Certification, DoctorFeedback, DoctorService,
-    DoctorSocialLink, Specialization, CustomSpecialization, KYCStatus
+    DoctorSocialLink, Specialization, CustomSpecialization, KYCStatus,
+    DoctorFeeStructure,FollowUpPolicy,DoctorAvailability,DoctorLeave,
 )
 from doctor.api.serializers import (
     DoctorRegistrationSerializer, DoctorProfileUpdateSerializer, DoctorSerializer,
@@ -46,12 +47,17 @@ from doctor.api.serializers import (
     EducationCertificateUploadSerializer, DoctorProfilePhotoUploadSerializer,
     DoctorProfileSerializer, RegistrationDocumentUploadSerializer,
     GovernmentIDUploadSerializer, KYCStatusSerializer, KYCVerifySerializer,
-    DoctorSearchSerializer
+    DoctorSearchSerializer,DoctorFeeStructureSerializer,FollowUpPolicySerializer,
+    DoctorAvailabilitySerializer,DoctorLeaveSerializer
 )
 from consultations.models import Consultation, PatientFeedback
 from appointments.models import Appointment
 from prescriptions.models import Prescription
-
+from account.permissions import IsDoctorOrHelpdesk,IsDoctorOrHelpdeskOrPatient
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework import  filters
+from rest_framework.pagination import PageNumberPagination
+from rest_framework.decorators import action
 # Constants
 CACHE_TIMEOUT = 300  # 5 minutes
 
@@ -1227,3 +1233,155 @@ class DoctorSearchView(APIView):
         serializer = DoctorSearchSerializer(queryset, many=True, context={"request": request})
         cache.set(cache_key, serializer.data, timeout=300)
         return Response({"status": "success", "data": serializer.data}, status=status.HTTP_200_OK)
+
+# Pagination
+class StandardResultsSetPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+class DoctorFeeStructureViewSet(viewsets.ModelViewSet):
+    queryset = DoctorFeeStructure.objects.all()
+    permission_classes = [IsAuthenticated, IsDoctorOrHelpdesk]
+    authentication_classes = [JWTAuthentication]
+    serializer_class = DoctorFeeStructureSerializer
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter, filters.SearchFilter]
+    filterset_fields = ['doctor', 'clinic']
+    search_fields = ['doctor__name', 'clinic__name']
+    ordering_fields = ['created_at', 'updated_at', 'first_time_consultation_fee']
+
+
+class FollowUpPolicyViewSet(viewsets.ModelViewSet):
+    queryset = FollowUpPolicy.objects.all()
+    serializer_class = FollowUpPolicySerializer
+    permission_classes = [IsAuthenticated, IsDoctorOrHelpdesk]
+    authentication_classes = [JWTAuthentication]
+    pagination_class = StandardResultsSetPagination
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['doctor', 'clinic']
+    search_fields = ['doctor__name', 'clinic__name']
+    ordering_fields = ['created_at', 'updated_at', 'follow_up_fee']
+    ordering = ['-created_at']
+
+    def perform_create(self, serializer):
+        serializer.save()
+
+    @action(detail=False, methods=['get'], url_path='by-doctor')
+    def list_by_doctor(self, request):
+        doctor_id = request.query_params.get('doctor_id')
+        if not doctor_id:
+            return Response({"error": "doctor_id is required"}, status=400)
+        policies = self.queryset.filter(doctor_id=doctor_id)
+        page = self.paginate_queryset(policies)
+        return self.get_paginated_response(self.get_serializer(page, many=True).data)
+    
+    @action(detail=False, methods=['get'], url_path='by-clinic')
+    def list_by_clinic(self, request):
+        clinic_id = request.query_params.get('clinic_id')
+        if not clinic_id:
+            return Response({"error": "clinic_id is required"}, status=400)
+        policies = self.queryset.filter(clinic_id=clinic_id)
+        page = self.paginate_queryset(policies)
+        return self.get_paginated_response(self.get_serializer(page, many=True).data)
+
+
+class DoctorAvailabilityView(APIView):
+    permission_classes = [IsAuthenticated,IsDoctorOrHelpdeskOrPatient]
+    authentication_classes = [JWTAuthentication]
+
+    def get(self, request):
+        doctor_id = request.data.get("doctor_id")
+        clinic_id = request.data.get("clinic_id")
+        if not doctor_id or not clinic_id:
+            return Response({"error": "doctor_id and clinic_id are required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            availability = DoctorAvailability.objects.get(doctor_id=doctor_id, clinic_id=clinic_id)
+            serializer = DoctorAvailabilitySerializer(availability)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except DoctorAvailability.DoesNotExist:
+            return Response({"error": "Availability not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    def post(self, request):
+        serializer = DoctorAvailabilitySerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def patch(self, request):
+        doctor_id = request.data.get("doctor_id")
+        clinic_id = request.data.get("clinic_id")
+
+        if not doctor_id or not clinic_id:
+            return Response({"error": "doctor_id and clinic_id are required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            availability = DoctorAvailability.objects.get(doctor_id=doctor_id, clinic_id=clinic_id)
+            serializer = DoctorAvailabilitySerializer(availability, data=request.data, partial=True)
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data, status=status.HTTP_200_OK)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        except DoctorAvailability.DoesNotExist:
+            return Response({"error": "Availability not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    def delete(self, request):
+        doctor_id = request.data.get("doctor_id")
+        clinic_id = request.data.get("clinic_id")
+
+        if not doctor_id or not clinic_id:
+            return Response({"error": "doctor_id and clinic_id are required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            availability = DoctorAvailability.objects.get(doctor_id=doctor_id, clinic_id=clinic_id)
+            availability.delete()
+            return Response({"message": "Availability deleted successfully"}, status=status.HTTP_204_NO_CONTENT)
+        except DoctorAvailability.DoesNotExist:
+            return Response({"error": "Availability not found"}, status=status.HTTP_404_NOT_FOUND)
+
+
+class DoctorLeaveCreateView(generics.CreateAPIView):
+    """POST /doctors/leaves/ - Apply for leave"""
+    queryset = DoctorLeave.objects.all()
+    serializer_class = DoctorLeaveSerializer
+    permission_classes = [IsAuthenticated, IsDoctorOrHelpdesk]
+    authentication_classes = [JWTAuthentication]
+
+class DoctorLeaveListView(generics.ListAPIView):
+    """GET /doctors/leaves/?doctor_id=<id>&date_filter=month - Fetch leave records"""
+    serializer_class = DoctorLeaveSerializer
+    permission_classes = [IsAuthenticated, IsDoctorOrHelpdesk]
+    authentication_classes = [JWTAuthentication]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_fields = ["doctor", "clinic", "start_date", "end_date"]
+    ordering_fields = ["start_date"]
+
+    def get_queryset(self):
+        doctor_id = self.request.query_params.get("doctor_id")
+        date_filter = self.request.query_params.get("date_filter")
+
+        queryset = DoctorLeave.objects.all()
+
+        if doctor_id:
+            queryset = queryset.filter(doctor_id=doctor_id)
+
+        if date_filter == "week":
+            queryset = queryset.filter(start_date__gte=date.today(), end_date__lte=date.today() + timedelta(days=7))
+        elif date_filter == "month":
+            queryset = queryset.filter(start_date__gte=date.today().replace(day=1))
+
+        return queryset
+
+class DoctorLeaveUpdateView(generics.UpdateAPIView):
+    """PATCH /doctors/leaves/{leave_id}/ - Update leave"""
+    queryset = DoctorLeave.objects.all()
+    serializer_class = DoctorLeaveSerializer
+    permission_classes = [IsAuthenticated, IsDoctorOrHelpdesk]
+    authentication_classes = [JWTAuthentication]
+
+class DoctorLeaveDeleteView(generics.DestroyAPIView):
+    """DELETE /doctors/leaves/{leave_id}/ - Delete leave"""
+    queryset = DoctorLeave.objects.all()
+    permission_classes = [IsAuthenticated, IsDoctorOrHelpdesk]
+    authentication_classes = [JWTAuthentication]

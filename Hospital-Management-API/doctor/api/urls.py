@@ -13,8 +13,9 @@ from doctor.api.views import (
     UploadDoctorPhotoView,DoctorProfileView,
     UploadRegistrationCertificateView,
     UploadEducationCertificateView,UploadGovernmentIDView,DoctorKYCStatusView,
-    KYCVerifyView,
-    DoctorSearchView,
+    KYCVerifyView,DoctorSearchView,
+    DoctorFeeStructureViewSet,FollowUpPolicyViewSet,DoctorAvailabilityView,DoctorLeaveCreateView,
+    DoctorLeaveCreateView,DoctorLeaveListView,DoctorLeaveUpdateView,DoctorLeaveDeleteView,
 )
 
 app_name='doctor'
@@ -27,9 +28,8 @@ router.register(r'services', DoctorServiceViewSet, basename='doctor-service')
 router.register(r'awards', AwardViewSet, basename='doctor-award')
 router.register(r'certifications', CertificationViewSet, basename='doctor-certification')
 router.register(r'medical-license', RegistrationViewSet, basename='medical-license')
-
-
-
+router.register(r'doctor-fees', DoctorFeeStructureViewSet)
+router.register(r'follow-up-policies', FollowUpPolicyViewSet)
 
 government_id_view = GovernmentIDViewSet.as_view({
     'post': 'create',
@@ -38,8 +38,6 @@ government_id_view = GovernmentIDViewSet.as_view({
     'patch': 'partial_update',
     'delete': 'destroy',
 })
-
-
 
 urlpatterns = [
     path('', include(router.urls)),
@@ -61,17 +59,22 @@ urlpatterns = [
     path('dashboard/summary/', DoctorDashboardSummaryView.as_view(), name='doctor-dashboard-summary'),
     path('upload-photo/', UploadDoctorPhotoView.as_view(), name='upload-doctor-photo'),
     path('me/', DoctorProfileView.as_view(), name='doctor-profile'),
-
     #KYC 
     path('kyc/upload/registration/', UploadRegistrationCertificateView.as_view(), name='doctor-kyc-registration-upload'),
     path('kyc/upload/education/', UploadEducationCertificateView.as_view(), name='doctor-kyc-education-upload'),
     path('kyc/upload/govt-id/', UploadGovernmentIDView.as_view(), name='upload-govt-id'),
     path('kyc/status/', DoctorKYCStatusView.as_view(), name='doctor-kyc-status'),
     path("kyc/admin-verify/<uuid:doctor_id>/", KYCVerifyView.as_view(), name="kyc-admin-verify"),
-
     path("search-doctors/", DoctorSearchView.as_view(), name="search-doctors"),
+    path('doctors-availability/',
+            DoctorAvailabilityView.as_view(),
+            name='doctor-availability'),
+        #Doctor Leave View
+    path("doctor-leave-create/", DoctorLeaveCreateView.as_view(), name="doctor-leave-create"),
+    path("doctor-leave-list/", DoctorLeaveListView.as_view(), name="doctor-leave-list"),
+    path("doctor-leave-update/<uuid:pk>/", DoctorLeaveUpdateView.as_view(), name="doctor-leave-update"),
+    path("doctor-leave-delete/<uuid:pk>/", DoctorLeaveDeleteView.as_view(), name="doctor-leave-delete"),
 ]
 #helpdesk uuid is user uuid used to approve the helpdesk user
-
 #token Refresh API - used by the front end for the if the token is expired after the one month time period it will refresh the token automatically no need to login again
 #token Verify API - used by the front end to verify the token is valid or not
