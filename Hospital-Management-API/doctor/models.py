@@ -300,6 +300,7 @@ class DoctorFeeStructure(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     class Meta:
+        ordering = ['id']
         unique_together = ('doctor', 'clinic')  # Ensures one fee structure per doctor per clinic
 
     def __str__(self):
@@ -327,6 +328,7 @@ class FollowUpPolicy(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     class Meta:
+        ordering = ['-created_at']
         unique_together = ('doctor', 'clinic')  # Ensures follow-up policy is unique per doctor per clinic
 
     def __str__(self):
@@ -354,6 +356,7 @@ class DoctorAvailability(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        ordering = ['-created_at']
         unique_together = ('doctor', 'clinic')  # Ensures one availability per doctor per clinic
 
     def __str__(self):
@@ -419,6 +422,10 @@ class DoctorLeave(models.Model):
     class Meta:
         unique_together = ('doctor', 'clinic', 'start_date', 'end_date')  # Prevent duplicate entries
         ordering = ["-start_date"]
+    
+    def clean(self):
+        if self.start_date > self.end_date:
+            raise ValidationError("Start date cannot be after end date.")
     def __str__(self):
         return f"Leave from {self.start_date} to {self.end_date} for {self.doctor.get_name} at {self.clinic.name}"
 
@@ -444,7 +451,15 @@ class DoctorOPDStatus(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     class Meta:
         unique_together = ('doctor', 'clinic')  # Ensures one fee structure per doctor per clinic
+        indexes = [
 
+            models.Index(fields=['doctor']),
+
+            models.Index(fields=['clinic']),
+
+            models.Index(fields=['is_available']),
+
+        ]
     def __str__(self):
         status = "Available" if self.is_available else "Away"
         return f"Dr. {self.doctor.get_name} - {status}"

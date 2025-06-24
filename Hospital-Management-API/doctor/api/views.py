@@ -1,6 +1,7 @@
 # Standard library imports
 import logging
-
+from datetime import date, datetime, timedelta
+from django.utils import timezone
 # Django imports
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import Group
@@ -36,6 +37,7 @@ from doctor.models import (
     Award, Certification, DoctorFeedback, DoctorService,
     DoctorSocialLink, Specialization, CustomSpecialization, KYCStatus,
     DoctorFeeStructure,FollowUpPolicy,DoctorAvailability,DoctorLeave,
+    DoctorOPDStatus,
 )
 from doctor.api.serializers import (
     DoctorRegistrationSerializer, DoctorProfileUpdateSerializer, DoctorSerializer,
@@ -48,7 +50,7 @@ from doctor.api.serializers import (
     DoctorProfileSerializer, RegistrationDocumentUploadSerializer,
     GovernmentIDUploadSerializer, KYCStatusSerializer, KYCVerifySerializer,
     DoctorSearchSerializer,DoctorFeeStructureSerializer,FollowUpPolicySerializer,
-    DoctorAvailabilitySerializer,DoctorLeaveSerializer
+    DoctorAvailabilitySerializer,DoctorLeaveSerializer,DoctorOPDStatusSerializer,
 )
 from consultations.models import Consultation, PatientFeedback
 from appointments.models import Appointment
@@ -1263,6 +1265,15 @@ class FollowUpPolicyViewSet(viewsets.ModelViewSet):
     ordering_fields = ['created_at', 'updated_at', 'follow_up_fee']
     ordering = ['-created_at']
 
+    def get_queryset(self):
+        user = self.request.user
+        base_qs = FollowUpPolicy.objects.all()  # always fresh queryset
+        if hasattr(user, 'doctor'):
+            return base_qs.filter(doctor=user.doctor)
+        elif hasattr(user, 'helpdesk'):
+            return base_qs.filter(clinic__in=user.helpdesk.clinics.all())
+        return base_qs.none()
+
     def perform_create(self, serializer):
         serializer.save()
 
@@ -1270,28 +1281,44 @@ class FollowUpPolicyViewSet(viewsets.ModelViewSet):
     def list_by_doctor(self, request):
         doctor_id = request.query_params.get('doctor_id')
         if not doctor_id:
-            return Response({"error": "doctor_id is required"}, status=400)
+            return Response({"error": "doctor_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+
         policies = self.queryset.filter(doctor_id=doctor_id)
+        if not policies.exists():
+            return Response({"message": "No policies found for this doctor"}, status=status.HTTP_404_NOT_FOUND)
+
         page = self.paginate_queryset(policies)
         return self.get_paginated_response(self.get_serializer(page, many=True).data)
-    
+
     @action(detail=False, methods=['get'], url_path='by-clinic')
     def list_by_clinic(self, request):
         clinic_id = request.query_params.get('clinic_id')
         if not clinic_id:
-            return Response({"error": "clinic_id is required"}, status=400)
+            return Response({"error": "clinic_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+
         policies = self.queryset.filter(clinic_id=clinic_id)
+        if not policies.exists():
+            return Response({"message": "No policies found for this clinic"}, status=status.HTTP_404_NOT_FOUND)
+
         page = self.paginate_queryset(policies)
         return self.get_paginated_response(self.get_serializer(page, many=True).data)
 
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        user = request.user
+        print("Deleting instance:", instance)
+        if hasattr(user, 'doctor') and instance.doctor != user.doctor:
+            return Response({'error': 'You do not have permission to delete this policy.'}, status=403)
+        return super().destroy(request, *args, **kwargs)
 
 class DoctorAvailabilityView(APIView):
-    permission_classes = [IsAuthenticated,IsDoctorOrHelpdeskOrPatient]
+    permission_classes = [IsAuthenticated, IsDoctorOrHelpdeskOrPatient]
     authentication_classes = [JWTAuthentication]
 
     def get(self, request):
-        doctor_id = request.data.get("doctor_id")
-        clinic_id = request.data.get("clinic_id")
+        doctor_id = request.query_params.get("doctor_id")
+        clinic_id = request.query_params.get("clinic_id")
+
         if not doctor_id or not clinic_id:
             return Response({"error": "doctor_id and clinic_id are required"}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -1312,23 +1339,29 @@ class DoctorAvailabilityView(APIView):
     def patch(self, request):
         doctor_id = request.data.get("doctor_id")
         clinic_id = request.data.get("clinic_id")
-
         if not doctor_id or not clinic_id:
             return Response({"error": "doctor_id and clinic_id are required"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             availability = DoctorAvailability.objects.get(doctor_id=doctor_id, clinic_id=clinic_id)
-            serializer = DoctorAvailabilitySerializer(availability, data=request.data, partial=True)
-            if serializer.is_valid():
-                serializer.save()
-                return Response(serializer.data, status=status.HTTP_200_OK)
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         except DoctorAvailability.DoesNotExist:
             return Response({"error": "Availability not found"}, status=status.HTTP_404_NOT_FOUND)
 
+        serializer = DoctorAvailabilitySerializer(availability, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
     def delete(self, request):
-        doctor_id = request.data.get("doctor_id")
-        clinic_id = request.data.get("clinic_id")
+        print("DELETE request received")
+        # doctor_id = request.data.get("doctor_id")
+        # clinic_id = request.data.get("clinic_id")
+        doctor_id = request.query_params.get("doctor_id")
+        clinic_id = request.query_params.get("clinic_id")
+
+        print("DELETE request - doctor_id:", doctor_id)
+        print("DELETE request - clinic_id:", clinic_id)
 
         if not doctor_id or not clinic_id:
             return Response({"error": "doctor_id and clinic_id are required"}, status=status.HTTP_400_BAD_REQUEST)
@@ -1339,7 +1372,6 @@ class DoctorAvailabilityView(APIView):
             return Response({"message": "Availability deleted successfully"}, status=status.HTTP_204_NO_CONTENT)
         except DoctorAvailability.DoesNotExist:
             return Response({"error": "Availability not found"}, status=status.HTTP_404_NOT_FOUND)
-
 
 class DoctorLeaveCreateView(generics.CreateAPIView):
     """POST /doctors/leaves/ - Apply for leave"""
@@ -1385,3 +1417,40 @@ class DoctorLeaveDeleteView(generics.DestroyAPIView):
     queryset = DoctorLeave.objects.all()
     permission_classes = [IsAuthenticated, IsDoctorOrHelpdesk]
     authentication_classes = [JWTAuthentication]
+
+class DoctorOPDStatusViewSet(viewsets.ModelViewSet):
+    queryset = DoctorOPDStatus.objects.select_related('doctor', 'clinic').order_by('-updated_at')
+    serializer_class = DoctorOPDStatusSerializer
+    permission_classes = [IsAuthenticated, IsDoctorOrHelpdesk]
+    authentication_classes = [JWTAuthentication]
+
+    def get_queryset(self):
+        queryset = self.queryset
+
+        doctor_id = self.request.query_params.get('doctor_id')
+        clinic_id = self.request.query_params.get('clinic_id')
+        is_available = self.request.query_params.get('is_available')
+
+        if doctor_id:
+            queryset = queryset.filter(doctor_id=doctor_id)
+        if clinic_id:
+            queryset = queryset.filter(clinic_id=clinic_id)
+        if is_available in ['true', 'false']:
+            queryset = queryset.filter(is_available=(is_available.lower() == 'true'))
+
+        return queryset
+
+    @action(detail=True, methods=['post'], url_path='toggle')
+    def toggle_availability(self, request, pk=None):
+        try:
+            instance = self.get_object()
+            instance.is_available = not instance.is_available
+            if instance.is_available:
+                instance.check_in_time = timezone.now()
+                instance.check_out_time = None
+            else:
+                instance.check_out_time = timezone.now()
+            instance.save()
+            return Response(self.get_serializer(instance).data, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)

@@ -1,7 +1,10 @@
+from datetime import date, datetime, timedelta
 from django.contrib.auth.models import Group
 from django.db import transaction
+from django.utils import timezone
 
 from rest_framework import serializers
+from django.utils import timezone
 
 from account.models import User
 from clinic.models import Clinic
@@ -10,6 +13,7 @@ from doctor.models import (
     DoctorService,DoctorSocialLink, Education, GovernmentID,
     Registration, Specialization, CustomSpecialization,
     doctor,KYCStatus,DoctorFeeStructure,FollowUpPolicy,DoctorAvailability,DoctorLeave,
+    DoctorOPDStatus
 )
 from hospital_mgmt.models import Hospital
 from helpdesk.models import HelpdeskClinicUser
@@ -846,12 +850,45 @@ class DoctorFeeStructureSerializer(serializers.ModelSerializer):
         model = DoctorFeeStructure
         fields = '__all__'
         read_only_fields = ['id', 'created_at', 'updated_at']
+    def validate(self, attrs):
+        doctor = attrs.get("doctor")
+        clinic = attrs.get("clinic")
+        if self.instance:
+            # for updates
+            if DoctorFeeStructure.objects.exclude(pk=self.instance.pk).filter(doctor=doctor, clinic=clinic).exists():
+                raise serializers.ValidationError("Fee structure for this doctor and clinic already exists.")
+        else:
+            # for create
+            if DoctorFeeStructure.objects.filter(doctor=doctor, clinic=clinic).exists():
+                raise serializers.ValidationError("Fee structure for this doctor and clinic already exists.")
+        return attrs
 
 class FollowUpPolicySerializer(serializers.ModelSerializer):
     class Meta:
         model = FollowUpPolicy
         fields = '__all__'
         read_only_fields = ['id', 'created_at', 'updated_at']
+    def validate(self, attrs):
+        if attrs.get('follow_up_fee', 0) < 0:
+            raise serializers.ValidationError("Follow-up fee cannot be negative.")
+        if attrs.get('online_follow_up_fee', 0) < 0:
+            raise serializers.ValidationError("Online follow-up fee cannot be negative.")
+        if attrs.get('follow_up_duration', 0) <= 0:
+            raise serializers.ValidationError("Follow-up duration must be a positive number.")
+        if attrs.get('max_follow_up_visits', 0) <= 0:
+            raise serializers.ValidationError("Max follow-up visits must be a positive number.")
+
+        doctor = attrs.get('doctor')
+        clinic = attrs.get('clinic')
+
+        # Ensure unique policy per doctor-clinic combination
+        existing = FollowUpPolicy.objects.filter(doctor=doctor, clinic=clinic)
+        if self.instance:
+            existing = existing.exclude(id=self.instance.id)
+        if existing.exists():
+            raise serializers.ValidationError("A follow-up policy already exists for this doctor and clinic.")
+
+        return attrs
 
 
 
@@ -864,8 +901,94 @@ class DoctorAvailabilitySerializer(serializers.ModelSerializer):
 
     def get_slots(self, obj):
         return obj.get_all_slots()
+    
+    def validate(self, attrs):
+        # For PATCH requests, we may need instance values
+        instance = self.instance
+
+        doctor = attrs.get("doctor", getattr(instance, "doctor", None))
+        clinic = attrs.get("clinic", getattr(instance, "clinic", None))
+
+        if doctor and clinic:
+            existing = DoctorAvailability.objects.filter(doctor=doctor, clinic=clinic)
+            if instance:
+                existing = existing.exclude(id=instance.id)
+            if existing.exists():
+                raise serializers.ValidationError("Doctor availability already exists for this clinic.")
+
+        slot_duration = attrs.get("slot_duration", getattr(instance, "slot_duration", 0))
+        buffer_time = attrs.get("buffer_time", getattr(instance, "buffer_time", 0))
+        max_appointments = attrs.get("max_appointments_per_day", getattr(instance, "max_appointments_per_day", 0))
+
+        if slot_duration <= 0:
+            raise serializers.ValidationError("Slot duration must be positive.")
+        if buffer_time < 0:
+            raise serializers.ValidationError("Buffer time cannot be negative.")
+        if max_appointments <= 0:
+            raise serializers.ValidationError("Max appointments per day must be positive.")
+
+        return attrs
 
 class DoctorLeaveSerializer(serializers.ModelSerializer):
     class Meta:
         model = DoctorLeave
-        fields = ["id", "doctor", "clinic", "start_date", "end_date", "reason"]
+        fields = ["id", "doctor", "clinic", "start_date", "end_date", "half_day", "leave_type", "reason"]
+        read_only_fields = ["id"]
+
+    def validate(self, attrs):
+        start_date = attrs.get("start_date", getattr(self.instance, "start_date", None))
+        end_date = attrs.get("end_date", getattr(self.instance, "end_date", None))
+        doctor = attrs.get("doctor", getattr(self.instance, "doctor", None))
+        clinic = attrs.get("clinic", getattr(self.instance, "clinic", None))
+
+        if not doctor or not clinic:
+            raise serializers.ValidationError("Doctor and clinic must be provided or already exist on the instance.")
+
+        # 1. Start date must be <= end date
+        if start_date and end_date and start_date > end_date:
+            raise serializers.ValidationError("Start date cannot be after end date.")
+
+        # 2. Allow only last 30 days backdated leave
+        if start_date and start_date < date.today() - timedelta(days=30):
+            raise serializers.ValidationError("Leave cannot be older than 30 days.")
+
+        # 3. Block overlapping leaves
+        overlapping = DoctorLeave.objects.filter(
+            doctor=doctor,
+            clinic=clinic,
+            start_date__lte=end_date,
+            end_date__gte=start_date,
+        )
+        if self.instance:
+            overlapping = overlapping.exclude(id=self.instance.id)
+
+        if overlapping.exists():
+            raise serializers.ValidationError("Overlapping leave already exists for this doctor.")
+
+        return attrs
+
+
+class DoctorOPDStatusSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DoctorOPDStatus
+        fields = [
+            'id', 'doctor', 'clinic',
+            'is_available', 'check_in_time', 'check_out_time',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def validate(self, attrs):
+        instance = self.instance
+
+        is_available = attrs.get('is_available', getattr(instance, 'is_available', None))
+        check_in_time = attrs.get('check_in_time', getattr(instance, 'check_in_time', None))
+        check_out_time = attrs.get('check_out_time', getattr(instance, 'check_out_time', None))
+
+        if is_available and not check_in_time:
+            attrs['check_in_time'] = timezone.now()
+            attrs['check_out_time'] = None  # Reset checkout
+        elif is_available is False and not check_out_time:
+            attrs['check_out_time'] = timezone.now()
+
+        return attrs

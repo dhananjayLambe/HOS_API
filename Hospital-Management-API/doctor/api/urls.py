@@ -16,6 +16,7 @@ from doctor.api.views import (
     KYCVerifyView,DoctorSearchView,
     DoctorFeeStructureViewSet,FollowUpPolicyViewSet,DoctorAvailabilityView,DoctorLeaveCreateView,
     DoctorLeaveCreateView,DoctorLeaveListView,DoctorLeaveUpdateView,DoctorLeaveDeleteView,
+    DoctorOPDStatusViewSet,
 )
 
 app_name='doctor'
@@ -30,6 +31,7 @@ router.register(r'certifications', CertificationViewSet, basename='doctor-certif
 router.register(r'medical-license', RegistrationViewSet, basename='medical-license')
 router.register(r'doctor-fees', DoctorFeeStructureViewSet)
 router.register(r'follow-up-policies', FollowUpPolicyViewSet)
+router.register(r'doctor-opd-status', DoctorOPDStatusViewSet)
 
 government_id_view = GovernmentIDViewSet.as_view({
     'post': 'create',
