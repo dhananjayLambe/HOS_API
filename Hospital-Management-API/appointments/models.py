@@ -1,5 +1,7 @@
 import uuid
 from django.db import models
+from account.models import User
+from django.utils import timezone
 #from patient_account.models import PatientAccount,PatientProfile
 
 class Appointment(models.Model):
@@ -58,6 +60,23 @@ class Appointment(models.Model):
 
     def __str__(self):
         return f"Appointment for {self.patient_profile.first_name} with Dr. {self.doctor.get_name} on {self.appointment_date}"
+
+
+class AppointmentHistory(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    appointment = models.ForeignKey(Appointment, on_delete=models.CASCADE, related_name="history")
+    status = models.CharField(max_length=20, choices=Appointment.status_choices)
+    changed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    comment = models.TextField(blank=True, null=True)
+    timestamp = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ['-timestamp']
+        verbose_name = "Appointment History"
+        verbose_name_plural = "Appointment Histories"
+
+    def __str__(self):
+        return f"{self.appointment} - {self.status} at {self.timestamp}"
 
 #Additional Model Suggestions (Optional for Future Phases)
 # AppointmentHistory Model – To track status changes of an appointment over time.

@@ -7,7 +7,7 @@ from appointments.api.views import (
     AppointmentRescheduleView,
     PatientAppointmentsView,
     DoctorAppointmentsView,
-    AppointmentSlotView,
+    AppointmentSlotView,AppointmentHistoryView,
     )
 app_name = 'appointments'
 
@@ -21,5 +21,5 @@ urlpatterns = [
     path('patient-appointments/', PatientAppointmentsView.as_view(), name='patient-appointments'),
     path("doctor-appointments/", DoctorAppointmentsView.as_view(), name="doctor-appointments"),
     path("slots/", AppointmentSlotView.as_view(), name="appointment-slots"),
-
+    path("history/", AppointmentHistoryView.as_view(), name="appointment-history"),
 ]

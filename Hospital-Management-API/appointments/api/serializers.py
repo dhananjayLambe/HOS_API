@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from appointments.models import (
-    Appointment,
+    Appointment,AppointmentHistory
     )
 from django.utils.timezone import now, localdate
 from django.utils import timezone
@@ -208,3 +208,15 @@ class PatientAppointmentFilterSerializer(serializers.Serializer):
     page = serializers.IntegerField(required=False, default=1)
     page_size = serializers.IntegerField(required=False, default=10)
 
+
+class AppointmentHistorySerializer(serializers.ModelSerializer):
+    changed_by = serializers.SerializerMethodField()
+
+    class Meta:
+        model = AppointmentHistory
+        fields = ['status', 'changed_by', 'comment', 'timestamp']
+
+    def get_changed_by(self, obj):
+        if obj.changed_by:
+            return f"{obj.changed_by.first_name} {obj.changed_by.last_name}"
+        return "System"

@@ -12,12 +12,12 @@ from django.db import transaction
 from django.utils.timezone import now
 
 from appointments.models import (
-    Appointment)
+    Appointment,AppointmentHistory)
 from appointments.api.serializers import (AppointmentSerializer\
     ,AppointmentCreateSerializer,AppointmentRescheduleSerializer,
     PatientAppointmentSerializer,DoctorAppointmentSerializer,
     DoctorAppointmentFilterSerializer\
-    ,PatientAppointmentFilterSerializer,
+    ,PatientAppointmentFilterSerializer,AppointmentHistorySerializer,
     )
 from clinic.models import Clinic
 from doctor.models import doctor
@@ -38,6 +38,7 @@ from django.utils.timezone import now
 import logging
 logger = logging.getLogger(__name__)
 from doctor.models import DoctorAvailability, DoctorLeave
+from appointments.utils.history import log_appointment_history 
 
 #1. Book an Appointment (POST)
 class AppointmentCreateView(generics.CreateAPIView):
@@ -131,6 +132,13 @@ class AppointmentCancelView(APIView):
         appointment.status = 'cancelled'
         appointment.updated_at = now()
         appointment.save(update_fields=['status', 'updated_at'])
+        # Log the cancellation in history
+        log_appointment_history(
+                appointment=appointment,
+                status='cancelled',
+                changed_by=request.user,
+                comment='Appointment cancelled via API'
+            )
 
         return Response({
             "status": "success",
@@ -191,6 +199,13 @@ class AppointmentRescheduleView(APIView):
         try:
             serializer.save(updated_at=now())
             logger.info(f"Appointment {appointment_id} successfully rescheduled.")
+            # Log history
+            log_appointment_history(
+                appointment=appointment,
+                status='rescheduled',
+                changed_by=request.user,
+                comment=f"Rescheduled to {serializer.validated_data.get('appointment_date')} {serializer.validated_data.get('appointment_time')}"
+            )
             return Response({
                 "status": "success",
                 "message": "Appointment rescheduled successfully.",
@@ -354,146 +369,6 @@ class PatientAppointmentsView(generics.GenericAPIView):
 class DoctorSlotThrottle(UserRateThrottle):
     rate = '10/min'
 
-# class AppointmentSlotView(APIView):
-#     authentication_classes = [JWTAuthentication]
-#     permission_classes = [IsAuthenticated, IsDoctorOrHelpdesk]
-#     throttle_classes = [DoctorSlotThrottle]
-
-#     def get(self, request):
-#         try:
-#             doctor_id = request.query_params.get('doctor_id')
-#             clinic_id = request.query_params.get('clinic_id')
-#             date_str = request.query_params.get('date')
-
-#             # Input validation
-#             if not (doctor_id and clinic_id and date_str):
-#                 return Response({
-#                     "status": "error",
-#                     "message": "doctor_id, clinic_id, and date are required",
-#                     "data": None
-#                 }, status=status.HTTP_400_BAD_REQUEST)
-
-#             try:
-#                 date = datetime.datetime.strptime(date_str, "%Y-%m-%d").date()
-#             except ValueError:
-#                 return Response({
-#                     "status": "error",
-#                     "message": "Invalid date format. Use YYYY-MM-DD.",
-#                     "data": None
-#                 }, status=status.HTTP_400_BAD_REQUEST)
-
-#             # Caching key
-#             cache_key = f"slots_{doctor_id}_{clinic_id}_{date_str}"
-#             cached_data = cache.get(cache_key)
-#             if cached_data:
-#                 return Response({
-#                     "status": "success",
-#                     "message": "Slots fetched from cache",
-#                     "data": cached_data
-#                 })
-
-#             doctor_obj = get_object_or_404(doctor, id=doctor_id)
-#             clinic = get_object_or_404(Clinic, id=clinic_id)
-
-#             # Check doctor leave
-#             is_on_leave = DoctorLeave.objects.filter(
-#                 doctor=doctor_obj,
-#                 clinic=clinic,
-#                 start_date__lte=date,
-#                 end_date__gte=date
-#             ).exists()
-
-#             availability = DoctorAvailability.objects.filter(doctor=doctor_obj, clinic=clinic).first()
-#             if not availability:
-#                 return Response({
-#                     "status": "error",
-#                     "message": "Doctor availability not configured for this clinic.",
-#                     "data": None
-#                 }, status=status.HTTP_404_NOT_FOUND)
-
-#             weekday = date.strftime("%A").lower()
-#             day_availability = next(
-#                 (entry for entry in availability.availability if entry.get("day", "").lower() == weekday),
-#                 None
-#             )
-#             if not day_availability:
-#                 return Response({
-#                     "status": "error",
-#                     "message": f"Doctor is not available on {weekday}.",
-#                     "data": None
-#                 }, status=status.HTTP_404_NOT_FOUND)
-
-#             def generate_slots(start_time, end_time):
-#                 slots = []
-#                 if not start_time or not end_time:
-#                     return slots
-
-#                 try:
-#                     start = datetime.datetime.combine(date, datetime.datetime.strptime(start_time, "%H:%M:%S").time())
-#                     end = datetime.datetime.combine(date, datetime.datetime.strptime(end_time, "%H:%M:%S").time())
-#                 except ValueError:
-#                     return slots
-
-#                 slot_duration = availability.slot_duration
-#                 buffer = availability.buffer_time
-#                 current = start
-
-#                 while current + datetime.timedelta(minutes=slot_duration) <= end:
-#                     slot_end = current + datetime.timedelta(minutes=slot_duration)
-#                     is_booked = Appointment.objects.filter(
-#                         doctor=doctor_obj,
-#                         clinic=clinic,
-#                         appointment_date=date,
-#                         appointment_time=current.time(),
-#                         status='scheduled'
-#                     ).exists()
-
-#                     slots.append({
-#                         "start_time": current.strftime("%H:%M:%S"),
-#                         "end_time": slot_end.strftime("%H:%M:%S"),
-#                         "available": not is_booked and not is_on_leave
-#                     })
-#                     current = slot_end + datetime.timedelta(minutes=buffer)
-#                 return slots
-
-#             slots = {
-#                 "morning": generate_slots(day_availability.get("morning_start"), day_availability.get("morning_end")),
-#                 "afternoon": generate_slots(day_availability.get("afternoon_start"), day_availability.get("afternoon_end")),
-#                 "evening": generate_slots(day_availability.get("evening_start"), day_availability.get("evening_end")),
-#                 "night": generate_slots(day_availability.get("night_start"), day_availability.get("night_end")),
-#             }
-
-#             response_data = {
-#                 "doctor_id": str(doctor_id),
-#                 "clinic_id": str(clinic_id),
-#                 "date": date_str,
-#                 "slots": slots,
-#                 "meta": {
-#                     "day_name": weekday.capitalize(),
-#                     "is_on_leave": is_on_leave,
-#                     "slot_duration": availability.slot_duration,
-#                     "buffer_time": availability.buffer_time,
-#                 }
-#             }
-
-#             cache.set(cache_key, response_data, timeout=30)
-#             logger.info(f"Slot availability fetched for doctor {doctor_id} at clinic {clinic_id} on {date_str}")
-
-#             return Response({
-#                 "status": "success",
-#                 "message": "Slot availability retrieved successfully",
-#                 "data": response_data
-#             }, status=status.HTTP_200_OK)
-
-#         except Exception as e:
-#             logger.error(f"Slot API error: {str(e)}")
-#             return Response({
-#                 "status": "error",
-#                 "message": "Internal Server Error",
-#                 "data": None
-#             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
 class AppointmentSlotView(APIView):
     """
     Fetch slot availability for a given doctor, clinic, and date.
@@ -642,3 +517,55 @@ class AppointmentSlotView(APIView):
                 "message": "Internal Server Error",
                 "data": None
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class AppointmentHistoryView(generics.ListAPIView):
+    """
+    GET /api/appointments/history/?appointment_id=<uuid>
+    Returns the status change history for an appointment.
+    """
+    serializer_class = AppointmentHistorySerializer
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        appointment_id = self.request.query_params.get("appointment_id")
+        if not appointment_id:
+            return AppointmentHistory.objects.none()
+        return AppointmentHistory.objects.filter(appointment_id=appointment_id)
+
+    def list(self, request, *args, **kwargs):
+        appointment_id = request.query_params.get("appointment_id")
+        if not appointment_id:
+            return Response({
+                "status": "error",
+                "message": "appointment_id is required"
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        queryset = self.get_queryset()
+        if not queryset.exists():
+            return Response({
+                "status": "success",
+                "message": "No history available for this appointment",
+                "data": []
+            }, status=status.HTTP_200_OK)
+
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({
+            "status": "success",
+            "message": "Appointment history fetched successfully",
+            "data": serializer.data
+        }, status=status.HTTP_200_OK)
+
+
+# ----------------------------
+# HOOK (to call inside cancel/reschedule/create APIs)
+# ----------------------------
+
+def log_appointment_history(appointment, status, changed_by=None, comment=""):
+    AppointmentHistory.objects.create(
+        appointment=appointment,
+        status=status,
+        changed_by=changed_by,
+        comment=comment
+    )
