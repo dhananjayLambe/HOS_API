@@ -6,7 +6,7 @@ from django.utils.timezone import now, localdate
 from django.utils import timezone
 from doctor.models import DoctorLeave, DoctorFeeStructure
 
-
+from django.utils.timezone import now, localdate, localtime
 class AppointmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Appointment
@@ -114,6 +114,7 @@ class AppointmentCreateSerializer(serializers.ModelSerializer):
 
         return super().create(validated_data)
 
+
 class AppointmentCancelSerializer(serializers.ModelSerializer):
     class Meta:
         model = Appointment
@@ -129,21 +130,22 @@ class AppointmentRescheduleSerializer(serializers.ModelSerializer):
         model = Appointment
         fields = ['appointment_date', 'appointment_time']
 
-    def update(self, instance, validated_data):
-        new_date = validated_data.get('appointment_date', instance.appointment_date)
-        new_time = validated_data.get('appointment_time', instance.appointment_time)
+    def validate(self, data):
+        appointment_date = data.get("appointment_date")
+        appointment_time = data.get("appointment_time")
 
-        # Check if the new time slot is available
-        if Appointment.objects.filter(
-            doctor=instance.doctor, clinic=instance.clinic, appointment_date=new_date,
-            appointment_time=new_time, status='scheduled'
-        ).exists():
-            raise serializers.ValidationError("The selected time slot is already booked.")
+        if not appointment_date or not appointment_time:
+            raise serializers.ValidationError("Both appointment_date and appointment_time are required.")
 
-        instance.appointment_date = new_date
-        instance.appointment_time = new_time
-        instance.save()
-        return instance
+        today = localdate()
+        now_time = localtime().time()
+
+        if appointment_date < today:
+            raise serializers.ValidationError("Appointment date cannot be in the past.")
+        if appointment_date == today and appointment_time < now_time:
+            raise serializers.ValidationError("Appointment time cannot be in the past.")
+
+        return data
 
 class DoctorAppointmentSerializer(serializers.ModelSerializer):
     patient_name = serializers.CharField(source="patient.full_name", read_only=True)
@@ -183,16 +185,26 @@ class PatientAppointmentSerializer(serializers.ModelSerializer):
         fields = '__all__'  # Or specify only required fields
 
 class PatientAppointmentFilterSerializer(serializers.Serializer):
-    patient_account_id = serializers.UUIDField(required=True)
-    patient_profile_ids = serializers.ListField(child=serializers.UUIDField(), required=False)
+    patient_account_id = serializers.UUIDField()
+    patient_profile_ids = serializers.ListField(
+        child=serializers.UUIDField(), required=False
+    )
     doctor_id = serializers.UUIDField(required=False)
     clinic_id = serializers.UUIDField(required=False)
-    date_filter = serializers.ChoiceField(choices=['today', 'tomorrow', 'week', 'custom'], required=False)
+    date_filter = serializers.ChoiceField(
+        choices=["today", "tomorrow", "week", "custom"], required=False
+    )
     custom_start_date = serializers.DateField(required=False)
     custom_end_date = serializers.DateField(required=False)
-    appointment_status = serializers.ChoiceField(choices=['scheduled', 'cancelled', 'completed'], required=False)
+    appointment_status = serializers.ChoiceField(
+        choices=["scheduled", "completed", "cancelled", "no_show"], required=False
+    )
     payment_status = serializers.BooleanField(required=False)
-    sort_by = serializers.ChoiceField(choices=['appointment_date', 'appointment_time', 'status', 'clinic'], required=False, default='appointment_date')
+    sort_by = serializers.ChoiceField(
+        choices=["appointment_date", "appointment_time", "status", "clinic_name"],
+        required=False,
+        default="appointment_date"
+    )
     page = serializers.IntegerField(required=False, default=1)
     page_size = serializers.IntegerField(required=False, default=10)
 

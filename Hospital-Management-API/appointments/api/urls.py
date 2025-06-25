@@ -11,10 +11,6 @@ from appointments.api.views import (
     )
 app_name = 'appointments'
 
-#router = DefaultRouter()
-
-
-
 urlpatterns = [
     #path('', include(router.urls)),
     path('create/', AppointmentCreateView.as_view(), name='appointment-create'),

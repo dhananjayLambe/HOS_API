@@ -1,18 +1,16 @@
 import uuid
 from django.db import models
-from clinic.models import Clinic
-from doctor.models import doctor
-from patient_account.models import PatientAccount,PatientProfile
+#from patient_account.models import PatientAccount,PatientProfile
 
 class Appointment(models.Model):
     """ Stores appointment details for a doctor and a specific patient profile """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     
-    patient_account = models.ForeignKey(PatientAccount, on_delete=models.CASCADE, related_name='appointments')
-    patient_profile = models.ForeignKey(PatientProfile, on_delete=models.CASCADE, related_name='appointments')
+    patient_account = models.ForeignKey("patient_account.PatientAccount", on_delete=models.CASCADE, related_name='appointments')
+    patient_profile = models.ForeignKey("patient_account.PatientProfile", on_delete=models.CASCADE, related_name='appointments')
     
-    doctor = models.ForeignKey(doctor, on_delete=models.CASCADE, related_name='appointments')
-    clinic = models.ForeignKey(Clinic, on_delete=models.CASCADE, related_name='appointments')
+    doctor = models.ForeignKey("doctor.doctor", on_delete=models.CASCADE, related_name='appointments')
+    clinic = models.ForeignKey("clinic.Clinic", on_delete=models.CASCADE, related_name='appointments')
 
     appointment_date = models.DateField()
     appointment_time = models.TimeField()
