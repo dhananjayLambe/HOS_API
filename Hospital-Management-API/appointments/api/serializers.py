@@ -220,3 +220,93 @@ class AppointmentHistorySerializer(serializers.ModelSerializer):
         if obj.changed_by:
             return f"{obj.changed_by.first_name} {obj.changed_by.last_name}"
         return "System"
+
+
+class AppointmentStatusUpdateSerializer(serializers.Serializer):
+    id = serializers.UUIDField(required=True)
+    status = serializers.ChoiceField(choices=['completed', 'no_show'], required=True)
+    comment = serializers.CharField(required=False, allow_blank=True)
+
+
+class WalkInAppointmentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Appointment
+        fields = ['patient_account', 'patient_profile', 'doctor', 'clinic', 'appointment_time', 'appointment_date']
+
+    def validate(self, data):
+        doctor = data['doctor']
+        clinic = data['clinic']
+        appointment_date = data.get('appointment_date', timezone.localdate())
+        appointment_time = data.get('appointment_time')
+        patient_profile = data['patient_profile']
+
+        today = timezone.localdate()
+        now_time = timezone.localtime().time()
+
+        # Default to today if not given
+        if appointment_date < today:
+            raise serializers.ValidationError("Appointment date cannot be in the past.")
+        if appointment_date == today and appointment_time and appointment_time < now_time:
+            raise serializers.ValidationError("Appointment time cannot be in the past.")
+
+        # Doctor-clinic relation
+        if clinic not in doctor.clinics.all():
+            raise serializers.ValidationError("Doctor is not associated with the selected clinic.")
+
+        # Leave check
+        if DoctorLeave.objects.filter(
+            doctor=doctor,
+            clinic=clinic,
+            start_date__lte=appointment_date,
+            end_date__gte=appointment_date,
+        ).exists():
+            raise serializers.ValidationError("Doctor is on leave on selected date.")
+
+        # Prevent double-booking
+        if appointment_time:
+            if Appointment.objects.filter(
+                doctor=doctor,
+                clinic=clinic,
+                appointment_date=appointment_date,
+                appointment_time=appointment_time,
+                status='scheduled'
+            ).exists():
+                raise serializers.ValidationError("Selected time slot is already booked.")
+
+        return data
+
+    def create(self, validated_data):
+        doctor = validated_data["doctor"]
+        clinic = validated_data["clinic"]
+        patient_profile = validated_data["patient_profile"]
+        appointment_date = validated_data.get("appointment_date", timezone.localdate())
+
+        # Fee Structure Check
+        fee_structure = DoctorFeeStructure.objects.filter(doctor=doctor, clinic=clinic).first()
+        if not fee_structure:
+            raise serializers.ValidationError("Doctor fee structure is missing.")
+
+        # Follow-up Check
+        last_appointment = Appointment.objects.filter(
+            patient_profile=patient_profile,
+            doctor=doctor,
+            clinic=clinic,
+            status='completed'
+        ).order_by('-appointment_date').first()
+
+        appointment_type = "new"
+        consultation_fee = fee_structure.first_time_consultation_fee
+
+        if last_appointment:
+            delta_days = (appointment_date - last_appointment.appointment_date).days
+            if delta_days <= fee_structure.case_paper_duration:
+                appointment_type = "follow_up"
+                consultation_fee = fee_structure.follow_up_fee
+
+        # Assign default values
+        validated_data["appointment_type"] = appointment_type
+        validated_data["consultation_fee"] = consultation_fee
+        validated_data["booking_source"] = "walk_in"
+        validated_data["consultation_mode"] = "clinic"
+
+        return super().create(validated_data)

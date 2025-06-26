@@ -10,6 +10,7 @@ from django.core.paginator import Paginator
 from rest_framework.response import Response
 from django.db import transaction
 from django.utils.timezone import now
+from django.utils import timezone
 
 from appointments.models import (
     Appointment,AppointmentHistory)
@@ -18,6 +19,7 @@ from appointments.api.serializers import (AppointmentSerializer\
     PatientAppointmentSerializer,DoctorAppointmentSerializer,
     DoctorAppointmentFilterSerializer\
     ,PatientAppointmentFilterSerializer,AppointmentHistorySerializer,
+    AppointmentStatusUpdateSerializer,WalkInAppointmentSerializer,
     )
 from clinic.models import Clinic
 from doctor.models import doctor
@@ -558,14 +560,109 @@ class AppointmentHistoryView(generics.ListAPIView):
         }, status=status.HTTP_200_OK)
 
 
-# ----------------------------
-# HOOK (to call inside cancel/reschedule/create APIs)
-# ----------------------------
+class AppointmentStatusUpdateView(APIView):
+    """
+    PATCH /api/appointments/update-status/
+    Allows doctor/helpdesk/admin to mark appointment as 'completed' or 'no_show'
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctorOrHelpdesk]
 
-def log_appointment_history(appointment, status, changed_by=None, comment=""):
-    AppointmentHistory.objects.create(
-        appointment=appointment,
-        status=status,
-        changed_by=changed_by,
-        comment=comment
-    )
+    @transaction.atomic
+    def patch(self, request):
+        serializer = AppointmentStatusUpdateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response({
+                "status": "error",
+                "message": "Invalid input",
+                "data": serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        appointment_id = serializer.validated_data["id"]
+        new_status = serializer.validated_data["status"]
+        comment = serializer.validated_data.get("comment", "")
+
+        try:
+            appointment = Appointment.objects.select_related(
+                'doctor', 'clinic', 'patient_profile', 'patient_account'
+            ).get(id=appointment_id)
+        except Appointment.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "Appointment not found",
+                "data": None
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        if appointment.status in ['cancelled', 'no_show', 'completed']:
+            return Response({
+                "status": "error",
+                "message": f"Cannot update status as the appointment is already '{appointment.status}'",
+                "data": None
+            }, status=status.HTTP_409_CONFLICT)
+
+        # Update status
+        appointment.status = new_status
+        appointment.updated_at = now()
+        appointment.save(update_fields=["status", "updated_at"])
+
+        # Log in history
+        log_appointment_history(
+            appointment=appointment,
+            status=new_status,
+            changed_by=request.user,
+            comment=comment or f"Status manually set to {new_status}"
+        )
+
+        return Response({
+            "status": "success",
+            "message": f"Appointment marked as {new_status} successfully",
+            "data": {
+                "appointment_id": str(appointment.id),
+                "status": new_status
+            }
+        }, status=status.HTTP_200_OK)
+
+
+class WalkInAppointmentCreateView(APIView):
+    """
+    POST /api/appointments/walk-in/
+    Helpdesk creates a walk-in appointment for today with immediate slot.
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]  # Optionally add IsHelpdeskOnly if needed
+
+    @transaction.atomic
+    def post(self, request):
+        data = request.data.copy()
+
+        if "appointment_date" not in data:
+            data["appointment_date"] = timezone.localdate()
+
+        serializer = WalkInAppointmentSerializer(data=data)
+        if not serializer.is_valid():
+            return Response({
+                "status": "error",
+                "message": "Validation failed",
+                "data": serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            appointment = serializer.save()
+            return Response({
+                "status": "success",
+                "message": "Walk-in appointment created successfully",
+                "data": {
+                    "appointment_id": str(appointment.id),
+                    "doctor": appointment.doctor.get_name,
+                    "clinic": appointment.clinic.name,
+                    "appointment_date": appointment.appointment_date,
+                    "appointment_time": str(appointment.appointment_time),
+                    "status": appointment.status
+                }
+            }, status=status.HTTP_201_CREATED)
+        except Exception as e:
+            return Response({
+                "status": "error",
+                "message": "Internal server error",
+                "data": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
