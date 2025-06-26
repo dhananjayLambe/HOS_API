@@ -1,46 +1,42 @@
-from datetime import  timedelta
-from rest_framework import status, generics
-from rest_framework.response import Response
-from rest_framework.views import APIView
-from rest_framework.permissions import IsAuthenticated
-from rest_framework_simplejwt.authentication import JWTAuthentication
-from account.permissions import IsDoctorOrHelpdeskOrPatient, IsDoctorOrHelpdesk
-from django.utils.timezone import localdate, timedelta
-from django.core.paginator import Paginator
-from rest_framework.response import Response
-from django.db import transaction
-from django.utils.timezone import now
-from django.utils import timezone
+import logging
 
-from appointments.models import (
-    Appointment,AppointmentHistory)
-from appointments.api.serializers import (AppointmentSerializer\
-    ,AppointmentCreateSerializer,AppointmentRescheduleSerializer,
-    PatientAppointmentSerializer,DoctorAppointmentSerializer,
-    DoctorAppointmentFilterSerializer\
-    ,PatientAppointmentFilterSerializer,AppointmentHistorySerializer,
-    AppointmentStatusUpdateSerializer,WalkInAppointmentSerializer,
-    )
-from clinic.models import Clinic
-from doctor.models import doctor
-from account.permissions import IsDoctorOrHelpdesk, IsDoctorOrHelpdeskOrPatient
-from rest_framework.response import Response
-from rest_framework import status
-import datetime
-import logging
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
 from django.core.cache import cache
+from django.core.paginator import Paginator
+from django.db import transaction
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
+from django.utils.timezone import localdate, now, timedelta
+
+from rest_framework import generics, status
 from rest_framework.permissions import IsAuthenticated
-from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework.response import Response
 from rest_framework.throttling import UserRateThrottle
-from django.utils.timezone import now
-import logging
+from rest_framework.views import APIView
+
+from rest_framework_simplejwt.authentication import JWTAuthentication
+
+from account.permissions import IsDoctorOrHelpdesk, IsDoctorOrHelpdeskOrPatient
+
+from appointments.models import Appointment, AppointmentHistory
+from appointments.api.serializers import (
+    AppointmentSerializer,
+    AppointmentCreateSerializer,
+    AppointmentRescheduleSerializer,
+    PatientAppointmentSerializer,
+    DoctorAppointmentSerializer,
+    DoctorAppointmentFilterSerializer,
+    PatientAppointmentFilterSerializer,
+    AppointmentHistorySerializer,
+    AppointmentStatusUpdateSerializer,
+    WalkInAppointmentSerializer,
+)
+from appointments.utils.history import log_appointment_history
+
+from clinic.models import Clinic
+
+from doctor.models import doctor, DoctorAvailability, DoctorLeave
+
 logger = logging.getLogger(__name__)
-from doctor.models import DoctorAvailability, DoctorLeave
-from appointments.utils.history import log_appointment_history 
 
 #1. Book an Appointment (POST)
 class AppointmentCreateView(generics.CreateAPIView):
@@ -373,12 +369,11 @@ class DoctorSlotThrottle(UserRateThrottle):
 
 class AppointmentSlotView(APIView):
     """
-    Fetch slot availability for a given doctor, clinic, and date.
+    Fetch slot availability for a given doctor, clinic, and date (IST-safe).
     GET params: doctor_id, clinic_id, date (YYYY-MM-DD)
-    Caches result for 30 seconds.
     """
     authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAuthenticated, IsDoctorOrHelpdesk]
+    permission_classes = [IsAuthenticated]
     throttle_classes = [DoctorSlotThrottle]
 
     def get(self, request):
@@ -387,7 +382,6 @@ class AppointmentSlotView(APIView):
             clinic_id = request.query_params.get('clinic_id')
             date_str = request.query_params.get('date')
 
-            # Validate input
             if not (doctor_id and clinic_id and date_str):
                 return Response({
                     "status": "error",
@@ -396,7 +390,7 @@ class AppointmentSlotView(APIView):
                 }, status=status.HTTP_400_BAD_REQUEST)
 
             try:
-                date = datetime.datetime.strptime(date_str, "%Y-%m-%d").date()
+                date = timezone.datetime.strptime(date_str, "%Y-%m-%d").date()
             except ValueError:
                 return Response({
                     "status": "error",
@@ -404,7 +398,7 @@ class AppointmentSlotView(APIView):
                     "data": None
                 }, status=status.HTTP_400_BAD_REQUEST)
 
-            # Check cache
+            # ✅ Use timezone-aware caching
             cache_key = f"slots_{doctor_id}_{clinic_id}_{date_str}"
             cached_data = cache.get(cache_key)
             if cached_data:
@@ -417,7 +411,7 @@ class AppointmentSlotView(APIView):
             doctor_obj = get_object_or_404(doctor, id=doctor_id)
             clinic = get_object_or_404(Clinic, id=clinic_id)
 
-            # Check if doctor is on leave
+            # Leave check
             is_on_leave = DoctorLeave.objects.filter(
                 doctor=doctor_obj,
                 clinic=clinic,
@@ -450,23 +444,27 @@ class AppointmentSlotView(APIView):
                     "data": None
                 }, status=status.HTTP_404_NOT_FOUND)
 
-            def generate_slots(start_time, end_time):
+            def generate_slots(start_time_str, end_time_str):
                 slots = []
-                if not start_time or not end_time:
+                if not start_time_str or not end_time_str:
                     return slots
 
                 try:
-                    start = datetime.datetime.combine(date, datetime.datetime.strptime(start_time, "%H:%M:%S").time())
-                    end = datetime.datetime.combine(date, datetime.datetime.strptime(end_time, "%H:%M:%S").time())
+                    start_time = timezone.datetime.strptime(start_time_str, "%H:%M:%S").time()
+                    end_time = timezone.datetime.strptime(end_time_str, "%H:%M:%S").time()
                 except ValueError:
                     return slots
 
+                # Combine with appointment date using timezone-aware datetime
+                start = timezone.make_aware(timezone.datetime.combine(date, start_time))
+                end = timezone.make_aware(timezone.datetime.combine(date, end_time))
+
+                current = start
                 duration = availability.slot_duration
                 buffer = availability.buffer_time
-                current = start
 
-                while current + datetime.timedelta(minutes=duration) <= end:
-                    slot_end = current + datetime.timedelta(minutes=duration)
+                while current + timedelta(minutes=duration) <= end:
+                    slot_end = current + timedelta(minutes=duration)
                     is_booked = Appointment.objects.filter(
                         doctor=doctor_obj,
                         clinic=clinic,
@@ -480,7 +478,7 @@ class AppointmentSlotView(APIView):
                         "end_time": slot_end.strftime("%H:%M:%S"),
                         "available": not is_booked and not is_on_leave
                     })
-                    current = slot_end + datetime.timedelta(minutes=buffer)
+                    current = slot_end + timedelta(minutes=buffer)
                 return slots
 
             slots = {
@@ -519,7 +517,6 @@ class AppointmentSlotView(APIView):
                 "message": "Internal Server Error",
                 "data": None
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
 class AppointmentHistoryView(generics.ListAPIView):
     """

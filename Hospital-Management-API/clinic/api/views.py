@@ -1,43 +1,44 @@
 import logging
+
 from django.db import transaction
 
 from rest_framework import status, viewsets
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.permissions import AllowAny, IsAuthenticated
-from rest_framework.throttling import AnonRateThrottle
 
 from rest_framework_simplejwt.tokens import RefreshToken, TokenError
-from rest_framework_simplejwt.views import TokenObtainPairView
-from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
+from rest_framework_simplejwt.views import (
+    TokenObtainPairView,
+    TokenRefreshView,
+    TokenVerifyView,
+)
+
+from account.permissions import IsClinicAdmin
 
 from clinic.api.serializers import (
-    ClinicSerializer,
     ClinicAddressSerializer,
-    ClinicSpecializationSerializer,
-    ClinicScheduleSerializer,
     ClinicAdminRegistrationSerializer,
-    ClinicServiceSerializer,
-    ClinicServiceListSerializer,
     ClinicAdminTokenObtainPairSerializer,
     ClinicAdminTokenRefreshSerializer,
     ClinicAdminTokenVerifySerializer,
+    ClinicScheduleSerializer,
+    ClinicSerializer,
+    ClinicServiceListSerializer,
+    ClinicServiceSerializer,
+    ClinicSpecializationSerializer,
 )
 
 from clinic.models import (
     Clinic,
     ClinicAddress,
-    ClinicSpecialization,
     ClinicSchedule,
     ClinicService,
     ClinicServiceList,
+    ClinicSpecialization,
 )
 
-from account.permissions import IsClinicAdmin
-from rest_framework_simplejwt.views import TokenRefreshView
-from rest_framework_simplejwt.views import TokenVerifyView
 logger = logging.getLogger(__name__)
-
 
 class ClinicCreateView(APIView):
     permission_classes = [AllowAny]

@@ -29,6 +29,8 @@ ALLOWED_HOSTS = []
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+
+
 # Application definition
 
 INSTALLED_APPS = [
@@ -90,6 +92,7 @@ REST_FRAMEWORK={
         'user': '1000/day',   # Set this to whatever rate limit you prefer
         'anon': '100/day',
     },
+     "DATETIME_FORMAT": "%Y-%m-%d %H:%M:%S",
 }
 
 # SimpleJWT settings
@@ -183,7 +186,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+#TIME_ZONE = 'UTC'
 
 USE_I18N = True
 
@@ -191,6 +194,8 @@ USE_L10N = True
 
 USE_TZ = True
 
+TIME_ZONE = "Asia/Kolkata"
+USE_TZ = True  # required for datetime-aware operations
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/3.0/howto/static-files/

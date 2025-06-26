@@ -2,8 +2,6 @@ from rest_framework import serializers
 from appointments.models import (
     Appointment,AppointmentHistory
     )
-from django.utils.timezone import now, localdate
-from django.utils import timezone
 from doctor.models import DoctorLeave, DoctorFeeStructure
 
 from django.utils.timezone import now, localdate, localtime

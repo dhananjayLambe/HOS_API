@@ -1,22 +1,30 @@
-from rest_framework import serializers
-from clinic.models import (
-    Clinic,ClinicAddress,
-    ClinicSpecialization, ClinicSchedule,
-    ClinicService, ClinicServiceList)
-from account.models import User
-from django.core.validators import RegexValidator
-from rest_framework.exceptions import ValidationError
-from django.contrib.auth.password_validation import validate_password
-from rest_framework.validators import UniqueValidator
-from django.db import transaction
-from django.contrib.auth.models import Group
 from django.contrib.auth import authenticate
-from rest_framework_simplejwt.tokens import RefreshToken
-from clinic.models import ClinicAdminProfile
-from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from rest_framework_simplejwt.serializers import TokenVerifySerializer
+from django.contrib.auth.models import Group
+from django.contrib.auth.password_validation import validate_password
+from django.core.validators import RegexValidator
+from django.db import transaction
+
+from rest_framework import serializers
+from rest_framework.validators import UniqueValidator
+
+from rest_framework_simplejwt.serializers import (
+    TokenObtainPairSerializer,
+    TokenRefreshSerializer,
+    TokenVerifySerializer,
+)
 from rest_framework_simplejwt.tokens import UntypedToken
-from rest_framework_simplejwt.serializers import TokenRefreshSerializer
+
+from account.models import User
+
+from clinic.models import (
+    Clinic,
+    ClinicAddress,
+    ClinicAdminProfile,
+    ClinicSchedule,
+    ClinicService,
+    ClinicServiceList,
+    ClinicSpecialization,
+)
 class ClinicSerializer(serializers.ModelSerializer):
     class Meta:
         model = Clinic

@@ -2,21 +2,17 @@
 import io
 import logging
 import os
-import uuid
-from datetime import date, datetime
+from datetime import datetime
 
 # Third-Party Imports
 from reportlab.lib.colors import black
 from reportlab.lib.colors import HexColor
-from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm, inch
-from reportlab.pdfgen import canvas
 from reportlab.platypus import (
-    Frame, Image, PageBreak, PageTemplate, Paragraph,
-    SimpleDocTemplate, Spacer, Table, TableStyle
+    Paragraph,SimpleDocTemplate, Spacer, Table, TableStyle
 )
 from rest_framework import generics, permissions, status, views,viewsets
 from rest_framework.exceptions import NotFound
@@ -26,16 +22,15 @@ from rest_framework.permissions import (
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
-from weasyprint import HTML
+
 
 # Django Imports
 from django.conf import settings
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db import transaction
 from django.db.models import Q
-from django.http import FileResponse, HttpResponse, JsonResponse
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
-from django.template.loader import get_template
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.views.decorators.csrf import csrf_exempt
@@ -850,70 +845,6 @@ def generate_prescription_pdf_content(buffer, consultation_data):
     doc.build(Story, onFirstPage=lambda canvas_obj, doc: header_footer_template_common(canvas_obj, doc, doctor_data),
                      onLaterPages=lambda canvas_obj, doc: header_footer_template_common(canvas_obj, doc, doctor_data))
     return buffer
-
-# --- Django REST Framework View ---
-# class GeneratePrescriptionPDFView(APIView):
-#     """
-#     API view to generate a PDF prescription for a given consultation ID.
-#     """
-#     def post(self, request, *args, **kwargs):
-#         consultation_id = request.data.get('consultation_id')
-#         if not consultation_id:
-#             return Response({
-#                 "status": "error",
-#                 "message": "consultation_id is required in the request body."
-#             }, status=status.HTTP_400_BAD_REQUEST)
-
-#         try:
-#             # Fetch the Consultation object
-#             consultation_obj = get_object_or_404(Consultation, id=consultation_id)
-
-#             # Serialize the consultation data using your serializer
-#             serializer = ConsultationSummarySerializer(consultation_obj)
-#             consultation_data = serializer.data
-
-#             # Create a buffer to hold the PDF
-#             buffer = io.BytesIO()
-
-#             # Generate the PDF content into the buffer, passing the dynamic data
-#             generate_prescription_pdf_content(buffer, consultation_data)
-
-#             # Rewind the buffer's file pointer to the beginning
-#             buffer.seek(0)
-
-#             # Create a unique filename for the PDF
-#             pdf_filename = f"prescription_{consultation_data.get('prescription_pnr', uuid.uuid4().hex)}.pdf"
-#             pdf_path = os.path.join(settings.MEDIA_ROOT, 'prescriptions', pdf_filename)
-
-#             # Ensure the prescriptions directory exists within MEDIA_ROOT
-#             os.makedirs(os.path.dirname(pdf_path), exist_ok=True)
-
-#             # Save the PDF to the media folder
-#             with open(pdf_path, 'wb') as f:
-#                 f.write(buffer.getvalue())
-
-#             # Construct the URL for the saved PDF
-#             pdf_url = f"{settings.MEDIA_URL}prescriptions/{pdf_filename}"
-
-#             return Response({
-#                 "status": "success",
-#                 "message": "PDF generated and saved successfully.",
-#                 "pdf_filename": pdf_filename,
-#                 "pdf_url": pdf_url
-#             }, status=status.HTTP_200_OK)
-
-#         except Consultation.DoesNotExist:
-#             return Response({
-#                 "status": "error",
-#                 "message": f"Consultation with ID '{consultation_id}' not found."
-#             }, status=status.HTTP_404_NOT_FOUND)
-#         except Exception as e:
-#             # Log the error for debugging purposes
-#             print(f"Error generating PDF: {e}")
-#             return Response({
-#                 "status": "error",
-#                 "message": f"Failed to generate PDF: {str(e)}"
-#             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class GeneratePrescriptionPDFView(APIView):
     """

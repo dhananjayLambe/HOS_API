@@ -1,24 +1,31 @@
-from rest_framework import serializers
-from consultations.models import Consultation
-from doctor.models import doctor
-from patient_account.models import PatientProfile
-from django.utils import timezone
 from django.db import transaction
+from django.utils import timezone
+
+from rest_framework import serializers
+
 from consultations.models import (
-    Vitals, Complaint, Diagnosis,
-    Advice, AdviceTemplate,PatientFeedback,
-    Consultation)
-from account.models import User
-from utils.static_data_service import StaticDataService
-from prescriptions.models import Prescription
-from diagnostic.models import TestRecommendation, PackageRecommendation
-from doctor.api.serializers import DoctorSerializer,DoctorSummarySerializer
-from patient_account.api.serializers import PatientProfileSerializer
-from diagnostic.api.serializers import (
-    TestRecommendationSerializer,
-    PackageRecommendationSerializer
+    Advice,
+    AdviceTemplate,
+    Complaint,
+    Consultation,
+    Diagnosis,
+    PatientFeedback,
+    Vitals,
 )
+
+from diagnostic.api.serializers import (
+    PackageRecommendationSerializer,
+    TestRecommendationSerializer,
+)
+
+from doctor.api.serializers import  DoctorSummarySerializer
+from doctor.models import doctor
+
+from patient_account.api.serializers import PatientProfileSerializer
+from patient_account.models import PatientProfile
+
 from prescriptions.api.serializers import PrescriptionSerializer
+
 from utils.static_data_service import StaticDataService
 
 
