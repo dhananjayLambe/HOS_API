@@ -8,7 +8,7 @@ from appointments.api.views import (
     PatientAppointmentsView,
     DoctorAppointmentsView,
     AppointmentSlotView,AppointmentHistoryView,AppointmentStatusUpdateView,
-    WalkInAppointmentCreateView,
+    WalkInAppointmentCreateView,AppointmentTodayMetricsView,DoctorCalendarView,
     )
 app_name = 'appointments'
 
@@ -25,4 +25,7 @@ urlpatterns = [
     path("history/", AppointmentHistoryView.as_view(), name="appointment-history"),
     path("update-status/", AppointmentStatusUpdateView.as_view(), name="appointment-update-status"),
     path('walk-in/', WalkInAppointmentCreateView.as_view(), name='walk-in-appointment'),
+    path("metrics/today/", AppointmentTodayMetricsView.as_view(), name="appointment-metrics-today"),
+    path("calendar-view/", DoctorCalendarView.as_view(), name="calendar-view"),
+
 ]

@@ -48,6 +48,8 @@ class PatientProfile(models.Model):
 
     def __str__(self):
         return f"{self.first_name} ({self.relation})"
+    def get_full_name(self):
+        return f"{self.first_name} {self.last_name}"
 
 class PatientProfileDetails(models.Model):
     BLOOD_GROUP_CHOICES = [

@@ -6,6 +6,7 @@ from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.timezone import localdate, now, timedelta
+from django.utils.timezone import localtime
 
 from rest_framework import generics, status
 from rest_framework.permissions import IsAuthenticated
@@ -37,6 +38,8 @@ from clinic.models import Clinic
 from doctor.models import doctor, DoctorAvailability, DoctorLeave
 
 logger = logging.getLogger(__name__)
+from zoneinfo import ZoneInfo
+#from datetime import timedelta
 
 #1. Book an Appointment (POST)
 class AppointmentCreateView(generics.CreateAPIView):
@@ -663,3 +666,159 @@ class WalkInAppointmentCreateView(APIView):
                 "message": "Internal server error",
                 "data": str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+IST = ZoneInfo("Asia/Kolkata")
+CACHE_TIMEOUT = 300  # 5 minutes
+
+class AppointmentTodayMetricsView(APIView):
+    """
+    GET /api/appointments/metrics/today/
+    Required query params: doctor_id, clinic_id
+    Returns today’s appointment counts (scheduled, completed, cancelled, no-show)
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctorOrHelpdesk]
+
+    def get(self, request):
+        doctor_id = request.query_params.get("doctor_id")
+        clinic_id = request.query_params.get("clinic_id")
+
+        if not doctor_id or not clinic_id:
+            return Response({
+                "status": "error",
+                "message": "doctor_id and clinic_id are required."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Get current IST datetime and today's date
+        now_ist = localtime().astimezone(IST)
+        today_ist = now_ist.date()
+
+        # Create cache key
+        cache_key = f"appointment_metrics:{doctor_id}:{clinic_id}:{today_ist}"
+        cached_metrics = cache.get(cache_key)
+
+        if cached_metrics:
+            return Response({
+                "status": "success",
+                "message": "Today's appointment metrics retrieved from cache",
+                "timestamp": now_ist.strftime("%Y-%m-%d %H:%M:%S"),
+                "data": cached_metrics
+            }, status=status.HTTP_200_OK)
+
+        # Query database for today's appointments
+        qs = Appointment.objects.filter(
+            doctor_id=doctor_id,
+            clinic_id=clinic_id,
+            appointment_date=today_ist
+        )
+
+        metrics = {
+            "date": str(today_ist),
+            "scheduled": qs.filter(status="scheduled").count(),
+            "completed": qs.filter(status="completed").count(),
+            "cancelled": qs.filter(status="cancelled").count(),
+            "no_show": qs.filter(status="no_show").count()
+        }
+
+        # Cache the result for 5 minutes
+        cache.set(cache_key, metrics, timeout=CACHE_TIMEOUT)
+
+        return Response({
+            "status": "success",
+            "message": "Today's appointment metrics retrieved",
+            "timestamp": now_ist.strftime("%Y-%m-%d %H:%M:%S"),
+            "data": metrics
+        }, status=status.HTTP_200_OK)        
+
+IST = ZoneInfo("Asia/Kolkata")
+CACHE_TIMEOUT = 300  # 5 minutes
+
+class DoctorCalendarView(APIView):
+    """
+    GET /api/appointments/calendar-view/
+    Returns slot-wise appointments for a doctor between start_date and end_date.
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctorOrHelpdesk]
+
+    def get(self, request):
+        doctor_id = request.query_params.get("doctor_id")
+        clinic_id = request.query_params.get("clinic_id")
+        start_date_str = request.query_params.get("start_date")
+        end_date_str = request.query_params.get("end_date")
+
+        if not doctor_id or not clinic_id:
+            return Response({
+                "status": "error",
+                "message": "doctor_id and clinic_id are required.",
+                "data": None
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        now_ist = localtime().astimezone(IST)
+
+        try:
+            # Parse dates or default to today + 7 days
+            start_date = timezone.datetime.strptime(start_date_str, "%Y-%m-%d").date() if start_date_str else now_ist.date()
+            end_date = timezone.datetime.strptime(end_date_str, "%Y-%m-%d").date() if end_date_str else start_date + timedelta(days=6)
+        except ValueError:
+            return Response({
+                "status": "error",
+                "message": "Invalid date format. Use YYYY-MM-DD.",
+                "data": None
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        if start_date > end_date:
+            return Response({
+                "status": "error",
+                "message": "start_date cannot be after end_date.",
+                "data": None
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        if (end_date - start_date).days > 31:
+            return Response({
+                "status": "error",
+                "message": "Date range cannot exceed 31 days.",
+                "data": None
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Cache Key
+        cache_key = f"calendar_view:{doctor_id}:{clinic_id}:{start_date}:{end_date}"
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            return Response({
+                "status": "success",
+                "message": "Doctor calendar fetched from cache.",
+                "timestamp": now_ist.strftime("%Y-%m-%d %H:%M:%S"),
+                "data": cached_data
+            }, status=status.HTTP_200_OK)
+
+        # Fetch Appointments
+        appointments = Appointment.objects.filter(
+            doctor_id=doctor_id,
+            clinic_id=clinic_id,
+            appointment_date__range=(start_date, end_date)
+        ).order_by("appointment_date", "appointment_time")
+
+        # Organize data by date
+        calendar_data = {}
+        for appt in appointments:
+            date_str = appt.appointment_date.strftime("%Y-%m-%d")
+            calendar_data.setdefault(date_str, []).append({
+                "id": str(appt.id),
+                "time": appt.appointment_time.strftime("%H:%M"),
+                "patient": appt.patient_profile.get_full_name(),
+                "status": appt.status,
+                "consultation_mode": appt.consultation_mode,
+                "booking_source": appt.booking_source,
+            })
+
+        cache.set(cache_key, calendar_data, timeout=CACHE_TIMEOUT)
+
+        return Response({
+            "status": "success",
+            "message": "Doctor calendar fetched successfully.",
+            "timestamp": now_ist.strftime("%Y-%m-%d %H:%M:%S"),
+            "data": calendar_data
+        }, status=status.HTTP_200_OK)
+
+
