@@ -656,14 +656,24 @@ def generate_prescription_pdf_content(buffer, consultation_data):
     # Calculate patient age
     patient_dob_str = patient_data.get('date_of_birth', '2000-01-01')
     try:
-        patient_dob = datetime.strptime(patient_dob_str, '%Y-%m-%d')
-        patient_age = datetime.now().year - patient_dob.year - ((datetime.now().month, datetime.now().day) < (patient_dob.month, patient_dob.day))
+        patient_dob = timezone.datetime.strptime(patient_dob_str, '%Y-%m-%d').date()
+        today = timezone.localdate()  # IST-aware current date
+        patient_age = today.year - patient_dob.year - (
+            (today.month, today.day) < (patient_dob.month, patient_dob.day)
+        )
         patient_age_gender_display = f"{patient_age}y, {patient_data.get('gender', 'N/A')}"
-    except ValueError:
+    except Exception:
         patient_age_gender_display = f"N/A, {patient_data.get('gender', 'N/A')}"
+    # try:
+    #     patient_dob = datetime.strptime(patient_dob_str, '%Y-%m-%d')
+    #     patient_age = datetime.now().year - patient_dob.year - ((datetime.now().month, datetime.now().day) < (patient_dob.month, patient_dob.day))
+    #     patient_age_gender_display = f"{patient_age}y, {patient_data.get('gender', 'N/A')}"
+    # except ValueError:
+    #     patient_age_gender_display = f"N/A, {patient_data.get('gender', 'N/A')}"
     patient_name = f"{patient_data.get('first_name', '')} {patient_data.get('last_name', '')}"
     #patient_age_gender = f"{datetime.now().year - datetime.strptime(patient_data.get('date_of_birth', '2000-01-01'), '%Y-%m-%d').year}y, {patient_data.get('gender', 'N/A')}"
-    prescription_date = datetime.strptime(consultation_data.get('started_at', datetime.now().isoformat()), '%Y-%m-%dT%H:%M:%S.%fZ').strftime("%Y-%m-%d")
+    #prescription_date = datetime.strptime(consultation_data.get('started_at', datetime.now().isoformat()), '%Y-%m-%dT%H:%M:%S.%fZ').strftime("%Y-%m-%d")
+    prescription_date = timezone.localdate().strftime("%Y-%m-%d")
     patient_height = f"{vitals_data.get('height_cm', 'N/A')} cm"
     patient_weight = f"{vitals_data.get('weight_kg', 'N/A')} kg"
     follow_up_date = consultation_data.get('follow_up_date', 'N/A')
@@ -913,8 +923,6 @@ class GeneratePrescriptionPDFView(APIView):
                 "status": "error",
                 "message": f"Failed to generate PDF: {str(e)}"
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
 
 class ConsultationHistoryAPIView(APIView):
     authentication_classes = [JWTAuthentication]
