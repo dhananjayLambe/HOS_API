@@ -6,6 +6,7 @@ from doctor.models import doctor
 from patient_account.models import PatientAccount, PatientProfile
 from utils.static_data_service import StaticDataService
 from account.models import User
+from appointments.models import Appointment
 
 
 class Consultation(models.Model):
@@ -35,7 +36,10 @@ class Consultation(models.Model):
     started_at = models.DateTimeField(auto_now_add=True)
     ended_at = models.DateTimeField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
-
+    appointment = models.ForeignKey(Appointment, 
+                        on_delete=models.SET_NULL, 
+                        null=True, blank=True, 
+                        related_name="consultations")
     class Meta:
         ordering = ['-started_at']
         verbose_name = "Consultation"

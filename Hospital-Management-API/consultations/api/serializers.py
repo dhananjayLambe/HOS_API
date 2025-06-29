@@ -27,21 +27,27 @@ from patient_account.models import PatientProfile
 from prescriptions.api.serializers import PrescriptionSerializer
 
 from utils.static_data_service import StaticDataService
-
+from appointments.models import Appointment
 
 class StartConsultationSerializer(serializers.ModelSerializer):
     patient_profile_id = serializers.UUIDField(write_only=True)
     doctor_id = serializers.UUIDField(write_only=True)
     reason = serializers.CharField(required=False, allow_blank=True, write_only=True)
+    appointment_id = serializers.UUIDField(write_only=True, required=False, allow_null=True)
 
     class Meta:
         model = Consultation
-        fields = ["id", "consultation_pnr", "prescription_pnr", "doctor_id", "patient_profile_id", "started_at", "is_active", "reason"]
+        fields = [
+            "id", "consultation_pnr", "prescription_pnr",
+            "doctor_id", "patient_profile_id", "appointment_id",
+            "started_at", "is_active", "reason"
+        ]
         read_only_fields = ["id", "consultation_pnr", "prescription_pnr", "started_at", "is_active"]
 
     def validate(self, attrs):
         doctor_id = attrs.get("doctor_id")
         patient_profile_id = attrs.get("patient_profile_id")
+        appointment_id = attrs.get("appointment_id")
 
         try:
             doctor_obj = doctor.objects.get(id=doctor_id)
@@ -56,11 +62,32 @@ class StartConsultationSerializer(serializers.ModelSerializer):
         attrs["doctor_obj"] = doctor_obj
         attrs["patient_profile_obj"] = patient_profile_obj
         attrs["patient_account_obj"] = patient_profile_obj.account
+
+        # Appointment validation
+        if appointment_id:
+            try:
+                appointment_obj = Appointment.objects.get(id=appointment_id)
+            except Appointment.DoesNotExist:
+                raise serializers.ValidationError({"appointment_id": "Appointment not found."})
+
+            if appointment_obj.patient_profile != patient_profile_obj:
+                raise serializers.ValidationError({"appointment_id": "Appointment does not belong to the patient."})
+
+            # Optional: prevent duplicate consultation for the same appointment
+            if Consultation.objects.filter(appointment=appointment_obj).exists():
+                raise serializers.ValidationError({"appointment_id": "Consultation already exists for this appointment."})
+
+            attrs["appointment_obj"] = appointment_obj
+
         return attrs
 
     def create(self, validated_data):
         doctor = validated_data["doctor_obj"]
         patient_profile = validated_data["patient_profile_obj"]
+        patient_account = validated_data["patient_account_obj"]
+        appointment = validated_data.get("appointment_obj", None)
+
+        # Check for existing active consultation (optional: skip this if appointment is passed)
         existing_consultation = Consultation.objects.filter(
             doctor=doctor,
             patient_profile=patient_profile,
@@ -70,17 +97,16 @@ class StartConsultationSerializer(serializers.ModelSerializer):
         if existing_consultation:
             return existing_consultation
 
-        # Else create a new consultation
         with transaction.atomic():
             consultation = Consultation.objects.create(
                 doctor=doctor,
                 patient_profile=patient_profile,
-                patient_account=validated_data["patient_account_obj"],
+                patient_account=patient_account,
+                appointment=appointment,
                 started_at=timezone.now(),
                 is_active=True
             )
             return consultation
-
 class VitalsSerializer(serializers.ModelSerializer):
     class Meta:
         model = Vitals
