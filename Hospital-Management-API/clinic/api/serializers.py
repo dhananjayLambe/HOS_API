@@ -213,3 +213,17 @@ class PendingClinicAdminSerializer(serializers.ModelSerializer):
 
     def get_full_name(self, obj):
         return f"{obj.user.first_name} {obj.user.last_name}"
+
+# serializers.py
+
+class ClinicAddressSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ClinicAddress
+        fields = ['address', 'address2', 'city', 'state', 'pincode', 'country']
+
+class ClinicSummarySerializer(serializers.ModelSerializer):
+    address = ClinicAddressSerializer()
+
+    class Meta:
+        model = Clinic
+        fields = ['id', 'name', 'contact_number_primary', 'contact_number_secondary', 'email_address', 'address']

@@ -28,6 +28,7 @@ from prescriptions.api.serializers import PrescriptionSerializer
 
 from utils.static_data_service import StaticDataService
 from appointments.models import Appointment
+from clinic.api.serializers import ClinicSummarySerializer
 
 class StartConsultationSerializer(serializers.ModelSerializer):
     patient_profile_id = serializers.UUIDField(write_only=True)
@@ -124,22 +125,6 @@ class VitalsSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"blood_pressure": "Blood pressure must be in format systolic/diastolic (e.g., 120/80)."})
         return attrs
 
-# class ComplaintSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = Complaint
-#         fields = [
-#             'id', 'complaint_text', 'duration', 'severity', 'is_general', 'doctor_note'
-#         ]
-#     def validate(self, data):
-#         consultation_id = self.context['consultation_id']
-#         existing_complaint = Complaint.objects.filter(consultation_id=consultation_id, complaint_text=data['complaint_text']).first()
-#         if existing_complaint:
-#             raise serializers.ValidationError('Complaint with the same details already exists for this consultation.')
-#         severity = data.get('severity')
-#         if severity and severity.lower() not in ['mild', 'moderate', 'severe']:
-#             raise serializers.ValidationError("Severity must be one of: mild, moderate, severe.")
-#         return data
-
 class ComplaintSerializer(serializers.ModelSerializer):
     class Meta:
         model = Complaint
@@ -209,24 +194,6 @@ class AdviceTemplateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Advice template with this description already exists.")
         return value.strip()
 
-# class AdviceSerializer(serializers.ModelSerializer):
-#     advice_templates = serializers.PrimaryKeyRelatedField(
-#         many=True,
-#         queryset=AdviceTemplate.objects.all(),
-#         required=False
-#     )
-
-#     class Meta:
-#         model = Advice
-#         fields = ['id', 'consultation', 'advice_templates', 'custom_advice', 'created_at', 'updated_at']
-#         read_only_fields = ['id', 'created_at', 'updated_at', 'consultation']
-
-#     def validate(self, attrs):
-#         if not attrs.get('advice_templates') and not attrs.get('custom_advice'):
-#             raise serializers.ValidationError("Either 'advice_templates' or 'custom_advice' must be provided.")
-#         return attrs
-
-
 class AdviceSerializer(serializers.ModelSerializer):
     advice_templates = serializers.PrimaryKeyRelatedField(
         many=True,
@@ -255,6 +222,7 @@ class EndConsultationSerializer(serializers.Serializer):
 
 class ConsultationSummarySerializer(serializers.ModelSerializer):
     doctor = DoctorSummarySerializer()
+    clinic = serializers.SerializerMethodField()
     patient = PatientProfileSerializer(source='patient_profile')
     vitals = VitalsSerializer()
     complaints = ComplaintSerializer(many=True)
@@ -263,15 +231,24 @@ class ConsultationSummarySerializer(serializers.ModelSerializer):
     advices = AdviceSerializer(many=True)
     test_recommendations = TestRecommendationSerializer(many=True)
     package_recommendations = PackageRecommendationSerializer(many=True)
+    appointment_id = serializers.UUIDField(source='appointment.id', allow_null=True)
 
     class Meta:
         model = Consultation
         fields = [
-            'id', 'consultation_pnr', 'prescription_pnr', 'started_at', 'ended_at',
-            'doctor', 'patient', 'follow_up_date', 'is_finalized',
+            'id', 'consultation_pnr', 'prescription_pnr', 'started_at', 'ended_at','appointment_id',
+            'doctor', 'patient', 'follow_up_date', 'is_finalized','clinic',
             'vitals', 'complaints', 'diagnoses', 'prescriptions',
             'advices', 'test_recommendations', 'package_recommendations'
         ]
+    def get_clinic(self, obj):
+        clinics = obj.doctor.clinics.all()
+        if not clinics.exists():
+            return None
+
+        # Pick the first clinic
+        clinic = clinics.first()
+        return ClinicSummarySerializer(clinic).data
 
 class ConsultationTagSerializer(serializers.ModelSerializer):
     tag = serializers.ChoiceField(choices=StaticDataService.get_consultation_tag_choices(), required=True)
@@ -329,3 +306,11 @@ class PatientFeedbackSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data['created_by'] = self.context['request'].user
         return super().create(validated_data)
+
+
+class FollowUpSerializer(serializers.ModelSerializer):
+    updated_by = serializers.CharField(source='follow_up_updated_by.username', read_only=True)
+
+    class Meta:
+        model = Consultation
+        fields = ['follow_up_date', 'updated_by', 'follow_up_updated_at']

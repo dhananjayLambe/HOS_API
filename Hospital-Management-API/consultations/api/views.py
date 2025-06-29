@@ -50,6 +50,7 @@ from consultations.api.serializers import (
 )
 from consultations.utils import render_pdf
 from patient_account.models import PatientProfile
+from clinic.models import Clinic, ClinicAddress
 
 # Logger
 logger = logging.getLogger(__name__)
@@ -196,66 +197,6 @@ class VitalsAPIView(views.APIView):
                 "message": "Vitals not found for this consultation."
             }, status=status.HTTP_404_NOT_FOUND)
 
-# class ComplaintAPIView(views.APIView):
-#     permission_classes = [IsAuthenticated]
-#     authourization_classes = [IsDoctor]
-
-#     def post(self, request, consultation_id):
-#         """
-#         Add new complaint to a consultation
-#         """
-#         try:
-#             consultation = Consultation.objects.get(id=consultation_id)
-#         except Consultation.DoesNotExist:
-#             return Response({"status": False, "message": "Consultation not found."}, status=status.HTTP_404_NOT_FOUND)
-
-#         serializer = ComplaintSerializer(data=request.data, context={'consultation_id': consultation_id})
-#         if serializer.is_valid():
-#             Complaint.objects.create(
-#                 consultation=consultation,
-#                 **serializer.validated_data
-#             )
-#             return Response({
-#                 "status": True,
-#                 "message": "Complaint added successfully."
-#             }, status=status.HTTP_201_CREATED)
-
-#         return Response({"status": False, "errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
-
-#     def patch(self, request, consultation_id, complaint_id):
-#         """
-#         Update an existing complaint
-#         """
-#         try:
-#             complaint = Complaint.objects.get(id=complaint_id, consultation_id=consultation_id)
-#         except Complaint.DoesNotExist:
-#             return Response({"status": False, "message": "Complaint not found."}, status=status.HTTP_404_NOT_FOUND)
-
-#         serializer = ComplaintSerializer(complaint, data=request.data, partial=True)
-#         if serializer.is_valid():
-#             serializer.save()
-#             return Response({
-#                 "status": True,
-#                 "message": "Complaint updated successfully."
-#             }, status=status.HTTP_200_OK)
-
-#         return Response({"status": False, "errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
-
-#     def delete(self, request, consultation_id, complaint_id):
-#         """
-#         Delete a complaint
-#         """
-#         try:
-#             complaint = Complaint.objects.get(id=complaint_id, consultation_id=consultation_id)
-#         except Complaint.DoesNotExist:
-#             return Response({"status": False, "message": "Complaint not found."}, status=status.HTTP_404_NOT_FOUND)
-
-#         complaint.delete()
-#         return Response({
-#             "status": True,
-#             "message": "Complaint deleted successfully."
-#         }, status=status.HTTP_200_OK)
-
 class ComplaintAPIView(views.APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated, IsDoctor]
@@ -336,88 +277,6 @@ class ComplaintAPIView(views.APIView):
             "status": True,
             "message": "Complaint deleted successfully."
         }, status=status.HTTP_200_OK)
-
-# class DiagnosisAPIView(views.APIView):
-#     permission_classes = [IsAuthenticated]
-#     authourization_classes = [IsDoctor]
-#     def post(self, request, consultation_id):
-#         """
-#         Create a diagnosis for a consultation
-#         """
-#         try:
-#             consultation = Consultation.objects.get(id=consultation_id)
-#         except Consultation.DoesNotExist:
-#             return Response({"status": False, "message": "Consultation not found."}, status=status.HTTP_404_NOT_FOUND)
-
-#         # Add the consultation_id to the request data implicitly
-#         request.data['consultation'] = consultation.id
-#         # Check if a diagnosis with the same details already exists
-#         existing_diagnosis = Diagnosis.objects.filter(
-#             consultation_id=consultation_id,
-#             code=request.data.get('code'),
-#             description=request.data.get('description'),
-#             location=request.data.get('location'),
-#             diagnosis_type=request.data.get('diagnosis_type')
-#         ).exists()
-
-#         if existing_diagnosis:
-#             return Response({
-#                 "status": False,
-#                 "message": "Duplicate diagnosis entry found."
-#             }, status=status.HTTP_400_BAD_REQUEST)
-
-#         # Validate and create diagnosis
-#         serializer = DiagnosisSerializer(data=request.data)
-#         if serializer.is_valid():
-#             diagnosis = serializer.save()
-#             return Response({
-#                 "status": True,
-#                 "message": "Diagnosis created successfully.",
-#                 "data": serializer.data
-#             }, status=status.HTTP_201_CREATED)
-
-#         return Response({
-#             "status": False,
-#             "errors": serializer.errors
-#         }, status=status.HTTP_400_BAD_REQUEST)
-
-#     def patch(self, request, consultation_id, diagnosis_id):
-#         """
-#         Update an existing diagnosis (partial update)
-#         """
-#         try:
-#             diagnosis = Diagnosis.objects.get(id=diagnosis_id, consultation_id=consultation_id)
-#         except Diagnosis.DoesNotExist:
-#             return Response({"status": False, "message": "Diagnosis not found."}, status=status.HTTP_404_NOT_FOUND)
-
-#         serializer = DiagnosisSerializer(diagnosis, data=request.data, partial=True)
-#         if serializer.is_valid():
-#             serializer.save()
-#             return Response({
-#                 "status": True,
-#                 "message": "Diagnosis updated successfully.",
-#                 "data": serializer.data
-#             }, status=status.HTTP_200_OK)
-
-#         return Response({
-#             "status": False,
-#             "errors": serializer.errors
-#         }, status=status.HTTP_400_BAD_REQUEST)
-
-#     def delete(self, request, consultation_id, diagnosis_id):
-#         """
-#         Delete a diagnosis from a consultation
-#         """
-#         try:
-#             diagnosis = Diagnosis.objects.get(id=diagnosis_id, consultation_id=consultation_id)
-#         except Diagnosis.DoesNotExist:
-#             return Response({"status": False, "message": "Diagnosis not found."}, status=status.HTTP_404_NOT_FOUND)
-
-#         diagnosis.delete()
-#         return Response({
-#             "status": True,
-#             "message": "Diagnosis deleted successfully."
-#         }, status=status.HTTP_200_OK)
 
 class DiagnosisAPIView(views.APIView):
     authentication_classes = [JWTAuthentication]
@@ -569,80 +428,6 @@ class AdviceTemplateDetailAPIView(views.APIView):
             "status": True,
             "message": "Advice template deleted successfully."
         }, status=status.HTTP_200_OK)
-
-# class AdviceAPIView(views.APIView):
-#     permission_classes = [IsAuthenticated]
-#     authourization_classes = [IsDoctor]
-
-#     def post(self, request, consultation_id):
-#         """
-#         Add advice (templates and/or custom) to a consultation.
-#         """
-#         try:
-#             consultation = Consultation.objects.get(id=consultation_id)
-#         except Consultation.DoesNotExist:
-#             return Response({"status": False, "message": "Consultation not found."}, status=status.HTTP_404_NOT_FOUND)
-#         # Check if an advice with the same details already exists
-#         existing_advice = Advice.objects.filter(
-#             consultation_id=consultation_id,
-#             custom_advice=request.data.get('custom_advice')
-#             ).filter(
-#                 advice_templates__id__in=request.data.get('advice_templates')
-#             ).exists()
-
-#         if existing_advice:
-#             return Response({
-#                 "status": False,
-#                 "message": "Duplicate advice entry found."
-#             }, status=status.HTTP_400_BAD_REQUEST)
-
-#         serializer = AdviceSerializer(data=request.data)
-#         if serializer.is_valid():
-#             advice = serializer.save(consultation=consultation)
-#             if 'advice_templates' in request.data:
-#                 advice.advice_templates.set(request.data['advice_templates'])
-#             return Response({
-#                 "status": True,
-#                 "message": "Advice added successfully.",
-#                 "data": AdviceSerializer(advice).data
-#             }, status=status.HTTP_201_CREATED)
-
-#         return Response({"status": False, "errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
-
-#     def patch(self, request, consultation_id, advice_id):
-#         """
-#         Update an existing advice.
-#         """
-#         try:
-#             advice = Advice.objects.get(id=advice_id, consultation_id=consultation_id)
-#         except Advice.DoesNotExist:
-#             return Response({"status": False, "message": "Advice not found."}, status=status.HTTP_404_NOT_FOUND)
-
-#         serializer = AdviceSerializer(advice, data=request.data, partial=True)
-#         if serializer.is_valid():
-#             updated_advice = serializer.save()
-#             if 'advice_templates' in request.data:
-#                 updated_advice.advice_templates.set(request.data['advice_templates'])
-#             return Response({
-#                 "status": True,
-#                 "message": "Advice updated successfully.",
-#                 "data": AdviceSerializer(updated_advice).data
-#             }, status=status.HTTP_200_OK)
-
-#         return Response({"status": False, "errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
-
-#     def delete(self, request, consultation_id, advice_id):
-#         """
-#         Delete an advice entry.
-#         """
-#         try:
-#             advice = Advice.objects.get(id=advice_id, consultation_id=consultation_id)
-#         except Advice.DoesNotExist:
-#             return Response({"status": False, "message": "Advice not found."}, status=status.HTTP_404_NOT_FOUND)
-
-#         advice.delete()
-#         return Response({"status": True, "message": "Advice deleted successfully."}, status=status.HTTP_200_OK)
-
 
 class AdviceAPIView(views.APIView):
     authentication_classes = [JWTAuthentication]
@@ -886,6 +671,10 @@ def header_footer_template_common(canvas_obj, doc, doctor_data):
     header_draw_start_y = A4[1] - (0.5 * inch) # Start 0.5 inch from the absolute top of the page
 
     # Clinic details (left) - using global constants for now
+    # clinic_name = clinic_data.get('name', 'N/A')
+    # clinic_address = clinic_data.get('address', 'N/A')
+    # clinic_contact = f"Contact: {clinic_data.get('contact_number_primary', 'N/A')} | Email: {clinic_data.get('email_address', 'N/A')}"
+
     clinic_name_p = Paragraph(CLINIC_NAME, styles['ClinicHeaderCanvas'])
     clinic_address_p = Paragraph(CLINIC_ADDRESS, styles['NormalLeftCanvas'])
     clinic_contact_p = Paragraph(CLINIC_CONTACT, styles['NormalLeftCanvas'])
@@ -1414,7 +1203,6 @@ class TagConsultationView(APIView):
                 "message": f"Something went wrong: {str(e)}"
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-
 class PatientTimelineView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated, ] #IsDoctorOrPatient
@@ -1530,3 +1318,58 @@ class PatientFeedbackViewSet(viewsets.ModelViewSet):
         if user.is_superuser:
             return PatientFeedback.objects.all()
         return PatientFeedback.objects.filter(created_by=user)
+
+class FollowUpAPIView(views.APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctor]
+
+    def get_object(self, consultation_id):
+        return get_object_or_404(Consultation, id=consultation_id)
+
+    def get(self, request, consultation_id):
+        consultation = self.get_object(consultation_id)
+        return Response({
+            "status": True,
+            "message": "Follow-up date fetched successfully.",
+            "data": {
+                "follow_up_date": consultation.follow_up_date
+            }
+        }, status=status.HTTP_200_OK)
+
+    @transaction.atomic
+    def post(self, request, consultation_id):
+        consultation = self.get_object(consultation_id)
+        follow_up_date = request.data.get("follow_up_date")
+
+        if not follow_up_date:
+            return Response({
+                "status": False,
+                "message": "follow_up_date is required in YYYY-MM-DD format."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            consultation.follow_up_date = follow_up_date
+            consultation.save()
+            return Response({
+                "status": True,
+                "message": "Follow-up date set successfully.",
+                "data": {
+                    "follow_up_date": consultation.follow_up_date
+                }
+            }, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({
+                "status": False,
+                "message": "Failed to update follow-up date.",
+                "error": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @transaction.atomic
+    def delete(self, request, consultation_id):
+        consultation = self.get_object(consultation_id)
+        consultation.follow_up_date = None
+        consultation.save()
+        return Response({
+            "status": True,
+            "message": "Follow-up date removed successfully."
+        }, status=status.HTTP_200_OK)

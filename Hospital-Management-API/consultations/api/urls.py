@@ -8,7 +8,7 @@ from consultations.api.views import(
     GeneratePrescriptionPDFView,ConsultationHistoryAPIView,
     GlobalConsultationSearchView,TagConsultationView,
     PatientTimelineView,ListPrescriptionPDFsView,
-    PatientFeedbackViewSet,
+    PatientFeedbackViewSet,FollowUpAPIView,
     test_pdf
     )
 # urlpatterns = []
@@ -29,6 +29,7 @@ urlpatterns = [
     path('advice/templates/<uuid:template_id>/', AdviceTemplateDetailAPIView.as_view(), name='advice-template-detail'),
     path('advice/<uuid:consultation_id>/', AdviceAPIView.as_view(), name='advice-list-or-create'),
     path('advice/<uuid:consultation_id>/<uuid:advice_id>/', AdviceAPIView.as_view(), name='advice-detail'),
+    path('follow-up/<uuid:consultation_id>/', FollowUpAPIView.as_view(), name='consultation-follow-up'),
     path('summary/<uuid:pk>/', ConsultationSummaryView.as_view(), name='consultation-summary'),
     path('test-pdf/',test_pdf, name='test-pdf'),
     path("generate-pdf/<uuid:consultation_id>/", GeneratePrescriptionPDFView.as_view(), name="generate-prescription-pdf"),
