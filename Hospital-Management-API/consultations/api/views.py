@@ -516,12 +516,6 @@ class DiagnosisAPIView(views.APIView):
             "message": "Diagnosis deleted successfully."
         }, status=status.HTTP_200_OK)
 
-# class AdviceTemplateListAPIView(generics.ListAPIView):
-#     queryset = AdviceTemplate.objects.all().order_by('description')
-#     serializer_class = AdviceTemplateSerializer
-#     permission_classes = [IsAuthenticated]
-#     #authourization_classes = [Allow]need to add as this can be use by docotors and patients as well
-
 class AdviceTemplateListCreateAPIView(generics.ListCreateAPIView):
     queryset = AdviceTemplate.objects.all().order_by('description')
     serializer_class = AdviceTemplateSerializer
@@ -543,7 +537,6 @@ class AdviceTemplateListCreateAPIView(generics.ListCreateAPIView):
             "message": "Validation failed.",
             "errors": serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
-
 
 class AdviceTemplateDetailAPIView(views.APIView):
     authentication_classes = [JWTAuthentication]
@@ -577,78 +570,170 @@ class AdviceTemplateDetailAPIView(views.APIView):
             "message": "Advice template deleted successfully."
         }, status=status.HTTP_200_OK)
 
+# class AdviceAPIView(views.APIView):
+#     permission_classes = [IsAuthenticated]
+#     authourization_classes = [IsDoctor]
+
+#     def post(self, request, consultation_id):
+#         """
+#         Add advice (templates and/or custom) to a consultation.
+#         """
+#         try:
+#             consultation = Consultation.objects.get(id=consultation_id)
+#         except Consultation.DoesNotExist:
+#             return Response({"status": False, "message": "Consultation not found."}, status=status.HTTP_404_NOT_FOUND)
+#         # Check if an advice with the same details already exists
+#         existing_advice = Advice.objects.filter(
+#             consultation_id=consultation_id,
+#             custom_advice=request.data.get('custom_advice')
+#             ).filter(
+#                 advice_templates__id__in=request.data.get('advice_templates')
+#             ).exists()
+
+#         if existing_advice:
+#             return Response({
+#                 "status": False,
+#                 "message": "Duplicate advice entry found."
+#             }, status=status.HTTP_400_BAD_REQUEST)
+
+#         serializer = AdviceSerializer(data=request.data)
+#         if serializer.is_valid():
+#             advice = serializer.save(consultation=consultation)
+#             if 'advice_templates' in request.data:
+#                 advice.advice_templates.set(request.data['advice_templates'])
+#             return Response({
+#                 "status": True,
+#                 "message": "Advice added successfully.",
+#                 "data": AdviceSerializer(advice).data
+#             }, status=status.HTTP_201_CREATED)
+
+#         return Response({"status": False, "errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+#     def patch(self, request, consultation_id, advice_id):
+#         """
+#         Update an existing advice.
+#         """
+#         try:
+#             advice = Advice.objects.get(id=advice_id, consultation_id=consultation_id)
+#         except Advice.DoesNotExist:
+#             return Response({"status": False, "message": "Advice not found."}, status=status.HTTP_404_NOT_FOUND)
+
+#         serializer = AdviceSerializer(advice, data=request.data, partial=True)
+#         if serializer.is_valid():
+#             updated_advice = serializer.save()
+#             if 'advice_templates' in request.data:
+#                 updated_advice.advice_templates.set(request.data['advice_templates'])
+#             return Response({
+#                 "status": True,
+#                 "message": "Advice updated successfully.",
+#                 "data": AdviceSerializer(updated_advice).data
+#             }, status=status.HTTP_200_OK)
+
+#         return Response({"status": False, "errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+#     def delete(self, request, consultation_id, advice_id):
+#         """
+#         Delete an advice entry.
+#         """
+#         try:
+#             advice = Advice.objects.get(id=advice_id, consultation_id=consultation_id)
+#         except Advice.DoesNotExist:
+#             return Response({"status": False, "message": "Advice not found."}, status=status.HTTP_404_NOT_FOUND)
+
+#         advice.delete()
+#         return Response({"status": True, "message": "Advice deleted successfully."}, status=status.HTTP_200_OK)
+
+
 class AdviceAPIView(views.APIView):
-    permission_classes = [IsAuthenticated]
-    authourization_classes = [IsDoctor]
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctor]
 
+    def get(self, request, consultation_id, advice_id=None):
+        """
+        GET one or all advice records for a consultation
+        """
+        if advice_id:
+            advice = get_object_or_404(Advice,\
+                                    id=advice_id, \
+                                    consultation_id=consultation_id)
+            serializer = AdviceSerializer(advice)
+            return Response({
+                "status": True,
+                "message": "Advice retrieved successfully.",
+                "data": serializer.data
+            }, status=status.HTTP_200_OK)
+
+        advices = Advice.objects.filter(consultation_id=consultation_id).order_by('created_at')
+        serializer = AdviceSerializer(advices, many=True)
+        return Response({
+            "status": True,
+            "message": "Advice list retrieved successfully.",
+            "data": serializer.data
+        }, status=status.HTTP_200_OK)
+    @transaction.atomic
     def post(self, request, consultation_id):
-        """
-        Add advice (templates and/or custom) to a consultation.
-        """
-        try:
-            consultation = Consultation.objects.get(id=consultation_id)
-        except Consultation.DoesNotExist:
-            return Response({"status": False, "message": "Consultation not found."}, status=status.HTTP_404_NOT_FOUND)
-        # Check if an advice with the same details already exists
-        existing_advice = Advice.objects.filter(
-            consultation_id=consultation_id,
-            custom_advice=request.data.get('custom_advice')
-            ).filter(
-                advice_templates__id__in=request.data.get('advice_templates')
-            ).exists()
+        consultation = get_object_or_404(Consultation, id=consultation_id)
+        data = request.data
+        data['consultation'] = str(consultation.id)
 
-        if existing_advice:
+        # Check duplicate
+        templates = data.get('advice_templates', [])
+        custom_text = data.get('custom_advice', '').strip()
+
+        if Advice.objects.filter(
+            consultation=consultation,
+            custom_advice=custom_text,
+            advice_templates__in=templates
+        ).exists():
             return Response({
                 "status": False,
                 "message": "Duplicate advice entry found."
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        serializer = AdviceSerializer(data=request.data)
+        serializer = AdviceSerializer(data=data)
         if serializer.is_valid():
-            advice = serializer.save(consultation=consultation)
-            if 'advice_templates' in request.data:
-                advice.advice_templates.set(request.data['advice_templates'])
+            advice = serializer.save()
+            if 'advice_templates' in data:
+                advice.advice_templates.set(data['advice_templates'])
             return Response({
                 "status": True,
                 "message": "Advice added successfully.",
                 "data": AdviceSerializer(advice).data
             }, status=status.HTTP_201_CREATED)
 
-        return Response({"status": False, "errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({
+            "status": False,
+            "message": "Validation failed.",
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
 
+    @transaction.atomic
     def patch(self, request, consultation_id, advice_id):
-        """
-        Update an existing advice.
-        """
-        try:
-            advice = Advice.objects.get(id=advice_id, consultation_id=consultation_id)
-        except Advice.DoesNotExist:
-            return Response({"status": False, "message": "Advice not found."}, status=status.HTTP_404_NOT_FOUND)
+        advice = get_object_or_404(Advice, id=advice_id, consultation_id=consultation_id)
 
         serializer = AdviceSerializer(advice, data=request.data, partial=True)
         if serializer.is_valid():
-            updated_advice = serializer.save()
+            updated = serializer.save()
             if 'advice_templates' in request.data:
-                updated_advice.advice_templates.set(request.data['advice_templates'])
+                updated.advice_templates.set(request.data['advice_templates'])
             return Response({
                 "status": True,
                 "message": "Advice updated successfully.",
-                "data": AdviceSerializer(updated_advice).data
+                "data": AdviceSerializer(updated).data
             }, status=status.HTTP_200_OK)
+        return Response({
+            "status": False,
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
 
-        return Response({"status": False, "errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
-
+    @transaction.atomic
     def delete(self, request, consultation_id, advice_id):
-        """
-        Delete an advice entry.
-        """
-        try:
-            advice = Advice.objects.get(id=advice_id, consultation_id=consultation_id)
-        except Advice.DoesNotExist:
-            return Response({"status": False, "message": "Advice not found."}, status=status.HTTP_404_NOT_FOUND)
-
+        advice = get_object_or_404(Advice, id=advice_id, consultation_id=consultation_id)
         advice.delete()
-        return Response({"status": True, "message": "Advice deleted successfully."}, status=status.HTTP_200_OK)
+        return Response({
+            "status": True,
+            "message": "Advice deleted successfully."
+        }, status=status.HTTP_200_OK)
 
 class EndConsultationAPIView(APIView):
     permission_classes = [IsAuthenticated]
@@ -660,45 +745,29 @@ class EndConsultationAPIView(APIView):
         except Consultation.DoesNotExist:
             return None
 
+    @transaction.atomic
     def post(self, request, consultation_id):
-        consultation = self.get_consultation(consultation_id)
-        if not consultation:
-            return Response({"status": False, "message": "Consultation not found."}, status=status.HTTP_404_NOT_FOUND)
+        consultation = get_object_or_404(Consultation, id=consultation_id)
+        
+        # Inject consultation ID into request data
+        request.data['consultation'] = str(consultation.id)
 
-        if consultation.is_finalized:
-            return Response({"status": False, "message": "Consultation is already finalized."}, status=status.HTTP_400_BAD_REQUEST)
-
-        serializer = EndConsultationSerializer(data=request.data)
+        serializer = AdviceSerializer(data=request.data)
         if serializer.is_valid():
-            data = serializer.validated_data
-
-            consultation.closure_note = data.get('closure_note')
-            consultation.follow_up_date = data.get('follow_up_date')
-
-            if data.get("confirm"):
-                consultation.is_finalized = True
-                consultation.is_active = False
-                consultation.ended_at = timezone.now()
-
-                # Optional: Trigger prescription PDF, reminders, etc.
-
-            consultation.save()
-
+            advice = serializer.save()  # consultation is now passed in data
+            if 'advice_templates' in request.data:
+                advice.advice_templates.set(request.data['advice_templates'])
             return Response({
                 "status": True,
-                "message": "Consultation finalized." if consultation.is_finalized else "Consultation saved but not finalized.",
-                "data": {
-                    "consultation_id": str(consultation.id),
-                    "is_finalized": consultation.is_finalized,
-                    "is_active": consultation.is_active,
-                    "follow_up_date": consultation.follow_up_date,
-                    "ended_at": consultation.ended_at,
-                    "closure_note": consultation.closure_note
-                }
-            }, status=status.HTTP_200_OK)
+                "message": "Advice added successfully.",
+                "data": AdviceSerializer(advice).data
+            }, status=status.HTTP_201_CREATED)
 
-        return Response({"status": False, "errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
-
+        return Response({
+            "status": False,
+            "message": "Validation failed.",
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
     def patch(self, request, consultation_id):
         consultation = self.get_consultation(consultation_id)
         if not consultation:

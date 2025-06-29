@@ -209,6 +209,24 @@ class AdviceTemplateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Advice template with this description already exists.")
         return value.strip()
 
+# class AdviceSerializer(serializers.ModelSerializer):
+#     advice_templates = serializers.PrimaryKeyRelatedField(
+#         many=True,
+#         queryset=AdviceTemplate.objects.all(),
+#         required=False
+#     )
+
+#     class Meta:
+#         model = Advice
+#         fields = ['id', 'consultation', 'advice_templates', 'custom_advice', 'created_at', 'updated_at']
+#         read_only_fields = ['id', 'created_at', 'updated_at', 'consultation']
+
+#     def validate(self, attrs):
+#         if not attrs.get('advice_templates') and not attrs.get('custom_advice'):
+#             raise serializers.ValidationError("Either 'advice_templates' or 'custom_advice' must be provided.")
+#         return attrs
+
+
 class AdviceSerializer(serializers.ModelSerializer):
     advice_templates = serializers.PrimaryKeyRelatedField(
         many=True,
@@ -219,13 +237,12 @@ class AdviceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Advice
         fields = ['id', 'consultation', 'advice_templates', 'custom_advice', 'created_at', 'updated_at']
-        read_only_fields = ['id', 'created_at', 'updated_at', 'consultation']
+        read_only_fields = ['id', 'created_at', 'updated_at']
 
     def validate(self, attrs):
         if not attrs.get('advice_templates') and not attrs.get('custom_advice'):
             raise serializers.ValidationError("Either 'advice_templates' or 'custom_advice' must be provided.")
         return attrs
-
 class EndConsultationSerializer(serializers.Serializer):
     closure_note = serializers.CharField(required=False, allow_blank=True)
     follow_up_date = serializers.DateField(required=False, allow_null=True)
