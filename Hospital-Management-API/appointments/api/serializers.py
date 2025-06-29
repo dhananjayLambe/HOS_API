@@ -3,6 +3,7 @@ from appointments.models import (
     Appointment,AppointmentHistory
     )
 from doctor.models import DoctorLeave, DoctorFeeStructure
+from django.utils import timezone
 
 from django.utils.timezone import now, localdate, localtime
 class AppointmentSerializer(serializers.ModelSerializer):

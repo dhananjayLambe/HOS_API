@@ -100,6 +100,7 @@ class Complaint(models.Model):
         ordering = ['created_at']
         verbose_name = "Complaint"
         verbose_name_plural = "Complaints"
+        unique_together = ('consultation', 'complaint_text')
 
     def __str__(self):
         return f"{self.complaint_text} ({self.severity})"
@@ -141,7 +142,7 @@ class Diagnosis(models.Model):
 
 class AdviceTemplate(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    description = models.CharField(max_length=500, help_text="Predefined lifestyle/dietary advice")
+    description = models.CharField(max_length=500, unique=True, help_text="Predefined lifestyle/dietary advice")
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -153,6 +154,7 @@ class AdviceTemplate(models.Model):
 
     def __str__(self):
         return f"Template: {self.description}"
+
 class Advice(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     consultation = models.ForeignKey(Consultation, on_delete=models.CASCADE, related_name='advices')
@@ -164,6 +166,12 @@ class Advice(models.Model):
         ordering = ['created_at']
         verbose_name = "Advice"
         verbose_name_plural = "Advices"
+        constraints = [
+        models.UniqueConstraint(
+            fields=['consultation', 'custom_advice'],
+            name='unique_custom_advice_per_consultation'
+            )
+        ]
 
     def __str__(self):
         return f"Advice for Consultation {self.consultation.id}"

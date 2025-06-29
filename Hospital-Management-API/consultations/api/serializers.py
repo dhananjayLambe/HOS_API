@@ -55,7 +55,13 @@ class StartConsultationSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"doctor_id": "Doctor not found."})
 
         try:
+            print("patient_profile_id:", patient_profile_id)
+            patients_all = PatientProfile.objects.all()
+            for patient in patients_all:
+                print("Patient ID:", patient.id)
+            print("patients_all:", patients_all)
             patient_profile_obj = PatientProfile.objects.get(id=patient_profile_id)
+            print("patient_profile_obj:", patient_profile_obj)
         except PatientProfile.DoesNotExist:
             raise serializers.ValidationError({"patient_profile_id": "Patient profile not found."})
 
@@ -118,22 +124,49 @@ class VitalsSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"blood_pressure": "Blood pressure must be in format systolic/diastolic (e.g., 120/80)."})
         return attrs
 
+# class ComplaintSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = Complaint
+#         fields = [
+#             'id', 'complaint_text', 'duration', 'severity', 'is_general', 'doctor_note'
+#         ]
+#     def validate(self, data):
+#         consultation_id = self.context['consultation_id']
+#         existing_complaint = Complaint.objects.filter(consultation_id=consultation_id, complaint_text=data['complaint_text']).first()
+#         if existing_complaint:
+#             raise serializers.ValidationError('Complaint with the same details already exists for this consultation.')
+#         severity = data.get('severity')
+#         if severity and severity.lower() not in ['mild', 'moderate', 'severe']:
+#             raise serializers.ValidationError("Severity must be one of: mild, moderate, severe.")
+#         return data
+
 class ComplaintSerializer(serializers.ModelSerializer):
     class Meta:
         model = Complaint
         fields = [
-            'id', 'complaint_text', 'duration', 'severity', 'is_general', 'doctor_note'
+            'id', 'complaint_text', 'duration', 'severity',
+            'is_general', 'doctor_note', 'created_at', 'updated_at'
         ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
     def validate(self, data):
-        consultation_id = self.context['consultation_id']
-        existing_complaint = Complaint.objects.filter(consultation_id=consultation_id, complaint_text=data['complaint_text']).first()
-        if existing_complaint:
-            raise serializers.ValidationError('Complaint with the same details already exists for this consultation.')
+        consultation_id = self.context.get('consultation_id')
+        complaint_text = data.get('complaint_text')
+
+        # Skip uniqueness check on PATCH where same value is reused
+        if self.instance is None or (complaint_text and complaint_text != getattr(self.instance, 'complaint_text', None)):
+            if Complaint.objects.filter(consultation_id=consultation_id, complaint_text=complaint_text).exists():
+                raise serializers.ValidationError({
+                    "complaint_text": "A complaint with this text already exists for this consultation."
+                })
+
         severity = data.get('severity')
         if severity and severity.lower() not in ['mild', 'moderate', 'severe']:
-            raise serializers.ValidationError("Severity must be one of: mild, moderate, severe.")
-        return data
+            raise serializers.ValidationError({
+                "severity": "Severity must be one of: mild, moderate, severe."
+            })
 
+        return data
 class DiagnosisSerializer(serializers.ModelSerializer):
     class Meta:
         model = Diagnosis
@@ -161,10 +194,20 @@ class DiagnosisSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(f"Invalid diagnosis type: {value}. Please select a valid type.")
         return value
 
+
 class AdviceTemplateSerializer(serializers.ModelSerializer):
     class Meta:
         model = AdviceTemplate
-        fields = ['id', 'description']
+        fields = ['id', 'description', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def validate_description(self, value):
+        qs = AdviceTemplate.objects.filter(description__iexact=value.strip())
+        if self.instance:
+            qs = qs.exclude(id=self.instance.id)
+        if qs.exists():
+            raise serializers.ValidationError("Advice template with this description already exists.")
+        return value.strip()
 
 class AdviceSerializer(serializers.ModelSerializer):
     advice_templates = serializers.PrimaryKeyRelatedField(

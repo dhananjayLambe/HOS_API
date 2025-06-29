@@ -86,58 +86,102 @@ class StartConsultationAPIView(views.APIView):
             }, status=status.HTTP_400_BAD_REQUEST)
 
 class VitalsAPIView(views.APIView):
-    permission_classes = [IsAuthenticated]
-    authourization_classes = [IsDoctor]
-    def post(self, request, consultation_id):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctor]
+
+    def get_consultation(self, consultation_id):
+        return get_object_or_404(Consultation, id=consultation_id)
+
+    def get(self, request, consultation_id):
         """
-        Create or update vitals for a consultation
+        Retrieve vitals for a consultation
         """
+        consultation = self.get_consultation(consultation_id)
         try:
-            consultation = Consultation.objects.get(id=consultation_id)
-        except Consultation.DoesNotExist:
+            vitals = consultation.vitals
+            serializer = VitalsSerializer(vitals)
+            return Response({
+                "status": True,
+                "message": "Vitals retrieved successfully.",
+                "data": serializer.data
+            }, status=status.HTTP_200_OK)
+        except Vitals.DoesNotExist:
             return Response({
                 "status": False,
-                "message": "Consultation not found."
+                "message": "Vitals not found for this consultation."
             }, status=status.HTTP_404_NOT_FOUND)
 
+    @transaction.atomic
+    def post(self, request, consultation_id):
+        """
+        Create or update vitals (idempotent)
+        """
+        consultation = self.get_consultation(consultation_id)
+
         try:
-            # Try to fetch existing vitals
             vitals = consultation.vitals
-            # Update vitals (partial update allowed)
             serializer = VitalsSerializer(vitals, data=request.data, partial=True)
             action = "updated"
         except Vitals.DoesNotExist:
-            # Create new vitals
             serializer = VitalsSerializer(data=request.data)
             action = "created"
 
         if serializer.is_valid():
-            if action == "updated":
-                serializer.save()
-            else:
+            if action == "created":
                 serializer.save(consultation=consultation)
+                http_status = status.HTTP_201_CREATED
+            else:
+                serializer.save()
+                http_status = status.HTTP_200_OK
+
             return Response({
                 "status": True,
                 "message": f"Vitals {action} successfully.",
                 "data": serializer.data
-            }, status=status.HTTP_200_OK if action == "updated" else status.HTTP_201_CREATED)
+            }, status=http_status)
 
         return Response({
             "status": False,
+            "message": "Validation failed.",
             "errors": serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
 
-    def delete(self, request, consultation_id):
+    @transaction.atomic
+    def patch(self, request, consultation_id):
         """
-        Delete vitals for a consultation
+        Partially update vitals
         """
+        consultation = self.get_consultation(consultation_id)
+
         try:
-            consultation = Consultation.objects.get(id=consultation_id)
-        except Consultation.DoesNotExist:
+            vitals = consultation.vitals
+        except Vitals.DoesNotExist:
             return Response({
                 "status": False,
-                "message": "Consultation not found."
+                "message": "Vitals not found for this consultation."
             }, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = VitalsSerializer(vitals, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({
+                "status": True,
+                "message": "Vitals updated successfully.",
+                "data": serializer.data
+            }, status=status.HTTP_200_OK)
+
+        return Response({
+            "status": False,
+            "message": "Validation failed.",
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    @transaction.atomic
+    def delete(self, request, consultation_id):
+        """
+        Delete vitals
+        """
+        consultation = self.get_consultation(consultation_id)
 
         try:
             vitals = consultation.vitals
@@ -152,96 +196,280 @@ class VitalsAPIView(views.APIView):
                 "message": "Vitals not found for this consultation."
             }, status=status.HTTP_404_NOT_FOUND)
 
-class ComplaintAPIView(views.APIView):
-    permission_classes = [IsAuthenticated]
-    authourization_classes = [IsDoctor]
+# class ComplaintAPIView(views.APIView):
+#     permission_classes = [IsAuthenticated]
+#     authourization_classes = [IsDoctor]
 
+#     def post(self, request, consultation_id):
+#         """
+#         Add new complaint to a consultation
+#         """
+#         try:
+#             consultation = Consultation.objects.get(id=consultation_id)
+#         except Consultation.DoesNotExist:
+#             return Response({"status": False, "message": "Consultation not found."}, status=status.HTTP_404_NOT_FOUND)
+
+#         serializer = ComplaintSerializer(data=request.data, context={'consultation_id': consultation_id})
+#         if serializer.is_valid():
+#             Complaint.objects.create(
+#                 consultation=consultation,
+#                 **serializer.validated_data
+#             )
+#             return Response({
+#                 "status": True,
+#                 "message": "Complaint added successfully."
+#             }, status=status.HTTP_201_CREATED)
+
+#         return Response({"status": False, "errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+#     def patch(self, request, consultation_id, complaint_id):
+#         """
+#         Update an existing complaint
+#         """
+#         try:
+#             complaint = Complaint.objects.get(id=complaint_id, consultation_id=consultation_id)
+#         except Complaint.DoesNotExist:
+#             return Response({"status": False, "message": "Complaint not found."}, status=status.HTTP_404_NOT_FOUND)
+
+#         serializer = ComplaintSerializer(complaint, data=request.data, partial=True)
+#         if serializer.is_valid():
+#             serializer.save()
+#             return Response({
+#                 "status": True,
+#                 "message": "Complaint updated successfully."
+#             }, status=status.HTTP_200_OK)
+
+#         return Response({"status": False, "errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+#     def delete(self, request, consultation_id, complaint_id):
+#         """
+#         Delete a complaint
+#         """
+#         try:
+#             complaint = Complaint.objects.get(id=complaint_id, consultation_id=consultation_id)
+#         except Complaint.DoesNotExist:
+#             return Response({"status": False, "message": "Complaint not found."}, status=status.HTTP_404_NOT_FOUND)
+
+#         complaint.delete()
+#         return Response({
+#             "status": True,
+#             "message": "Complaint deleted successfully."
+#         }, status=status.HTTP_200_OK)
+
+class ComplaintAPIView(views.APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctor]
+
+    def get_object(self, consultation_id, complaint_id):
+        return get_object_or_404(Complaint, id=complaint_id, consultation_id=consultation_id)
+
+    def get(self, request, consultation_id, complaint_id=None):
+        """
+        Retrieve all or one complaint for a consultation
+        """
+        if complaint_id:
+            complaint = self.get_object(consultation_id, complaint_id)
+            serializer = ComplaintSerializer(complaint)
+            return Response({
+                "status": True,
+                "message": "Complaint retrieved.",
+                "data": serializer.data
+            }, status=status.HTTP_200_OK)
+
+        complaints = Complaint.objects.filter(consultation_id=consultation_id)
+        serializer = ComplaintSerializer(complaints, many=True)
+        return Response({
+            "status": True,
+            "message": "Complaints list retrieved.",
+            "data": serializer.data
+        }, status=status.HTTP_200_OK)
+
+    @transaction.atomic
     def post(self, request, consultation_id):
         """
-        Add new complaint to a consultation
+        Add a new complaint to a consultation
         """
-        try:
-            consultation = Consultation.objects.get(id=consultation_id)
-        except Consultation.DoesNotExist:
-            return Response({"status": False, "message": "Consultation not found."}, status=status.HTTP_404_NOT_FOUND)
+        consultation = get_object_or_404(Consultation, id=consultation_id)
 
         serializer = ComplaintSerializer(data=request.data, context={'consultation_id': consultation_id})
         if serializer.is_valid():
-            Complaint.objects.create(
-                consultation=consultation,
-                **serializer.validated_data
-            )
+            Complaint.objects.create(consultation=consultation, **serializer.validated_data)
             return Response({
                 "status": True,
                 "message": "Complaint added successfully."
             }, status=status.HTTP_201_CREATED)
 
-        return Response({"status": False, "errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({
+            "status": False,
+            "message": "Validation failed.",
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
 
+    @transaction.atomic
     def patch(self, request, consultation_id, complaint_id):
         """
-        Update an existing complaint
+        Update a complaint
         """
-        try:
-            complaint = Complaint.objects.get(id=complaint_id, consultation_id=consultation_id)
-        except Complaint.DoesNotExist:
-            return Response({"status": False, "message": "Complaint not found."}, status=status.HTTP_404_NOT_FOUND)
-
+        complaint = self.get_object(consultation_id, complaint_id)
         serializer = ComplaintSerializer(complaint, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
             return Response({
                 "status": True,
-                "message": "Complaint updated successfully."
+                "message": "Complaint updated successfully.",
+                "data": serializer.data
             }, status=status.HTTP_200_OK)
 
-        return Response({"status": False, "errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({
+            "status": False,
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
 
+    @transaction.atomic
     def delete(self, request, consultation_id, complaint_id):
         """
         Delete a complaint
         """
-        try:
-            complaint = Complaint.objects.get(id=complaint_id, consultation_id=consultation_id)
-        except Complaint.DoesNotExist:
-            return Response({"status": False, "message": "Complaint not found."}, status=status.HTTP_404_NOT_FOUND)
-
+        complaint = self.get_object(consultation_id, complaint_id)
         complaint.delete()
         return Response({
             "status": True,
             "message": "Complaint deleted successfully."
         }, status=status.HTTP_200_OK)
 
+# class DiagnosisAPIView(views.APIView):
+#     permission_classes = [IsAuthenticated]
+#     authourization_classes = [IsDoctor]
+#     def post(self, request, consultation_id):
+#         """
+#         Create a diagnosis for a consultation
+#         """
+#         try:
+#             consultation = Consultation.objects.get(id=consultation_id)
+#         except Consultation.DoesNotExist:
+#             return Response({"status": False, "message": "Consultation not found."}, status=status.HTTP_404_NOT_FOUND)
+
+#         # Add the consultation_id to the request data implicitly
+#         request.data['consultation'] = consultation.id
+#         # Check if a diagnosis with the same details already exists
+#         existing_diagnosis = Diagnosis.objects.filter(
+#             consultation_id=consultation_id,
+#             code=request.data.get('code'),
+#             description=request.data.get('description'),
+#             location=request.data.get('location'),
+#             diagnosis_type=request.data.get('diagnosis_type')
+#         ).exists()
+
+#         if existing_diagnosis:
+#             return Response({
+#                 "status": False,
+#                 "message": "Duplicate diagnosis entry found."
+#             }, status=status.HTTP_400_BAD_REQUEST)
+
+#         # Validate and create diagnosis
+#         serializer = DiagnosisSerializer(data=request.data)
+#         if serializer.is_valid():
+#             diagnosis = serializer.save()
+#             return Response({
+#                 "status": True,
+#                 "message": "Diagnosis created successfully.",
+#                 "data": serializer.data
+#             }, status=status.HTTP_201_CREATED)
+
+#         return Response({
+#             "status": False,
+#             "errors": serializer.errors
+#         }, status=status.HTTP_400_BAD_REQUEST)
+
+#     def patch(self, request, consultation_id, diagnosis_id):
+#         """
+#         Update an existing diagnosis (partial update)
+#         """
+#         try:
+#             diagnosis = Diagnosis.objects.get(id=diagnosis_id, consultation_id=consultation_id)
+#         except Diagnosis.DoesNotExist:
+#             return Response({"status": False, "message": "Diagnosis not found."}, status=status.HTTP_404_NOT_FOUND)
+
+#         serializer = DiagnosisSerializer(diagnosis, data=request.data, partial=True)
+#         if serializer.is_valid():
+#             serializer.save()
+#             return Response({
+#                 "status": True,
+#                 "message": "Diagnosis updated successfully.",
+#                 "data": serializer.data
+#             }, status=status.HTTP_200_OK)
+
+#         return Response({
+#             "status": False,
+#             "errors": serializer.errors
+#         }, status=status.HTTP_400_BAD_REQUEST)
+
+#     def delete(self, request, consultation_id, diagnosis_id):
+#         """
+#         Delete a diagnosis from a consultation
+#         """
+#         try:
+#             diagnosis = Diagnosis.objects.get(id=diagnosis_id, consultation_id=consultation_id)
+#         except Diagnosis.DoesNotExist:
+#             return Response({"status": False, "message": "Diagnosis not found."}, status=status.HTTP_404_NOT_FOUND)
+
+#         diagnosis.delete()
+#         return Response({
+#             "status": True,
+#             "message": "Diagnosis deleted successfully."
+#         }, status=status.HTTP_200_OK)
+
 class DiagnosisAPIView(views.APIView):
-    permission_classes = [IsAuthenticated]
-    authourization_classes = [IsDoctor]
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctor]
+
+    def get_object(self, consultation_id, diagnosis_id):
+        return get_object_or_404(Diagnosis, id=diagnosis_id, consultation_id=consultation_id)
+
+    def get(self, request, consultation_id, diagnosis_id=None):
+        """
+        List all diagnoses or fetch a single diagnosis
+        """
+        if diagnosis_id:
+            diagnosis = self.get_object(consultation_id, diagnosis_id)
+            serializer = DiagnosisSerializer(diagnosis)
+            return Response({
+                "status": True,
+                "message": "Diagnosis retrieved successfully.",
+                "data": serializer.data
+            }, status=status.HTTP_200_OK)
+
+        diagnoses = Diagnosis.objects.filter(consultation_id=consultation_id)
+        serializer = DiagnosisSerializer(diagnoses, many=True)
+        return Response({
+            "status": True,
+            "message": "Diagnoses list retrieved.",
+            "data": serializer.data
+        }, status=status.HTTP_200_OK)
+
+    @transaction.atomic
     def post(self, request, consultation_id):
         """
-        Create a diagnosis for a consultation
+        Create a diagnosis (idempotent)
         """
-        try:
-            consultation = Consultation.objects.get(id=consultation_id)
-        except Consultation.DoesNotExist:
-            return Response({"status": False, "message": "Consultation not found."}, status=status.HTTP_404_NOT_FOUND)
+        consultation = get_object_or_404(Consultation, id=consultation_id)
+        request.data['consultation'] = str(consultation.id)
 
-        # Add the consultation_id to the request data implicitly
-        request.data['consultation'] = consultation.id
-        # Check if a diagnosis with the same details already exists
-        existing_diagnosis = Diagnosis.objects.filter(
-            consultation_id=consultation_id,
+        # Check for duplicate
+        existing = Diagnosis.objects.filter(
+            consultation=consultation,
             code=request.data.get('code'),
             description=request.data.get('description'),
             location=request.data.get('location'),
-            diagnosis_type=request.data.get('diagnosis_type')
-        ).exists()
+            diagnosis_type=request.data.get('diagnosis_type'),
+        ).first()
 
-        if existing_diagnosis:
+        if existing:
             return Response({
                 "status": False,
                 "message": "Duplicate diagnosis entry found."
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        # Validate and create diagnosis
         serializer = DiagnosisSerializer(data=request.data)
         if serializer.is_valid():
             diagnosis = serializer.save()
@@ -253,18 +481,16 @@ class DiagnosisAPIView(views.APIView):
 
         return Response({
             "status": False,
+            "message": "Validation failed.",
             "errors": serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
 
+    @transaction.atomic
     def patch(self, request, consultation_id, diagnosis_id):
         """
-        Update an existing diagnosis (partial update)
+        Partial update diagnosis
         """
-        try:
-            diagnosis = Diagnosis.objects.get(id=diagnosis_id, consultation_id=consultation_id)
-        except Diagnosis.DoesNotExist:
-            return Response({"status": False, "message": "Diagnosis not found."}, status=status.HTTP_404_NOT_FOUND)
-
+        diagnosis = self.get_object(consultation_id, diagnosis_id)
         serializer = DiagnosisSerializer(diagnosis, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
@@ -273,32 +499,83 @@ class DiagnosisAPIView(views.APIView):
                 "message": "Diagnosis updated successfully.",
                 "data": serializer.data
             }, status=status.HTTP_200_OK)
-
         return Response({
             "status": False,
             "errors": serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
 
+    @transaction.atomic
     def delete(self, request, consultation_id, diagnosis_id):
         """
-        Delete a diagnosis from a consultation
+        Delete diagnosis
         """
-        try:
-            diagnosis = Diagnosis.objects.get(id=diagnosis_id, consultation_id=consultation_id)
-        except Diagnosis.DoesNotExist:
-            return Response({"status": False, "message": "Diagnosis not found."}, status=status.HTTP_404_NOT_FOUND)
-
+        diagnosis = self.get_object(consultation_id, diagnosis_id)
         diagnosis.delete()
         return Response({
             "status": True,
             "message": "Diagnosis deleted successfully."
         }, status=status.HTTP_200_OK)
 
-class AdviceTemplateListAPIView(generics.ListAPIView):
+# class AdviceTemplateListAPIView(generics.ListAPIView):
+#     queryset = AdviceTemplate.objects.all().order_by('description')
+#     serializer_class = AdviceTemplateSerializer
+#     permission_classes = [IsAuthenticated]
+#     #authourization_classes = [Allow]need to add as this can be use by docotors and patients as well
+
+class AdviceTemplateListCreateAPIView(generics.ListCreateAPIView):
     queryset = AdviceTemplate.objects.all().order_by('description')
     serializer_class = AdviceTemplateSerializer
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]  # Could be changed to [AllowAny] if patients are also allowed
+
+    @transaction.atomic
+    def post(self, request, *args, **kwargs):
+        serializer = AdviceTemplateSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({
+                "status": True,
+                "message": "Advice template created successfully.",
+                "data": serializer.data
+            }, status=status.HTTP_201_CREATED)
+        return Response({
+            "status": False,
+            "message": "Validation failed.",
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class AdviceTemplateDetailAPIView(views.APIView):
+    authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
-    #authourization_classes = [Allow]need to add as this can be use by docotors and patients as well
+
+    def get_object(self, template_id):
+        return get_object_or_404(AdviceTemplate, id=template_id)
+
+    def patch(self, request, template_id):
+        template = self.get_object(template_id)
+        serializer = AdviceTemplateSerializer(template, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({
+                "status": True,
+                "message": "Advice template updated successfully.",
+                "data": serializer.data
+            }, status=status.HTTP_200_OK)
+        return Response({
+            "status": False,
+            "message": "Validation failed.",
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    @transaction.atomic
+    def delete(self, request, template_id):
+        template = self.get_object(template_id)
+        template.delete()
+        return Response({
+            "status": True,
+            "message": "Advice template deleted successfully."
+        }, status=status.HTTP_200_OK)
 
 class AdviceAPIView(views.APIView):
     permission_classes = [IsAuthenticated]
