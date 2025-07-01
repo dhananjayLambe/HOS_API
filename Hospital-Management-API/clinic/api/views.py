@@ -14,7 +14,7 @@ from rest_framework_simplejwt.views import (
     TokenRefreshView,
     TokenVerifyView,
 )
-
+from rest_framework_simplejwt.authentication import JWTAuthentication
 from account.permissions import IsClinicAdmin
 
 from clinic.api.serializers import (
@@ -38,69 +38,91 @@ from clinic.models import (
     ClinicServiceList,
     ClinicSpecialization,
 )
-
+from account.permissions import IsDoctor
 logger = logging.getLogger(__name__)
-
+from clinic.utils import api_response
+# Create Clinic
 class ClinicCreateView(APIView):
     permission_classes = [AllowAny]
-    authentication_classes = []
+
+    @transaction.atomic
     def post(self, request):
         serializer = ClinicSerializer(data=request.data)
-
         if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            reg_no = serializer.validated_data.get('registration_number')
+            if reg_no and Clinic.objects.filter(registration_number=reg_no).exists():
+                return api_response(status.HTTP_400_BAD_REQUEST, "Clinic already registered with this registration number.")
+
+            clinic = serializer.save()
+            return api_response(status.HTTP_201_CREATED, "Clinic created successfully.", ClinicSerializer(clinic).data)
+        return api_response(status.HTTP_400_BAD_REQUEST, "Invalid clinic data.", serializer.errors)
+
 
 # Get All Clinics
 class ClinicListView(APIView):
     permission_classes = [AllowAny]
-    authentication_classes = []
+
     def get(self, request):
-        clinics = Clinic.objects.all()
+        clinics = Clinic.objects.all().order_by('-created_at')
         serializer = ClinicSerializer(clinics, many=True)
-        return Response(serializer.data)
+        return api_response(status.HTTP_200_OK, "Clinics retrieved successfully.", serializer.data)
+
 
 # Get a Single Clinic
 class ClinicDetailView(APIView):
     permission_classes = [AllowAny]
-    authentication_classes = []
+
     def get(self, request, pk):
         try:
             clinic = Clinic.objects.get(pk=pk)
         except Clinic.DoesNotExist:
-            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+            return api_response(status.HTTP_404_NOT_FOUND, "Clinic not found.")
         serializer = ClinicSerializer(clinic)
-        return Response(serializer.data)
+        return api_response(status.HTTP_200_OK, "Clinic retrieved successfully.", serializer.data)
+
 
 # Update Clinic
 class ClinicUpdateView(APIView):
     permission_classes = [AllowAny]
-    authentication_classes = []
+
+    @transaction.atomic
     def put(self, request, pk):
         try:
             clinic = Clinic.objects.get(pk=pk)
         except Clinic.DoesNotExist:
-            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
-        
-        serializer = ClinicSerializer(clinic, data=request.data, partial=True)  # partial=True for partial updates
+            return api_response(status.HTTP_404_NOT_FOUND, "Clinic not found.")
+
+        serializer = ClinicSerializer(clinic, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
-            return Response(serializer.data)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            return api_response(status.HTTP_200_OK, "Clinic updated successfully.", serializer.data)
+        return api_response(status.HTTP_400_BAD_REQUEST, "Invalid data.", serializer.errors)
+    def patch(self, request, pk):
+        try:
+            clinic = Clinic.objects.get(pk=pk)
+        except Clinic.DoesNotExist:
+            return api_response(status.HTTP_404_NOT_FOUND, "Clinic not found.")
+
+        serializer = ClinicSerializer(clinic, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return api_response(status.HTTP_200_OK, "Clinic partially updated successfully.", serializer.data)
+        return api_response(status.HTTP_400_BAD_REQUEST, "Invalid data.", serializer.errors)
 
 # Delete Clinic
 class ClinicDeleteView(APIView):
     permission_classes = [AllowAny]
-    authentication_classes = []
+
+    @transaction.atomic
     def delete(self, request, pk):
         try:
             clinic = Clinic.objects.get(pk=pk)
         except Clinic.DoesNotExist:
-            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
-        
+            return api_response(status.HTTP_404_NOT_FOUND, "Clinic not found.")
+
         clinic.delete()
-        return Response({"detail": "Deleted successfully."}, status=status.HTTP_204_NO_CONTENT)
+        return api_response(status.HTTP_200_OK, "Clinic deleted successfully.")
+
 
 class ClinicAddressViewSet(viewsets.ModelViewSet):
     queryset = ClinicAddress.objects.all()
@@ -368,10 +390,76 @@ class ClinicServiceViewSet(viewsets.ModelViewSet):
         }, status=status.HTTP_200_OK)
 
 class ClinicServiceListViewSet(viewsets.ModelViewSet):
-    permission_classes = [AllowAny]
-    authentication_classes = []
-    queryset = ClinicServiceList.objects.all()
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctor]
     serializer_class = ClinicServiceListSerializer
+
+    def get_queryset(self):
+        doctor = self.request.user.doctor  # OneToOneField from User
+        return ClinicServiceList.objects.filter(clinic__in=doctor.clinics.all()).order_by('-updated_at')
+
+    def create(self, request, *args, **kwargs):
+        with transaction.atomic():
+            serializer = self.get_serializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+
+            clinic = serializer.validated_data['clinic']
+            service_name = serializer.validated_data['service_name']
+
+            instance, created = ClinicServiceList.objects.update_or_create(
+                clinic=clinic,
+                service_name__iexact=service_name,
+                defaults=serializer.validated_data
+            )
+
+            response_data = ClinicServiceListSerializer(instance).data
+            return Response({
+                "status": True,
+                "message": "Service created" if created else "Service updated",
+                "data": response_data
+            }, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
+    def update(self, request, *args, **kwargs):
+        return self._custom_response(super().update(request, *args, **kwargs), "Service updated")
+
+    def partial_update(self, request, *args, **kwargs):
+        return self._custom_response(super().partial_update(request, *args, **kwargs), "Service partially updated")
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        instance.delete()
+        return Response({
+            "status": True,
+            "message": "Service deleted",
+            "data": {}
+        }, status=status.HTTP_200_OK)
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return Response({
+            "status": True,
+            "message": "Service fetched successfully",
+            "data": serializer.data
+        })
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({
+            "status": True,
+            "message": "Service list fetched successfully",
+            "data": serializer.data
+        })
+
+    def _custom_response(self, response, message):
+        if response.status_code in [200, 201]:
+            return Response({
+                "status": True,
+                "message": message,
+                "data": response.data
+            }, status=response.status_code)
+        return response
 
 class ClinicRegistrationView(APIView):
     permission_classes = [AllowAny]

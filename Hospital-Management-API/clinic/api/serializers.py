@@ -30,6 +30,16 @@ class ClinicSerializer(serializers.ModelSerializer):
     class Meta:
         model = Clinic
         fields = '__all__'
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def validate_registration_number(self, value):
+        if value:
+            qs = Clinic.objects.filter(registration_number=value)
+            if self.instance:
+                qs = qs.exclude(id=self.instance.id)
+            if qs.exists():
+                raise serializers.ValidationError("A clinic with this registration number already exists.")
+        return value
 
 
 
@@ -93,10 +103,24 @@ class ClinicServiceSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({'clinic': 'Another service record already exists for this clinic.'})
         return data
 
+
 class ClinicServiceListSerializer(serializers.ModelSerializer):
     class Meta:
         model = ClinicServiceList
         fields = '__all__'
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def validate(self, attrs):
+        request = self.context.get('request')
+        clinic = attrs.get('clinic') or getattr(self.instance, 'clinic', None)
+        service_name = attrs.get('service_name') or getattr(self.instance, 'service_name', None)
+
+        if ClinicServiceList.objects.filter(
+            clinic=clinic,
+            service_name__iexact=service_name
+        ).exclude(id=getattr(self.instance, 'id', None)).exists():
+            raise serializers.ValidationError("Service with this name already exists for the clinic.")
+        return attrs
 
 class ClinicAdminRegistrationSerializer(serializers.Serializer):
     first_name = serializers.CharField(max_length=150)
