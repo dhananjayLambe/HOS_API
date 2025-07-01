@@ -6,6 +6,7 @@ from rest_framework import status, viewsets
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from django.shortcuts import get_object_or_404
 
 from rest_framework_simplejwt.tokens import RefreshToken, TokenError
 from rest_framework_simplejwt.views import (
@@ -102,16 +103,167 @@ class ClinicDeleteView(APIView):
         return Response({"detail": "Deleted successfully."}, status=status.HTTP_204_NO_CONTENT)
 
 class ClinicAddressViewSet(viewsets.ModelViewSet):
-    permission_classes = [AllowAny]
-    authentication_classes = []
     queryset = ClinicAddress.objects.all()
     serializer_class = ClinicAddressSerializer
+    permission_classes = [AllowAny] #IsAuthenticated
+    authentication_classes = []
+
+    def get_object(self):
+        return get_object_or_404(ClinicAddress, pk=self.kwargs['pk'])
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({'status': True, 'message': 'List retrieved successfully', 'data': serializer.data}, status=status.HTTP_200_OK)
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return Response({'status': True, 'message': 'Record retrieved successfully', 'data': serializer.data}, status=status.HTTP_200_OK)
+
+    @transaction.atomic
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        if serializer.is_valid():
+            # Idempotency check
+            clinic = serializer.validated_data['clinic']
+            existing = ClinicAddress.objects.filter(clinic=clinic).first()
+            if existing:
+                existing_serializer = self.get_serializer(existing)
+                return Response({
+                    'status': True,
+                    'message': 'Address already exists. Returning existing.',
+                    'data': existing_serializer.data
+                }, status=status.HTTP_200_OK)
+            self.perform_create(serializer)
+            return Response({'status': True, 'message': 'Created successfully', 'data': serializer.data}, status=status.HTTP_201_CREATED)
+        return Response({'status': False, 'message': 'Validation failed', 'errors': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+    @transaction.atomic
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data)
+        if serializer.is_valid():
+            self.perform_update(serializer)
+            return Response({'status': True, 'message': 'Updated successfully', 'data': serializer.data}, status=status.HTTP_200_OK)
+        return Response({'status': False, 'message': 'Validation failed', 'errors': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+    @transaction.atomic
+    def partial_update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=True)
+        if serializer.is_valid():
+            self.perform_update(serializer)
+            return Response({'status': True, 'message': 'Patched successfully', 'data': serializer.data}, status=status.HTTP_200_OK)
+        return Response({'status': False, 'message': 'Validation failed', 'errors': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+    @transaction.atomic
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        self.perform_destroy(instance)
+        return Response({'status': True, 'message': 'Deleted successfully', 'data': {}}, status=status.HTTP_200_OK)
 
 class ClinicSpecializationViewSet(viewsets.ModelViewSet):
-    permission_classes = [AllowAny]
-    authentication_classes = []
     queryset = ClinicSpecialization.objects.all()
     serializer_class = ClinicSpecializationSerializer
+    permission_classes = [AllowAny]  # IsAuthenticated
+    authentication_classes = []
+
+    def get_object(self):
+        return get_object_or_404(ClinicSpecialization, pk=self.kwargs['pk'])
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({
+            'status': True,
+            'message': 'List retrieved successfully',
+            'data': serializer.data
+        }, status=status.HTTP_200_OK)
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return Response({
+            'status': True,
+            'message': 'Record retrieved successfully',
+            'data': serializer.data
+        }, status=status.HTTP_200_OK)
+
+    @transaction.atomic
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        if serializer.is_valid():
+            clinic = serializer.validated_data['clinic']
+            specialization_name = serializer.validated_data['specialization_name']
+            existing = ClinicSpecialization.objects.filter(
+                clinic=clinic,
+                specialization_name__iexact=specialization_name
+            ).first()
+            if existing:
+                existing_serializer = self.get_serializer(existing)
+                return Response({
+                    'status': True,
+                    'message': 'Specialization already exists. Returning existing.',
+                    'data': existing_serializer.data
+                }, status=status.HTTP_200_OK)
+
+            self.perform_create(serializer)
+            return Response({
+                'status': True,
+                'message': 'Created successfully',
+                'data': serializer.data
+            }, status=status.HTTP_201_CREATED)
+
+        return Response({
+            'status': False,
+            'message': 'Validation failed',
+            'errors': serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    @transaction.atomic
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data)
+        if serializer.is_valid():
+            self.perform_update(serializer)
+            return Response({
+                'status': True,
+                'message': 'Updated successfully',
+                'data': serializer.data
+            }, status=status.HTTP_200_OK)
+        return Response({
+            'status': False,
+            'message': 'Validation failed',
+            'errors': serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    @transaction.atomic
+    def partial_update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=True)
+        if serializer.is_valid():
+            self.perform_update(serializer)
+            return Response({
+                'status': True,
+                'message': 'Patched successfully',
+                'data': serializer.data
+            }, status=status.HTTP_200_OK)
+        return Response({
+            'status': False,
+            'message': 'Validation failed',
+            'errors': serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    @transaction.atomic
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        self.perform_destroy(instance)
+        return Response({
+            'status': True,
+            'message': 'Deleted successfully',
+            'data': {}
+        }, status=status.HTTP_200_OK)
 
 class ClinicScheduleViewSet(viewsets.ModelViewSet):
     permission_classes = [AllowAny]
@@ -120,10 +272,100 @@ class ClinicScheduleViewSet(viewsets.ModelViewSet):
     serializer_class = ClinicScheduleSerializer
 
 class ClinicServiceViewSet(viewsets.ModelViewSet):
-    permission_classes = [AllowAny]
-    authentication_classes = []
     queryset = ClinicService.objects.all()
     serializer_class = ClinicServiceSerializer
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def get_object(self):
+        return ClinicService.objects.get(pk=self.kwargs['pk'])
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({
+            'status': True,
+            'message': 'Clinic services list fetched successfully',
+            'data': serializer.data
+        }, status=status.HTTP_200_OK)
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return Response({
+            'status': True,
+            'message': 'Clinic service record fetched successfully',
+            'data': serializer.data
+        }, status=status.HTTP_200_OK)
+
+    @transaction.atomic
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        if serializer.is_valid():
+            clinic = serializer.validated_data['clinic']
+            existing = ClinicService.objects.filter(clinic=clinic).first()
+            if existing:
+                existing_serializer = self.get_serializer(existing)
+                return Response({
+                    'status': True,
+                    'message': 'Service already exists for this clinic. Returning existing.',
+                    'data': existing_serializer.data
+                }, status=status.HTTP_200_OK)
+            self.perform_create(serializer)
+            return Response({
+                'status': True,
+                'message': 'Clinic service created successfully',
+                'data': serializer.data
+            }, status=status.HTTP_201_CREATED)
+        return Response({
+            'status': False,
+            'message': 'Validation failed',
+            'errors': serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    @transaction.atomic
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data)
+        if serializer.is_valid():
+            self.perform_update(serializer)
+            return Response({
+                'status': True,
+                'message': 'Clinic service updated successfully',
+                'data': serializer.data
+            }, status=status.HTTP_200_OK)
+        return Response({
+            'status': False,
+            'message': 'Validation failed',
+            'errors': serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    @transaction.atomic
+    def partial_update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=True)
+        if serializer.is_valid():
+            self.perform_update(serializer)
+            return Response({
+                'status': True,
+                'message': 'Clinic service partially updated',
+                'data': serializer.data
+            }, status=status.HTTP_200_OK)
+        return Response({
+            'status': False,
+            'message': 'Validation failed',
+            'errors': serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    @transaction.atomic
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        self.perform_destroy(instance)
+        return Response({
+            'status': True,
+            'message': 'Clinic service deleted successfully',
+            'data': {}
+        }, status=status.HTTP_200_OK)
 
 class ClinicServiceListViewSet(viewsets.ModelViewSet):
     permission_classes = [AllowAny]

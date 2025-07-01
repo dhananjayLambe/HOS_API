@@ -3,6 +3,7 @@ from django.contrib.auth.models import Group
 from django.contrib.auth.password_validation import validate_password
 from django.core.validators import RegexValidator
 from django.db import transaction
+from django.utils import timezone
 
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
@@ -30,15 +31,38 @@ class ClinicSerializer(serializers.ModelSerializer):
         model = Clinic
         fields = '__all__'
 
-class ClinicAddressSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = ClinicAddress
-        fields = '__all__'
+
 
 class ClinicSpecializationSerializer(serializers.ModelSerializer):
+    created_at = serializers.SerializerMethodField()
+    updated_at = serializers.SerializerMethodField()
+
     class Meta:
         model = ClinicSpecialization
         fields = '__all__'
+
+    def get_created_at(self, obj):
+        return timezone.localtime(obj.created_at).isoformat()
+
+    def get_updated_at(self, obj):
+        return timezone.localtime(obj.updated_at).isoformat()
+
+    def validate(self, data):
+        clinic = data.get('clinic')
+        specialization_name = data.get('specialization_name')
+
+        if self.instance is None:
+            if ClinicSpecialization.objects.filter(clinic=clinic, specialization_name__iexact=specialization_name).exists():
+                raise serializers.ValidationError({'specialization_name': 'This specialization already exists for this clinic.'})
+        else:
+            # Ensure uniqueness on update
+            if ClinicSpecialization.objects.filter(
+                clinic=clinic,
+                specialization_name__iexact=specialization_name
+            ).exclude(id=self.instance.id).exists():
+                raise serializers.ValidationError({'specialization_name': 'Another specialization with this name already exists for this clinic.'})
+
+        return data
 
 class ClinicScheduleSerializer(serializers.ModelSerializer):
     class Meta:
@@ -46,15 +70,33 @@ class ClinicScheduleSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class ClinicServiceSerializer(serializers.ModelSerializer):
+    created_at = serializers.SerializerMethodField()
+    updated_at = serializers.SerializerMethodField()
+
     class Meta:
         model = ClinicService
         fields = '__all__'
+
+    def get_created_at(self, obj):
+        return timezone.localtime(obj.created_at).isoformat()
+
+    def get_updated_at(self, obj):
+        return timezone.localtime(obj.updated_at).isoformat()
+
+    def validate(self, data):
+        clinic = data.get('clinic')
+        if self.instance is None:
+            if ClinicService.objects.filter(clinic=clinic).exists():
+                raise serializers.ValidationError({'clinic': 'Clinic already has service settings defined.'})
+        else:
+            if ClinicService.objects.filter(clinic=clinic).exclude(id=self.instance.id).exists():
+                raise serializers.ValidationError({'clinic': 'Another service record already exists for this clinic.'})
+        return data
 
 class ClinicServiceListSerializer(serializers.ModelSerializer):
     class Meta:
         model = ClinicServiceList
         fields = '__all__'
-    
 
 class ClinicAdminRegistrationSerializer(serializers.Serializer):
     first_name = serializers.CharField(max_length=150)
@@ -214,12 +256,25 @@ class PendingClinicAdminSerializer(serializers.ModelSerializer):
     def get_full_name(self, obj):
         return f"{obj.user.first_name} {obj.user.last_name}"
 
-# serializers.py
-
 class ClinicAddressSerializer(serializers.ModelSerializer):
+    created_at = serializers.SerializerMethodField()
+    updated_at = serializers.SerializerMethodField()
+
     class Meta:
         model = ClinicAddress
-        fields = ['address', 'address2', 'city', 'state', 'pincode', 'country']
+        fields = '__all__'
+
+    def get_created_at(self, obj):
+        return timezone.localtime(obj.created_at).isoformat()
+
+    def get_updated_at(self, obj):
+        return timezone.localtime(obj.updated_at).isoformat()
+
+    def validate(self, data):
+        clinic = data.get('clinic')
+        if self.instance is None and ClinicAddress.objects.filter(clinic=clinic).exists():
+            raise serializers.ValidationError({'clinic': 'Address for this clinic already exists.'})
+        return data
 
 class ClinicSummarySerializer(serializers.ModelSerializer):
     address = ClinicAddressSerializer()

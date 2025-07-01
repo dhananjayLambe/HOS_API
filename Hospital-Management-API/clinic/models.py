@@ -2,6 +2,7 @@ import uuid
 from datetime import time
 from django.db import models
 from account.models import User
+from django.utils import timezone
 
 class Clinic(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -19,34 +20,37 @@ class Clinic(models.Model):
 
 class ClinicAddress(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    clinic = models.OneToOneField(Clinic, on_delete=models.CASCADE, related_name="address")
-    address = models.TextField(max_length=255,default='NA')  # Address line 1
-    address2 = models.TextField(max_length=255,default='NA')  # Address line 2
-    city = models.CharField(max_length=100,default='NA')
-    state = models.CharField(max_length=100,default='NA')
-    pincode = models.CharField(max_length=10,default='NA')
+    clinic = models.OneToOneField("Clinic", on_delete=models.CASCADE, related_name="address", unique=True)
+    address = models.TextField(max_length=255, default='NA')
+    address2 = models.TextField(max_length=255, default='NA')
+    city = models.CharField(max_length=100, default='NA')
+    state = models.CharField(max_length=100, default='NA')
+    pincode = models.CharField(max_length=10, default='NA')
     country = models.CharField(max_length=100, default="India")
-    latitude = models.DecimalField(max_digits=9, decimal_places=6, blank=True, null=True,default='NA')  # For geolocation
-    longitude = models.DecimalField(max_digits=9, decimal_places=6, blank=True, null=True,default='NA')  # For geolocation
-    google_place_id = models.CharField(max_length=255, blank=True, null=True,default='NA')  # Unique Google Place ID
-    google_maps_url = models.URLField(blank=True, null=True,default='NA')  # URL for the Google Maps location
-    created_at = models.DateTimeField(auto_now_add=True)  # Mandatory
-    updated_at = models.DateTimeField(auto_now=True)  # Mandatory
+    latitude = models.DecimalField(max_digits=9, decimal_places=6, blank=True, null=True)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6, blank=True, null=True)
+    google_place_id = models.CharField(max_length=255, blank=True, null=True)
+    google_maps_url = models.URLField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f"{self.address}, {self.city}, {self.state}, {self.pincode}"
 
+
 class ClinicSpecialization(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    clinic = models.ForeignKey(Clinic, on_delete=models.CASCADE, related_name="specializations")
-    specialization_name = models.CharField(max_length=255,default='NA')  # Name of the specialization
-    description = models.TextField(blank=True, null=True,default='NA')  # Description of the specialization
-    created_at = models.DateTimeField(auto_now_add=True)  # Mandatory #auto_now_add=True,
-    updated_at = models.DateTimeField(auto_now=True)  # Mandatory #auto_now=True,
+    clinic = models.ForeignKey("Clinic", on_delete=models.CASCADE, related_name="specializations")
+    specialization_name = models.CharField(max_length=255, default='NA')
+    description = models.TextField(blank=True, null=True, default='NA')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        unique_together = ('clinic', 'specialization_name')
     def __str__(self):
         return f"{self.specialization_name} - {self.clinic.name}"
-    
+
 class ClinicSchedule(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     clinic = models.OneToOneField(Clinic, on_delete=models.CASCADE, related_name="schedule")
