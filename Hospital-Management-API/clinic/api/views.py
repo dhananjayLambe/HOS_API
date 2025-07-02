@@ -471,53 +471,89 @@ class ClinicRegistrationView(APIView):
             clinic = clinic_serializer.save()
             return Response({"message": "Clinic registered successfully.", "clinic_id": clinic.id}, status=status.HTTP_201_CREATED)
         return Response(clinic_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
 class ClinicProfileUpdateView(APIView):
     permission_classes = [AllowAny]
-    authentication_classes = []
+
+    @transaction.atomic
     def put(self, request, clinic_id):
+        return self._update_profile(request, clinic_id, partial=False)
+
+    @transaction.atomic
+    def patch(self, request, clinic_id):
+        return self._update_profile(request, clinic_id, partial=True)
+
+    def _update_profile(self, request, clinic_id, partial):
         try:
             clinic = Clinic.objects.get(id=clinic_id)
         except Clinic.DoesNotExist:
-            return Response({"error": "Clinic not found."}, status=status.HTTP_404_NOT_FOUND)
+            return Response({
+                "status": 404,
+                "message": "Clinic not found."
+            }, status=status.HTTP_404_NOT_FOUND)
 
         # Address
         address_data = request.data.get("address")
         if address_data:
-            clinic_address_serializer = ClinicAddressSerializer(data=address_data)
-            if clinic_address_serializer.is_valid():
-                ClinicAddress.objects.update_or_create(clinic=clinic, defaults=clinic_address_serializer.validated_data)
+            address_instance = ClinicAddress.objects.filter(clinic=clinic).first()
+            address_data["clinic"] = clinic.id  # inject clinic manually
+            serializer = ClinicAddressSerializer(
+                instance=address_instance,
+                data=address_data,
+                partial=partial
+            )
+            if serializer.is_valid(raise_exception=True):
+                serializer.save()
 
         # Specializations
-        specializations = request.data.get("specializations", [])
-        for specialization in specializations:
-            specialization_serializer = ClinicSpecializationSerializer(data=specialization)
-            if specialization_serializer.is_valid():
-                ClinicSpecialization.objects.create(clinic=clinic, **specialization_serializer.validated_data)
+        specializations = request.data.get("specializations")
+        if specializations is not None:
+            ClinicSpecialization.objects.filter(clinic=clinic).delete()
+            for spec in specializations:
+                spec["clinic"] = clinic.id
+                serializer = ClinicSpecializationSerializer(data=spec)
+                if serializer.is_valid(raise_exception=True):
+                    serializer.save()
 
         # Services
         services_data = request.data.get("services")
         if services_data:
-            clinic_service_serializer = ClinicServiceSerializer(data=services_data)
-            if clinic_service_serializer.is_valid():
-                ClinicService.objects.update_or_create(clinic=clinic, defaults=clinic_service_serializer.validated_data)
+            service_instance = ClinicService.objects.filter(clinic=clinic).first()
+            services_data["clinic"] = clinic.id
+            serializer = ClinicServiceSerializer(
+                instance=service_instance,
+                data=services_data,
+                partial=partial
+            )
+            if serializer.is_valid(raise_exception=True):
+                serializer.save()
 
         # Schedule
         schedule_data = request.data.get("schedule")
         if schedule_data:
-            clinic_schedule_serializer = ClinicScheduleSerializer(data=schedule_data)
-            if clinic_schedule_serializer.is_valid():
-                ClinicSchedule.objects.update_or_create(clinic=clinic, defaults=clinic_schedule_serializer.validated_data)
+            schedule_instance = ClinicSchedule.objects.filter(clinic=clinic).first()
+            schedule_data["clinic"] = clinic.id
+            serializer = ClinicScheduleSerializer(
+                instance=schedule_instance,
+                data=schedule_data,
+                partial=partial
+            )
+            if serializer.is_valid(raise_exception=True):
+                serializer.save()
 
         # Service List
-        service_list = request.data.get("service_list", [])
-        for service in service_list:
-            service_list_serializer = ClinicServiceListSerializer(data=service)
-            if service_list_serializer.is_valid():
-                ClinicServiceList.objects.create(clinic=clinic, **service_list_serializer.validated_data)
+        service_list = request.data.get("service_list")
+        if service_list is not None:
+            ClinicServiceList.objects.filter(clinic=clinic).delete()
+            for item in service_list:
+                item["clinic"] = clinic.id
+                serializer = ClinicServiceListSerializer(data=item)
+                if serializer.is_valid(raise_exception=True):
+                    serializer.save()
 
-        return Response({"message": "Clinic profile updated successfully."}, status=status.HTTP_200_OK)
-    
+        return Response({
+            "status": 200,
+            "message": "Clinic profile updated successfully."
+        }, status=status.HTTP_200_OK)
 class ClinicAdminRegisterView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
@@ -540,7 +576,6 @@ class ClinicAdminRegisterView(APIView):
             "message": "Validation failed",
             "errors": serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
-
 
 class ClinicAdminLoginView(TokenObtainPairView):
     permission_classes = [AllowAny]
@@ -578,7 +613,6 @@ class ClinicAdminLogoutView(APIView):
                 "status": "error",
                 "message": "Token is invalid or already blacklisted."
             }, status=status.HTTP_400_BAD_REQUEST)
-
 
 class ClinicAdminTokenRefreshView(TokenRefreshView):
     serializer_class = ClinicAdminTokenRefreshSerializer

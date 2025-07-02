@@ -26,7 +26,7 @@ urlpatterns = [
     path('clinics/update/<uuid:pk>/', ClinicUpdateView.as_view(), name='clinic-update'),
     path('clinics/delete/<uuid:pk>/', ClinicDeleteView.as_view(), name='clinic-delete'),
     
-    path('registration/', ClinicRegistrationView.as_view(), name='clinic-register'),
+    #path('registration/', ClinicRegistrationView.as_view(), name='clinic-register'),
     path('profilupdate/<uuid:clinic_id>/', ClinicProfileUpdateView.as_view(), name='clinic-profile-update'),
     path('', include(router.urls)),
     path('clinic-admin/register/', ClinicAdminRegisterView.as_view(), name='clinic-admin-register'),
