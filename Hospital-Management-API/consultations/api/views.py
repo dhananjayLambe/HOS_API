@@ -652,7 +652,7 @@ def format_dosage_timing(timing_schedule):
     return f"{morning}-{afternoon}-{night}"
 
 # --- Common Header/Footer Drawing Logic ---
-def header_footer_template_common(canvas_obj, doc, doctor_data):
+def header_footer_template_common(canvas_obj, doc, doctor_data,clinic_data):
     """
     Draws the header and footer on each page using dynamic doctor data.
     """
@@ -675,17 +675,58 @@ def header_footer_template_common(canvas_obj, doc, doctor_data):
     # clinic_address = clinic_data.get('address', 'N/A')
     # clinic_contact = f"Contact: {clinic_data.get('contact_number_primary', 'N/A')} | Email: {clinic_data.get('email_address', 'N/A')}"
 
-    clinic_name_p = Paragraph(CLINIC_NAME, styles['ClinicHeaderCanvas'])
-    clinic_address_p = Paragraph(CLINIC_ADDRESS, styles['NormalLeftCanvas'])
-    clinic_contact_p = Paragraph(CLINIC_CONTACT, styles['NormalLeftCanvas'])
+    # clinic_name_p = Paragraph(CLINIC_NAME, styles['ClinicHeaderCanvas'])
+    # clinic_address_p = Paragraph(CLINIC_ADDRESS, styles['NormalLeftCanvas'])
+    # clinic_contact_p = Paragraph(CLINIC_CONTACT, styles['NormalLeftCanvas'])
 
+    # Clinic details (left) - using dynamic clinic_data
+    clinic_name = clinic_data.get('name', 'N/A') if clinic_data else "Clinic Name N/A"
+    clinic_address_parts = []
+    if clinic_data and clinic_data.get('address'):
+        addr = clinic_data['address']
+        if addr.get('address'): clinic_address_parts.append(addr['address'])
+        if addr.get('address2'): clinic_address_parts.append(addr['address2'])
+        if addr.get('city'): clinic_address_parts.append(addr['city'])
+        if addr.get('state'): clinic_address_parts.append(addr['state'])
+        if addr.get('pincode'): clinic_address_parts.append(addr['pincode'])
+        if addr.get('country'): clinic_address_parts.append(addr['country'])
+    clinic_address = ", ".join(clinic_address_parts) if clinic_address_parts else "Clinic Address N/A"
+
+    clinic_contact_primary = clinic_data.get('contact_number_primary', 'N/A') if clinic_data else 'N/A'
+    clinic_email = clinic_data.get('email_address', 'N/A') if clinic_data else 'N/A'
+    clinic_contact = f"Contact: {clinic_contact_primary} | Email: {clinic_email}"
+    clinic_name_p = Paragraph(clinic_name, styles['ClinicHeaderCanvas'])
+    clinic_address_p = Paragraph(clinic_address, styles['NormalLeftCanvas'])
+    clinic_contact_p = Paragraph(clinic_contact, styles['NormalLeftCanvas'])
     # Doctor details (right) - using dynamic data
-    doctor_name = doctor_data.get('first_name', '') + " " + doctor_data.get('last_name', '') if doctor_data else "Dr. [Name Missing]"
-    doctor_qualification = "MD. DM(Endocrinology)" # Assuming static for now or needs to come from doctor_data
-    doctor_reg_no = "Reg no: 2011/03/0577" # Assuming static for now or needs to come from doctor_data
-    doctor_title = "Consultant Diabetologist and Endocrinologist" # Assuming static for now or needs to come from doctor_data
-    doctor_contact = f"Email: {doctor_data.get('email', 'N/A')} | Mobile: {doctor_data.get('secondary_mobile_number', 'N/A')}" if doctor_data else "Contact: N/A"
-
+    #doctor_name = doctor_data.get('first_name', '') + " " + doctor_data.get('last_name', '') if doctor_data else "Dr. [Name Missing]"
+    doctor_first_name = doctor_data.get('user', {}).get('first_name', '')
+    doctor_last_name = doctor_data.get('user', {}).get('last_name', '')
+    doctor_name = f"{doctor_first_name} {doctor_last_name}".strip() if doctor_first_name or doctor_last_name else "Dr. [Name Missing]"
+    
+    #doctor_name =f"{doctor_data.get('first_name', '')} {doctor_data.get('last_name', '')}".strip() if doctor_data else "Dr. [Name Missing]"
+    #doctor_qualification = "MD. DM(Endocrinology)" # Assuming static for now or needs to come from doctor_data
+    #doctor_reg_no = "Reg no: 2011/03/0577" # Assuming static for now or needs to come from doctor_data
+    #doctor_title = "Consultant Diabetologist and Endocrinologist" # Assuming static for now or needs to come from doctor_data
+    #doctor_contact = f"Email: {doctor_data.get('email', 'N/A')} | Mobile: {doctor_data.get('secondary_mobile_number', 'N/A')}" if doctor_data else "Contact: N/A"
+    
+    # Dynamically get Qualification from 'education' list
+    qualifications = [edu.get('qualification') for edu in doctor_data.get('education', []) if edu.get('qualification')]
+    doctor_qualification = ", ".join(qualifications) if qualifications else "Qualification: N/A"
+    # Dynamically get Registration Number
+    doctor_reg_no = doctor_data.get('registration', {}).get('medical_registration_number', 'Reg No: N/A')
+    doctor_reg_no = f"Reg No: {doctor_reg_no}" if doctor_reg_no else "Reg No: N/A"
+    # Dynamically get Contact Details
+    doctor_contact_mobile = doctor_data.get('secondary_mobile_number', 'N/A')
+    doctor_contact_email = doctor_data.get('user', {}).get('email', 'N/A')
+    doctor_contact = f"Email: {doctor_contact_email} | Mobile: {doctor_contact_mobile}"
+    # MODIFIED: Dynamically get Title from the top-level 'title' field in doctor_data
+    doctor_title = doctor_data.get('title', 'Specialization: N/A') 
+    # If 'title' is empty or not present, fallback to 'specializations' as a secondary option
+    if not doctor_title or doctor_title == 'Specialization: N/A':
+        specializations = [spec.get('specialization') for spec in doctor_data.get('specializations', []) if spec.get('specialization')]
+        doctor_title = ", ".join(specializations) if specializations else "Specialization: N/A"
+    # Create Paragraph objects for doctor details
     doctor_name_p = Paragraph(doctor_name, styles['DoctorNameHeaderCanvas'])
     doctor_qualification_p = Paragraph(doctor_qualification, styles['NormalRightCanvas'])
     doctor_reg_no_p = Paragraph(doctor_reg_no, styles['NormalRightCanvas'])
@@ -781,6 +822,7 @@ def generate_prescription_pdf_content(buffer, consultation_data):
     """
     # Extract data from consultation_data
     doctor_data = consultation_data.get('doctor', {})
+    clinic_data = consultation_data.get('clinic', {})
     patient_data = consultation_data.get('patient', {})
     vitals_data = consultation_data.get('vitals', {})
     prescriptions_data = consultation_data.get('prescriptions', [])
@@ -987,8 +1029,8 @@ def generate_prescription_pdf_content(buffer, consultation_data):
     Story.append(Paragraph(f"Date: {prescription_date}", styles['NormalLeft']))
 
     # --- Build the document with custom page callbacks ---
-    doc.build(Story, onFirstPage=lambda canvas_obj, doc: header_footer_template_common(canvas_obj, doc, doctor_data),
-                     onLaterPages=lambda canvas_obj, doc: header_footer_template_common(canvas_obj, doc, doctor_data))
+    doc.build(Story, onFirstPage=lambda canvas_obj, doc: header_footer_template_common(canvas_obj, doc, doctor_data,clinic_data),
+                     onLaterPages=lambda canvas_obj, doc: header_footer_template_common(canvas_obj, doc, doctor_data,clinic_data))
     return buffer
 
 class GeneratePrescriptionPDFView(APIView):

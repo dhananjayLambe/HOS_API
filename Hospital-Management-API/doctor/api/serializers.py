@@ -370,6 +370,7 @@ class DoctorSummarySerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'user',
+            'title',
             'secondary_mobile_number',
             'designation',
             'registration',

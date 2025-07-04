@@ -22,6 +22,11 @@ class doctor(models.Model):
     photo = models.ImageField(upload_to=doctor_photo_upload_path, blank=True, null=True)
     years_of_experience = models.PositiveIntegerField(default=1)
     avg_rating = models.DecimalField(max_digits=3, decimal_places=2, default=5.0)
+    title = models.CharField(
+        max_length=255,
+        default="Consultant Physician",
+        help_text="Displayed title in prescriptions, e.g., 'Consultant Cardiologist'"
+    )
     primary_specialization = models.CharField(max_length=100, default="General", help_text="Primary specialization for indexing/search")
     consultation_modes = models.JSONField(default=list, help_text="Available consultation modes (e.g., ['video', 'in_clinic'])")
     languages_spoken = models.JSONField(default=list, help_text="Languages the doctor can speak")
