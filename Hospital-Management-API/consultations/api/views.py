@@ -664,7 +664,7 @@ def header_footer_template_common(canvas_obj, doc, doctor_data,clinic_data):
     styles.add(ParagraphStyle(name='DoctorNameHeaderCanvas', fontSize=13, leading=15, alignment=TA_RIGHT, fontName='Helvetica-Bold', textColor=HexColor('#003366')))
     styles.add(ParagraphStyle(name='NormalLeftCanvas', fontSize=9, leading=10, alignment=TA_LEFT))
     styles.add(ParagraphStyle(name='NormalRightCanvas', fontSize=9, leading=10, alignment=TA_RIGHT))
-    styles.add(ParagraphStyle(name='FooterCanvas', fontSize=7, leading=9, alignment=TA_CENTER, textColor=HexColor('#666666')))
+    styles.add(ParagraphStyle(name='FooterCanvas', fontSize=8, leading=9, alignment=TA_CENTER, textColor=HexColor('#666666')))
 
     # --- Header Content ---
     # Define the top Y coordinate for the header content.
@@ -778,9 +778,12 @@ def header_footer_template_common(canvas_obj, doc, doctor_data,clinic_data):
 
     # --- Footer Content ---
     # Define the bottom Y coordinate for the footer content.
+    FOOTER_TEXT_COLOR = '#333333' # Dark grey for general footer text
+    HIGHLIGHT_COLOR = '#0056b3' # A prominent blue for highlighting
     footer_draw_start_y = 0.75 * inch # Start 0.75 inch from the absolute bottom of the page
-
-    footer_text_p = Paragraph("This is a digitally signed prescription. Powered by DoctorProCare.com", styles['FooterCanvas'])
+    footer_text_content = f"This is a digitally signed prescription. Powered by <font color='{HIGHLIGHT_COLOR}'><b>DoctorProCare.com</b></font>"
+    footer_text_p = Paragraph(footer_text_content, styles['FooterCanvas'])
+    #footer_text_p = Paragraph("This is a digitally signed prescription. Powered by DoctorProCare.com", styles['FooterCanvas'])
     emergency_contact_p = Paragraph("In case of emergency, contact: emergency@example.com or +91-9988776655", styles['FooterCanvas'])
     page_number_text = f"Page {doc.page}"
 
@@ -899,7 +902,7 @@ def generate_prescription_pdf_content(buffer, consultation_data):
 
     # Prepare medicine table data from prescriptions_data
     medicine_table_data = [
-        [Paragraph("#", styles['MedicineTableHeader']),
+        [Paragraph("Sr.No", styles['MedicineTableHeader']),
          Paragraph("Medicine", styles['MedicineTableHeader']),
          Paragraph("Dosage", styles['MedicineTableHeader']),
          Paragraph("Duration", styles['MedicineTableHeader']),
