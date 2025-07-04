@@ -784,7 +784,11 @@ def header_footer_template_common(canvas_obj, doc, doctor_data,clinic_data):
     footer_text_content = f"This is a digitally signed prescription. Powered by <font color='{HIGHLIGHT_COLOR}'><b>DoctorProCare.com</b></font>"
     footer_text_p = Paragraph(footer_text_content, styles['FooterCanvas'])
     #footer_text_p = Paragraph("This is a digitally signed prescription. Powered by DoctorProCare.com", styles['FooterCanvas'])
-    emergency_contact_p = Paragraph("In case of emergency, contact: emergency@example.com or +91-9988776655", styles['FooterCanvas'])
+    emergency_email = clinic_data.get('emergency_email_address', 'emergency@example.com')
+    emergency_mobile = clinic_data.get('emergency_contact_number', '+91-9988776655')
+    emergency_contact_content = f"In case of emergency, contact: {emergency_email} or {emergency_mobile}"
+    emergency_contact_p = Paragraph(emergency_contact_content, styles['FooterCanvas'])
+    #emergency_contact_p = Paragraph("In case of emergency, contact: emergency@example.com or +91-9988776655", styles['FooterCanvas'])
     page_number_text = f"Page {doc.page}"
 
     # Draw emergency contact first (lower)

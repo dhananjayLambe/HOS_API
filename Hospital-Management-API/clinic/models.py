@@ -13,6 +13,11 @@ class Clinic(models.Model):
     email_address = models.EmailField(max_length=255,default='NA')  # Optional)  # Optional
     registration_number = models.CharField(max_length=255,unique=True, null=True, blank=True,default=None)  # Mandatory it should be unique
     gst_number = models.CharField(max_length=15, default='NA')  # Optional
+
+    # Emergency Contact Information
+    emergency_contact_number = models.CharField(max_length=15, default='NA')
+    emergency_email_address = models.EmailField(max_length=255, default='NA')
+
     created_at = models.DateTimeField(auto_now_add=True)  # Mandatory
     updated_at = models.DateTimeField(auto_now=True)  # Mandatory
     def __str__(self):

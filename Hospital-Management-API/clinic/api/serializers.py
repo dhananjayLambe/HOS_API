@@ -305,4 +305,4 @@ class ClinicSummarySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Clinic
-        fields = ['id', 'name', 'contact_number_primary', 'contact_number_secondary', 'email_address', 'address']
+        fields = ['id', 'name', 'contact_number_primary', 'contact_number_secondary', 'email_address',  'emergency_contact_number','emergency_email_address','address']
