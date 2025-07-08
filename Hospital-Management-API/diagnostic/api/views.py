@@ -15,9 +15,10 @@ from diagnostic.models import (MedicalTest,
                                PackageRecommendation,TestPackage)
 from diagnostic.api.serializers import (
     MedicalTestSerializer,TestCategorySerializer,ImagingViewSerializer,TestPackageSerializer,
-    TestRecommendationSerializer,PackageRecommendationSerializer)
+    TestRecommendationSerializer,PackageRecommendationSerializer,
+    LabAdminRegistrationSerializer,)
 from consultations.models import Consultation
-from account.permissions import IsDoctor
+from account.permissions import IsDoctor, IsAdminUser
 class MedicalTestViewSet(viewsets.ModelViewSet):
     queryset = MedicalTest.objects.filter(is_active=True).order_by('-created_at')
     serializer_class = MedicalTestSerializer
@@ -243,3 +244,19 @@ class BulkTestPackageCreateView(APIView):
             "message": "Validation failed",
             "data": serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class LabAdminRegisterView(generics.CreateAPIView):
+    serializer_class = LabAdminRegistrationSerializer
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def post(self, request):
+        serializer = self.get_serializer(data=request.data)
+        if serializer.is_valid():
+            lab_admin = serializer.save()
+            return Response({
+                "message": "Lab admin registered successfully.",
+                "lab_admin_id": lab_admin.id
+            }, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

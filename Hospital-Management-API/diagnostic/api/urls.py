@@ -8,7 +8,7 @@ from diagnostic.api.views import (
     PackageRecommendationViewSet,
     TestPackageListCreateView,
     TestPackageDetailView,
-    BulkTestPackageCreateView
+    BulkTestPackageCreateView,LabAdminRegisterView,
 )
 urlpatterns =[]
 router = DefaultRouter()
@@ -60,5 +60,8 @@ urlpatterns += [
          package_recommendation_list, name='package-recommendation-list'),
     path('package-recommendation/<uuid:consultation_id>/test-packages/<uuid:pk>/',
         package_recommendation_detail, name='package-recommendation-detail'),
+
+    # Lab Admin Registration
+    path("lab-admin/register/", LabAdminRegisterView.as_view(), name="lab-register"),
 
 ]
