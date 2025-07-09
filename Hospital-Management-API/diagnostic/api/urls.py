@@ -8,11 +8,11 @@ from diagnostic.api.views import (
     PackageRecommendationViewSet,
     TestPackageListCreateView,
     TestPackageDetailView,
-    BulkTestPackageCreateView,LabAdminRegisterView,
+    BulkTestPackageCreateView,LabAdminRegisterView,DiagnosticLabViewSet,
 )
 urlpatterns =[]
 router = DefaultRouter()
-
+router.register(r'labs', DiagnosticLabViewSet, basename='lab')
 test_recommendation_list = TestRecommendationViewSet.as_view({
     'get': 'list',
     'post': 'create'

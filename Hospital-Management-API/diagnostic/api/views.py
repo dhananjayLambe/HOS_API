@@ -7,18 +7,28 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
+from rest_framework import filters
+# Maintain ordering using Case/When
+from django.db.models import Case, When
 
 from utils.utils import api_response
 
 from diagnostic.models import (MedicalTest,
                                TestCategory,ImagingView,TestRecommendation,
-                               PackageRecommendation,TestPackage)
+                               PackageRecommendation,TestPackage,DiagnosticLab,)
 from diagnostic.api.serializers import (
     MedicalTestSerializer,TestCategorySerializer,ImagingViewSerializer,TestPackageSerializer,
     TestRecommendationSerializer,PackageRecommendationSerializer,
-    LabAdminRegistrationSerializer,)
+    LabAdminRegistrationSerializer,
+    DiagnosticLabSerializer,)
 from consultations.models import Consultation
 from account.permissions import IsDoctor, IsAdminUser
+from django.db import transaction
+from django.utils import timezone
+from django_filters.rest_framework import DjangoFilterBackend
+from django.core.paginator import Paginator
+from math import radians, cos, sin, asin, sqrt
+
 class MedicalTestViewSet(viewsets.ModelViewSet):
     queryset = MedicalTest.objects.filter(is_active=True).order_by('-created_at')
     serializer_class = MedicalTestSerializer
@@ -260,3 +270,117 @@ class LabAdminRegisterView(generics.CreateAPIView):
                 "lab_admin_id": lab_admin.id
             }, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+
+class DiagnosticLabViewSet(viewsets.ModelViewSet):
+    queryset = DiagnosticLab.objects.all()
+    serializer_class = DiagnosticLabSerializer
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['lab_type', 'is_active', 'home_sample_collection', 'pricing_tier']
+    search_fields = ['name', 'contact']
+    ordering_fields = ['created_at', 'updated_at']
+
+    def haversine(self, lon1, lat1, lon2, lat2):
+        lon1, lat1, lon2, lat2 = map(radians, [lon1, lat1, lon2, lat2])
+        dlon = lon2 - lon1
+        dlat = lat2 - lat1
+        a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
+        c = 2 * asin(sqrt(a))
+        km = 6371 * c
+        return km
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        pincode = self.request.query_params.get('pincode')
+        if pincode:
+            queryset = queryset.filter(service_pincodes__contains=[pincode])
+
+        lat = self.request.query_params.get('latitude')
+        lon = self.request.query_params.get('longitude')
+        if lat and lon:
+            lat = float(lat)
+            lon = float(lon)
+            labs_with_distance = []
+            for lab in queryset:
+                if hasattr(lab, 'address') and lab.address.latitude and lab.address.longitude:
+                    distance = self.haversine(lon, lat, float(lab.address.longitude), float(lab.address.latitude))
+                    labs_with_distance.append((lab.id, distance))
+            labs_with_distance.sort(key=lambda x: x[1])
+            lab_ids_ordered = [lab_id for lab_id, _ in labs_with_distance]
+            preserved = Case(*[When(id=pk, then=pos) for pos, pk in enumerate(lab_ids_ordered)])
+            queryset = queryset.filter(id__in=lab_ids_ordered).order_by(preserved)
+    
+        return queryset
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        page_number = request.query_params.get('page', 1)
+        page_size = request.query_params.get('page_size', 10)
+        paginator = Paginator(queryset, page_size)
+        page = paginator.get_page(page_number)
+        serializer = self.get_serializer(page.object_list, many=True)
+        return Response({
+            "status": True,
+            "message": "Diagnostic Labs fetched successfully",
+            "total": paginator.count,
+            "pages": paginator.num_pages,
+            "current_page": page.number,
+            "data": serializer.data
+        }, status=status.HTTP_200_OK)
+
+    def create(self, request, *args, **kwargs):
+        with transaction.atomic():
+            serializer = self.get_serializer(data=request.data)
+            if serializer.is_valid():
+                instance = DiagnosticLab.objects.filter(name__iexact=serializer.validated_data['name']).first()
+                if instance:
+                    return Response({
+                        "status": False,
+                        "message": "Lab with this name already exists.",
+                        "data": {}
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                lab = serializer.save()
+                return Response({
+                    "status": True,
+                    "message": "Diagnostic Lab created successfully",
+                    "data": DiagnosticLabSerializer(lab).data
+                }, status=status.HTTP_201_CREATED)
+            return Response({
+                "status": False,
+                "message": "Validation failed",
+                "data": serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+    def update(self, request, *args, **kwargs):
+        with transaction.atomic():
+            partial = kwargs.pop('partial', False)
+            instance = self.get_object()
+            serializer = self.get_serializer(instance, data=request.data, partial=partial)
+            if serializer.is_valid():
+                serializer.save()
+                return Response({
+                    "status": True,
+                    "message": "Diagnostic Lab updated successfully",
+                    "data": serializer.data
+                }, status=status.HTTP_200_OK)
+            return Response({
+                "status": False,
+                "message": "Validation failed",
+                "data": serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+    def partial_update(self, request, *args, **kwargs):
+        kwargs['partial'] = True
+        return self.update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        instance.delete()
+        return Response({
+            "status": True,
+            "message": "Diagnostic Lab deleted successfully",
+            "data": {}
+        }, status=status.HTTP_200_OK)
+

@@ -8,6 +8,7 @@ from django.db import transaction
 from account.models import User
 from diagnostic.models import DiagnosticLab, LabAdminUser
 from django.contrib.auth.models import Group
+from django.utils import timezone
 
 class MedicalTestSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source="category.name", read_only=True)
@@ -226,3 +227,19 @@ class LabAdminRegistrationSerializer(serializers.Serializer):
 
         lab_admin = LabAdminUser.objects.create(user=user, lab=lab)
         return lab_admin
+
+
+class DiagnosticLabSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DiagnosticLab
+        fields = '__all__'
+
+    def validate_license_valid_till(self, value):
+        if value and value < timezone.localdate():
+            raise serializers.ValidationError("License expiry date cannot be in the past.")
+        return value
+
+    def validate_name(self, value):
+        if DiagnosticLab.objects.filter(name__iexact=value).exclude(id=self.instance.id if self.instance else None).exists():
+            raise serializers.ValidationError("Lab with this name already exists.")
+        return value
