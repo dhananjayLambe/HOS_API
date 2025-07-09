@@ -9,10 +9,14 @@ from diagnostic.api.views import (
     TestPackageListCreateView,
     TestPackageDetailView,
     BulkTestPackageCreateView,LabAdminRegisterView,DiagnosticLabViewSet,
+    DiagnosticLabAddressViewSet,LabAdminLoginView,LabAdminTokenRefreshView,
+    LabAdminTokenVerifyView,
 )
 urlpatterns =[]
 router = DefaultRouter()
 router.register(r'labs', DiagnosticLabViewSet, basename='lab')
+router.register(r'lab-addresses', DiagnosticLabAddressViewSet, basename='lab-address')
+
 test_recommendation_list = TestRecommendationViewSet.as_view({
     'get': 'list',
     'post': 'create'
@@ -63,5 +67,8 @@ urlpatterns += [
 
     # Lab Admin Registration
     path("lab-admin/register/", LabAdminRegisterView.as_view(), name="lab-register"),
+    path("lab-admin/login/", LabAdminLoginView.as_view(), name="lab-admin-login"),
+    path("lab-admin/token/refresh/", LabAdminTokenRefreshView.as_view(), name="lab-admin-token-refresh"),
+    path("lab-admin/token/verify/", LabAdminTokenVerifyView.as_view(), name="lab-admin-token-verify"),
 
 ]

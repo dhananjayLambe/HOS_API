@@ -310,6 +310,7 @@ class LabCommissionLedger(models.Model):
 class LabAdminUser(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="lab_admin_profile")
+    mobile_number = models.CharField(max_length=15, unique=True,default="NA")
     lab = models.OneToOneField("diagnostic.DiagnosticLab", on_delete=models.CASCADE, related_name="lab_admin")
 
     is_active = models.BooleanField(default=True)

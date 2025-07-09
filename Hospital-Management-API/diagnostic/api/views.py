@@ -8,6 +8,12 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 from rest_framework import filters
+
+from rest_framework_simplejwt.views import (
+    TokenRefreshView as SimpleJWTRefreshView,
+    TokenVerifyView as SimpleJWTVerifyView
+)
+from rest_framework.permissions import AllowAny
 # Maintain ordering using Case/When
 from django.db.models import Case, When
 
@@ -15,12 +21,13 @@ from utils.utils import api_response
 
 from diagnostic.models import (MedicalTest,
                                TestCategory,ImagingView,TestRecommendation,
-                               PackageRecommendation,TestPackage,DiagnosticLab,)
+                               PackageRecommendation,TestPackage,DiagnosticLab,
+                               DiagnosticLabAddress,)
 from diagnostic.api.serializers import (
     MedicalTestSerializer,TestCategorySerializer,ImagingViewSerializer,TestPackageSerializer,
     TestRecommendationSerializer,PackageRecommendationSerializer,
-    LabAdminRegistrationSerializer,
-    DiagnosticLabSerializer,)
+    LabAdminRegistrationSerializer,LabAdminLoginSerializer,
+    DiagnosticLabSerializer,DiagnosticLabAddressSerializer)
 from consultations.models import Consultation
 from account.permissions import IsDoctor, IsAdminUser
 from django.db import transaction
@@ -28,6 +35,8 @@ from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from django.core.paginator import Paginator
 from math import radians, cos, sin, asin, sqrt
+from diagnostic.filters import DiagnosticLabAddressFilter
+from rest_framework import viewsets, status, filters
 
 class MedicalTestViewSet(viewsets.ModelViewSet):
     queryset = MedicalTest.objects.filter(is_active=True).order_by('-created_at')
@@ -255,24 +264,6 @@ class BulkTestPackageCreateView(APIView):
             "data": serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
 
-
-class LabAdminRegisterView(generics.CreateAPIView):
-    serializer_class = LabAdminRegistrationSerializer
-    permission_classes = [AllowAny]
-    authentication_classes = []
-
-    def post(self, request):
-        serializer = self.get_serializer(data=request.data)
-        if serializer.is_valid():
-            lab_admin = serializer.save()
-            return Response({
-                "message": "Lab admin registered successfully.",
-                "lab_admin_id": lab_admin.id
-            }, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-
 class DiagnosticLabViewSet(viewsets.ModelViewSet):
     queryset = DiagnosticLab.objects.all()
     serializer_class = DiagnosticLabSerializer
@@ -384,3 +375,120 @@ class DiagnosticLabViewSet(viewsets.ModelViewSet):
             "data": {}
         }, status=status.HTTP_200_OK)
 
+
+class DiagnosticLabAddressViewSet(viewsets.ModelViewSet):
+    queryset = DiagnosticLabAddress.objects.select_related('lab').all().order_by('-created_at')
+    serializer_class = DiagnosticLabAddressSerializer
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_class = DiagnosticLabAddressFilter
+    search_fields = ['city', 'state', 'pincode', 'lab__name']
+    ordering_fields = ['created_at', 'city', 'pincode']
+
+    @transaction.atomic
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        if serializer.is_valid():
+            instance = serializer.save()
+            return Response({
+                "status": True,
+                "message": "Diagnostic lab address created successfully.",
+                "data": DiagnosticLabAddressSerializer(instance).data
+            }, status=status.HTTP_201_CREATED)
+        return Response({
+            "status": False,
+            "message": "Validation failed.",
+            "data": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    @transaction.atomic
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        if serializer.is_valid():
+            instance = serializer.save()
+            return Response({
+                "status": True,
+                "message": "Diagnostic lab address updated successfully.",
+                "data": DiagnosticLabAddressSerializer(instance).data
+            }, status=status.HTTP_200_OK)
+        return Response({
+            "status": False,
+            "message": "Update failed.",
+            "data": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    @transaction.atomic
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        instance.delete()
+        return Response({
+            "status": True,
+            "message": "Diagnostic lab address deleted successfully.",
+            "data": {}
+        }, status=status.HTTP_200_OK)
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        return Response({
+            "status": True,
+            "message": "Diagnostic lab address fetched successfully.",
+            "data": DiagnosticLabAddressSerializer(instance).data
+        }, status=status.HTTP_200_OK)
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+        serializer = DiagnosticLabAddressSerializer(page or queryset, many=True)
+        return Response({
+            "status": True,
+            "message": "Diagnostic lab address list fetched successfully.",
+            "data": serializer.data
+        }, status=status.HTTP_200_OK)
+
+
+class LabAdminRegisterView(generics.CreateAPIView):
+    serializer_class = LabAdminRegistrationSerializer
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def post(self, request):
+        serializer = self.get_serializer(data=request.data)
+        if serializer.is_valid():
+            lab_admin = serializer.save()
+            return Response({
+                "status": True,
+                "message": "Lab admin registered successfully.",
+                "lab_admin_id": lab_admin.id
+            }, status=status.HTTP_201_CREATED)
+        return Response({
+            "status": False,
+            "message": "Validation failed.",
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+class LabAdminLoginView(APIView):
+    permission_classes = []
+    authentication_classes = []
+
+    def post(self, request):
+        serializer = LabAdminLoginSerializer(data=request.data)
+        if serializer.is_valid():
+            return Response({
+                "status": True,
+                "message": "Login successful.",
+                "data": serializer.validated_data
+            }, status=status.HTTP_200_OK)
+        return Response({
+            "status": False,
+            "message": "Login failed.",
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+class LabAdminTokenRefreshView(SimpleJWTRefreshView):
+    permission_classes = [AllowAny]
+
+class LabAdminTokenVerifyView(SimpleJWTVerifyView):
+    permission_classes = [AllowAny]

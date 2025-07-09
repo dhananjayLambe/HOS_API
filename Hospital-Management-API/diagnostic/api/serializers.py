@@ -2,13 +2,15 @@ from rest_framework import serializers
 from django.utils.text import slugify
 from diagnostic.models import (
     MedicalTest, TestCategory, ImagingView, TestRecommendation,PackageRecommendation,
-    TestPackage
+    TestPackage,DiagnosticLabAddress,
     )
 from django.db import transaction
 from account.models import User
 from diagnostic.models import DiagnosticLab, LabAdminUser
 from django.contrib.auth.models import Group
 from django.utils import timezone
+from django.contrib.auth import authenticate
+from rest_framework_simplejwt.tokens import RefreshToken
 
 class MedicalTestSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source="category.name", read_only=True)
@@ -181,13 +183,44 @@ class TestPackageSerializer(serializers.ModelSerializer):
                 instance.tests.set(tests)
         return instance
 
+class DiagnosticLabSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DiagnosticLab
+        fields = '__all__'
 
+    def validate_license_valid_till(self, value):
+        if value and value < timezone.localdate():
+            raise serializers.ValidationError("License expiry date cannot be in the past.")
+        return value
+
+    def validate_name(self, value):
+        if DiagnosticLab.objects.filter(name__iexact=value).exclude(id=self.instance.id if self.instance else None).exists():
+            raise serializers.ValidationError("Lab with this name already exists.")
+        return value
+
+
+class DiagnosticLabAddressSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DiagnosticLabAddress
+        fields = '__all__'
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def validate_pincode(self, value):
+        if not value.isdigit() or len(value) != 6:
+            raise serializers.ValidationError("Pincode must be a 6-digit number.")
+        return value
+
+    def validate(self, data):
+        lab = data.get('lab')
+        if self.instance is None and DiagnosticLabAddress.objects.filter(lab=lab).exists():
+            raise serializers.ValidationError("Address for this lab already exists.")
+        return data
 
 class LabAdminRegistrationSerializer(serializers.Serializer):
     first_name = serializers.CharField()
     last_name = serializers.CharField()
     email = serializers.EmailField()
-    phone = serializers.CharField()
+    mobile_number = serializers.CharField()
     password = serializers.CharField(write_only=True)
     lab_id = serializers.UUIDField()
 
@@ -203,43 +236,65 @@ class LabAdminRegistrationSerializer(serializers.Serializer):
             raise serializers.ValidationError("Email is already taken.")
         return email
 
-    def validate_phone(self, phone):
-        if User.objects.filter(phone=phone).exists():
-            raise serializers.ValidationError("Phone number already taken.")
-        return phone
+    def validate_mobile_number(self, mobile_number):
+        if User.objects.filter(username=mobile_number).exists():
+            raise serializers.ValidationError("Mobile number is already taken.")
+        return mobile_number
 
     def create(self, validated_data):
         lab = DiagnosticLab.objects.get(id=validated_data["lab_id"])
+        mobile_number = validated_data["mobile_number"]
 
         user = User.objects.create_user(
-            username=validated_data["email"],
+            username=mobile_number,  # Username is mobile number
             email=validated_data["email"],
             password=validated_data["password"],
             first_name=validated_data["first_name"],
             last_name=validated_data["last_name"],
-            phone=validated_data["phone"],
             status=True
         )
 
-        # Add to lab-admin group
         lab_group, _ = Group.objects.get_or_create(name="lab-admin")
         user.groups.add(lab_group)
 
-        lab_admin = LabAdminUser.objects.create(user=user, lab=lab)
+        lab_admin = LabAdminUser.objects.create(
+            user=user,
+            lab=lab,
+            mobile_number=mobile_number
+        )
         return lab_admin
 
 
-class DiagnosticLabSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = DiagnosticLab
-        fields = '__all__'
+class LabAdminLoginSerializer(serializers.Serializer):
+    mobile_number = serializers.CharField()
+    password = serializers.CharField(write_only=True)
 
-    def validate_license_valid_till(self, value):
-        if value and value < timezone.localdate():
-            raise serializers.ValidationError("License expiry date cannot be in the past.")
-        return value
+    def validate(self, data):
+        mobile_number = data.get("mobile_number")
+        password = data.get("password")
 
-    def validate_name(self, value):
-        if DiagnosticLab.objects.filter(name__iexact=value).exclude(id=self.instance.id if self.instance else None).exists():
-            raise serializers.ValidationError("Lab with this name already exists.")
-        return value
+        if not mobile_number or not password:
+            raise serializers.ValidationError("Mobile number and password are required.")
+
+        user = authenticate(username=mobile_number, password=password)
+        if not user:
+            raise serializers.ValidationError("Invalid credentials.")
+
+        try:
+            lab_admin_profile = user.lab_admin_profile
+        except LabAdminUser.DoesNotExist:
+            raise serializers.ValidationError("User is not a Lab Admin.")
+
+        if not lab_admin_profile.is_active or not user.is_active:
+            raise serializers.ValidationError("Lab admin account is inactive.")
+
+        tokens = RefreshToken.for_user(user)
+        return {
+            "access": str(tokens.access_token),
+            "refresh": str(tokens),
+            "user_id": str(user.id),
+            "lab_admin_id": str(lab_admin_profile.id),
+            "lab_id": str(lab_admin_profile.lab.id),
+            "name": user.first_name,
+            "email": user.email
+        }
