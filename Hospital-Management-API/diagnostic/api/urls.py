@@ -10,12 +10,16 @@ from diagnostic.api.views import (
     TestPackageDetailView,
     BulkTestPackageCreateView,LabAdminRegisterView,DiagnosticLabViewSet,
     DiagnosticLabAddressViewSet,LabAdminLoginView,LabAdminTokenRefreshView,
-    LabAdminTokenVerifyView,
+    LabAdminTokenVerifyView,ImagingViewSet,TestPackageViewSet,
 )
 urlpatterns =[]
 router = DefaultRouter()
 router.register(r'labs', DiagnosticLabViewSet, basename='lab')
 router.register(r'lab-addresses', DiagnosticLabAddressViewSet, basename='lab-address')
+router.register(r'test-categories', TestCategoryViewSet, basename='test-category')
+router.register(r'imaging-views', ImagingViewSet, basename='imaging-view')
+router.register(r'medical-tests', MedicalTestViewSet, basename='medical-test')
+router.register(r'test-packages', TestPackageViewSet, basename='test-package')
 
 test_recommendation_list = TestRecommendationViewSet.as_view({
     'get': 'list',
@@ -40,16 +44,9 @@ package_recommendation_detail = PackageRecommendationViewSet.as_view({
     'delete': 'destroy'
 })
 
-router.register(r'medical-tests', MedicalTestViewSet, basename='medical-test')
-router.register(r'test-categories', TestCategoryViewSet, basename='test-category')
-router.register(r'imaging-views', ImagingViewViewSet, basename='imaging-view')
 urlpatterns += router.urls
 
 urlpatterns += [
-    path('test-packages/', TestPackageListCreateView.as_view(), name='test-package-list-create'),
-    path('test-packages/bulk-create/', BulkTestPackageCreateView.as_view(), name='bulk-create-test-packages'),
-    path('test-packages/<uuid:pk>/', TestPackageDetailView.as_view(), name='test-package-detail'),
-
     path(
         'test-recommendation/<uuid:consultation_id>/tests/',
         test_recommendation_list,

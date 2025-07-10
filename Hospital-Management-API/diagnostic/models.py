@@ -43,11 +43,14 @@ class TestCategory(models.Model):
     slug = models.SlugField(max_length=100, unique=True, blank=True)
     modality = models.CharField(max_length=50, blank=True, null=True)  # imaging/lab/etc.
     description = models.TextField(blank=True, null=True)
+    is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def save(self, *args, **kwargs):
-        if not self.slug:
+
+        if self.name:
+            self.name = self.name.strip()
             self.slug = slugify(self.name)
         super().save(*args, **kwargs)
 
@@ -56,6 +59,10 @@ class TestCategory(models.Model):
     
     class Meta:
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['slug']),
+            models.Index(fields=['is_active']),
+        ]
 
 class MedicalTest(models.Model):
     TEST_TYPE_CHOICES = StaticDataService.get_test_type_choices()
@@ -74,12 +81,17 @@ class MedicalTest(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     class Meta:
+        ordering = ['-created_at']
         constraints = [
             models.UniqueConstraint(
                 name='unique_lowercase_test_name',
                 fields=['name'],
-                condition=models.Q(name__isnull=False),
+                condition=models.Q(name__isnull=False, is_active=True),
             )
+        ]
+        indexes = [
+            models.Index(fields=['type']),
+            models.Index(fields=['is_active']),
         ]
 
     def save(self, *args, **kwargs):
@@ -199,24 +211,37 @@ class TestRecommendation(models.Model):
 
 class TestPackage(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    name = models.CharField(max_length=255, unique=True)
+    name = models.CharField(max_length=255)
     category = models.CharField(max_length=100, blank=True, null=True)
     description = models.TextField(blank=True, null=True)
     instructions = models.TextField(blank=True, null=True)
     standard_price = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
-    tests = models.ManyToManyField(MedicalTest, related_name='included_in_packages')
+    tests = models.ManyToManyField("diagnostic.MedicalTest", related_name='included_in_packages')
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     def clean(self):
-        test_ids = list(self.tests.values_list('id', flat=True))
-        if len(test_ids) != len(set(test_ids)):
-            raise ValidationError("Duplicate tests in the package are not allowed.")
+        if self.tests.exists():
+            test_ids = list(self.tests.values_list('id', flat=True))
+            if len(test_ids) != len(set(test_ids)):
+                raise ValidationError("Duplicate tests in the package are not allowed.")
 
     def __str__(self):
         return self.name
     class Meta:
         ordering = ['-created_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['name'],
+                condition=models.Q(is_active=True),
+                name="unique_active_package_name"
+            )
+        ]
+        indexes = [
+            models.Index(fields=['name']),
+            models.Index(fields=['category']),
+            models.Index(fields=['is_active']),
+        ]
 
 
 class PackageRecommendation(models.Model):

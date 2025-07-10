@@ -12,69 +12,69 @@ from django.utils import timezone
 from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
 
-class MedicalTestSerializer(serializers.ModelSerializer):
-    category_name = serializers.CharField(source="category.name", read_only=True)
-    view_name = serializers.CharField(source="view.name", read_only=True)
+# class MedicalTestSerializer(serializers.ModelSerializer):
+#     category_name = serializers.CharField(source="category.name", read_only=True)
+#     view_name = serializers.CharField(source="view.name", read_only=True)
 
-    class Meta:
-        model = MedicalTest
-        fields = [
-            "id", "name", "category", "category_name", "view", "view_name",
-            "type", "description", "default_instructions",
-            "standard_price", "is_active", "created_at"
-        ]
-        read_only_fields = ["id", "created_at"]
+#     class Meta:
+#         model = MedicalTest
+#         fields = [
+#             "id", "name", "category", "category_name", "view", "view_name",
+#             "type", "description", "default_instructions",
+#             "standard_price", "is_active", "created_at"
+#         ]
+#         read_only_fields = ["id", "created_at"]
     
-    def validate_name(self, value):
-        if MedicalTest.objects.exclude(id=self.instance.id if self.instance else None).filter(name__iexact=value).exists():
-            raise serializers.ValidationError("A medical test with this name already exists.")
-        return value
+#     def validate_name(self, value):
+#         if MedicalTest.objects.exclude(id=self.instance.id if self.instance else None).filter(name__iexact=value).exists():
+#             raise serializers.ValidationError("A medical test with this name already exists.")
+#         return value
 
-class TestCategorySerializer(serializers.ModelSerializer):
-    class Meta:
-        model = TestCategory
-        fields = ['id', 'name', 'slug', 'modality', 'description']
-        read_only_fields = ['id', 'slug']
+# class TestCategorySerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = TestCategory
+#         fields = ['id', 'name', 'slug', 'modality', 'description']
+#         read_only_fields = ['id', 'slug']
 
-    def validate_name(self, value):
-        qs = TestCategory.objects.exclude(id=self.instance.id if self.instance else None)
-        if qs.filter(name__iexact=value).exists():
-            raise serializers.ValidationError("A category with this name already exists.")
-        return value
+#     def validate_name(self, value):
+#         qs = TestCategory.objects.exclude(id=self.instance.id if self.instance else None)
+#         if qs.filter(name__iexact=value).exists():
+#             raise serializers.ValidationError("A category with this name already exists.")
+#         return value
 
-    def create(self, validated_data):
-        validated_data['slug'] = slugify(validated_data['name'])
-        return super().create(validated_data)
+#     def create(self, validated_data):
+#         validated_data['slug'] = slugify(validated_data['name'])
+#         return super().create(validated_data)
 
-    def update(self, instance, validated_data):
-        if 'name' in validated_data:
-            validated_data['slug'] = slugify(validated_data['name'])
-        return super().update(instance, validated_data)
+#     def update(self, instance, validated_data):
+#         if 'name' in validated_data:
+#             validated_data['slug'] = slugify(validated_data['name'])
+#         return super().update(instance, validated_data)
 
-class ImagingViewSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = ImagingView
-        fields = ['id', 'name', 'code', 'description']
-        read_only_fields = ['id']
+# class ImagingViewSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = ImagingView
+#         fields = ['id', 'name', 'code', 'description']
+#         read_only_fields = ['id']
 
-    def validate(self, data):
-        """
-        Ensure uniqueness across name, code, and description
-        """
-        name = data.get('name', getattr(self.instance, 'name', None))
-        code = data.get('code', getattr(self.instance, 'code', None))
-        description = data.get('description', getattr(self.instance, 'description', None))
+#     def validate(self, data):
+#         """
+#         Ensure uniqueness across name, code, and description
+#         """
+#         name = data.get('name', getattr(self.instance, 'name', None))
+#         code = data.get('code', getattr(self.instance, 'code', None))
+#         description = data.get('description', getattr(self.instance, 'description', None))
 
-        qs = ImagingView.objects.exclude(id=self.instance.id if self.instance else None)
+#         qs = ImagingView.objects.exclude(id=self.instance.id if self.instance else None)
 
-        if qs.filter(name__iexact=name).exists():
-            raise serializers.ValidationError({'name': 'An imaging view with this name already exists.'})
-        if qs.filter(code__iexact=code).exists():
-            raise serializers.ValidationError({'code': 'An imaging view with this code already exists.'})
-        if description and qs.filter(description__iexact=description).exists():
-            raise serializers.ValidationError({'description': 'This description is already used.'})
+#         if qs.filter(name__iexact=name).exists():
+#             raise serializers.ValidationError({'name': 'An imaging view with this name already exists.'})
+#         if qs.filter(code__iexact=code).exists():
+#             raise serializers.ValidationError({'code': 'An imaging view with this code already exists.'})
+#         if description and qs.filter(description__iexact=description).exists():
+#             raise serializers.ValidationError({'description': 'This description is already used.'})
 
-        return data
+#         return data
 
 class TestRecommendationSerializer(serializers.ModelSerializer):
     test_name = serializers.CharField(source='test.name', read_only=True)
@@ -298,3 +298,75 @@ class LabAdminLoginSerializer(serializers.Serializer):
             "name": user.first_name,
             "email": user.email
         }
+
+
+class TestCategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TestCategory
+        fields = ['id', 'name', 'slug', 'modality', 'description', 'is_active', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'slug', 'created_at', 'updated_at']
+
+    def validate_name(self, value):
+        value = value.strip()
+        if TestCategory.objects.filter(name__iexact=value).exclude(id=self.instance.id if self.instance else None).exists():
+            raise serializers.ValidationError("A test category with this name already exists.")
+        return value
+
+
+class ImagingViewSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ImagingView
+        fields = ['id', 'name', 'code', 'description', 'is_active', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def validate_name(self, value):
+        value = value.strip()
+        if ImagingView.objects.filter(name__iexact=value).exclude(id=self.instance.id if self.instance else None).exists():
+            raise serializers.ValidationError("Imaging view with this name already exists.")
+        return value
+
+    def validate_code(self, value):
+        value = value.strip().lower()
+        if ImagingView.objects.filter(code__iexact=value).exclude(id=self.instance.id if self.instance else None).exists():
+            raise serializers.ValidationError("Imaging view with this code already exists.")
+        return value
+
+class MedicalTestSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MedicalTest
+        fields = '__all__'
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def validate_name(self, value):
+        value = value.strip().lower()
+        qs = MedicalTest.objects.filter(name__iexact=value, is_active=True)
+        if self.instance:
+            qs = qs.exclude(id=self.instance.id)
+        if qs.exists():
+            raise serializers.ValidationError("A medical test with this name already exists.")
+        return value
+
+class TestPackageSerializer(serializers.ModelSerializer):
+    tests = serializers.PrimaryKeyRelatedField(queryset=MedicalTest.objects.filter(is_active=True), many=True)
+
+    class Meta:
+        model = TestPackage
+        fields = '__all__'
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def validate_name(self, value):
+        value = value.strip()
+        qs = TestPackage.objects.filter(name__iexact=value, is_active=True)
+        if self.instance:
+            qs = qs.exclude(id=self.instance.id)
+        if qs.exists():
+            raise serializers.ValidationError("A package with this name already exists.")
+        return value
+
+    def validate_tests(self, value):
+        if not value:
+            raise serializers.ValidationError("At least one test must be selected.")
+        test_ids = [test.id for test in value]
+        if len(test_ids) != len(set(test_ids)):
+            raise serializers.ValidationError("Duplicate tests in the package are not allowed.")
+        return value

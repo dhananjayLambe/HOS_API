@@ -8,6 +8,7 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 from rest_framework import filters
+from django_filters.rest_framework import DjangoFilterBackend
 
 from rest_framework_simplejwt.views import (
     TokenRefreshView as SimpleJWTRefreshView,
@@ -22,11 +23,12 @@ from utils.utils import api_response
 from diagnostic.models import (MedicalTest,
                                TestCategory,ImagingView,TestRecommendation,
                                PackageRecommendation,TestPackage,DiagnosticLab,
-                               DiagnosticLabAddress,)
+                               DiagnosticLabAddress,TestCategory,
+                               ImagingView)
 from diagnostic.api.serializers import (
     MedicalTestSerializer,TestCategorySerializer,ImagingViewSerializer,TestPackageSerializer,
     TestRecommendationSerializer,PackageRecommendationSerializer,
-    LabAdminRegistrationSerializer,LabAdminLoginSerializer,
+    LabAdminRegistrationSerializer,LabAdminLoginSerializer,TestCategorySerializer,
     DiagnosticLabSerializer,DiagnosticLabAddressSerializer)
 from consultations.models import Consultation
 from account.permissions import IsDoctor, IsAdminUser
@@ -37,33 +39,8 @@ from django.core.paginator import Paginator
 from math import radians, cos, sin, asin, sqrt
 from diagnostic.filters import DiagnosticLabAddressFilter
 from rest_framework import viewsets, status, filters
+from rest_framework.response import Response
 
-class MedicalTestViewSet(viewsets.ModelViewSet):
-    queryset = MedicalTest.objects.filter(is_active=True).order_by('-created_at')
-    serializer_class = MedicalTestSerializer
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAuthenticated]
-    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-
-    filterset_fields = ['type', 'category', 'view']
-    search_fields = ['name', 'description']
-    ordering_fields = ['name', 'created_at', 'standard_price']
-
-    def destroy(self, request, *args, **kwargs):
-        instance = self.get_object()
-        instance.is_active = False  # Soft delete
-        instance.save()
-        return Response({"detail": "Test deactivated successfully."}, status=status.HTTP_204_NO_CONTENT)
-
-class TestCategoryViewSet(viewsets.ModelViewSet):
-    queryset = TestCategory.objects.all().order_by('-name')
-    serializer_class = TestCategorySerializer
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAuthenticated]
-    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = ['modality']
-    search_fields = ['name', 'description']
-    ordering_fields = ['name', 'modality']
 
 class ImagingViewViewSet(viewsets.ModelViewSet):
     queryset = ImagingView.objects.all().order_by('name')
@@ -492,3 +469,319 @@ class LabAdminTokenRefreshView(SimpleJWTRefreshView):
 
 class LabAdminTokenVerifyView(SimpleJWTVerifyView):
     permission_classes = [AllowAny]
+
+class TestCategoryViewSet(viewsets.ModelViewSet):
+    queryset = TestCategory.objects.filter(is_active=True).order_by('-created_at')
+    serializer_class = TestCategorySerializer
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['name', 'modality']
+    ordering_fields = ['created_at', 'name']
+
+    @transaction.atomic
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        if serializer.is_valid():
+            instance = serializer.save()
+            return Response({
+                "status": True,
+                "message": "Test category created successfully.",
+                "data": TestCategorySerializer(instance).data
+            }, status=status.HTTP_201_CREATED)
+        return Response({
+            "status": False,
+            "message": "Validation failed.",
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    @transaction.atomic
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        if serializer.is_valid():
+            instance = serializer.save()
+            return Response({
+                "status": True,
+                "message": "Test category updated successfully.",
+                "data": TestCategorySerializer(instance).data
+            }, status=status.HTTP_200_OK)
+        return Response({
+            "status": False,
+            "message": "Update failed.",
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    @transaction.atomic
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        instance.is_active = False  # ✅ Soft delete
+        instance.save()
+        return Response({
+            "status": True,
+            "message": "Test category deleted (soft) successfully.",
+            "data": {}
+        }, status=status.HTTP_200_OK)
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+        serializer = TestCategorySerializer(page or queryset, many=True)
+        return Response({
+            "status": True,
+            "message": "Test categories fetched successfully.",
+            "data": serializer.data
+        }, status=status.HTTP_200_OK)
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return Response({
+            "status": True,
+            "message": "Test category retrieved successfully.",
+            "data": serializer.data
+        }, status=status.HTTP_200_OK)
+    
+
+class ImagingViewSet(viewsets.ModelViewSet):
+    queryset = ImagingView.objects.filter(is_active=True).order_by('-created_at')
+    serializer_class = ImagingViewSerializer
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['name', 'code']
+    ordering_fields = ['created_at', 'name', 'code']
+    filterset_fields = ['code', 'name']
+
+    @transaction.atomic
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        if serializer.is_valid():
+            instance = serializer.save()
+            return Response({
+                "status": True,
+                "message": "Imaging view created successfully.",
+                "data": ImagingViewSerializer(instance).data
+            }, status=status.HTTP_201_CREATED)
+        return Response({
+            "status": False,
+            "message": "Validation failed.",
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    @transaction.atomic
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        if serializer.is_valid():
+            instance = serializer.save()
+            return Response({
+                "status": True,
+                "message": "Imaging view updated successfully.",
+                "data": ImagingViewSerializer(instance).data
+            }, status=status.HTTP_200_OK)
+        return Response({
+            "status": False,
+            "message": "Update failed.",
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    @transaction.atomic
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        instance.is_active = False
+        instance.save()
+        return Response({
+            "status": True,
+            "message": "Imaging view soft-deleted successfully.",
+            "data": {}
+        }, status=status.HTTP_200_OK)
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return Response({
+            "status": True,
+            "message": "Imaging view fetched successfully.",
+            "data": serializer.data
+        }, status=status.HTTP_200_OK)
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+        serializer = ImagingViewSerializer(page or queryset, many=True)
+        return Response({
+            "status": True,
+            "message": "Imaging views fetched successfully.",
+            "data": serializer.data
+        }, status=status.HTTP_200_OK)
+
+class MedicalTestViewSet(viewsets.ModelViewSet):
+    queryset = MedicalTest.objects.filter(is_active=True).select_related('category', 'view').order_by('-created_at')
+    serializer_class = MedicalTestSerializer
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['type', 'fasting_required', 'category', 'view']
+    search_fields = ['name', 'sample_required']
+    ordering_fields = ['created_at', 'standard_price', 'name']
+
+    @transaction.atomic
+    def create(self, request, *args, **kwargs):
+        name = request.data.get("name", "").strip().lower()
+        existing = MedicalTest.objects.filter(name=name, is_active=False).first()
+        if existing:
+            serializer = self.get_serializer(existing, data=request.data, partial=True)
+            if serializer.is_valid():
+                instance = serializer.save(is_active=True)
+                return Response({
+                    "status": True,
+                    "message": "Previously deleted medical test restored.",
+                    "data": self.get_serializer(instance).data
+                }, status=status.HTTP_200_OK)
+            return Response({
+                "status": False,
+                "message": "Restore failed.",
+                "errors": serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        return super().create(request, *args, **kwargs)
+    @transaction.atomic
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        if serializer.is_valid():
+            instance = serializer.save()
+            return Response({
+                "status": True,
+                "message": "Medical test updated successfully.",
+                "data": MedicalTestSerializer(instance).data
+            }, status=status.HTTP_200_OK)
+        return Response({
+            "status": False,
+            "message": "Update failed.",
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    @transaction.atomic
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        instance.is_active = False
+        instance.save()
+        return Response({
+            "status": True,
+            "message": "Medical test soft-deleted successfully.",
+            "data": {}
+        }, status=status.HTTP_200_OK)
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return Response({
+            "status": True,
+            "message": "Medical test fetched successfully.",
+            "data": serializer.data
+        }, status=status.HTTP_200_OK)
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+        serializer = self.get_serializer(page or queryset, many=True)
+        return Response({
+            "status": True,
+            "message": "Medical tests fetched successfully.",
+            "data": serializer.data
+        }, status=status.HTTP_200_OK)
+
+
+class TestPackageViewSet(viewsets.ModelViewSet):
+    queryset = TestPackage.objects.filter(is_active=True).prefetch_related('tests')
+    serializer_class = TestPackageSerializer
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['category']
+    search_fields = ['name', 'description']
+    ordering_fields = ['name', 'created_at', 'standard_price']
+
+    @transaction.atomic
+    def create(self, request, *args, **kwargs):
+        name = request.data.get("name", "").strip()
+        existing = TestPackage.objects.filter(name__iexact=name, is_active=False).first()
+        if existing:
+            serializer = self.get_serializer(existing, data=request.data, partial=True)
+            if serializer.is_valid():
+                instance = serializer.save(is_active=True)
+                instance.tests.set(request.data.get("tests", []))
+                return Response({
+                    "status": True,
+                    "message": "Previously deleted package restored.",
+                    "data": self.get_serializer(instance).data
+                }, status=status.HTTP_200_OK)
+            return Response({
+                "status": False,
+                "message": "Restore failed.",
+                "errors": serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        return super().create(request, *args, **kwargs)
+
+    @transaction.atomic
+    def update(self, request, *args, **kwargs):
+        return self._update_common(request, partial=False, **kwargs)
+
+    @transaction.atomic
+    def partial_update(self, request, *args, **kwargs):
+        return self._update_common(request, partial=True, **kwargs)
+
+    def _update_common(self, request, partial=False, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        if serializer.is_valid():
+            updated_instance = serializer.save()
+            if "tests" in request.data:
+                updated_instance.tests.set(request.data["tests"])
+            return Response({
+                "status": True,
+                "message": "Package updated successfully.",
+                "data": self.get_serializer(updated_instance).data
+            }, status=status.HTTP_200_OK)
+        return Response({
+            "status": False,
+            "message": "Update failed.",
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    @transaction.atomic
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        instance.is_active = False
+        instance.save()
+        return Response({
+            "status": True,
+            "message": "Package soft-deleted successfully.",
+            "data": {}
+        }, status=status.HTTP_200_OK)
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({
+            "status": True,
+            "message": "Packages fetched successfully.",
+            "data": serializer.data
+        })
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return Response({
+            "status": True,
+            "message": "Package retrieved successfully.",
+            "data": serializer.data
+        })
+
+
