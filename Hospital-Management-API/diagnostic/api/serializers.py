@@ -2,7 +2,7 @@ from rest_framework import serializers
 from django.utils.text import slugify
 from diagnostic.models import (
     MedicalTest, TestCategory, ImagingView, TestRecommendation,PackageRecommendation,
-    TestPackage,DiagnosticLabAddress,
+    TestPackage,DiagnosticLabAddress,TestLabMapping,PackageLabMapping,
     )
 from django.db import transaction
 from account.models import User
@@ -370,3 +370,30 @@ class TestPackageSerializer(serializers.ModelSerializer):
         if len(test_ids) != len(set(test_ids)):
             raise serializers.ValidationError("Duplicate tests in the package are not allowed.")
         return value
+
+class TestLabMappingSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TestLabMapping
+        fields = "__all__"
+        read_only_fields = ["id", "lab", "created_at", "updated_at"]
+
+    def validate(self, data):
+        test = data.get("test")
+        lab = self.context["lab"]  # Passed from view
+        if TestLabMapping.objects.filter(test=test, lab=lab, is_active=True).exclude(id=self.instance.id if self.instance else None).exists():
+            raise serializers.ValidationError("This test is already mapped to your lab.")
+        return data
+
+class PackageLabMappingSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PackageLabMapping
+        fields = "__all__"
+        read_only_fields = ["id", "lab", "created_at", "updated_at"]
+
+    def validate(self, data):
+        package = data.get("package")
+        lab = self.context.get("lab")
+
+        if PackageLabMapping.objects.filter(package=package, lab=lab, is_active=True).exclude(id=self.instance.id if self.instance else None).exists():
+            raise serializers.ValidationError("This package is already mapped to your lab.")
+        return data

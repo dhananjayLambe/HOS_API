@@ -10,7 +10,8 @@ from diagnostic.api.views import (
     TestPackageDetailView,
     BulkTestPackageCreateView,LabAdminRegisterView,DiagnosticLabViewSet,
     DiagnosticLabAddressViewSet,LabAdminLoginView,LabAdminTokenRefreshView,
-    LabAdminTokenVerifyView,ImagingViewSet,TestPackageViewSet,
+    LabAdminTokenVerifyView,ImagingViewSet,TestPackageViewSet,TestLabMappingViewSet,
+    PackageLabMappingViewSet,
 )
 urlpatterns =[]
 router = DefaultRouter()
@@ -20,6 +21,8 @@ router.register(r'test-categories', TestCategoryViewSet, basename='test-category
 router.register(r'imaging-views', ImagingViewSet, basename='imaging-view')
 router.register(r'medical-tests', MedicalTestViewSet, basename='medical-test')
 router.register(r'test-packages', TestPackageViewSet, basename='test-package')
+router.register(r'test-lab-mappings', TestLabMappingViewSet, basename='test-lab-mapping')
+router.register(r'package-lab-mappings', PackageLabMappingViewSet, basename='package-lab-mapping')
 
 test_recommendation_list = TestRecommendationViewSet.as_view({
     'get': 'list',

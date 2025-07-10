@@ -23,15 +23,16 @@ from utils.utils import api_response
 from diagnostic.models import (MedicalTest,
                                TestCategory,ImagingView,TestRecommendation,
                                PackageRecommendation,TestPackage,DiagnosticLab,
-                               DiagnosticLabAddress,TestCategory,
-                               ImagingView)
+                               DiagnosticLabAddress,TestCategory,TestLabMapping,
+                               ImagingView,PackageLabMapping,)
 from diagnostic.api.serializers import (
     MedicalTestSerializer,TestCategorySerializer,ImagingViewSerializer,TestPackageSerializer,
     TestRecommendationSerializer,PackageRecommendationSerializer,
     LabAdminRegistrationSerializer,LabAdminLoginSerializer,TestCategorySerializer,
-    DiagnosticLabSerializer,DiagnosticLabAddressSerializer)
+    DiagnosticLabSerializer,DiagnosticLabAddressSerializer,
+    TestLabMappingSerializer,PackageLabMappingSerializer,)
 from consultations.models import Consultation
-from account.permissions import IsDoctor, IsAdminUser
+from account.permissions import IsDoctor, IsAdminUser,IsLabAdmin
 from django.db import transaction
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
@@ -784,4 +785,216 @@ class TestPackageViewSet(viewsets.ModelViewSet):
             "data": serializer.data
         })
 
+class TestLabMappingViewSet(viewsets.ModelViewSet):
+    serializer_class = TestLabMappingSerializer
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsLabAdmin]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ["test", "is_available", "home_collection_available"]
+    search_fields = ["test__name"]
+    ordering_fields = ["price", "turnaround_time", "created_at"]
 
+    def get_queryset(self):
+        lab = self.request.user.lab_admin_profile.lab
+        return TestLabMapping.objects.filter(lab=lab, is_active=True).select_related("test")
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["lab"] = self.request.user.lab_admin_profile.lab
+        return context
+
+    @transaction.atomic
+    def create(self, request, *args, **kwargs):
+        lab = request.user.lab_admin_profile.lab
+        test = request.data.get("test")
+
+        # Restore previously soft-deleted record if exists
+        existing = TestLabMapping.objects.filter(test_id=test, lab=lab, is_active=False).first()
+        if existing:
+            serializer = self.get_serializer(existing, data=request.data, partial=True)
+            if serializer.is_valid():
+                instance = serializer.save(is_active=True, lab=lab)  # ✅ FIX: set lab here
+                return Response({
+                    "status": True,
+                    "message": "Mapping restored successfully.",
+                    "data": self.get_serializer(instance).data
+                }, status=status.HTTP_200_OK)
+            return Response({
+                "status": False,
+                "message": "Validation failed.",
+                "errors": serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Standard create: inject lab manually
+        serializer = self.get_serializer(data=request.data)
+        if serializer.is_valid():
+            instance = serializer.save(lab=lab)  # ✅ FIX: set lab here
+            return Response({
+                "status": True,
+                "message": "Mapping created successfully.",
+                "data": self.get_serializer(instance).data
+            }, status=status.HTTP_201_CREATED)
+        return Response({
+            "status": False,
+            "message": "Validation failed.",
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    @transaction.atomic
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        instance.is_active = False
+        instance.save()
+        return Response({
+            "status": True,
+            "message": "Mapping deleted (soft).",
+            "data": {}
+        }, status=status.HTTP_200_OK)
+
+    @transaction.atomic
+    def update(self, request, *args, **kwargs):
+        return self._update_common(request, partial=False, **kwargs)
+
+    @transaction.atomic
+    def partial_update(self, request, *args, **kwargs):
+        return self._update_common(request, partial=True, **kwargs)
+
+    def _update_common(self, request, partial, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        if serializer.is_valid():
+            updated = serializer.save()
+            return Response({
+                "status": True,
+                "message": "Mapping updated successfully.",
+                "data": self.get_serializer(updated).data
+            }, status=status.HTTP_200_OK)
+        return Response({
+            "status": False,
+            "message": "Update failed.",
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({
+            "status": True,
+            "message": "Lab mappings fetched successfully.",
+            "data": serializer.data
+        })
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return Response({
+            "status": True,
+            "message": "Lab mapping fetched.",
+            "data": serializer.data
+        })
+
+
+class PackageLabMappingViewSet(viewsets.ModelViewSet):
+    serializer_class = PackageLabMappingSerializer
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsLabAdmin]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ["package", "is_available", "home_collection_available"]
+    search_fields = ["package__name"]
+    ordering_fields = ["price", "turnaround_time", "created_at"]
+
+    def get_queryset(self):
+        lab = self.request.user.lab_admin_profile.lab
+        return PackageLabMapping.objects.filter(lab=lab, is_active=True).select_related("package")
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["lab"] = self.request.user.lab_admin_profile.lab
+        return context
+
+    @transaction.atomic
+    def create(self, request, *args, **kwargs):
+        lab = request.user.lab_admin_profile.lab
+        package_id = request.data.get("package")
+        existing = PackageLabMapping.objects.filter(package_id=package_id, lab=lab, is_active=False).first()
+        if existing:
+            serializer = self.get_serializer(existing, data=request.data, partial=True)
+            if serializer.is_valid():
+                instance = serializer.save(is_active=True, lab=lab)
+                return Response({
+                    "status": True,
+                    "message": "Mapping restored successfully.",
+                    "data": self.get_serializer(instance).data
+                }, status=status.HTTP_200_OK)
+            return Response({
+                "status": False,
+                "message": "Validation failed.",
+                "errors": serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = self.get_serializer(data=request.data)
+        if serializer.is_valid():
+            instance = serializer.save(lab=lab)
+            return Response({
+                "status": True,
+                "message": "Mapping created successfully.",
+                "data": self.get_serializer(instance).data
+            }, status=status.HTTP_201_CREATED)
+        return Response({
+            "status": False,
+            "message": "Validation failed.",
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    @transaction.atomic
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        instance.is_active = False
+        instance.save()
+        return Response({
+            "status": True,
+            "message": "Mapping soft-deleted.",
+            "data": {}
+        }, status=status.HTTP_200_OK)
+
+    @transaction.atomic
+    def update(self, request, *args, **kwargs):
+        return self._update_common(request, partial=False, **kwargs)
+
+    @transaction.atomic
+    def partial_update(self, request, *args, **kwargs):
+        return self._update_common(request, partial=True, **kwargs)
+
+    def _update_common(self, request, partial, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        if serializer.is_valid():
+            updated = serializer.save()
+            return Response({
+                "status": True,
+                "message": "Mapping updated successfully.",
+                "data": self.get_serializer(updated).data
+            })
+        return Response({
+            "status": False,
+            "message": "Update failed.",
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({
+            "status": True,
+            "message": "Package mappings fetched successfully.",
+            "data": serializer.data
+        })
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return Response({
+            "status": True,
+            "message": "Mapping fetched.",
+            "data": serializer.data
+        })

@@ -150,21 +150,32 @@ class DiagnosticLab(models.Model):
 
 class TestLabMapping(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    test = models.ForeignKey(MedicalTest, on_delete=models.CASCADE)
-    lab = models.ForeignKey(DiagnosticLab, on_delete=models.CASCADE)
+    test = models.ForeignKey("diagnostic.MedicalTest", on_delete=models.CASCADE)
+    lab = models.ForeignKey("diagnostic.DiagnosticLab", on_delete=models.CASCADE)
     price = models.DecimalField(max_digits=8, decimal_places=2)
     is_available = models.BooleanField(default=True)
-    turnaround_time = models.PositiveIntegerField()  # in hours
+    turnaround_time = models.PositiveIntegerField(help_text="In hours")  # in hours
     home_collection_available = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True, help_text="Is this mapping currently active?")
+    notes = models.TextField(blank=True, null=True, help_text="Any additional notes about this mapping")
+    # This field is used to track the last time this mapping was updated
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = ('test', 'lab')
         ordering = ['-created_at']
+        constraints = [
+            models.UniqueConstraint(fields=["test", "lab"], condition=models.Q(is_active=True), name="unique_active_test_lab")
+        ]
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["lab"]),
+            models.Index(fields=["test"]),
+            models.Index(fields=["is_active"]),
+        ]
 
     def __str__(self):
-        return f"{self.test.name} at {self.lab.name}"
+        return f"{self.test.name.title()} at {self.lab.name}"
 
 class TestRecommendation(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -365,3 +376,34 @@ class DiagnosticLabAddress(models.Model):
 
     def __str__(self):
         return f"{self.address}, {self.city}, {self.state}, {self.pincode}"
+    
+
+# diagnostic/models.py
+
+class PackageLabMapping(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    package = models.ForeignKey("diagnostic.TestPackage", on_delete=models.CASCADE, related_name="lab_mappings")
+    lab = models.ForeignKey("diagnostic.DiagnosticLab", on_delete=models.CASCADE, related_name="package_mappings")
+    price = models.DecimalField(max_digits=8, decimal_places=2)
+    is_available = models.BooleanField(default=True)
+    turnaround_time = models.PositiveIntegerField(help_text="In hours")
+    home_collection_available = models.BooleanField(default=False)
+    notes = models.TextField(blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["package", "lab"], condition=models.Q(is_active=True), name="unique_active_package_lab")
+        ]
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["lab"]),
+            models.Index(fields=["package"]),
+            models.Index(fields=["is_active"]),
+        ]
+
+    def __str__(self):
+        return f"{self.package.name} - {self.lab.name}"
