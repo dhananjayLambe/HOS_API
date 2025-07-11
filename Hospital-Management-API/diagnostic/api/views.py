@@ -9,7 +9,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 from rest_framework import filters
 from django_filters.rest_framework import DjangoFilterBackend
-
+from django.db.models import Q
 from rest_framework_simplejwt.views import (
     TokenRefreshView as SimpleJWTRefreshView,
     TokenVerifyView as SimpleJWTVerifyView
@@ -27,12 +27,12 @@ from diagnostic.models import (MedicalTest,
                                ImagingView,PackageLabMapping,)
 from diagnostic.api.serializers import (
     MedicalTestSerializer,TestCategorySerializer,ImagingViewSerializer,TestPackageSerializer,
-    TestRecommendationSerializer,PackageRecommendationSerializer,
+    TestRecommendationSerializer,PackageRecommendationSerializer,BulkPackageRecommendationSerializer,
     LabAdminRegistrationSerializer,LabAdminLoginSerializer,TestCategorySerializer,
     DiagnosticLabSerializer,DiagnosticLabAddressSerializer,
     TestLabMappingSerializer,PackageLabMappingSerializer,)
 from consultations.models import Consultation
-from account.permissions import IsDoctor, IsAdminUser,IsLabAdmin
+from account.permissions import IsDoctor, IsAdminUser,IsLabAdmin,IsPatient
 from django.db import transaction
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
@@ -52,92 +52,92 @@ class ImagingViewViewSet(viewsets.ModelViewSet):
     search_fields = ['name', 'code', 'description']
     ordering_fields = ['name', 'code']
 
-class TestRecommendationViewSet(viewsets.ModelViewSet):
-    serializer_class = TestRecommendationSerializer
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAuthenticated]
+# class TestRecommendationViewSet(viewsets.ModelViewSet):
+#     serializer_class = TestRecommendationSerializer
+#     authentication_classes = [JWTAuthentication]
+#     permission_classes = [IsAuthenticated]
 
-    def get_queryset(self):
-        consultation_id = self.kwargs.get('consultation_id')
-        return TestRecommendation.objects.filter(consultation_id=consultation_id)
+#     def get_queryset(self):
+#         consultation_id = self.kwargs.get('consultation_id')
+#         return TestRecommendation.objects.filter(consultation_id=consultation_id)
 
-    def perform_create(self, serializer):
-        consultation_id = self.kwargs.get('consultation_id')
-        try:
-            consultation = Consultation.objects.get(id=consultation_id)
-        except Consultation.DoesNotExist:
-            raise NotFound("Consultation not found")
-        serializer.save(
-            consultation=consultation,
-            recommended_by=self.request.user
-        )
+#     def perform_create(self, serializer):
+#         consultation_id = self.kwargs.get('consultation_id')
+#         try:
+#             consultation = Consultation.objects.get(id=consultation_id)
+#         except Consultation.DoesNotExist:
+#             raise NotFound("Consultation not found")
+#         serializer.save(
+#             consultation=consultation,
+#             recommended_by=self.request.user
+#         )
 
-    def get_object(self):
-        consultation_id = self.kwargs.get('consultation_id')
-        pk = self.kwargs.get('pk')
-        try:
-            return TestRecommendation.objects.get(id=pk, consultation_id=consultation_id)
-        except TestRecommendation.DoesNotExist:
-            raise NotFound("Test recommendation not found for this consultation.")
+#     def get_object(self):
+#         consultation_id = self.kwargs.get('consultation_id')
+#         pk = self.kwargs.get('pk')
+#         try:
+#             return TestRecommendation.objects.get(id=pk, consultation_id=consultation_id)
+#         except TestRecommendation.DoesNotExist:
+#             raise NotFound("Test recommendation not found for this consultation.")
 
-class PackageRecommendationViewSet(viewsets.ModelViewSet):
-    serializer_class = PackageRecommendationSerializer
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAuthenticated]
-    def get_queryset(self):
-        consultation_id = self.kwargs.get('consultation_id')
-        return PackageRecommendation.objects.filter(consultation_id=consultation_id)
+# class PackageRecommendationViewSet(viewsets.ModelViewSet):
+#     serializer_class = PackageRecommendationSerializer
+#     authentication_classes = [JWTAuthentication]
+#     permission_classes = [IsAuthenticated]
+#     def get_queryset(self):
+#         consultation_id = self.kwargs.get('consultation_id')
+#         return PackageRecommendation.objects.filter(consultation_id=consultation_id)
 
-    def get_object(self):
-        consultation_id = self.kwargs.get('consultation_id')
-        pk = self.kwargs.get('pk')
-        try:
-            return PackageRecommendation.objects.get(id=pk, consultation_id=consultation_id)
-        except PackageRecommendation.DoesNotExist:
-            raise NotFound("Package recommendation not found for this consultation.")
+#     def get_object(self):
+#         consultation_id = self.kwargs.get('consultation_id')
+#         pk = self.kwargs.get('pk')
+#         try:
+#             return PackageRecommendation.objects.get(id=pk, consultation_id=consultation_id)
+#         except PackageRecommendation.DoesNotExist:
+#             raise NotFound("Package recommendation not found for this consultation.")
 
-    def perform_create(self, serializer):
-        consultation_id = self.kwargs.get('consultation_id')
-        try:
-            consultation = Consultation.objects.get(id=consultation_id)
-        except Consultation.DoesNotExist:
-            raise NotFound("Consultation not found")
-        serializer.save(
-            consultation=consultation,
-            recommended_by=self.request.user
-        )
+#     def perform_create(self, serializer):
+#         consultation_id = self.kwargs.get('consultation_id')
+#         try:
+#             consultation = Consultation.objects.get(id=consultation_id)
+#         except Consultation.DoesNotExist:
+#             raise NotFound("Consultation not found")
+#         serializer.save(
+#             consultation=consultation,
+#             recommended_by=self.request.user
+#         )
 
-    @transaction.atomic
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        self.perform_create(serializer)
-        return api_response("success", "Package recommendation added", serializer.data, status.HTTP_201_CREATED)
+#     @transaction.atomic
+#     def create(self, request, *args, **kwargs):
+#         serializer = self.get_serializer(data=request.data)
+#         serializer.is_valid(raise_exception=True)
+#         self.perform_create(serializer)
+#         return api_response("success", "Package recommendation added", serializer.data, status.HTTP_201_CREATED)
 
-    @transaction.atomic
-    def update(self, request, *args, **kwargs):
-        partial = kwargs.pop('partial', False)
-        instance = self.get_object()
-        serializer = self.get_serializer(instance, data=request.data, partial=partial)
-        serializer.is_valid(raise_exception=True)
-        self.perform_update(serializer)
-        return api_response("success", "Package recommendation updated", serializer.data)
+#     @transaction.atomic
+#     def update(self, request, *args, **kwargs):
+#         partial = kwargs.pop('partial', False)
+#         instance = self.get_object()
+#         serializer = self.get_serializer(instance, data=request.data, partial=partial)
+#         serializer.is_valid(raise_exception=True)
+#         self.perform_update(serializer)
+#         return api_response("success", "Package recommendation updated", serializer.data)
 
-    @transaction.atomic
-    def destroy(self, request, *args, **kwargs):
-        instance = self.get_object()
-        instance.delete()
-        return api_response("success", "Package recommendation deleted", None, status.HTTP_204_NO_CONTENT)
+#     @transaction.atomic
+#     def destroy(self, request, *args, **kwargs):
+#         instance = self.get_object()
+#         instance.delete()
+#         return api_response("success", "Package recommendation deleted", None, status.HTTP_204_NO_CONTENT)
 
-    def retrieve(self, request, *args, **kwargs):
-        instance = self.get_object()
-        serializer = self.get_serializer(instance)
-        return api_response("success", "Package recommendation details", serializer.data)
+#     def retrieve(self, request, *args, **kwargs):
+#         instance = self.get_object()
+#         serializer = self.get_serializer(instance)
+#         return api_response("success", "Package recommendation details", serializer.data)
 
-    def list(self, request, *args, **kwargs):
-        queryset = self.get_queryset()
-        serializer = self.get_serializer(queryset, many=True)
-        return api_response("success", "Package recommendations list", serializer.data)
+#     def list(self, request, *args, **kwargs):
+#         queryset = self.get_queryset()
+#         serializer = self.get_serializer(queryset, many=True)
+#         return api_response("success", "Package recommendations list", serializer.data)
 
 
 class TestPackageListCreateView(generics.ListCreateAPIView):
@@ -998,3 +998,297 @@ class PackageLabMappingViewSet(viewsets.ModelViewSet):
             "message": "Mapping fetched.",
             "data": serializer.data
         })
+
+class FilterLabsByTestView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsPatient]
+
+    def get(self, request):
+        test_id = request.query_params.get("test")
+        pincode = request.query_params.get("pincode")
+        sort_by_price = request.query_params.get("sort_by_price", "asc")
+        sort_by_tat = request.query_params.get("sort_by_turnaround")
+
+        # Basic validation
+        if not test_id or not pincode:
+            return Response({
+                "status": False,
+                "message": "Both 'test' and 'pincode' are required.",
+                "data": {}
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            filters = Q(
+                test_id=test_id,
+                is_available=True,
+                is_active=True,
+                lab__is_active=True,
+                lab__address__pincode=pincode
+            )
+
+            if request.query_params.get("home_collection") == "true":
+                filters &= Q(home_collection_available=True)
+
+            if max_price := request.query_params.get("max_price"):
+                filters &= Q(price__lte=float(max_price))
+
+            if min_price := request.query_params.get("min_price"):
+                filters &= Q(price__gte=float(min_price))
+
+            if tier := request.query_params.get("pricing_tier"):
+                filters &= Q(lab__pricing_tier=tier)
+
+            if lab_type := request.query_params.get("lab_type"):
+                filters &= Q(lab__lab_type=lab_type)
+
+        except ValueError as e:
+            return Response({
+                "status": False,
+                "message": f"Invalid parameter: {str(e)}",
+                "data": {}
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        queryset = TestLabMapping.objects.filter(filters).select_related(
+            "lab", "lab__address", "test"
+        )
+
+        # Sorting logic
+        if sort_by_price == "desc":
+            queryset = queryset.order_by("-price")
+        else:
+            queryset = queryset.order_by("price")
+
+        if sort_by_tat:
+            queryset = queryset.order_by("turnaround_time" if sort_by_tat == "asc" else "-turnaround_time")
+
+        result = []
+        for mapping in queryset:
+            lab = mapping.lab
+            addr = lab.address
+            result.append({
+                "lab_id": str(lab.id),
+                "lab_name": lab.name,
+                "price": float(mapping.price),
+                "turnaround_time": mapping.turnaround_time,
+                "home_collection_available": mapping.home_collection_available,
+                "pricing_tier": lab.pricing_tier,
+                "lab_type": lab.lab_type,
+                "address": {
+                    "full_address": addr.address,
+                    "city": addr.city,
+                    "state": addr.state,
+                    "pincode": addr.pincode,
+                    "latitude": addr.latitude,
+                    "longitude": addr.longitude,
+                    "google_maps_url": addr.google_maps_url
+                }
+            })
+
+        return Response({
+            "status": True,
+            "message": f"Labs offering test in pincode {pincode} fetched successfully.",
+            "data": result
+        }, status=status.HTTP_200_OK)
+
+class TestRecommendationViewSet(viewsets.ModelViewSet):
+    serializer_class = TestRecommendationSerializer
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctor]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['consultation', 'test_status', 'is_completed', 'lab_advised']
+    search_fields = ['custom_name', 'notes', 'doctor_comment']
+    ordering_fields = ['created_at', 'scheduled_for']
+    ordering = ['-created_at']
+
+    def get_queryset(self):
+        return TestRecommendation.objects.filter(
+            recommended_by=self.request.user,
+            is_active=True
+        ).select_related("test", "consultation")
+
+    def get_serializer_context(self):
+        return {"request": self.request}
+
+    @transaction.atomic
+    def create(self, request, *args, **kwargs):
+        data = request.data
+        multiple_tests = data.get("tests")
+        consultation_id = data.get("consultation")
+
+        if multiple_tests:
+            created = []
+            for test_id in multiple_tests:
+                payload = data.copy()
+                payload["test"] = test_id
+                payload.pop("tests")
+                serializer = self.get_serializer(data=payload)
+                serializer.is_valid(raise_exception=True)
+                instance = serializer.save(recommended_by=request.user)
+                created.append(self.get_serializer(instance).data)
+            return Response({"status": True, "message": "Multiple tests recommended.", "data": created}, status=201)
+
+        serializer = self.get_serializer(data=request.data)
+        if serializer.is_valid():
+            instance = serializer.save(recommended_by=request.user)
+            return Response({"status": True, "message": "Test recommendation created.", "data": self.get_serializer(instance).data}, status=201)
+        return Response({"status": False, "message": "Validation failed.", "errors": serializer.errors}, status=400)
+
+    @transaction.atomic
+    def update(self, request, *args, **kwargs):
+        return self._update_common(request, partial=False, **kwargs)
+
+    @transaction.atomic
+    def partial_update(self, request, *args, **kwargs):
+        return self._update_common(request, partial=True, **kwargs)
+
+    def _update_common(self, request, partial, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        if serializer.is_valid():
+            updated = serializer.save()
+            return Response({"status": True, "message": "Test recommendation updated.", "data": self.get_serializer(updated).data})
+        return Response({"status": False, "message": "Update failed.", "errors": serializer.errors}, status=400)
+
+    @transaction.atomic
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        instance.is_active = False
+        instance.save()
+        return Response({"status": True, "message": "Recommendation soft-deleted.", "data": {}})
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({"status": True, "message": "Recommendations fetched.", "data": serializer.data})
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return Response({"status": True, "message": "Recommendation details.", "data": serializer.data})
+
+
+# class PackageRecommendationViewSet(viewsets.ModelViewSet):
+#     serializer_class = PackageRecommendationSerializer
+#     authentication_classes = [JWTAuthentication]
+#     permission_classes = [IsAuthenticated, IsDoctor]
+#     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+#     filterset_fields = ['consultation', 'is_completed']
+#     search_fields = ['notes', 'doctor_comment', 'package__name']
+#     ordering_fields = ['created_at', 'updated_at']
+#     ordering = ['-created_at']
+
+#     def get_queryset(self):
+#         return PackageRecommendation.objects.filter(is_active=True, recommended_by=self.request.user)
+
+#     def perform_create(self, serializer):
+#         serializer.save(recommended_by=self.request.user)
+
+#     @transaction.atomic
+#     def create(self, request, *args, **kwargs):
+#         serializer = self.get_serializer(data=request.data)
+#         if serializer.is_valid():
+#             self.perform_create(serializer)
+#             return Response({
+#                 "status": True,
+#                 "message": "Package recommendation created successfully.",
+#                 "data": serializer.data
+#             }, status=status.HTTP_201_CREATED)
+#         return Response({"status": False, "message": "Validation failed.", "errors": serializer.errors}, status=400)
+
+#     @transaction.atomic
+#     def update(self, request, *args, **kwargs):
+#         return self._update_common(request, partial=False, *args, **kwargs)
+
+#     @transaction.atomic
+#     def partial_update(self, request, *args, **kwargs):
+#         return self._update_common(request, partial=True, *args, **kwargs)
+
+#     def _update_common(self, request, partial, *args, **kwargs):
+#         instance = self.get_object()
+#         serializer = self.get_serializer(instance, data=request.data, partial=partial)
+#         if serializer.is_valid():
+#             serializer.save()
+#             return Response({"status": True, "message": "Updated successfully.", "data": serializer.data})
+#         return Response({"status": False, "message": "Update failed.", "errors": serializer.errors}, status=400)
+
+#     @transaction.atomic
+#     def destroy(self, request, *args, **kwargs):
+#         instance = self.get_object()
+#         instance.is_active = False
+#         instance.save()
+#         return Response({"status": True, "message": "Package recommendation deleted (soft).", "data": {}})
+
+
+class PackageRecommendationViewSet(viewsets.ModelViewSet):
+    serializer_class = PackageRecommendationSerializer
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctor]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['consultation', 'is_completed']
+    search_fields = ['notes', 'doctor_comment', 'package__name']
+    ordering_fields = ['created_at', 'updated_at']
+    ordering = ['-created_at']
+
+    def get_queryset(self):
+        return PackageRecommendation.objects.filter(is_active=True, recommended_by=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(recommended_by=self.request.user)
+
+    @transaction.atomic
+    def create(self, request, *args, **kwargs):
+        if isinstance(request.data.get("packages"), list):
+            bulk_serializer = BulkPackageRecommendationSerializer(data=request.data)
+            if not bulk_serializer.is_valid():
+                return Response({"status": False, "message": "Validation failed.", "errors": bulk_serializer.errors}, status=400)
+            validated = bulk_serializer.validated_data
+            consultation = Consultation.objects.get(id=validated["consultation"])
+            recommendations = []
+            for package_id in validated["packages"]:
+                package = TestPackage.objects.get(id=package_id)
+                rec = PackageRecommendation.objects.create(
+                    consultation=consultation,
+                    package=package,
+                    notes=validated.get("notes", ""),
+                    doctor_comment=validated.get("doctor_comment", ""),
+                    recommended_by=request.user
+                )
+                recommendations.append(PackageRecommendationSerializer(rec).data)
+            return Response({
+                "status": True,
+                "message": "Package recommendations created successfully.",
+                "data": recommendations
+            }, status=status.HTTP_201_CREATED)
+        else:
+            serializer = self.get_serializer(data=request.data)
+            if serializer.is_valid():
+                self.perform_create(serializer)
+                return Response({
+                    "status": True,
+                    "message": "Package recommendation created successfully.",
+                    "data": serializer.data
+                }, status=status.HTTP_201_CREATED)
+            return Response({"status": False, "message": "Validation failed.", "errors": serializer.errors}, status=400)
+
+    @transaction.atomic
+    def update(self, request, *args, **kwargs):
+        return self._update_common(request, partial=False, *args, **kwargs)
+
+    @transaction.atomic
+    def partial_update(self, request, *args, **kwargs):
+        return self._update_common(request, partial=True, *args, **kwargs)
+
+    def _update_common(self, request, partial, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({"status": True, "message": "Updated successfully.", "data": serializer.data})
+        return Response({"status": False, "message": "Update failed.", "errors": serializer.errors}, status=400)
+
+    @transaction.atomic
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        instance.is_active = False
+        instance.save()
+        return Response({"status": True, "message": "Package recommendation deleted (soft).", "data": {}})

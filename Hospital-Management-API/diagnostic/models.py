@@ -196,6 +196,7 @@ class TestRecommendation(models.Model):
         help_text="Track the current state of test"
     )
     category_snapshot = models.CharField(max_length=100, blank=True, null=True)
+    is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     def clean(self):
@@ -203,7 +204,8 @@ class TestRecommendation(models.Model):
             raise ValidationError("Either a predefined test or a custom name must be provided.")
         if self.custom_name and TestRecommendation.objects.filter(
             consultation=self.consultation,
-            custom_name__iexact=self.custom_name.strip()
+            custom_name__iexact=self.custom_name.strip(),
+            is_active=True
         ).exclude(id=self.id).exists():
             raise ValidationError("This custom test is already recommended for this consultation.")
 
@@ -215,8 +217,14 @@ class TestRecommendation(models.Model):
             models.UniqueConstraint(
                 fields=['consultation', 'test'],
                 name='unique_consultation_test',
-                condition=models.Q(test__isnull=False)
+                condition=models.Q(test__isnull=False, is_active=True)
             )
+        ]
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['consultation']),
+            models.Index(fields=['test']),
+            models.Index(fields=['is_active']),
         ]
 
 
@@ -258,7 +266,7 @@ class TestPackage(models.Model):
 class PackageRecommendation(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     consultation = models.ForeignKey(Consultation, on_delete=models.CASCADE, related_name='package_recommendations')
-    package = models.ForeignKey(TestPackage, on_delete=models.CASCADE)
+    package = models.ForeignKey(TestPackage, on_delete=models.CASCADE, related_name='recommended_packages')
     notes = models.TextField(blank=True, null=True)
     doctor_comment = models.TextField(blank=True, null=True)
     is_completed = models.BooleanField(default=False)
@@ -267,11 +275,20 @@ class PackageRecommendation(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     is_active = models.BooleanField(default=True)
     class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['consultation', 'package'], condition=models.Q(is_active=True), name='unique_active_consultation_package'
+            )
+        ]
+        indexes = [
+            models.Index(fields=['consultation']),
+            models.Index(fields=['is_active']),
+        ]
         unique_together = ('consultation', 'package')
         ordering = ['-created_at']
 
     def __str__(self):
-        return self.package.name
+        return f"{self.package.name} for {self.consultation.id}"
 
 
 class TestBooking(models.Model):
