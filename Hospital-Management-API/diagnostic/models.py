@@ -20,6 +20,7 @@ def generate_test_pnr():
         if not TestRecommendation.objects.filter(test_pnr=pnr).exists():
             return pnr
 
+
 # View options for X-Ray and Imaging normalization
 class ImagingView(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -196,6 +197,10 @@ class TestRecommendation(models.Model):
         help_text="Track the current state of test"
     )
     category_snapshot = models.CharField(max_length=100, blank=True, null=True)
+    source = models.CharField(
+        max_length=30, blank=True, null=True,
+        help_text="Indicates how test was added: doctor, patient_upload, external_prescription"
+    )
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -262,7 +267,6 @@ class TestPackage(models.Model):
             models.Index(fields=['is_active']),
         ]
 
-
 class PackageRecommendation(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     consultation = models.ForeignKey(Consultation, on_delete=models.CASCADE, related_name='package_recommendations')
@@ -290,6 +294,58 @@ class PackageRecommendation(models.Model):
     def __str__(self):
         return f"{self.package.name} for {self.consultation.id}"
 
+class BookingGroup(models.Model):
+    STATUS_CHOICES = [
+        ('PENDING', 'Pending'),
+        ('CONFIRMED', 'Confirmed'),
+        ('SCHEDULED', 'Scheduled'),
+        ('COMPLETED', 'Completed'),
+        ('CANCELLED', 'Cancelled'),
+    ]
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    consultation = models.ForeignKey(
+        "consultations.Consultation", on_delete=models.CASCADE,
+        related_name="booking_groups",null=True, blank=True,
+    )
+    patient_profile = models.ForeignKey(
+        "patient_account.PatientProfile", on_delete=models.CASCADE,
+        related_name="booking_groups",null=True, blank=True,
+    )
+    booked_by = models.CharField(
+        max_length=30,
+        choices=[('patient', 'Patient'), ('helpdesk', 'Helpdesk')],
+        default='patient'
+    )
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default='PENDING',
+        help_text="Overall group booking status"
+    )
+    is_home_collection = models.BooleanField(default=False)
+    preferred_schedule_time = models.DateTimeField(blank=True, null=True)
+    notes = models.TextField(blank=True, null=True)
+    lab_grouping_type = models.CharField(
+        max_length=20,
+        choices=[("single_lab", "Single Lab"), ("multi_lab", "Multi Lab")],
+        default="single_lab",
+        help_text="Indicates if all tests were booked under one lab or multiple"
+    )
+    total_price = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True)
+    source = models.CharField(
+        max_length=50, blank=True, null=True,
+        help_text="e.g., patient_app, helpdesk_panel")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    is_active = models.BooleanField(default=True)
+    def __str__(self):
+        return f"BookingGroup for {self.patient_profile.get_full_name()} - {self.status}"
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['consultation']),
+            models.Index(fields=['patient_profile']),
+            models.Index(fields=['status']),
+        ]
 
 class TestBooking(models.Model):
     STATUS_CHOICES = [
@@ -297,35 +353,71 @@ class TestBooking(models.Model):
         ('CONFIRMED', 'Confirmed'),
         ('SCHEDULED', 'Scheduled'),
         ('COMPLETED', 'Completed'),
-        ('CANCELLED', 'Cancelled')
+        ('CANCELLED', 'Cancelled'),
     ]
-
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    recommendation = models.ForeignKey(TestRecommendation, on_delete=models.CASCADE, related_name='bookings')
-    lab = models.ForeignKey(DiagnosticLab, on_delete=models.SET_NULL, null=True)
-    patient = models.ForeignKey(User, on_delete=models.CASCADE, related_name='test_bookings')
+    # ✅ Linking booking group (optional but useful if bulk booked)
+    booking_group = models.ForeignKey(
+        "diagnostic.BookingGroup", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="test_bookings"
+    )
+    # ✅ Denormalized for fast access and traceability
+    consultation = models.ForeignKey(
+        "consultations.Consultation", on_delete=models.CASCADE,
+        related_name="test_bookings",null=True, blank=True,
+    )
+    patient_profile = models.ForeignKey(
+        "patient_account.PatientProfile", on_delete=models.CASCADE,
+        related_name="test_bookings",null=True, blank=True,
+    )
+    recommendation = models.ForeignKey(
+        "diagnostic.TestRecommendation", on_delete=models.CASCADE,
+        related_name='bookings',null=True, blank=True,
+    )
+    lab = models.ForeignKey(
+        "diagnostic.DiagnosticLab", on_delete=models.SET_NULL, null=True,
+        related_name="test_bookings"
+    )
+    lab_mapping = models.ForeignKey(
+        "diagnostic.TestLabMapping", on_delete=models.SET_NULL,
+        null=True, blank=True, help_text="Lab mapping used for price/TAT"
+    )
+    test_price = models.DecimalField(
+        max_digits=8, decimal_places=2, null=True, blank=True)
+    tat_hours = models.PositiveIntegerField(
+        null=True, blank=True, help_text="Snapshot of turnaround time")
     is_home_collection = models.BooleanField(default=False)
     scheduled_time = models.DateTimeField(blank=True, null=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
-    booked_by = models.CharField(max_length=30, choices=[('patient', 'Patient'), ('helpdesk', 'Helpdesk')])
+    booked_by = models.CharField(
+        max_length=30,
+        choices=[('patient', 'Patient'), ('helpdesk', 'Helpdesk')],
+        default='patient'
+    )
     lab_approved_at = models.DateTimeField(blank=True, null=True, help_text="Time when lab confirmed the booking")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     is_active = models.BooleanField(default=True)
     def __str__(self):
-        return f"Booking for {self.recommendation.test_pnr}"
-    
+        return f"Booking for {self.recommendation.test_pnr} - {self.patient_profile.get_full_name()}"
     class Meta:
+        ordering = ['-created_at']
         constraints = [
             models.UniqueConstraint(
                 fields=['recommendation'],
                 name='unique_booking_per_recommendation'
             )
         ]
-
+        indexes = [
+            models.Index(fields=["consultation"]),
+            models.Index(fields=["patient_profile"]),
+            models.Index(fields=["lab"]),
+            models.Index(fields=["is_active"]),
+        ]
 
 class TestReport(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    lab = models.ForeignKey(DiagnosticLab, on_delete=models.SET_NULL, null=True, blank=True)
     booking = models.OneToOneField(TestBooking, on_delete=models.CASCADE, related_name='report')
     file = models.FileField(upload_to='reports/')
     uploaded_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)

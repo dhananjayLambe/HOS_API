@@ -14,23 +14,33 @@ from rest_framework_simplejwt.views import (
     TokenRefreshView as SimpleJWTRefreshView,
     TokenVerifyView as SimpleJWTVerifyView
 )
+from django.core.exceptions import ValidationError
 from rest_framework.permissions import AllowAny
 # Maintain ordering using Case/When
 from django.db.models import Case, When
-
+from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework import status
+from django.utils.timezone import now
+from django.utils.dateparse import parse_datetime
+from django.core.exceptions import ValidationError
+from patient_account.models import PatientProfile
 from utils.utils import api_response
-
+import uuid
 from diagnostic.models import (MedicalTest,
                                TestCategory,ImagingView,TestRecommendation,
                                PackageRecommendation,TestPackage,DiagnosticLab,
                                DiagnosticLabAddress,TestCategory,TestLabMapping,
-                               ImagingView,PackageLabMapping,)
+                               ImagingView,PackageLabMapping,
+                                   DiagnosticLab,TestLabMapping,TestBooking,BookingGroup,TestRecommendation,)
 from diagnostic.api.serializers import (
     MedicalTestSerializer,TestCategorySerializer,ImagingViewSerializer,TestPackageSerializer,
     TestRecommendationSerializer,PackageRecommendationSerializer,BulkPackageRecommendationSerializer,
     LabAdminRegistrationSerializer,LabAdminLoginSerializer,TestCategorySerializer,
     DiagnosticLabSerializer,DiagnosticLabAddressSerializer,
-    TestLabMappingSerializer,PackageLabMappingSerializer,)
+    TestLabMappingSerializer,PackageLabMappingSerializer,
+    AutoBookingRequestSerializer,)
 from consultations.models import Consultation
 from account.permissions import IsDoctor, IsAdminUser,IsLabAdmin,IsPatient
 from django.db import transaction
@@ -41,6 +51,7 @@ from math import radians, cos, sin, asin, sqrt
 from diagnostic.filters import DiagnosticLabAddressFilter
 from rest_framework import viewsets, status, filters
 from rest_framework.response import Response
+from diagnostic.response_format import success_response, error_response
 
 
 class ImagingViewViewSet(viewsets.ModelViewSet):
@@ -697,7 +708,6 @@ class MedicalTestViewSet(viewsets.ModelViewSet):
             "data": serializer.data
         }, status=status.HTTP_200_OK)
 
-
 class TestPackageViewSet(viewsets.ModelViewSet):
     queryset = TestPackage.objects.filter(is_active=True).prefetch_related('tests')
     serializer_class = TestPackageSerializer
@@ -1167,58 +1177,6 @@ class TestRecommendationViewSet(viewsets.ModelViewSet):
         return Response({"status": True, "message": "Recommendation details.", "data": serializer.data})
 
 
-# class PackageRecommendationViewSet(viewsets.ModelViewSet):
-#     serializer_class = PackageRecommendationSerializer
-#     authentication_classes = [JWTAuthentication]
-#     permission_classes = [IsAuthenticated, IsDoctor]
-#     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-#     filterset_fields = ['consultation', 'is_completed']
-#     search_fields = ['notes', 'doctor_comment', 'package__name']
-#     ordering_fields = ['created_at', 'updated_at']
-#     ordering = ['-created_at']
-
-#     def get_queryset(self):
-#         return PackageRecommendation.objects.filter(is_active=True, recommended_by=self.request.user)
-
-#     def perform_create(self, serializer):
-#         serializer.save(recommended_by=self.request.user)
-
-#     @transaction.atomic
-#     def create(self, request, *args, **kwargs):
-#         serializer = self.get_serializer(data=request.data)
-#         if serializer.is_valid():
-#             self.perform_create(serializer)
-#             return Response({
-#                 "status": True,
-#                 "message": "Package recommendation created successfully.",
-#                 "data": serializer.data
-#             }, status=status.HTTP_201_CREATED)
-#         return Response({"status": False, "message": "Validation failed.", "errors": serializer.errors}, status=400)
-
-#     @transaction.atomic
-#     def update(self, request, *args, **kwargs):
-#         return self._update_common(request, partial=False, *args, **kwargs)
-
-#     @transaction.atomic
-#     def partial_update(self, request, *args, **kwargs):
-#         return self._update_common(request, partial=True, *args, **kwargs)
-
-#     def _update_common(self, request, partial, *args, **kwargs):
-#         instance = self.get_object()
-#         serializer = self.get_serializer(instance, data=request.data, partial=partial)
-#         if serializer.is_valid():
-#             serializer.save()
-#             return Response({"status": True, "message": "Updated successfully.", "data": serializer.data})
-#         return Response({"status": False, "message": "Update failed.", "errors": serializer.errors}, status=400)
-
-#     @transaction.atomic
-#     def destroy(self, request, *args, **kwargs):
-#         instance = self.get_object()
-#         instance.is_active = False
-#         instance.save()
-#         return Response({"status": True, "message": "Package recommendation deleted (soft).", "data": {}})
-
-
 class PackageRecommendationViewSet(viewsets.ModelViewSet):
     serializer_class = PackageRecommendationSerializer
     authentication_classes = [JWTAuthentication]
@@ -1292,3 +1250,368 @@ class PackageRecommendationViewSet(viewsets.ModelViewSet):
         instance.is_active = False
         instance.save()
         return Response({"status": True, "message": "Package recommendation deleted (soft).", "data": {}})
+
+
+# class LabAllocatorService:
+#     @staticmethod
+#     @transaction.atomic
+#     def allocate_tests(consultation_id, patient_profile, pincode, scheduled_time, booked_by):
+#         test_recommendations = TestRecommendation.objects.filter(
+#             consultation=consultation_id,
+#             is_active=True,
+#             test__isnull=False
+#         ).select_related('test')
+
+#         if not test_recommendations.exists():
+#             raise ValidationError("No active test recommendations found for this consultation.")
+
+#         required_tests = [tr.test for tr in test_recommendations if tr.test]
+#         required_test_ids = [test.id for test in required_tests]
+
+#         active_labs = DiagnosticLab.objects.filter(
+#             is_active=True,
+#             service_pincodes__contains=[pincode]
+#         )
+
+#         preferred_lab = None
+#         for lab in active_labs:
+#             mapped_tests = TestLabMapping.objects.filter(
+#                 lab=lab,
+#                 test_id__in=required_test_ids,
+#                 is_available=True,
+#                 is_active=True
+#             ).values_list('test_id', flat=True)
+
+#             if set(mapped_tests) == set(required_test_ids):
+#                 preferred_lab = lab
+#                 break
+
+#         lab_grouping_type = "single_lab" if preferred_lab else "multi_lab"
+
+#         if not active_labs.exists():
+#             raise ValidationError("No labs available for the given pincode.")
+
+#         # Create BookingGroup
+#         booking_group = BookingGroup.objects.create(
+#             consultation=consultation,
+#             patient_profile=patient_profile,
+#             booked_by=booked_by,
+#             status="PENDING",
+#             is_home_collection=False,
+#             preferred_schedule_time=scheduled_time,
+#             lab_grouping_type=lab_grouping_type,
+#             created_at=timezone.now(),
+#         )
+
+#         test_bookings = []
+
+#         if preferred_lab:
+#             # One lab supports all
+#             for tr in test_recommendations:
+#                 mapping = TestLabMapping.objects.get(
+#                     lab=preferred_lab,
+#                     test=tr.test,
+#                     is_available=True,
+#                     is_active=True
+#                 )
+
+#                 booking = TestBooking.objects.create(
+#                     booking_group=booking_group,
+#                     consultation=consultation,
+#                     patient_profile=patient_profile,
+#                     recommendation=tr,
+#                     lab=preferred_lab,
+#                     lab_mapping=mapping,
+#                     test_price=mapping.price,
+#                     tat_hours=mapping.turnaround_time,
+#                     scheduled_time=scheduled_time,
+#                     booked_by=booked_by,
+#                     status="PENDING",
+#                     is_home_collection=False
+#                 )
+#                 test_bookings.append(booking)
+
+#         else:
+#             # Distribute across labs
+#             test_to_lab_map = {}
+#             for test in required_tests:
+#                 lab_mapping = TestLabMapping.objects.filter(
+#                     test=test,
+#                     is_available=True,
+#                     is_active=True,
+#                     lab__in=active_labs
+#                 ).order_by('price').select_related('lab').first()
+#                 if not lab_mapping:
+#                     raise ValidationError(f"No lab found for test: {test.name}")
+#                 test_to_lab_map[test.id] = lab_mapping
+
+#             for tr in test_recommendations:
+#                 mapping = test_to_lab_map.get(tr.test.id)
+#                 if not mapping:
+#                     raise ValidationError(f"Missing mapping for test: {tr.test.name}")
+
+#                 booking = TestBooking.objects.create(
+#                     booking_group=booking_group,
+#                     consultation=consultation,
+#                     patient_profile=patient_profile,
+#                     recommendation=tr,
+#                     lab=mapping.lab,
+#                     lab_mapping=mapping,
+#                     test_price=mapping.price,
+#                     tat_hours=mapping.turnaround_time,
+#                     scheduled_time=scheduled_time,
+#                     booked_by=booked_by,
+#                     status="PENDING",
+#                     is_home_collection=False
+#                 )
+#                 test_bookings.append(booking)
+
+#         return {
+#             "booking_group": booking_group,
+#             "bookings": test_bookings,
+#         }
+
+# class AutoBookTestsView(APIView):
+#     permission_classes = [IsAuthenticated]
+
+#     def post(self, request):
+#         try:
+#             data = request.data
+#             consultation_id = data.get("consultation_id")
+#             patient_profile_id = data.get("patient_profile_id")
+#             pincode = data.get("pincode")
+#             scheduled_time = data.get("scheduled_time")
+#             booked_by = data.get("booked_by", "patient")
+#             test_ids = data.get("test_ids", None)  # Optional
+
+#             if not consultation_id or not patient_profile_id or not pincode:
+#                 return Response(error_response("Missing required fields."), status=status.HTTP_400_BAD_REQUEST)
+
+#             # Validate optional test_ids
+#             if test_ids:
+#                 valid_ids = TestRecommendation.objects.filter(
+#                     consultation_id=consultation_id,
+#                     test__isnull=False,
+#                     is_active=True,
+#                     id__in=test_ids
+#                 ).values_list("id", flat=True)
+#                 if len(set(valid_ids)) != len(set(test_ids)):
+#                     return Response(error_response("One or more test_ids are invalid or not part of this consultation."),
+#                                     status=status.HTTP_400_BAD_REQUEST)
+
+#             with transaction.atomic():
+#                 result = LabAllocatorService.allocate_tests(
+#                     consultation_id=consultation_id,
+#                     patient_profile_id=patient_profile_id,
+#                     pincode=pincode,
+#                     scheduled_time=scheduled_time,
+#                     booked_by=booked_by,
+#                     specific_test_ids=test_ids  # Pass None or list
+#                 )
+
+#             return Response(success_response("Tests booked successfully.", result), status=status.HTTP_200_OK)
+
+#         except Exception as e:
+#             return Response(error_response(str(e)), status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class LabAllocatorService:
+
+    @staticmethod
+    @transaction.atomic
+    def allocate_tests(
+        consultation_id,
+        patient_profile,
+        pincode,
+        scheduled_time,
+        booked_by="patient",
+        test_ids=None  # Optional: support partial test booking
+    ):
+        # Fetch valid test recommendations (linked to MedicalTest)
+        test_recommendations_qs = TestRecommendation.objects.filter(
+            consultation_id=consultation_id,
+            is_active=True,
+            test__isnull=False
+        ).select_related('test')
+
+        if not test_recommendations_qs.exists():
+            raise ValidationError("No active test recommendations found for this consultation.")
+
+        # Apply test_ids filtering if passed (partial booking)
+        if test_ids:
+            test_recommendations_qs = test_recommendations_qs.filter(test_id__in=test_ids)
+
+        if not test_recommendations_qs.exists():
+            raise ValidationError("One or more test_ids are invalid or not part of this consultation.")
+
+        recommended_tests = [tr.test for tr in test_recommendations_qs]
+        required_test_ids = [test.id for test in recommended_tests]
+
+        # Fetch labs servicing the given pincode
+        active_labs = DiagnosticLab.objects.filter(
+            is_active=True,
+            service_pincodes__contains=[pincode]
+        )
+
+        if not active_labs.exists():
+            raise ValidationError("No labs available for the given pincode.")
+
+        preferred_lab = None
+        for lab in active_labs:
+            mapped_test_ids = TestLabMapping.objects.filter(
+                lab=lab,
+                test_id__in=required_test_ids,
+                is_available=True,
+                is_active=True
+            ).values_list('test_id', flat=True)
+
+            if set(mapped_test_ids) == set(required_test_ids):
+                preferred_lab = lab
+                break
+
+        lab_grouping_type = "single_lab" if preferred_lab else "multi_lab"
+
+        # Create BookingGroup
+        booking_group = BookingGroup.objects.create(
+            consultation_id=consultation_id,
+            patient_profile=patient_profile,
+            booked_by=booked_by,
+            status="PENDING",
+            is_home_collection=False,
+            preferred_schedule_time=scheduled_time,
+            lab_grouping_type=lab_grouping_type,
+            created_at=timezone.now(),
+        )
+
+        test_bookings = []
+
+        if preferred_lab:
+            # All tests in one lab
+            for tr in test_recommendations_qs:
+                mapping = TestLabMapping.objects.get(
+                    lab=preferred_lab,
+                    test=tr.test,
+                    is_available=True,
+                    is_active=True
+                )
+                booking = TestBooking.objects.create(
+                    booking_group=booking_group,
+                    consultation_id=consultation_id,
+                    patient_profile=patient_profile,
+                    recommendation=tr,
+                    lab=preferred_lab,
+                    lab_mapping=mapping,
+                    test_price=mapping.price,
+                    tat_hours=mapping.turnaround_time,
+                    scheduled_time=scheduled_time,
+                    booked_by=booked_by,
+                    status="PENDING",
+                    is_home_collection=False
+                )
+                test_bookings.append(booking)
+        else:
+            # Distribute tests across labs
+            test_to_lab_map = {}
+            for test in recommended_tests:
+                lab_mapping = TestLabMapping.objects.filter(
+                    test=test,
+                    is_available=True,
+                    is_active=True,
+                    lab__in=active_labs
+                ).order_by('price').select_related('lab').first()
+
+                if not lab_mapping:
+                    raise ValidationError(f"No lab found for test: {test.name}")
+
+                test_to_lab_map[test.id] = lab_mapping
+
+            for tr in test_recommendations_qs:
+                mapping = test_to_lab_map.get(tr.test.id)
+                if not mapping:
+                    raise ValidationError(f"Missing lab mapping for test: {tr.test.name}")
+
+                booking = TestBooking.objects.create(
+                    booking_group=booking_group,
+                    consultation_id=consultation_id,
+                    patient_profile=patient_profile,
+                    recommendation=tr,
+                    lab=mapping.lab,
+                    lab_mapping=mapping,
+                    test_price=mapping.price,
+                    tat_hours=mapping.turnaround_time,
+                    scheduled_time=scheduled_time,
+                    booked_by=booked_by,
+                    status="PENDING",
+                    is_home_collection=False
+                )
+                test_bookings.append(booking)
+
+        return {
+            "booking_group": booking_group,
+            "bookings": test_bookings,
+        }
+
+
+class AutoBookTestsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        try:
+            data = request.data
+
+            consultation_id = data.get("consultation_id")
+            patient_profile_id = data.get("patient_profile_id")
+            pincode = data.get("pincode")
+            scheduled_time = parse_datetime(data.get("scheduled_time"))
+            booked_by = data.get("booked_by", "patient")
+            test_ids = data.get("test_ids")  # Optional for partial booking
+
+            # Validate required fields
+            if not all([consultation_id, patient_profile_id, pincode, scheduled_time]):
+                return Response(error_response("Missing required fields"), status=status.HTTP_400_BAD_REQUEST)
+
+            if scheduled_time < now():
+                return Response(error_response("Scheduled time must be in the future"), status=status.HTTP_400_BAD_REQUEST)
+
+            # Fetch patient profile object
+            try:
+                patient_profile = PatientProfile.objects.get(id=patient_profile_id, is_active=True)
+            except PatientProfile.DoesNotExist:
+                return Response(error_response("Invalid patient profile ID"), status=status.HTTP_404_NOT_FOUND)
+
+            # Delegate to service
+            allocation_result = LabAllocatorService.allocate_tests(
+                consultation_id=consultation_id,
+                patient_profile=patient_profile,
+                pincode=pincode,
+                scheduled_time=scheduled_time,
+                booked_by=booked_by,
+                test_ids=test_ids  # Optional
+            )
+
+            booking_group = allocation_result["booking_group"]
+            bookings = allocation_result["bookings"]
+
+            return Response(success_response(
+                "Tests booked successfully",
+                data={
+                    "booking_group_id": booking_group.id,
+                    "lab_grouping_type": booking_group.lab_grouping_type,
+                    "bookings": [
+                        {
+                            "test": b.recommendation.test.name if b.recommendation and b.recommendation.test else None,
+                            "lab": b.lab.name if b.lab else None,
+                            "scheduled_time": b.scheduled_time
+                        }
+                        for b in bookings
+                    ]
+                }
+            ), status=status.HTTP_201_CREATED)
+
+        except ValidationError as e:
+            return Response(error_response(str(e)), status=status.HTTP_400_BAD_REQUEST)
+
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return Response(error_response("Internal server error", errors=str(e)), status=status.HTTP_500_INTERNAL_SERVER_ERROR)

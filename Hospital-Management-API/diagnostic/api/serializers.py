@@ -446,3 +446,15 @@ class BulkPackageRecommendationSerializer(serializers.Serializer):
             names = TestPackage.objects.filter(id__in=existing).values_list("name", flat=True)
             raise serializers.ValidationError(f"Already recommended: {', '.join(names)}")
         return data
+
+class AutoBookingRequestSerializer(serializers.Serializer):
+    consultation_id = serializers.UUIDField()
+    patient_profile_id = serializers.UUIDField()
+    pincode = serializers.CharField(max_length=10)
+    scheduled_time = serializers.DateTimeField()
+    booked_by = serializers.ChoiceField(choices=[('patient', 'Patient'), ('helpdesk', 'Helpdesk')])
+
+    def validate_scheduled_time(self, value):
+        if value <= timezone.now():
+            raise serializers.ValidationError("Scheduled time must be in the future.")
+        return value

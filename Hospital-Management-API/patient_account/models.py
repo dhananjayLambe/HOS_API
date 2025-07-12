@@ -19,6 +19,7 @@ class PatientAccount(models.Model):
     clinics = models.ManyToManyField(Clinic, related_name='patients')
     alternate_mobile = models.CharField(max_length=15, blank=True, null=True)
     preferred_language = models.CharField(max_length=50, blank=True, null=True)  # Preferred communication language
+    is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -43,6 +44,7 @@ class PatientProfile(models.Model):
     relation = models.CharField(max_length=10, choices=RELATION_CHOICES,default='self')
     gender = models.CharField(max_length=10, choices=GENDER_CHOICES, blank=True)
     date_of_birth = models.DateField(blank=True, null=True)
+    is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
