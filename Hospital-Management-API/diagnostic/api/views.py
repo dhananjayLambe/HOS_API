@@ -9,6 +9,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 from rest_framework import filters
 from django_filters.rest_framework import DjangoFilterBackend
+from django.shortcuts import get_object_or_404
 from django.db.models import Q
 from rest_framework_simplejwt.views import (
     TokenRefreshView as SimpleJWTRefreshView,
@@ -33,16 +34,20 @@ from diagnostic.models import (MedicalTest,
                                PackageRecommendation,TestPackage,DiagnosticLab,
                                DiagnosticLabAddress,TestCategory,TestLabMapping,
                                ImagingView,PackageLabMapping,
-                                   DiagnosticLab,TestLabMapping,TestBooking,BookingGroup,TestRecommendation,)
+                                   DiagnosticLab,TestLabMapping,TestBooking,BookingGroup,TestRecommendation,
+                                   DiagnosticLab, MedicalTest,TestLabMapping, TestRecommendation, BookingGroup
+                                   )
 from diagnostic.api.serializers import (
     MedicalTestSerializer,TestCategorySerializer,ImagingViewSerializer,TestPackageSerializer,
     TestRecommendationSerializer,PackageRecommendationSerializer,BulkPackageRecommendationSerializer,
     LabAdminRegistrationSerializer,LabAdminLoginSerializer,TestCategorySerializer,
     DiagnosticLabSerializer,DiagnosticLabAddressSerializer,
     TestLabMappingSerializer,PackageLabMappingSerializer,
-    AutoBookingRequestSerializer,)
+    AutoBookingRequestSerializer,ManualBookingSerializer,UpdateBookingSerializer,
+    BookingGroupSerializer,TestBookingSummarySerializer,)
 from consultations.models import Consultation
 from account.permissions import IsDoctor, IsAdminUser,IsLabAdmin,IsPatient
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
@@ -1552,66 +1557,250 @@ class LabAllocatorService:
         }
 
 
+# class AutoBookTestsView(APIView):
+#     permission_classes = [IsAuthenticated]
+
+#     def post(self, request):
+#         try:
+#             data = request.data
+
+#             consultation_id = data.get("consultation_id")
+#             patient_profile_id = data.get("patient_profile_id")
+#             pincode = data.get("pincode")
+#             scheduled_time = parse_datetime(data.get("scheduled_time"))
+#             booked_by = data.get("booked_by", "patient")
+#             test_ids = data.get("test_ids")  # Optional for partial booking
+
+#             # Validate required fields
+#             if not all([consultation_id, patient_profile_id, pincode, scheduled_time]):
+#                 return Response(error_response("Missing required fields"), status=status.HTTP_400_BAD_REQUEST)
+
+#             if scheduled_time < now():
+#                 return Response(error_response("Scheduled time must be in the future"), status=status.HTTP_400_BAD_REQUEST)
+
+#             # Fetch patient profile object
+#             try:
+#                 patient_profile = PatientProfile.objects.get(id=patient_profile_id, is_active=True)
+#             except PatientProfile.DoesNotExist:
+#                 return Response(error_response("Invalid patient profile ID"), status=status.HTTP_404_NOT_FOUND)
+
+#             # Delegate to service
+#             allocation_result = LabAllocatorService.allocate_tests(
+#                 consultation_id=consultation_id,
+#                 patient_profile=patient_profile,
+#                 pincode=pincode,
+#                 scheduled_time=scheduled_time,
+#                 booked_by=booked_by,
+#                 test_ids=test_ids  # Optional
+#             )
+
+#             booking_group = allocation_result["booking_group"]
+#             bookings = allocation_result["bookings"]
+
+#             return Response(success_response(
+#                 "Tests booked successfully",
+#                 data={
+#                     "booking_group_id": booking_group.id,
+#                     "lab_grouping_type": booking_group.lab_grouping_type,
+#                     "bookings": [
+#                         {
+#                             "test": b.recommendation.test.name if b.recommendation and b.recommendation.test else None,
+#                             "lab": b.lab.name if b.lab else None,
+#                             "scheduled_time": b.scheduled_time
+#                         }
+#                         for b in bookings
+#                     ]
+#                 }
+#             ), status=status.HTTP_201_CREATED)
+
+#         except ValidationError as e:
+#             return Response(error_response(str(e)), status=status.HTTP_400_BAD_REQUEST)
+
+#         except Exception as e:
+#             import traceback
+#             traceback.print_exc()
+#             return Response(error_response("Internal server error", errors=str(e)), status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+
 class AutoBookTestsView(APIView):
+    authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
         try:
             data = request.data
-
             consultation_id = data.get("consultation_id")
             patient_profile_id = data.get("patient_profile_id")
             pincode = data.get("pincode")
-            scheduled_time = parse_datetime(data.get("scheduled_time"))
             booked_by = data.get("booked_by", "patient")
-            test_ids = data.get("test_ids")  # Optional for partial booking
+            test_ids = data.get("test_ids", None)
+            scheduled_time = parse_datetime(data.get("scheduled_time"))
 
-            # Validate required fields
             if not all([consultation_id, patient_profile_id, pincode, scheduled_time]):
                 return Response(error_response("Missing required fields"), status=status.HTTP_400_BAD_REQUEST)
-
             if scheduled_time < now():
                 return Response(error_response("Scheduled time must be in the future"), status=status.HTTP_400_BAD_REQUEST)
 
-            # Fetch patient profile object
-            try:
-                patient_profile = PatientProfile.objects.get(id=patient_profile_id, is_active=True)
-            except PatientProfile.DoesNotExist:
-                return Response(error_response("Invalid patient profile ID"), status=status.HTTP_404_NOT_FOUND)
+            patient_profile = get_object_or_404(PatientProfile, id=patient_profile_id)
 
-            # Delegate to service
-            allocation_result = LabAllocatorService.allocate_tests(
+            result = LabAllocatorService.allocate_tests(
                 consultation_id=consultation_id,
                 patient_profile=patient_profile,
                 pincode=pincode,
                 scheduled_time=scheduled_time,
                 booked_by=booked_by,
-                test_ids=test_ids  # Optional
+                test_ids=test_ids,
             )
+            booking_group = result["booking_group"]
+            bookings = result["bookings"]
 
-            booking_group = allocation_result["booking_group"]
-            bookings = allocation_result["bookings"]
-
-            return Response(success_response(
-                "Tests booked successfully",
-                data={
-                    "booking_group_id": booking_group.id,
-                    "lab_grouping_type": booking_group.lab_grouping_type,
-                    "bookings": [
-                        {
-                            "test": b.recommendation.test.name if b.recommendation and b.recommendation.test else None,
-                            "lab": b.lab.name if b.lab else None,
-                            "scheduled_time": b.scheduled_time
-                        }
-                        for b in bookings
-                    ]
-                }
-            ), status=status.HTTP_201_CREATED)
-
-        except ValidationError as e:
-            return Response(error_response(str(e)), status=status.HTTP_400_BAD_REQUEST)
+            return Response(success_response("Tests booked successfully", {
+                "booking_group_id": booking_group.id,
+                "lab_grouping_type": booking_group.lab_grouping_type,
+                "bookings": [
+                    {
+                        "test": b.recommendation.test.name if b.recommendation and b.recommendation.test else None,
+                        "lab": b.lab.name if b.lab else None,
+                        "scheduled_time": timezone.localtime(b.scheduled_time)
+                    } for b in bookings
+                ]
+            }), status=status.HTTP_201_CREATED)
 
         except Exception as e:
-            import traceback
-            traceback.print_exc()
             return Response(error_response("Internal server error", errors=str(e)), status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def get(self, request, id=None):
+        if id:
+            booking_group = get_object_or_404(BookingGroup, id=id, is_active=True)
+            serializer = BookingGroupSerializer(booking_group)
+            return Response(success_response("Booking group retrieved", serializer.data), status=status.HTTP_200_OK)
+        else:
+            qs = BookingGroup.objects.filter(is_active=True).select_related('consultation', 'patient_profile')
+            if 'consultation_id' in request.query_params:
+                qs = qs.filter(consultation_id=request.query_params['consultation_id'])
+            serializer = BookingGroupSerializer(qs, many=True)
+            return Response(success_response("Booking groups listed", serializer.data), status=status.HTTP_200_OK)
+
+    def patch(self, request, id):
+        booking_group = get_object_or_404(BookingGroup, id=id, is_active=True)
+        serializer = BookingGroupSerializer(booking_group, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(success_response("Booking group updated", serializer.data), status=status.HTTP_200_OK)
+        return Response(error_response("Validation error", errors=serializer.errors), status=status.HTTP_400_BAD_REQUEST)
+
+    @transaction.atomic
+    def delete(self, request, id):
+        booking_group = get_object_or_404(BookingGroup, id=id, is_active=True)
+        booking_group.is_active = False
+        booking_group.save(update_fields=["is_active", "updated_at"])
+        booking_group.test_bookings.update(is_active=False)
+        return Response(success_response("Booking group deleted (soft)"), status=status.HTTP_200_OK)
+
+class ManualBookTestsView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    @transaction.atomic
+    def post(self, request):
+        serializer = ManualBookingSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(error_response("Validation failed", serializer.errors), status=400)
+
+        data = serializer.validated_data
+        consultation_id = data['consultation_id']
+        patient_profile_id = data['patient_profile_id']
+
+        try:
+            consultation = Consultation.objects.get(id=consultation_id)
+            patient_profile = PatientProfile.objects.get(id=patient_profile_id)
+        except (Consultation.DoesNotExist, PatientProfile.DoesNotExist):
+            return Response(error_response("Consultation or Patient not found"), status=404)
+
+        booking_group = BookingGroup.objects.create(
+            consultation=consultation,
+            patient_profile=patient_profile,
+            booked_by=data['booked_by'],
+            status='PENDING',
+            preferred_schedule_time=data['scheduled_time']
+        )
+
+        test_bookings = []
+
+        for item in data['bookings']:
+            test_id = item.get('test_id')
+            lab_id = item.get('lab_id')
+
+            try:
+                recommendation = TestRecommendation.objects.get(test_id=test_id, consultation=consultation, is_active=True)
+                mapping = TestLabMapping.objects.get(test_id=test_id, lab_id=lab_id, is_available=True, is_active=True)
+            except (TestRecommendation.DoesNotExist, TestLabMapping.DoesNotExist):
+                transaction.set_rollback(True)
+                return Response(error_response("Invalid test or lab mapping"), status=400)
+
+            # Prevent duplicates
+            if TestBooking.objects.filter(recommendation=recommendation, is_active=True).exists():
+                continue
+
+            booking = TestBooking.objects.create(
+                booking_group=booking_group,
+                consultation=consultation,
+                patient_profile=patient_profile,
+                recommendation=recommendation,
+                lab=mapping.lab,
+                lab_mapping=mapping,
+                test_price=mapping.price,
+                tat_hours=mapping.turnaround_time,
+                scheduled_time=data['scheduled_time'],
+                booked_by=data['booked_by']
+            )
+            test_bookings.append(booking)
+
+        response_data = {
+            "booking_group_id": booking_group.id,
+            "test_bookings": [
+                {
+                    "test": b.recommendation.test.name.title(),
+                    "lab": b.lab.name,
+                    "status": b.status,
+                    "scheduled_time": b.scheduled_time
+                } for b in test_bookings
+            ]
+        }
+        return Response(success_response("Tests booked successfully", response_data), status=201)
+
+    @transaction.atomic
+    def patch(self, request):
+        booking_id = request.query_params.get("booking_id")
+        try:
+            booking = TestBooking.objects.get(id=booking_id, is_active=True)
+        except TestBooking.DoesNotExist:
+            return Response(error_response("Booking not found"), status=404)
+
+        serializer = UpdateBookingSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(error_response("Validation failed", serializer.errors), status=400)
+
+        data = serializer.validated_data
+        if 'scheduled_time' in data:
+            if data['scheduled_time'] < timezone.now():
+                return Response(error_response("Scheduled time must be in the future."), status=400)
+            booking.scheduled_time = data['scheduled_time']
+        if 'status' in data:
+            booking.status = data['status']
+        booking.save()
+
+        return Response(success_response("Booking updated successfully"), status=200)
+
+    @transaction.atomic
+    def delete(self, request):
+        booking_id = request.query_params.get("booking_id")
+        try:
+            booking = TestBooking.objects.get(id=booking_id)
+        except TestBooking.DoesNotExist:
+            return Response(error_response("Booking not found"), status=404)
+
+        booking.is_active = False
+        booking.status = 'CANCELLED'
+        booking.save()
+        return Response(success_response("Booking cancelled successfully"), status=200)

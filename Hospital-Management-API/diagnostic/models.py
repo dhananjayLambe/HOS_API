@@ -405,6 +405,7 @@ class TestBooking(models.Model):
         constraints = [
             models.UniqueConstraint(
                 fields=['recommendation'],
+                condition=models.Q(is_active=True),  # ✅ only enforce when active
                 name='unique_booking_per_recommendation'
             )
         ]

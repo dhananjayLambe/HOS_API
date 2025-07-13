@@ -8,7 +8,7 @@ from diagnostic.api.views import (
     DiagnosticLabAddressViewSet,LabAdminLoginView,LabAdminTokenRefreshView,
     LabAdminTokenVerifyView,ImagingViewSet,TestPackageViewSet,TestLabMappingViewSet,
     PackageLabMappingViewSet,FilterLabsByTestView,PackageRecommendationViewSet,
-    AutoBookTestsView,
+    AutoBookTestsView,ManualBookTestsView,
 )
 urlpatterns =[]
 router = DefaultRouter()
@@ -33,6 +33,9 @@ urlpatterns += [
     path("lab-admin/token/verify/", LabAdminTokenVerifyView.as_view(), name="lab-admin-token-verify"),
     
     path('labs-by-test/', FilterLabsByTestView.as_view(), name='labs-by-test'),
-    path('bookings/auto-book/', AutoBookTestsView.as_view(), name='auto-book-tests'),
 
+    #Booking and Auto Booking
+    path('bookings/auto-book/', AutoBookTestsView.as_view(), name='auto-book-tests'),
+    path('bookings/auto-book/<uuid:id>/', AutoBookTestsView.as_view(), name='auto-book-tests-detail'),
+    path('bookings/manual-book/', ManualBookTestsView.as_view(), name='manual-book-tests'),
 ]
