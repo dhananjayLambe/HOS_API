@@ -29,11 +29,12 @@ from django.core.exceptions import ValidationError
 from patient_account.models import PatientProfile
 from utils.utils import api_response
 import uuid
+from rest_framework.pagination import PageNumberPagination
 from diagnostic.models import (MedicalTest,
                                TestCategory,ImagingView,TestRecommendation,
                                PackageRecommendation,TestPackage,DiagnosticLab,
                                DiagnosticLabAddress,TestCategory,TestLabMapping,
-                               ImagingView,PackageLabMapping,
+                               ImagingView,PackageLabMapping,LabAdminUser,
                                    DiagnosticLab,TestLabMapping,TestBooking,BookingGroup,TestRecommendation,
                                    DiagnosticLab, MedicalTest,TestLabMapping, TestRecommendation, BookingGroup
                                    )
@@ -43,8 +44,12 @@ from diagnostic.api.serializers import (
     LabAdminRegistrationSerializer,LabAdminLoginSerializer,TestCategorySerializer,
     DiagnosticLabSerializer,DiagnosticLabAddressSerializer,
     TestLabMappingSerializer,PackageLabMappingSerializer,
-    AutoBookingRequestSerializer,ManualBookingSerializer,UpdateBookingSerializer,
-    BookingGroupSerializer,TestBookingSummarySerializer,)
+    ManualBookingSerializer,UpdateBookingSerializer,
+    BookingGroupSerializer,
+    BookingListSerializer,BookingStatusUpdateSerializer,RescheduleBookingSerializer,
+    HomeCollectionConfirmSerializer,HomeCollectionRejectSerializer,
+    HomeCollectionRescheduleSerializer,MarkCollectedSerializer,
+    BookingGroupListSerializer)
 from consultations.models import Consultation
 from account.permissions import IsDoctor, IsAdminUser,IsLabAdmin,IsPatient
 from django.core.exceptions import ValidationError
@@ -1770,10 +1775,9 @@ class ManualBookTestsView(APIView):
         return Response(success_response("Tests booked successfully", response_data), status=201)
 
     @transaction.atomic
-    def patch(self, request):
-        booking_id = request.query_params.get("booking_id")
+    def patch(self, request, id=None):  # Accept the URL param
         try:
-            booking = TestBooking.objects.get(id=booking_id, is_active=True)
+            booking = TestBooking.objects.get(id=id, is_active=True)
         except TestBooking.DoesNotExist:
             return Response(error_response("Booking not found"), status=404)
 
@@ -1788,19 +1792,363 @@ class ManualBookTestsView(APIView):
             booking.scheduled_time = data['scheduled_time']
         if 'status' in data:
             booking.status = data['status']
+        booking.updated_at = timezone.now()
         booking.save()
 
         return Response(success_response("Booking updated successfully"), status=200)
 
     @transaction.atomic
-    def delete(self, request):
-        booking_id = request.query_params.get("booking_id")
+    def delete(self, request, id=None):  # Accept the URL param
         try:
-            booking = TestBooking.objects.get(id=booking_id)
+            booking = TestBooking.objects.get(id=id)
         except TestBooking.DoesNotExist:
             return Response(error_response("Booking not found"), status=404)
 
         booking.is_active = False
         booking.status = 'CANCELLED'
+        booking.updated_at = timezone.now()
         booking.save()
         return Response(success_response("Booking cancelled successfully"), status=200)
+  
+
+class CustomPageNumberPagination(PageNumberPagination):
+    page_size = 20
+    page_size_query_param = "page_size"
+    max_page_size = 100
+
+
+class BookingListView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        query_params = request.query_params
+        filters = Q(is_active=True)
+
+        # 🔐 Restrict to current lab's bookings (if lab admin)
+        lab_admin_qs = LabAdminUser.objects.filter(user=user, is_active=True).select_related("lab")
+        if lab_admin_qs.exists():
+            lab = lab_admin_qs.first().lab
+            filters &= Q(lab=lab)
+
+        # 📌 Apply filters
+        if lab_id := query_params.get("lab_id"):
+            filters &= Q(lab_id=lab_id)
+
+        if status := query_params.get("status"):
+            filters &= Q(status=status)
+
+        if is_home_collection := query_params.get("is_home_collection"):
+            if is_home_collection.lower() in ["true", "1"]:
+                filters &= Q(is_home_collection=True)
+            elif is_home_collection.lower() in ["false", "0"]:
+                filters &= Q(is_home_collection=False)
+
+        if booking_group_id := query_params.get("booking_group_id"):
+            filters &= Q(booking_group_id=booking_group_id)
+
+        if consultation_id := query_params.get("consultation_id"):
+            filters &= Q(consultation_id=consultation_id)
+
+        if from_date := query_params.get("from_date"):
+            filters &= Q(scheduled_time__date__gte=from_date)
+
+        if to_date := query_params.get("to_date"):
+            filters &= Q(scheduled_time__date__lte=to_date)
+
+        if name := query_params.get("patient_name"):
+            filters &= Q(
+                Q(patient_profile__first_name__icontains=name) |
+                Q(patient_profile__last_name__icontains=name)
+            )
+
+        if mobile := query_params.get("mobile_number"):
+            filters &= Q(patient_profile__account__user__username=mobile)
+
+        if category := query_params.get("category"):
+            filters &= Q(recommendation__test__category__name__icontains=category)
+
+        if test_type := query_params.get("test_type"):
+            filters &= Q(recommendation__test__type__iexact=test_type)
+
+        # ⚡ Queryset with joins
+        queryset = TestBooking.objects.filter(filters).select_related(
+            "lab",
+            "booking_group",
+            "consultation",
+            "patient_profile__account__user",
+            "recommendation__test__category"
+        ).order_by("-created_at")
+
+        # 📦 Paginate
+        paginator = CustomPageNumberPagination()
+        paginated_qs = paginator.paginate_queryset(queryset, request)
+
+        serializer = BookingListSerializer(paginated_qs, many=True)
+        return paginator.get_paginated_response(success_response("Bookings fetched", serializer.data))
+
+
+class BookingStatusUpdateView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    @transaction.atomic
+    def patch(self, request, booking_id):
+        try:
+            booking = TestBooking.objects.get(id=booking_id, is_active=True)
+        except TestBooking.DoesNotExist:
+            return Response(error_response("Booking not found"), status=404)
+
+        # Only lab admin for this booking's lab can update
+        if not LabAdminUser.objects.filter(user=request.user, lab=booking.lab, is_active=True).exists():
+            return Response(error_response("Permission denied"), status=403)
+
+        serializer = BookingStatusUpdateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(error_response("Validation failed", serializer.errors), status=400)
+
+        booking.status = serializer.validated_data["status"]
+        if booking.status == "CONFIRMED":
+            booking.lab_approved_at = timezone.now()
+        booking.save()
+
+        return Response(success_response("Booking status updated"), status=200)
+
+
+class BookingRescheduleView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    @transaction.atomic
+    def patch(self, request, booking_id):
+        try:
+            booking = TestBooking.objects.get(id=booking_id, is_active=True)
+        except TestBooking.DoesNotExist:
+            return Response(error_response("Booking not found"), status=404)
+
+        if not LabAdminUser.objects.filter(user=request.user, lab=booking.lab, is_active=True).exists():
+            return Response(error_response("Permission denied"), status=403)
+
+        serializer = RescheduleBookingSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(error_response("Validation failed", serializer.errors), status=400)
+
+        new_time = serializer.validated_data["scheduled_time"]
+        if new_time < timezone.now():
+            return Response(error_response("Scheduled time must be in the future"), status=400)
+
+        booking.scheduled_time = new_time
+        booking.status = "SCHEDULED"
+        booking.save()
+
+        return Response(success_response("Booking rescheduled successfully"), status=200)
+
+
+class BookingCancelView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    @transaction.atomic
+    def patch(self, request, booking_id):
+        try:
+            booking = TestBooking.objects.get(id=booking_id, is_active=True)
+        except TestBooking.DoesNotExist:
+            return Response(error_response("Booking not found"), status=404)
+
+        if not LabAdminUser.objects.filter(user=request.user, lab=booking.lab, is_active=True).exists():
+            return Response(error_response("Permission denied"), status=403)
+
+        booking.status = "CANCELLED"
+        booking.is_active = False
+        booking.save()
+
+        return Response(success_response("Booking cancelled successfully"), status=200)
+
+
+class BookingGroupCancelView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    @transaction.atomic
+    def patch(self, request, group_id):
+        try:
+            group = BookingGroup.objects.get(id=group_id, is_active=True)
+        except BookingGroup.DoesNotExist:
+            return Response(error_response("Booking group not found"), status=404)
+
+        # Permission check: lab admin must have access to at least one booking under this group
+        lab_admin = LabAdminUser.objects.filter(user=request.user, is_active=True).first()
+        if not lab_admin or not TestBooking.objects.filter(booking_group=group, lab=lab_admin.lab).exists():
+            return Response(error_response("Permission denied"), status=403)
+
+        group.status = "CANCELLED"
+        group.is_active = False
+        group.save()
+
+        TestBooking.objects.filter(booking_group=group).update(status="CANCELLED", is_active=False)
+
+        return Response(success_response("All bookings under group cancelled"), status=200)
+
+
+class HomeCollectionConfirmView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    @transaction.atomic
+    def patch(self, request, booking_id):
+        user = request.user
+        try:
+            booking = TestBooking.objects.select_related("lab").get(id=booking_id, is_active=True)
+        except TestBooking.DoesNotExist:
+            return Response(error_response("Booking not found"), status=404)
+
+        # Lab admin check
+        if LabAdminUser.objects.filter(user=user, lab=booking.lab, is_active=True).exists() is False:
+            return Response(error_response("Unauthorized: This booking does not belong to your lab"), status=403)
+
+        serializer = HomeCollectionConfirmSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(error_response("Validation failed", serializer.errors), status=400)
+
+        data = serializer.validated_data
+
+        booking.collector_name = data.get("collector_name")
+        booking.collector_contact = data.get("collector_contact")
+        booking.home_collection_address = data.get("home_collection_address")
+        booking.home_collection_confirmed = True
+        booking.home_collection_confirmed_at = timezone.now()
+        if data.get("scheduled_time"):
+            booking.scheduled_time = data.get("scheduled_time")
+        booking.save()
+
+        return Response(success_response("Home collection confirmed successfully"), status=200)
+
+
+class HomeCollectionRejectView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    @transaction.atomic
+    def patch(self, request, booking_id):
+        user = request.user
+        try:
+            booking = TestBooking.objects.select_related("lab").get(id=booking_id, is_active=True)
+        except TestBooking.DoesNotExist:
+            return Response(error_response("Booking not found"), status=404)
+
+        # Lab admin check
+        if LabAdminUser.objects.filter(user=user, lab=booking.lab, is_active=True).exists() is False:
+            return Response(error_response("Unauthorized: This booking does not belong to your lab"), status=403)
+
+        serializer = HomeCollectionRejectSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(error_response("Validation failed", serializer.errors), status=400)
+
+        booking.status = "CANCELLED"
+        booking.rejection_reason = serializer.validated_data.get("reason")
+        booking.is_active = False
+        booking.save()
+
+        return Response(success_response("Home collection rejected successfully"), status=200)
+
+
+# --- PATCH /bookings/<booking_id>/reschedule-home-collection/ ---
+class HomeCollectionRescheduleView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsLabAdmin]
+
+    @transaction.atomic
+    def patch(self, request, booking_id):
+        booking = get_object_or_404(TestBooking, id=booking_id, is_active=True)
+        # print("home collection reschedule view called",booking.is_home_collection)
+        # if not booking.is_home_collection:
+        #     return Response(error_response("Booking is not marked for home collection"), status=400)
+
+        serializer = HomeCollectionRescheduleSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(error_response("Validation failed", serializer.errors), status=400)
+
+        new_time = serializer.validated_data["scheduled_time"]
+        booking.scheduled_time = new_time
+        booking.save(update_fields=["scheduled_time", "updated_at"])
+
+        return Response(success_response("Home collection rescheduled successfully"), status=200)
+
+
+# --- PATCH /bookings/<booking_id>/mark-collected/ ---
+class MarkCollectedView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsLabAdmin]
+
+    @transaction.atomic
+    def patch(self, request, booking_id):
+        booking = get_object_or_404(TestBooking, id=booking_id, is_active=True)
+        # if not booking.is_home_collection:
+        #     return Response(error_response("Not a home collection booking"), status=400)
+
+        serializer = MarkCollectedSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(error_response("Validation failed", serializer.errors), status=400)
+
+        collector_name = serializer.validated_data["collector_name"]
+        collector_contact = serializer.validated_data["collector_contact"]
+
+        booking.collector_name = collector_name
+        booking.collector_contact = collector_contact
+        booking.home_collection_confirmed = True
+        booking.home_collection_confirmed_at = timezone.localtime()
+        booking.save(update_fields=[
+            "collector_name", "collector_contact",
+            "home_collection_confirmed", "home_collection_confirmed_at",
+            "updated_at"
+        ])
+
+        return Response(success_response("Sample marked as collected"), status=200)
+
+
+class CustomPageNumberPagination(PageNumberPagination):
+    page_size = 20
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+
+class BookingGroupListView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        query_params = request.query_params
+        filters = Q(is_active=True)
+
+        if status := query_params.get("status"):
+            filters &= Q(status=status)
+
+        if patient_id := query_params.get("patient_profile_id"):
+            filters &= Q(patient_profile_id=patient_id)
+
+        if consultation_id := query_params.get("consultation_id"):
+            filters &= Q(consultation_id=consultation_id)
+
+        if booked_by := query_params.get("booked_by"):
+            filters &= Q(booked_by__iexact=booked_by)
+
+        if from_date := query_params.get("from_date"):
+            filters &= Q(created_at__date__gte=from_date)
+
+        if to_date := query_params.get("to_date"):
+            filters &= Q(created_at__date__lte=to_date)
+
+        if is_home_collection := query_params.get("is_home_collection"):
+            filters &= Q(is_home_collection=is_home_collection.lower() in ["true", "1"])
+
+        qs = BookingGroup.objects.filter(filters).select_related(
+            "consultation", "patient_profile"
+        ).prefetch_related("test_bookings").order_by("-created_at")
+
+        paginator = CustomPageNumberPagination()
+        paginated_qs = paginator.paginate_queryset(qs, request)
+        serializer = BookingGroupListSerializer(paginated_qs, many=True)
+
+        return paginator.get_paginated_response(success_response("Booking groups fetched", serializer.data))

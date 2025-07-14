@@ -8,7 +8,10 @@ from diagnostic.api.views import (
     DiagnosticLabAddressViewSet,LabAdminLoginView,LabAdminTokenRefreshView,
     LabAdminTokenVerifyView,ImagingViewSet,TestPackageViewSet,TestLabMappingViewSet,
     PackageLabMappingViewSet,FilterLabsByTestView,PackageRecommendationViewSet,
-    AutoBookTestsView,ManualBookTestsView,
+    AutoBookTestsView,ManualBookTestsView,BookingListView,
+    BookingStatusUpdateView, BookingRescheduleView,
+    BookingCancelView, BookingGroupCancelView,HomeCollectionConfirmView,HomeCollectionRejectView,
+    HomeCollectionRescheduleView, MarkCollectedView,BookingGroupListView
 )
 urlpatterns =[]
 router = DefaultRouter()
@@ -37,5 +40,31 @@ urlpatterns += [
     #Booking and Auto Booking
     path('bookings/auto-book/', AutoBookTestsView.as_view(), name='auto-book-tests'),
     path('bookings/auto-book/<uuid:id>/', AutoBookTestsView.as_view(), name='auto-book-tests-detail'),
+    #Manual Booking
     path('bookings/manual-book/', ManualBookTestsView.as_view(), name='manual-book-tests'),
+    path('bookings/manual-book/<uuid:id>/', ManualBookTestsView.as_view(), name='manual-book-tests'),
+
+    path("bookings/", BookingListView.as_view(), name="booking-list"),
+    #Booking Life Cycle
+    path("bookings/<uuid:booking_id>/status/", BookingStatusUpdateView.as_view(), name="booking-status-update"),
+    path("bookings/<uuid:booking_id>/reschedule/", BookingRescheduleView.as_view(), name="booking-reschedule"),
+    path("bookings/<uuid:booking_id>/cancel/", BookingCancelView.as_view(), name="booking-cancel"),
+    path("booking-groups/<uuid:group_id>/cancel/", BookingGroupCancelView.as_view(), name="booking-group-cancel"),
+
+    #home collection confirmation
+    path("bookings/<uuid:booking_id>/confirm-home-collection/", HomeCollectionConfirmView.as_view(), name="confirm-home-collection"),
+    path("bookings/<uuid:booking_id>/reject/", HomeCollectionRejectView.as_view(), name="reject-home-collection"),
+    path(
+        "bookings/<uuid:booking_id>/reschedule-home-collection/",
+        HomeCollectionRescheduleView.as_view(),
+        name="reschedule-home-collection",
+    ),
+    path(
+        "bookings/<uuid:booking_id>/mark-collected/",
+        MarkCollectedView.as_view(),
+        name="mark-collected-home-collection",
+    ),
+    # Booking Group List
+    path("booking-groups/", BookingGroupListView.as_view(), name="booking-group-list"),
+
 ]

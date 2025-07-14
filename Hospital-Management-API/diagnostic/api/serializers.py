@@ -13,7 +13,7 @@ from django.utils import timezone
 from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
 from consultations.models import Consultation
-
+from patient_account.api.serializers import PatientProfileSearchSerializer
 class PackageRecommendationSerializer(serializers.ModelSerializer):
     package_name = serializers.CharField(source='package.name', read_only=True)
 
@@ -398,3 +398,115 @@ class BookingGroupSerializer(serializers.ModelSerializer):
         instance.notes = validated_data.get("notes", instance.notes)
         instance.save()
         return instance
+
+
+class TestBookingListSerializer(serializers.ModelSerializer):
+    patient_name = serializers.SerializerMethodField()
+    test_name = serializers.SerializerMethodField()
+    category = serializers.SerializerMethodField()
+    lab_name = serializers.CharField(source="lab.name")
+
+    class Meta:
+        model = TestBooking
+        fields = [
+            "id",
+            "status",
+            "scheduled_time",
+            "test_price",
+            "tat_hours",
+            "booked_by",
+            "patient_name",
+            "test_name",
+            "category",
+            "lab_name"
+        ]
+
+    def get_patient_name(self, obj):
+        return obj.patient_profile.get_full_name() if obj.patient_profile else ""
+
+    def get_test_name(self, obj):
+        return obj.recommendation.test.name.title() if obj.recommendation and obj.recommendation.test else ""
+
+    def get_category(self, obj):
+        return obj.recommendation.test.category.name if obj.recommendation and obj.recommendation.test and obj.recommendation.test.category else ""
+
+
+
+class BookingListSerializer(serializers.ModelSerializer):
+    test_name = serializers.CharField(source="recommendation.test.name", read_only=True)
+    category = serializers.CharField(source="recommendation.test.category.name", read_only=True)
+    patient_name = serializers.CharField(source="patient_profile.get_full_name", read_only=True)
+    mobile_number = serializers.CharField(source="patient_profile.account.mobile_number", read_only=True)
+    lab_name = serializers.CharField(source="lab.name", read_only=True)
+
+    class Meta:
+        model = TestBooking
+        fields = [
+            "id", "booking_group_id", "consultation_id", "scheduled_time",
+            "test_name", "category", "status", "booked_by",
+            "patient_name", "mobile_number", "lab_name", "is_home_collection",
+            "created_at", "updated_at"
+        ]
+    
+
+class BookingStatusUpdateSerializer(serializers.Serializer):
+    status = serializers.ChoiceField(choices=TestBooking.STATUS_CHOICES)
+
+
+class RescheduleBookingSerializer(serializers.Serializer):
+    scheduled_time = serializers.DateTimeField()
+
+
+class HomeCollectionConfirmSerializer(serializers.Serializer):
+    collector_name = serializers.CharField(max_length=100)
+    collector_contact = serializers.CharField(max_length=15)
+    home_collection_address = serializers.CharField()
+    scheduled_time = serializers.DateTimeField(required=False)
+
+    def validate_scheduled_time(self, value):
+        if value < timezone.now():
+            raise serializers.ValidationError("Scheduled time must be in the future.")
+        return value
+
+
+class HomeCollectionRejectSerializer(serializers.Serializer):
+    reason = serializers.CharField(max_length=255)
+
+# --- Serializer for Rescheduling Home Collection ---
+class HomeCollectionRescheduleSerializer(serializers.Serializer):
+    scheduled_time = serializers.DateTimeField(required=True)
+
+    def validate_scheduled_time(self, value):
+        now = timezone.localtime()
+        if value <= now:
+            raise serializers.ValidationError("Scheduled time must be in the future.")
+        return value
+
+# --- Serializer for Marking Collection ---
+class MarkCollectedSerializer(serializers.Serializer):
+    collector_name = serializers.CharField(max_length=100)
+    collector_contact = serializers.CharField(max_length=15)
+
+
+class BookingGroupListSerializer(serializers.ModelSerializer):
+    bookings = TestBookingListSerializer(source="test_bookings", many=True, read_only=True)
+    patient_profile = PatientProfileSearchSerializer(read_only=True)
+
+    class Meta:
+        model = BookingGroup
+        fields = [
+            "id",
+            "consultation",
+            "patient_profile",
+            "booked_by",
+            "status",
+            "is_home_collection",
+            "preferred_schedule_time",
+            "notes",
+            "lab_grouping_type",
+            "total_price",
+            "source",
+            "created_at",
+            "updated_at",
+            "bookings"
+        ]

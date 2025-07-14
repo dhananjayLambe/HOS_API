@@ -78,6 +78,10 @@ class MedicalTest(models.Model):
     standard_price = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
     sample_required = models.CharField(max_length=100, blank=True, null=True)
     fasting_required = models.BooleanField(default=False)
+    home_collection_supported = models.BooleanField(
+    default=True,
+    help_text="Indicates if this test is technically eligible for home sample collection"
+    )
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -395,6 +399,12 @@ class TestBooking(models.Model):
         default='patient'
     )
     lab_approved_at = models.DateTimeField(blank=True, null=True, help_text="Time when lab confirmed the booking")
+    home_collection_confirmed = models.BooleanField(default=False)
+    home_collection_address = models.TextField(blank=True, null=True)
+    collector_name = models.CharField(max_length=100, blank=True, null=True)
+    collector_contact = models.CharField(max_length=15, blank=True, null=True)
+    home_collection_confirmed_at = models.DateTimeField(blank=True, null=True)
+    rejection_reason = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     is_active = models.BooleanField(default=True)
