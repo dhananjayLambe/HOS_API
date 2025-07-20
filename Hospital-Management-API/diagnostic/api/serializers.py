@@ -3,7 +3,7 @@ from django.utils.text import slugify
 from diagnostic.models import (
     MedicalTest, TestCategory, ImagingView, TestRecommendation,PackageRecommendation,
     TestPackage,DiagnosticLabAddress,TestLabMapping,PackageLabMapping,TestRecommendation,
-    TestBooking,BookingGroup
+    TestBooking,BookingGroup,TestReport
     )
 from django.db import transaction
 from account.models import User
@@ -13,7 +13,8 @@ from django.utils import timezone
 from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
 from consultations.models import Consultation
-from patient_account.api.serializers import PatientProfileSearchSerializer
+from patient_account.api.serializers import PatientProfileSearchSerializer,PatientInfoSerializer
+import os
 class PackageRecommendationSerializer(serializers.ModelSerializer):
     package_name = serializers.CharField(source='package.name', read_only=True)
 
@@ -509,4 +510,101 @@ class BookingGroupListSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
             "bookings"
+        ]
+
+
+ALLOWED_EXTENSIONS = ['.pdf', '.jpg', '.jpeg', '.png', '.xls', '.xlsx']
+
+class LabReportUploadSerializer(serializers.Serializer):
+    booking_id = serializers.UUIDField(required=True)
+    file = serializers.FileField(required=True)
+    comments = serializers.CharField(required=False, allow_blank=True)
+    is_external = serializers.BooleanField(required=False)
+
+    def validate_booking_id(self, value):
+        if not TestBooking.objects.filter(id=value, is_active=True).exists():
+            raise serializers.ValidationError("Invalid or inactive booking ID.")
+        return value
+    def validate_file_extension(file):
+        ext = os.path.splitext(file.name)[1].lower()
+        if ext not in ALLOWED_EXTENSIONS:
+            raise serializers.ValidationError(
+                f"Unsupported file extension '{ext}'. Allowed: {', '.join(ALLOWED_EXTENSIONS)}"
+            )
+        return file
+
+
+class TestBookingSerializer(serializers.ModelSerializer):
+    test_name = serializers.CharField(source='recommendation.test.name', read_only=True)
+    test_type = serializers.CharField(source='recommendation.test.type', read_only=True)
+    lab_name = serializers.CharField(source='lab.name', read_only=True)
+    test_pnr = serializers.CharField(source='recommendation.test_pnr', read_only=True)
+
+    class Meta:
+        model = TestBooking
+        fields = [
+            'id', 'test_name', 'test_type', 'status', 'test_pnr',
+            'lab_name', 'is_home_collection', 'scheduled_time', 'collected_time'
+        ]
+
+class BookingGroupTestListSerializer(serializers.Serializer):
+    patient = PatientProfileSearchSerializer()
+    tests = TestBookingSerializer(many=True)
+
+class TestReportDownloadSerializer(serializers.ModelSerializer):
+    patient_name = serializers.CharField(source="patient_profile.full_name", read_only=True)
+    patient_mobile = serializers.CharField(source="patient_profile.mobile", read_only=True)
+    consultation_id = serializers.UUIDField(source="consultation.id", read_only=True)
+    file_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = TestReport
+        fields = [
+            "id",
+            "test_pnr",
+            "patient_name",
+            "patient_mobile",
+            "consultation_id",
+            "file_url",
+            "uploaded_at",
+            "is_external",
+            "comments"
+        ]
+
+class TestReportDetailsSerializer(serializers.ModelSerializer):
+    test_name = serializers.SerializerMethodField()
+    booking_id = serializers.UUIDField(source="booking.id")
+    consultation_id = serializers.UUIDField(source="consultation.id")
+    patient_name = serializers.CharField(source="patient_profile.get_full_name", default="")
+    report_url = serializers.FileField(source="file")
+    uploaded_at = serializers.SerializerMethodField()
+
+    class Meta:
+        model = TestReport
+        fields = [
+            "id",  # report_id
+            "test_pnr",
+            "booking_id",
+            "consultation_id",
+            "patient_name",
+            "test_name",
+            "report_url",
+            "uploaded_at"
+        ]
+
+    def get_test_name(self, obj):
+        return obj.booking.recommendation.test.name if obj.booking and obj.booking.recommendation and obj.booking.recommendation.test else None
+
+    def get_uploaded_at(self, obj):
+        return timezone.localtime(obj.uploaded_at).strftime("%Y-%m-%d %H:%M:%S")
+
+class TestReportDetailsSerializer(serializers.ModelSerializer):
+    test_name = serializers.CharField(source="booking.recommendation.test_name", read_only=True)
+    lab_name = serializers.CharField(source="booking.lab.name", read_only=True)
+
+    class Meta:
+        model = TestReport
+        fields = [
+            'id', 'file', 'test_pnr', 'comments', 'is_external', 'uploaded_at',
+            'consultation_id', 'patient_profile_id', 'test_name', 'lab_name'
         ]

@@ -7,6 +7,7 @@ from django.core.exceptions import ValidationError
 from consultations.models import Consultation
 from account.models import User
 from utils.static_data_service import StaticDataService
+from diagnostic.utils import report_upload_path
 
 STATUS_CHOICES = [
     ('RECOMMENDED', 'Recommended'),
@@ -152,7 +153,6 @@ class DiagnosticLab(models.Model):
         models.Index(fields=['is_active']),
         ]
 
-
 class TestLabMapping(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     test = models.ForeignKey("diagnostic.MedicalTest", on_delete=models.CASCADE)
@@ -235,7 +235,6 @@ class TestRecommendation(models.Model):
             models.Index(fields=['test']),
             models.Index(fields=['is_active']),
         ]
-
 
 class TestPackage(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -426,24 +425,23 @@ class TestBooking(models.Model):
             models.Index(fields=["is_active"]),
         ]
 
-class TestReport(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    lab = models.ForeignKey(DiagnosticLab, on_delete=models.SET_NULL, null=True, blank=True)
-    booking = models.OneToOneField(TestBooking, on_delete=models.CASCADE, related_name='report')
-    file = models.FileField(upload_to='reports/')
-    uploaded_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
-    is_external = models.BooleanField(default=False)
-    comments = models.TextField(blank=True, null=True)
-    uploaded_at = models.DateTimeField(auto_now_add=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    is_active = models.BooleanField(default=True)
+# class TestReport(models.Model):
+#     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+#     lab = models.ForeignKey(DiagnosticLab, on_delete=models.SET_NULL, null=True, blank=True)
+#     booking = models.OneToOneField(TestBooking, on_delete=models.CASCADE, related_name='report')
+#     file = models.FileField(upload_to='reports/')
+#     uploaded_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+#     is_external = models.BooleanField(default=False)
+#     comments = models.TextField(blank=True, null=True)
+#     uploaded_at = models.DateTimeField(auto_now_add=True)
+#     created_at = models.DateTimeField(auto_now_add=True)
+#     updated_at = models.DateTimeField(auto_now=True)
+#     is_active = models.BooleanField(default=True)
 
-    def __str__(self):
-        return f"Report for {self.booking.recommendation.test_pnr}"
-    class Meta:
-        ordering = ['-created_at']
-
+#     def __str__(self):
+#         return f"Report for {self.booking.recommendation.test_pnr}"
+#     class Meta:
+#         ordering = ['-created_at']
 
 class LabCommissionLedger(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -476,8 +474,6 @@ class LabAdminUser(models.Model):
     def __str__(self):
         return f"{self.user.first_name} - {self.lab.name}"
 
-
-
 class DiagnosticLabAddress(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     lab = models.OneToOneField(DiagnosticLab, on_delete=models.CASCADE, related_name="address", unique=True)
@@ -496,9 +492,6 @@ class DiagnosticLabAddress(models.Model):
 
     def __str__(self):
         return f"{self.address}, {self.city}, {self.state}, {self.pincode}"
-    
-
-# diagnostic/models.py
 
 class PackageLabMapping(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -527,3 +520,52 @@ class PackageLabMapping(models.Model):
 
     def __str__(self):
         return f"{self.package.name} - {self.lab.name}"
+
+class TestReport(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    lab = models.ForeignKey("diagnostic.DiagnosticLab", on_delete=models.SET_NULL, null=True, blank=True)
+    booking = models.OneToOneField("diagnostic.TestBooking", on_delete=models.CASCADE, related_name='report')
+
+    # ✅ Newly added fields for filtering and access
+    consultation = models.ForeignKey("consultations.Consultation", on_delete=models.CASCADE, related_name="test_reports", null=True, blank=True)
+    patient_profile = models.ForeignKey("patient_account.PatientProfile", on_delete=models.CASCADE, related_name="test_reports", null=True, blank=True)
+
+    # ✅ Test PNR (indexed)
+    test_pnr = models.CharField(max_length=15, db_index=True, null=True, blank=True)
+
+    # ✅ File stored in structured S3 folder
+    file = models.FileField(upload_to=report_upload_path, max_length=500)
+
+    uploaded_by = models.ForeignKey("account.User", on_delete=models.SET_NULL, null=True)
+    is_external = models.BooleanField(default=False)
+    comments = models.TextField(blank=True, null=True)
+
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    is_active = models.BooleanField(default=True)
+
+    def save(self, *args, **kwargs):
+        # Auto-fill from booking if not explicitly set
+        if self.booking:
+            if not self.test_pnr and self.booking.recommendation:
+                self.test_pnr = self.booking.recommendation.test_pnr
+            if not self.consultation:
+                self.consultation = self.booking.consultation
+            if not self.patient_profile:
+                self.patient_profile = self.booking.patient_profile
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"Report for {self.test_pnr} | Patient: {self.patient_profile.get_full_name()}"
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=["test_pnr"]),
+            models.Index(fields=["consultation"]),
+            models.Index(fields=["patient_profile"]),
+            models.Index(fields=["is_active"]),
+        ]

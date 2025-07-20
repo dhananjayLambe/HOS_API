@@ -84,3 +84,9 @@ class PatientProfileSearchSerializer(serializers.ModelSerializer):
 
     def get_full_name(self, obj):
         return f"{obj.first_name} {obj.last_name}".strip()
+
+
+class PatientInfoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PatientProfile
+        fields = ['id', 'first_name', 'last_name', 'gender', 'age', 'account']

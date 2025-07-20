@@ -100,3 +100,16 @@ class IsLabAdmin(BasePermission):
 
         return user and user.is_authenticated and \
                user.groups.filter(name='lab-admin').exists()
+
+
+class IsHelpdeskOrLabAdmin(BasePermission):
+    """
+    Custom permission to allow access only to users in 'helpdesk' or 'lab-admin' group.
+    """
+
+    def has_permission(self, request, view):
+        return bool(
+            request.user and
+            request.user.is_authenticated and
+            request.user.groups.filter(name__in=['helpdesk', 'lab-admin']).exists()
+        )

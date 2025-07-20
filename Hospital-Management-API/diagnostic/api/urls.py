@@ -11,7 +11,13 @@ from diagnostic.api.views import (
     AutoBookTestsView,ManualBookTestsView,BookingListView,
     BookingStatusUpdateView, BookingRescheduleView,
     BookingCancelView, BookingGroupCancelView,HomeCollectionConfirmView,HomeCollectionRejectView,
-    HomeCollectionRescheduleView, MarkCollectedView,BookingGroupListView
+    HomeCollectionRescheduleView, MarkCollectedView,BookingGroupListView,
+    UploadLabReportView,BookingGroupTestListView,TestReportDownloadView,
+    TestReportDetailsView,
+    TestReportDetailsView,DeleteTestReportView,
+    PatientReportHistoryView,
+    DoctorReportHistoryView,
+    AdminReportHistoryView,
 )
 urlpatterns =[]
 router = DefaultRouter()
@@ -67,4 +73,17 @@ urlpatterns += [
     # Booking Group List
     path("booking-groups/", BookingGroupListView.as_view(), name="booking-group-list"),
 
+    #Lab Report Upload
+    path('lab/upload-report/', UploadLabReportView.as_view(), name='upload-lab-report'),
+    path("booking-groups/<uuid:group_id>/tests/", BookingGroupTestListView.as_view(), name="booking-group-tests"),
+    path("reports/details/", TestReportDetailsView.as_view(), name="report-details"),
+    path("report/view/", TestReportDownloadView.as_view(), name="view-test-report"),
+    path("lab/delete-report/<str:report_id>/", DeleteTestReportView.as_view(), name="delete-lab-report"),
+    #report History API
+    path("patient/reports/history/", PatientReportHistoryView.as_view(), name="patient-report-history"),
+    path("doctor/reports/history/", DoctorReportHistoryView.as_view(), name="doctor-report-history"),
+    path("admin/reports/history/", AdminReportHistoryView.as_view(), name="admin-report-history"),
+
+
+    
 ]

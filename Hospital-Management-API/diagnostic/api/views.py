@@ -1,3 +1,4 @@
+import os
 from django.db import transaction
 from rest_framework import generics, status, viewsets
 from rest_framework.views import APIView
@@ -15,6 +16,7 @@ from rest_framework_simplejwt.views import (
     TokenRefreshView as SimpleJWTRefreshView,
     TokenVerifyView as SimpleJWTVerifyView
 )
+from account.models import User
 from django.core.exceptions import ValidationError
 from rest_framework.permissions import AllowAny
 # Maintain ordering using Case/When
@@ -36,8 +38,8 @@ from diagnostic.models import (MedicalTest,
                                DiagnosticLabAddress,TestCategory,TestLabMapping,
                                ImagingView,PackageLabMapping,LabAdminUser,
                                    DiagnosticLab,TestLabMapping,TestBooking,BookingGroup,TestRecommendation,
-                                   DiagnosticLab, MedicalTest,TestLabMapping, TestRecommendation, BookingGroup
-                                   )
+                                   DiagnosticLab, MedicalTest,TestLabMapping, TestRecommendation, BookingGroup,
+                                   TestBooking, TestReport,BookingGroup,)
 from diagnostic.api.serializers import (
     MedicalTestSerializer,TestCategorySerializer,ImagingViewSerializer,TestPackageSerializer,
     TestRecommendationSerializer,PackageRecommendationSerializer,BulkPackageRecommendationSerializer,
@@ -49,9 +51,10 @@ from diagnostic.api.serializers import (
     BookingListSerializer,BookingStatusUpdateSerializer,RescheduleBookingSerializer,
     HomeCollectionConfirmSerializer,HomeCollectionRejectSerializer,
     HomeCollectionRescheduleSerializer,MarkCollectedSerializer,
-    BookingGroupListSerializer)
+    BookingGroupListSerializer,LabReportUploadSerializer,BookingGroupTestListSerializer,
+    TestReportDownloadSerializer,TestReportDetailsSerializer,TestReportDetailsSerializer,)
 from consultations.models import Consultation
-from account.permissions import IsDoctor, IsAdminUser,IsLabAdmin,IsPatient
+from account.permissions import IsDoctor, IsAdminUser,IsLabAdmin,IsPatient,IsHelpdeskOrLabAdmin
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
@@ -62,8 +65,12 @@ from diagnostic.filters import DiagnosticLabAddressFilter
 from rest_framework import viewsets, status, filters
 from rest_framework.response import Response
 from diagnostic.response_format import success_response, error_response
-
-
+from rest_framework.parsers import MultiPartParser, FormParser
+import hashlib
+from django.shortcuts import get_object_or_404
+from rest_framework.exceptions import NotFound
+from rest_framework.generics import ListAPIView
+from patient_account.models import PatientProfile, PatientAccount
 class ImagingViewViewSet(viewsets.ModelViewSet):
     queryset = ImagingView.objects.all().order_by('name')
     serializer_class = ImagingViewSerializer
@@ -1186,7 +1193,6 @@ class TestRecommendationViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(instance)
         return Response({"status": True, "message": "Recommendation details.", "data": serializer.data})
 
-
 class PackageRecommendationViewSet(viewsets.ModelViewSet):
     serializer_class = PackageRecommendationSerializer
     authentication_classes = [JWTAuthentication]
@@ -1260,170 +1266,6 @@ class PackageRecommendationViewSet(viewsets.ModelViewSet):
         instance.is_active = False
         instance.save()
         return Response({"status": True, "message": "Package recommendation deleted (soft).", "data": {}})
-
-
-# class LabAllocatorService:
-#     @staticmethod
-#     @transaction.atomic
-#     def allocate_tests(consultation_id, patient_profile, pincode, scheduled_time, booked_by):
-#         test_recommendations = TestRecommendation.objects.filter(
-#             consultation=consultation_id,
-#             is_active=True,
-#             test__isnull=False
-#         ).select_related('test')
-
-#         if not test_recommendations.exists():
-#             raise ValidationError("No active test recommendations found for this consultation.")
-
-#         required_tests = [tr.test for tr in test_recommendations if tr.test]
-#         required_test_ids = [test.id for test in required_tests]
-
-#         active_labs = DiagnosticLab.objects.filter(
-#             is_active=True,
-#             service_pincodes__contains=[pincode]
-#         )
-
-#         preferred_lab = None
-#         for lab in active_labs:
-#             mapped_tests = TestLabMapping.objects.filter(
-#                 lab=lab,
-#                 test_id__in=required_test_ids,
-#                 is_available=True,
-#                 is_active=True
-#             ).values_list('test_id', flat=True)
-
-#             if set(mapped_tests) == set(required_test_ids):
-#                 preferred_lab = lab
-#                 break
-
-#         lab_grouping_type = "single_lab" if preferred_lab else "multi_lab"
-
-#         if not active_labs.exists():
-#             raise ValidationError("No labs available for the given pincode.")
-
-#         # Create BookingGroup
-#         booking_group = BookingGroup.objects.create(
-#             consultation=consultation,
-#             patient_profile=patient_profile,
-#             booked_by=booked_by,
-#             status="PENDING",
-#             is_home_collection=False,
-#             preferred_schedule_time=scheduled_time,
-#             lab_grouping_type=lab_grouping_type,
-#             created_at=timezone.now(),
-#         )
-
-#         test_bookings = []
-
-#         if preferred_lab:
-#             # One lab supports all
-#             for tr in test_recommendations:
-#                 mapping = TestLabMapping.objects.get(
-#                     lab=preferred_lab,
-#                     test=tr.test,
-#                     is_available=True,
-#                     is_active=True
-#                 )
-
-#                 booking = TestBooking.objects.create(
-#                     booking_group=booking_group,
-#                     consultation=consultation,
-#                     patient_profile=patient_profile,
-#                     recommendation=tr,
-#                     lab=preferred_lab,
-#                     lab_mapping=mapping,
-#                     test_price=mapping.price,
-#                     tat_hours=mapping.turnaround_time,
-#                     scheduled_time=scheduled_time,
-#                     booked_by=booked_by,
-#                     status="PENDING",
-#                     is_home_collection=False
-#                 )
-#                 test_bookings.append(booking)
-
-#         else:
-#             # Distribute across labs
-#             test_to_lab_map = {}
-#             for test in required_tests:
-#                 lab_mapping = TestLabMapping.objects.filter(
-#                     test=test,
-#                     is_available=True,
-#                     is_active=True,
-#                     lab__in=active_labs
-#                 ).order_by('price').select_related('lab').first()
-#                 if not lab_mapping:
-#                     raise ValidationError(f"No lab found for test: {test.name}")
-#                 test_to_lab_map[test.id] = lab_mapping
-
-#             for tr in test_recommendations:
-#                 mapping = test_to_lab_map.get(tr.test.id)
-#                 if not mapping:
-#                     raise ValidationError(f"Missing mapping for test: {tr.test.name}")
-
-#                 booking = TestBooking.objects.create(
-#                     booking_group=booking_group,
-#                     consultation=consultation,
-#                     patient_profile=patient_profile,
-#                     recommendation=tr,
-#                     lab=mapping.lab,
-#                     lab_mapping=mapping,
-#                     test_price=mapping.price,
-#                     tat_hours=mapping.turnaround_time,
-#                     scheduled_time=scheduled_time,
-#                     booked_by=booked_by,
-#                     status="PENDING",
-#                     is_home_collection=False
-#                 )
-#                 test_bookings.append(booking)
-
-#         return {
-#             "booking_group": booking_group,
-#             "bookings": test_bookings,
-#         }
-
-# class AutoBookTestsView(APIView):
-#     permission_classes = [IsAuthenticated]
-
-#     def post(self, request):
-#         try:
-#             data = request.data
-#             consultation_id = data.get("consultation_id")
-#             patient_profile_id = data.get("patient_profile_id")
-#             pincode = data.get("pincode")
-#             scheduled_time = data.get("scheduled_time")
-#             booked_by = data.get("booked_by", "patient")
-#             test_ids = data.get("test_ids", None)  # Optional
-
-#             if not consultation_id or not patient_profile_id or not pincode:
-#                 return Response(error_response("Missing required fields."), status=status.HTTP_400_BAD_REQUEST)
-
-#             # Validate optional test_ids
-#             if test_ids:
-#                 valid_ids = TestRecommendation.objects.filter(
-#                     consultation_id=consultation_id,
-#                     test__isnull=False,
-#                     is_active=True,
-#                     id__in=test_ids
-#                 ).values_list("id", flat=True)
-#                 if len(set(valid_ids)) != len(set(test_ids)):
-#                     return Response(error_response("One or more test_ids are invalid or not part of this consultation."),
-#                                     status=status.HTTP_400_BAD_REQUEST)
-
-#             with transaction.atomic():
-#                 result = LabAllocatorService.allocate_tests(
-#                     consultation_id=consultation_id,
-#                     patient_profile_id=patient_profile_id,
-#                     pincode=pincode,
-#                     scheduled_time=scheduled_time,
-#                     booked_by=booked_by,
-#                     specific_test_ids=test_ids  # Pass None or list
-#                 )
-
-#             return Response(success_response("Tests booked successfully.", result), status=status.HTTP_200_OK)
-
-#         except Exception as e:
-#             return Response(error_response(str(e)), status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
 class LabAllocatorService:
 
@@ -1560,72 +1402,6 @@ class LabAllocatorService:
             "booking_group": booking_group,
             "bookings": test_bookings,
         }
-
-
-# class AutoBookTestsView(APIView):
-#     permission_classes = [IsAuthenticated]
-
-#     def post(self, request):
-#         try:
-#             data = request.data
-
-#             consultation_id = data.get("consultation_id")
-#             patient_profile_id = data.get("patient_profile_id")
-#             pincode = data.get("pincode")
-#             scheduled_time = parse_datetime(data.get("scheduled_time"))
-#             booked_by = data.get("booked_by", "patient")
-#             test_ids = data.get("test_ids")  # Optional for partial booking
-
-#             # Validate required fields
-#             if not all([consultation_id, patient_profile_id, pincode, scheduled_time]):
-#                 return Response(error_response("Missing required fields"), status=status.HTTP_400_BAD_REQUEST)
-
-#             if scheduled_time < now():
-#                 return Response(error_response("Scheduled time must be in the future"), status=status.HTTP_400_BAD_REQUEST)
-
-#             # Fetch patient profile object
-#             try:
-#                 patient_profile = PatientProfile.objects.get(id=patient_profile_id, is_active=True)
-#             except PatientProfile.DoesNotExist:
-#                 return Response(error_response("Invalid patient profile ID"), status=status.HTTP_404_NOT_FOUND)
-
-#             # Delegate to service
-#             allocation_result = LabAllocatorService.allocate_tests(
-#                 consultation_id=consultation_id,
-#                 patient_profile=patient_profile,
-#                 pincode=pincode,
-#                 scheduled_time=scheduled_time,
-#                 booked_by=booked_by,
-#                 test_ids=test_ids  # Optional
-#             )
-
-#             booking_group = allocation_result["booking_group"]
-#             bookings = allocation_result["bookings"]
-
-#             return Response(success_response(
-#                 "Tests booked successfully",
-#                 data={
-#                     "booking_group_id": booking_group.id,
-#                     "lab_grouping_type": booking_group.lab_grouping_type,
-#                     "bookings": [
-#                         {
-#                             "test": b.recommendation.test.name if b.recommendation and b.recommendation.test else None,
-#                             "lab": b.lab.name if b.lab else None,
-#                             "scheduled_time": b.scheduled_time
-#                         }
-#                         for b in bookings
-#                     ]
-#                 }
-#             ), status=status.HTTP_201_CREATED)
-
-#         except ValidationError as e:
-#             return Response(error_response(str(e)), status=status.HTTP_400_BAD_REQUEST)
-
-#         except Exception as e:
-#             import traceback
-#             traceback.print_exc()
-#             return Response(error_response("Internal server error", errors=str(e)), status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
 
 class AutoBookTestsView(APIView):
     authentication_classes = [JWTAuthentication]
@@ -1809,13 +1585,11 @@ class ManualBookTestsView(APIView):
         booking.updated_at = timezone.now()
         booking.save()
         return Response(success_response("Booking cancelled successfully"), status=200)
-  
 
 class CustomPageNumberPagination(PageNumberPagination):
     page_size = 20
     page_size_query_param = "page_size"
     max_page_size = 100
-
 
 class BookingListView(APIView):
     authentication_classes = [JWTAuthentication]
@@ -1888,7 +1662,6 @@ class BookingListView(APIView):
         serializer = BookingListSerializer(paginated_qs, many=True)
         return paginator.get_paginated_response(success_response("Bookings fetched", serializer.data))
 
-
 class BookingStatusUpdateView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
@@ -1914,7 +1687,6 @@ class BookingStatusUpdateView(APIView):
         booking.save()
 
         return Response(success_response("Booking status updated"), status=200)
-
 
 class BookingRescheduleView(APIView):
     authentication_classes = [JWTAuthentication]
@@ -1944,7 +1716,6 @@ class BookingRescheduleView(APIView):
 
         return Response(success_response("Booking rescheduled successfully"), status=200)
 
-
 class BookingCancelView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
@@ -1964,7 +1735,6 @@ class BookingCancelView(APIView):
         booking.save()
 
         return Response(success_response("Booking cancelled successfully"), status=200)
-
 
 class BookingGroupCancelView(APIView):
     authentication_classes = [JWTAuthentication]
@@ -1989,7 +1759,6 @@ class BookingGroupCancelView(APIView):
         TestBooking.objects.filter(booking_group=group).update(status="CANCELLED", is_active=False)
 
         return Response(success_response("All bookings under group cancelled"), status=200)
-
 
 class HomeCollectionConfirmView(APIView):
     authentication_classes = [JWTAuthentication]
@@ -2024,7 +1793,6 @@ class HomeCollectionConfirmView(APIView):
 
         return Response(success_response("Home collection confirmed successfully"), status=200)
 
-
 class HomeCollectionRejectView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
@@ -2052,7 +1820,6 @@ class HomeCollectionRejectView(APIView):
 
         return Response(success_response("Home collection rejected successfully"), status=200)
 
-
 # --- PATCH /bookings/<booking_id>/reschedule-home-collection/ ---
 class HomeCollectionRescheduleView(APIView):
     authentication_classes = [JWTAuthentication]
@@ -2074,7 +1841,6 @@ class HomeCollectionRescheduleView(APIView):
         booking.save(update_fields=["scheduled_time", "updated_at"])
 
         return Response(success_response("Home collection rescheduled successfully"), status=200)
-
 
 # --- PATCH /bookings/<booking_id>/mark-collected/ ---
 class MarkCollectedView(APIView):
@@ -2106,12 +1872,10 @@ class MarkCollectedView(APIView):
 
         return Response(success_response("Sample marked as collected"), status=200)
 
-
 class CustomPageNumberPagination(PageNumberPagination):
     page_size = 20
     page_size_query_param = 'page_size'
     max_page_size = 100
-
 
 class BookingGroupListView(APIView):
     authentication_classes = [JWTAuthentication]
@@ -2152,3 +1916,348 @@ class BookingGroupListView(APIView):
         serializer = BookingGroupListSerializer(paginated_qs, many=True)
 
         return paginator.get_paginated_response(success_response("Booking groups fetched", serializer.data))
+
+class UploadLabReportView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsHelpdeskOrLabAdmin]
+    parser_classes = [MultiPartParser, FormParser]
+    @transaction.atomic
+    def post(self, request, *args, **kwargs):
+        booking_id = request.data.get("booking_id")
+        uploaded_file = request.FILES.get("file")
+
+        if not booking_id or not uploaded_file:
+            return Response({
+                "status": False,
+                "message": "Missing required fields: booking_id or file"
+            }, status=400)
+
+        booking = TestBooking.objects.filter(id=booking_id).first()
+        if not booking:
+            return Response({"status": False, "message": "Booking not found."}, status=404)
+
+        # ✅ Check if report exists
+        report = TestReport.objects.filter(booking=booking).first()
+
+        if report:
+            # ✅ Restore and replace
+            report.is_active = True
+            report.file = uploaded_file
+            report.uploaded_by = request.user
+            report.updated_at = timezone.localtime()
+            report.save()
+            message = "Report re-uploaded successfully."
+        else:
+            # ✅ Create new report
+            TestReport.objects.create(
+                booking=booking,
+                lab=booking.lab,
+                consultation=booking.consultation,
+                patient_profile=booking.patient_profile,
+                test_pnr=booking.recommendation.test_pnr if booking.recommendation else None,
+                uploaded_by=request.user,
+                file=uploaded_file,
+                is_active=True
+            )
+            message = "Report uploaded successfully."
+
+        return Response({
+            "status": True,
+            "message": message
+        }, status=201)
+
+class BookingGroupTestListView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsHelpdeskOrLabAdmin]
+
+    def get(self, request, group_id):
+        try:
+            group = BookingGroup.objects.get(id=group_id, is_active=True)
+        except BookingGroup.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "Booking group not found."
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        bookings = TestBooking.objects.filter(
+            booking_group_id=group_id,
+            is_active=True
+        ).select_related(
+            "patient_profile", "consultation", "lab", "recommendation", "report"
+        )
+
+        data = []
+        for booking in bookings:
+            report_uploaded = hasattr(booking, 'report') and booking.report.file
+            data.append({
+                "booking_id": str(booking.id),
+                "test_name": booking.recommendation.test.name,
+                "status": booking.status,
+                "report_uploaded": bool(report_uploaded),
+                "lab": booking.lab.name if booking.lab else None,
+                "scheduled_time": booking.scheduled_time,
+            })
+
+        return Response({
+            "status": "success",
+            "message": "Test list for booking group fetched.",
+            "data": {
+                "patient": {
+                    "name": group.patient_profile.first_name + " " + group.patient_profile.last_name,
+                    "mobile": group.patient_profile.account.user.username,
+                    #"age": group.patient_profile.age,
+                    #"gender": group.patient_profile.gender,
+                },
+                "consultation_id": str(group.consultation.id),
+                "tests": data
+            }
+        }, status=status.HTTP_200_OK)
+
+class TestReportDownloadView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        report_id = request.query_params.get('report_id')
+        test_pnr = request.query_params.get('test_pnr')
+        booking_id = request.query_params.get('booking_id')
+
+        report = None
+        if report_id:
+            report = get_object_or_404(TestReport, id=report_id, is_active=True)
+        elif test_pnr:
+            report = get_object_or_404(TestReport, test_pnr=test_pnr, is_active=True)
+        elif booking_id:
+            report = get_object_or_404(TestReport, booking__id=booking_id, is_active=True)
+        else:
+            return Response({
+                "status": "error",
+                "message": "Please provide report_id, test_pnr or booking_id."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        file_url = report.file.url if report.file else None
+        if not file_url:
+            return Response({
+                "status": "error",
+                "message": "Report file not available."
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        return Response({
+            "status": "success",
+            "message": "Report fetched successfully.",
+            "data": {
+                "patient_name": report.patient_profile.get_full_name() if report.patient_profile else "",
+                "test_pnr": report.test_pnr,
+                "uploaded_at": timezone.localtime(report.uploaded_at),
+                "file_url": file_url,
+                "comments": report.comments,
+                "is_external": report.is_external
+            }
+        }, status=status.HTTP_200_OK)
+
+class TestReportDetailsView(ListAPIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsHelpdeskOrLabAdmin]
+    serializer_class = TestReportDetailsSerializer
+
+    def get_queryset(self):
+        queryset = TestReport.objects.select_related(
+            "booking", "consultation", "patient_profile", "booking__recommendation", "booking__lab"
+        ).filter(is_active=True)
+
+        consultation_id = self.request.query_params.get("consultation_id")
+        booking_group_id = self.request.query_params.get("booking_group_id")
+        patient_profile_id = self.request.query_params.get("patient_profile_id")
+
+        if consultation_id:
+            queryset = queryset.filter(consultation_id=consultation_id)
+        elif patient_profile_id:
+            queryset = queryset.filter(patient_profile_id=patient_profile_id)
+        elif booking_group_id:
+            queryset = queryset.filter(booking__booking_group_id=booking_group_id)
+
+        return queryset
+
+    @transaction.atomic
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        serializer = self.serializer_class(queryset, many=True)
+        return Response({
+            "status": True,
+            "message": "Report details fetched successfully",
+            "data": serializer.data
+        }, status=200)
+
+class DeleteTestReportView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsHelpdeskOrLabAdmin]
+
+    @transaction.atomic
+    def delete(self, request, report_id=None):
+        try:
+            report = None
+            # Allow lookup by report_id or test_pnr
+            if report_id and len(report_id) > 15:
+                report = TestReport.objects.filter(id=report_id, is_active=True).first()
+            else:
+                report = TestReport.objects.filter(test_pnr=report_id, is_active=True).first()
+
+            if not report:
+                return Response({
+                    "status": False,
+                    "message": "Report not found.",
+                }, status=404)
+
+            # Soft delete and hard file delete
+            file_path = report.file.path if report.file else None
+            report.is_active = False
+            report.file = None
+            report.updated_at = timezone.localtime()
+            report.save()
+
+            if file_path and os.path.exists(file_path):
+                os.remove(file_path)
+
+            return Response({
+                "status": True,
+                "message": "Report deleted successfully.",
+            }, status=200)
+
+        except Exception as e:
+            return Response({
+                "status": False,
+                "message": "Failed to delete report.",
+                "error": str(e),
+            }, status=400)
+
+class PatientReportHistoryView(ListAPIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsPatient]
+    serializer_class = TestReportDetailsSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        mobile = self.request.query_params.get("mobile")
+
+        try:
+            if mobile:
+                account = PatientAccount.objects.get(mobile=mobile, is_active=True)
+            else:
+                account = PatientAccount.objects.get(user=user, is_active=True)
+
+            # 🔄 Fetch multiple profiles, not just one
+            patient_profiles = PatientProfile.objects.filter(account=account, is_active=True)
+
+            if not patient_profiles.exists():
+                raise NotFound("No patient profiles found for this account.")
+
+        except PatientAccount.DoesNotExist:
+            raise NotFound("Patient account not found.")
+
+        return TestReport.objects.filter(
+            patient_profile__in=patient_profiles,
+            is_active=True
+        ).select_related(
+            "booking", "consultation", "booking__lab", "booking__recommendation"
+        )
+    @transaction.atomic
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        serializer = self.serializer_class(queryset, many=True)
+        return Response({
+            "status": True,
+            "message": "Report history fetched successfully",
+            "data": serializer.data
+        }, status=200)
+
+class DoctorReportHistoryView(ListAPIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctor]
+    serializer_class = TestReportDetailsSerializer
+
+    def get_queryset(self):
+        consultation_id = self.request.query_params.get("consultation_id")
+        patient_profile_id = self.request.query_params.get("patient_profile_id")
+
+        # No input means no access
+        if not consultation_id and not patient_profile_id:
+            raise NotFound("Either consultation_id or patient_profile_id is required.")
+
+        queryset = TestReport.objects.select_related(
+            "booking", "consultation", "patient_profile", "booking__recommendation", "booking__lab"
+        ).filter(is_active=True)
+
+        if consultation_id:
+            queryset = queryset.filter(consultation_id=consultation_id)
+
+        if patient_profile_id:
+            try:
+                profile = PatientProfile.objects.get(id=patient_profile_id, is_active=True)
+            except PatientProfile.DoesNotExist:
+                raise NotFound("Patient profile not found.")
+            queryset = queryset.filter(patient_profile=profile)
+
+        return queryset
+
+    @transaction.atomic
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        serializer = self.serializer_class(queryset, many=True)
+        return Response({
+            "status": True,
+            "message": "Doctor report history fetched successfully.",
+            "data": serializer.data
+        }, status=200)
+
+class AdminReportHistoryView(ListAPIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsHelpdeskOrLabAdmin]
+    serializer_class = TestReportDetailsSerializer
+
+    def get_queryset(self):
+        queryset = TestReport.objects.select_related(
+            "booking", "consultation", "patient_profile", "booking__recommendation", "booking__lab"
+        ).filter(is_active=True)
+
+        patient_profile_id = self.request.query_params.get("patient_profile_id")
+        mobile = self.request.query_params.get("mobile")
+
+        if patient_profile_id:
+            queryset = queryset.filter(patient_profile_id=patient_profile_id)
+
+        elif mobile:
+            try:
+                # ✅ Get User by username (used as mobile)
+                user = User.objects.get(username=mobile, is_active=True)
+
+                # ✅ Get PatientAccount
+                account = PatientAccount.objects.get(user=user, is_active=True)
+
+                # ✅ Get related PatientProfiles
+                patient_profiles = PatientProfile.objects.filter(account=account, is_active=True)
+
+                if not patient_profiles.exists():
+                    raise NotFound("No patient profiles found for this mobile number.")
+
+                queryset = queryset.filter(patient_profile__in=patient_profiles)
+
+            except User.DoesNotExist:
+                raise NotFound("User with this mobile number does not exist.")
+            except PatientAccount.DoesNotExist:
+                raise NotFound("Patient account linked to this user does not exist.")
+
+        else:
+            raise NotFound("Please provide either patient_profile_id or mobile.")
+
+        return queryset
+
+    @transaction.atomic
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        serializer = self.serializer_class(queryset, many=True)
+        return Response({
+            "status": True,
+            "message": "Admin report history fetched successfully.",
+            "data": serializer.data
+        }, status=200)
+
