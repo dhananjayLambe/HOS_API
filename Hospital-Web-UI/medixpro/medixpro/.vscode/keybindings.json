@@ -1,0 +1,32 @@
+[
+  {
+    "key": "ctrl+shift+d",
+    "command": "workbench.view.scm",
+    "when": "!scmRepository"
+  },
+  {
+    "key": "ctrl+shift+g",
+    "command": "workbench.view.scm",
+    "when": "scmRepository"
+  },
+  {
+    "key": "ctrl+shift+r",
+    "command": "git.revertSelectedRanges",
+    "when": "editorTextFocus && scmResourceIsModified"
+  },
+  {
+    "key": "ctrl+k ctrl+d",
+    "command": "workbench.action.compareEditor.nextChange",
+    "when": "compareEditorActive"
+  },
+  {
+    "key": "ctrl+k ctrl+shift+d",
+    "command": "workbench.action.compareEditor.previousChange",
+    "when": "compareEditorActive"
+  },
+  {
+    "key": "ctrl+alt+d",
+    "command": "workbench.action.files.compareFileWith",
+    "when": "resourceScheme == file"
+  }
+]

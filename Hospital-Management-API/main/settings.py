@@ -212,7 +212,9 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 REDIS_HOST = 'localhost'
 REDIS_PORT = 6379
 REDIS_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}/1"
-
+cors = [
+    "http://localhost:3000/",
+]
 # Caching with Redis
 CACHES = {
     "default": {

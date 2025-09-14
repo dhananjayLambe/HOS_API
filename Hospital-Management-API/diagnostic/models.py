@@ -7,7 +7,7 @@ from django.core.exceptions import ValidationError
 from consultations.models import Consultation
 from account.models import User
 from utils.static_data_service import StaticDataService
-from diagnostic.utils import report_upload_path
+from diagnostic.utils.upload_paths import report_upload_path
 
 STATUS_CHOICES = [
     ('RECOMMENDED', 'Recommended'),
@@ -163,7 +163,16 @@ class TestLabMapping(models.Model):
     home_collection_available = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True, help_text="Is this mapping currently active?")
     notes = models.TextField(blank=True, null=True, help_text="Any additional notes about this mapping")
+    platform_commission_percent = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True,
+        help_text="Overrides lab's default platform commission for this test"
+    )
+    doctor_commission_percent = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True,
+        help_text="Overrides lab's default doctor commission for this test"
+    )
     # This field is used to track the last time this mapping was updated
+    is_active = models.BooleanField(default=True, help_text="Is this mapping currently active?")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -425,24 +434,6 @@ class TestBooking(models.Model):
             models.Index(fields=["is_active"]),
         ]
 
-# class TestReport(models.Model):
-#     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-#     lab = models.ForeignKey(DiagnosticLab, on_delete=models.SET_NULL, null=True, blank=True)
-#     booking = models.OneToOneField(TestBooking, on_delete=models.CASCADE, related_name='report')
-#     file = models.FileField(upload_to='reports/')
-#     uploaded_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
-#     is_external = models.BooleanField(default=False)
-#     comments = models.TextField(blank=True, null=True)
-#     uploaded_at = models.DateTimeField(auto_now_add=True)
-#     created_at = models.DateTimeField(auto_now_add=True)
-#     updated_at = models.DateTimeField(auto_now=True)
-#     is_active = models.BooleanField(default=True)
-
-#     def __str__(self):
-#         return f"Report for {self.booking.recommendation.test_pnr}"
-#     class Meta:
-#         ordering = ['-created_at']
-
 class LabCommissionLedger(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     booking = models.OneToOneField(TestBooking, on_delete=models.CASCADE)
@@ -452,6 +443,8 @@ class LabCommissionLedger(models.Model):
     platform_commission_amount = models.DecimalField(max_digits=8, decimal_places=2)
     doctor_commission_amount = models.DecimalField(max_digits=8, decimal_places=2)
     lab_net_earning = models.DecimalField(max_digits=8, decimal_places=2)
+    generated_from = models.CharField(max_length=20, default="auto", help_text="auto or manual")
+    remarks = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     is_active = models.BooleanField(default=True)
@@ -460,6 +453,12 @@ class LabCommissionLedger(models.Model):
         return f"Commission: {self.lab.name} - {self.test.name}"
     class Meta:
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['lab']),
+            models.Index(fields=['booking']),
+            models.Index(fields=['test']),
+            models.Index(fields=['is_active']),
+        ]
 
 class LabAdminUser(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

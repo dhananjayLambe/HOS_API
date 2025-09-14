@@ -1,0 +1,53 @@
+{
+  // Git and version control settings
+  "git.enableSmartCommit": false,
+  "git.confirmSync": true,
+  "git.confirmEmptyCommits": true,
+  "git.showProgress": true,
+  "git.autoStash": true,
+  "git.autoFetch": true,
+  
+  // File change detection and auto-save
+  "files.autoSave": "off",
+  "files.hotExit": "onExit",
+  "files.watcherExclude": {
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/node_modules/**": true,
+    "**/.next/**": true
+  },
+  
+  // Diff and merge settings
+  "diffEditor.ignoreTrimWhitespace": false,
+  "diffEditor.renderSideBySide": true,
+  "diffEditor.renderIndicators": true,
+  "merge-conflict.autoNavigateNextConflict.enabled": true,
+  
+  // Editor settings for change visibility
+  "editor.renderWhitespace": "boundary",
+  "editor.renderControlCharacters": true,
+  "editor.minimap.enabled": true,
+  "editor.minimap.showSlider": "always",
+  
+  // Cursor AI specific settings
+  "cursor.ai.showChangesBeforeApplying": true,
+  "cursor.ai.confirmBeforeEditing": true,
+  "cursor.ai.previewChanges": true,
+  "cursor.ai.askForConfirmationOnLargeChanges": true,
+  
+  // TypeScript and Next.js specific
+  "typescript.preferences.includePackageJsonAutoImports": "on",
+  "typescript.suggest.autoImports": true,
+  "typescript.updateImportsOnFileMove.enabled": "always",
+  
+  // Formatting and linting
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit",
+    "source.organizeImports": "explicit"
+  },
+  
+  // Terminal settings
+  "terminal.integrated.confirmOnExit": "hasChildProcesses",
+  "terminal.integrated.confirmOnKill": "editor"
+}
