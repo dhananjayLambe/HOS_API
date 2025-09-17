@@ -38,6 +38,7 @@ schema_view = get_schema_view(
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('api/auth/', include('account.api.urls')),
     path('api/doctor/', include('doctor.api.urls')),
     path('api/patients/', include('patient_account.api.urls')),
     path('api/admin/', include('hospitalAdmin.api.urls')),

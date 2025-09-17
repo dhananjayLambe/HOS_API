@@ -65,6 +65,7 @@ INSTALLED_APPS = [
     'django_ratelimit', 
     'drf_yasg',
     'core',
+    "corsheaders",
 ]
 
 REST_FRAMEWORK={
@@ -116,7 +117,16 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    "corsheaders.middleware.CorsMiddleware",
 ]
+# Allow all origins (only for development)
+CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_HEADERS = ['*']
+CORS_ALLOW_METHODS = ['*']
+CORS_EXPOSE_HEADERS = ['*']
+CORS_PREFLIGHT_MAX_AGE = 86400  # 24 hours
+
 
 ROOT_URLCONF = 'main.urls'
 AUTH_USER_MODEL='account.User'
@@ -213,7 +223,7 @@ REDIS_HOST = 'localhost'
 REDIS_PORT = 6379
 REDIS_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}/1"
 cors = [
-    "http://localhost:3000/",
+    "http://localhost:3000",
 ]
 # Caching with Redis
 CACHES = {

@@ -37,7 +37,7 @@ class CheckUserStatusView(APIView):
     authentication_classes = []
     def post(self, request):
         phone_number = request.data.get('phone_number')
-        if User.objects.filter(username=phone_number).exists():
+        if User.objects.filter(username=phone_number).exists() or PatientAccount.objects.filter(user__username=phone_number).exists():
             return Response({"status": "existing_user"}, status=status.HTTP_200_OK)
         return Response({"status": "new_user"}, status=status.HTTP_200_OK)
 

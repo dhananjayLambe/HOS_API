@@ -17,6 +17,7 @@ from doctor.api.views import (
     DoctorFeeStructureViewSet,FollowUpPolicyViewSet,DoctorAvailabilityView,DoctorLeaveCreateView,
     DoctorLeaveCreateView,DoctorLeaveListView,DoctorLeaveUpdateView,DoctorLeaveDeleteView,
     DoctorOPDStatusViewSet,
+    CheckUserStatusView,
 )
 
 app_name='doctor'
@@ -44,6 +45,7 @@ government_id_view = GovernmentIDViewSet.as_view({
 urlpatterns = [
     path('', include(router.urls)),
     # Doctor Authentication Endpoints
+    path('check-doctor-user/', CheckUserStatusView.as_view(), name='check-doctor-user'),
     path('login/', DoctorLoginView.as_view(), name='doctor_login'),
     path('logout/', DoctorLogoutView.as_view(), name='doctor_logout'),
     path('token/refresh/', DoctorTokenRefreshView.as_view(), name='doctor_token_refresh'),

@@ -66,6 +66,58 @@ CACHE_TIMEOUT = 300  # 5 minutes
 # Logger
 logger = logging.getLogger(__name__)
 
+#Determines if the user is new or existing.
+
+class CheckUserStatusView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def post(self, request):
+        phone_number = request.data.get("phone_number")
+
+        if not phone_number:
+            return Response(
+                {"error": "Phone number is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            user = User.objects.get(username=phone_number)
+
+            # ✅ Check if user is in doctor group
+            if user.groups.filter(name="doctor").exists():
+                return Response(
+                    {
+                        "role": "doctor",
+                        "mobile": phone_number,
+                        "exists": True,
+                        "status": "existing_user",
+                    },
+                    status=status.HTTP_200_OK,
+                )
+            else:
+                return Response(
+                    {
+                        "role": None,
+                        "mobile": phone_number,
+                        "exists": False,
+                        "status": "not_a_doctor",
+                        "message": "Mobile number registered but not as doctor",
+                    },
+                    status=status.HTTP_403_FORBIDDEN,  # Forbidden
+                )
+
+        except User.DoesNotExist:
+            return Response(
+                {
+                    "status": "new_user",
+                    "exists": False,
+                    "mobile": phone_number,
+                    "message": "Mobile number not registered",
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
 class DoctorLoginView(APIView):
     """Custom JWT login for doctors only"""
     permission_classes=[]
