@@ -11,6 +11,8 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertCircle, Ban, Calendar, CheckCircle2, ChevronRight, Clock, DollarSign, Download, Filter, UserRound, Users } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { fetchWithAuth } from "@/lib/fetchWithAuth";
+import { useEffect, useState } from "react";
 const unread = [
   {
     icon: <AlertCircle className="h-4 w-4 text-red-500" />,
@@ -163,6 +165,25 @@ const revenueDepartmentsData = [
   { name: "Oncology", revenue: 5900 },
 ];
 export default function DashboardPage() {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState(null);
+    useEffect(() => {
+    async function loadData() {
+      try {
+        const res = await fetchWithAuth("/api/doctor/dashboard/");
+        if (!res.ok) {
+          const data = await res.json();
+          setError(data.message || "Failed to load dashboard");
+          return;
+        }
+        const data = await res.json();
+        setData(data);
+      } catch (err: any) {
+        setError(err.message || "Something went wrong");
+      }
+    }
+    loadData();
+  }, []);
   return (
     <div className="flex flex-col gap-5 overflow-x-hidden">
       <div className="flex flex-col md:flex-row items-center justify-between gap-4">

@@ -20,6 +20,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
 from rest_framework import status
+from django.core.cache import cache
 
 # Local app imports
 from account.models import User
@@ -53,6 +54,9 @@ OTP_CACHE_PREFIX = "staff_otp"  # full key: staff_otp:{role}:{phone}
 # Phone regex (10-15 digits, tweak if you need country codes or plus sign)
 PHONE_REGEX = re.compile(r"^\d{10,15}$")
 
+MAX_RESEND_COUNT = 3
+RESEND_COOLDOWN_SECONDS = 30  # 30 seconds cooldown
+OTP_TTL_SECONDS = 60  # 1 min OTP validity
 
 # -------------------
 # Helper functions
@@ -74,84 +78,122 @@ def _otp_cache_key(role: str, phone: str) -> str:
 # OTP Redis Helpers Production 
 # -------------------
 
-# def _store_otp(role: str, phone: str, otp: str):
-#     """Store OTP in Redis with TTL"""
-#     cache_key = _otp_cache_key(role, phone)
-#     try:
-#         cache.set(cache_key, otp, timeout=OTP_TTL_SECONDS)
-#     except Exception as e:
-#         logging.error(f"Redis OTP store failed for {cache_key}: {e}")
-#         raise
+def _store_otp(role: str, phone: str, otp: str):
+    """Store OTP in Redis with TTL"""
+    cache_key = _otp_cache_key(role, phone)
+    try:
+        cache.set(cache_key, otp, timeout=OTP_TTL_SECONDS)
+    except Exception as e:
+        logging.error(f"Redis OTP store failed for {cache_key}: {e}")
+        raise
 
-# def _get_otp(role: str, phone: str):
-#     """Fetch OTP from Redis"""
-#     cache_key = _otp_cache_key(role, phone)
-#     try:
-#         return cache.get(cache_key)
-#     except Exception as e:
-#         logging.error(f"Redis OTP fetch failed for {cache_key}: {e}")
-#         return None
+def _get_otp(role: str, phone: str):
+    """Fetch OTP from Redis"""
+    cache_key = _otp_cache_key(role, phone)
+    try:
+        return cache.get(cache_key)
+    except Exception as e:
+        logging.error(f"Redis OTP fetch failed for {cache_key}: {e}")
+        return None
 
-# def _delete_otp(role: str, phone: str):
-#     """Delete OTP from Redis"""
-#     cache_key = _otp_cache_key(role, phone)
-#     try:
-#         cache.delete(cache_key)
-#     except Exception as e:
-#         logging.error(f"Redis OTP delete failed for {cache_key}: {e}")
+def _delete_otp(role: str, phone: str):
+    """Delete OTP from Redis"""
+    cache_key = _otp_cache_key(role, phone)
+    try:
+        cache.delete(cache_key)
+    except Exception as e:
+        logging.error(f"Redis OTP delete failed for {cache_key}: {e}")
+
+#FOR RESEND OTP Helper function
+def _resend_count_key(role: str, phone: str):
+    return f"resend_count:{role}:{phone}"
+
+def _resend_last_key(role: str, phone: str):
+    return f"resend_last:{role}:{phone}"
+
+def can_resend_otp(role: str, phone: str):
+    """
+    Returns (allowed: bool, message: str, remaining_cooldown: int)
+    """
+    last_sent = cache.get(_resend_last_key(role, phone))
+    count = cache.get(_resend_count_key(role, phone)) or 0
+
+    # Check cooldown
+    if last_sent and (time.time() - last_sent) < COOLDOWN:
+        remaining = int(COOLDOWN - (time.time() - last_sent))
+        return False, f"Please wait {remaining}s before resending OTP.", remaining
+
+    # Check resend limit
+    if count >= RESEND_LIMIT:
+        return False, f"OTP resend limit reached. Try again later.", 0
+
+    return True, "", 0
+
+def update_resend_counters(role: str, phone: str):
+    count_key = _resend_count_key(role, phone)
+    last_key = _resend_last_key(role, phone)
+
+    # Increment resend count
+    count = cache.get(count_key) or 0
+    cache.set(count_key, count + 1, timeout=RESEND_WINDOW)
+
+    # Update last sent timestamp
+    cache.set(last_key, time.time(), timeout=RESEND_WINDOW)
+def _resend_cache_key(role, phone):
+    return f"resend_otp:{role}:{phone}"
 
 # -------------------
 # OTP In-Memory Helpers (DEV)
 # -------------------
 
-import logging
-import time
+# import logging
+# import time
 
-# Simple dict for OTP storage in DEV
-DEV_OTP_STORE = {}
+# # Simple dict for OTP storage in DEV
+# DEV_OTP_STORE = {}
 
-# TTL for OTP (same as production)
-OTP_TTL_SECONDS = 300  # 5 minutes
-
-
-def _store_otp(role: str, phone: str, otp: str):
-    """Store OTP in memory with TTL (DEV only)"""
-    cache_key = _otp_cache_key(role, phone)
-    expiry = time.time() + OTP_TTL_SECONDS
-    try:
-        DEV_OTP_STORE[cache_key] = {"otp": otp, "expiry": expiry}
-        print(f"[DEV] OTP stored for {phone} ({role}) -> {otp}")
-    except Exception as e:
-        logging.error(f"In-memory OTP store failed for {cache_key}: {e}")
-        raise
+# # TTL for OTP (same as production)
+# OTP_TTL_SECONDS = 300  # 5 minutes
 
 
-def _get_otp(role: str, phone: str):
-    """Fetch OTP from memory (DEV only)"""
-    cache_key = _otp_cache_key(role, phone)
-    try:
-        entry = DEV_OTP_STORE.get(cache_key)
-        if not entry:
-            return None
-        if time.time() > entry["expiry"]:  # expired
-            _delete_otp(role, phone)
-            return None
-        return entry["otp"]
-    except Exception as e:
-        logging.error(f"In-memory OTP fetch failed for {cache_key}: {e}")
-        return None
+# def _store_otp(role: str, phone: str, otp: str):
+#     """Store OTP in memory with TTL (DEV only)"""
+#     cache_key = _otp_cache_key(role, phone)
+#     expiry = time.time() + OTP_TTL_SECONDS
+#     try:
+#         DEV_OTP_STORE[cache_key] = {"otp": otp, "expiry": expiry}
+#         print(f"[DEV] OTP stored for {phone} ({role}) -> {otp}")
+#     except Exception as e:
+#         logging.error(f"In-memory OTP store failed for {cache_key}: {e}")
+#         raise
 
 
-def _delete_otp(role: str, phone: str):
-    """Delete OTP from memory (DEV only)"""
-    cache_key = _otp_cache_key(role, phone)
-    try:
-        if cache_key in DEV_OTP_STORE:
-            del DEV_OTP_STORE[cache_key]
-            print(f"[DEV] OTP deleted for {phone} ({role})")
-    except Exception as e:
-        logging.error(f"In-memory OTP delete failed for {cache_key}: {e}")
-# -------------------
+# def _get_otp(role: str, phone: str):
+#     """Fetch OTP from memory (DEV only)"""
+#     cache_key = _otp_cache_key(role, phone)
+#     try:
+#         entry = DEV_OTP_STORE.get(cache_key)
+#         if not entry:
+#             return None
+#         if time.time() > entry["expiry"]:  # expired
+#             _delete_otp(role, phone)
+#             return None
+#         return entry["otp"]
+#     except Exception as e:
+#         logging.error(f"In-memory OTP fetch failed for {cache_key}: {e}")
+#         return None
+
+
+# def _delete_otp(role: str, phone: str):
+#     """Delete OTP from memory (DEV only)"""
+#     cache_key = _otp_cache_key(role, phone)
+#     try:
+#         if cache_key in DEV_OTP_STORE:
+#             del DEV_OTP_STORE[cache_key]
+#             print(f"[DEV] OTP deleted for {phone} ({role})")
+#     except Exception as e:
+#         logging.error(f"In-memory OTP delete failed for {cache_key}: {e}")
+# # -------------------
 
 
 def _generate_jwt_tokens(user, role: str):
@@ -352,7 +394,8 @@ class StaffSendOTPView(APIView):
 
         return Response(response, status=status.HTTP_200_OK)
 
-
+#need to add an logic to send an same OTP for 1 min 
+#or not allow to send an OTP 
 # -------------------
 # Staff Verify OTP API
 # -------------------
@@ -381,19 +424,19 @@ class VerifyOTPStaffView(APIView):
         # OTP check
         cached_otp = _get_otp(role, phone)
         print("cached OTP",cached_otp)
-        # if not cached_otp:
-        #     #For DEV: allow manual OTP entry if needed
-        #     return Response({"status": "otp_expired", "message": "OTP expired or not found."},
-        #                     status=status.HTTP_401_UNAUTHORIZED)
+        if not cached_otp:
+            #For DEV: allow manual OTP entry if needed
+            return Response({"status": "otp_expired", "message": "OTP expired or not found."},
+                            status=status.HTTP_401_UNAUTHORIZED)
 
         if str(cached_otp) != str(otp) and settings.DEBUG:
             print(f"[DEV] OTP mismatch: entered={otp}, cached={cached_otp}")
 
-        # if str(cached_otp) != str(otp):
-        #     return Response(
-        #         {"status": "otp_mismatch", "message": "OTP mismatched."},
-        #         status=status.HTTP_401_UNAUTHORIZED
-        #     )
+        if str(cached_otp) != str(otp):
+            return Response(
+                {"status": "otp_mismatch", "message": "OTP mismatched."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
         # Fetch user
         user = User.objects.filter(username=phone).prefetch_related("groups").first()
         if not user:
@@ -423,13 +466,23 @@ class VerifyOTPStaffView(APIView):
             "user_id": str(user.id),
             #"tokens": tokens. 
         }, status=status.HTTP_200_OK)
-                # Access token (short-lived)
+        response.set_cookie(
+            key="role",
+            value=role,
+            httponly=False,  # role is safe to expose to client
+            #secure=not settings.DEBUG,
+            secure=False, #For DEV
+            samesite="Lax", #For DEV for Production srict
+            max_age=60 * 60 * 24 * 7  # match refresh token lifetime
+        )
+        # Access token (short-lived)
         response.set_cookie(
             key="access_token",
             value=tokens["access"],
             httponly=True,
-            secure=not settings.DEBUG,  # only secure in production
-            samesite="Strict",
+            #secure=not settings.DEBUG,  # only secure in production
+            secure=False, #For DEV
+            samesite="Lax",
             max_age=60 * 15  # 15 min
         )
 
@@ -438,13 +491,101 @@ class VerifyOTPStaffView(APIView):
             key="refresh_token",
             value=tokens["refresh"],
             httponly=True,
-            secure=not settings.DEBUG,
-            samesite="Strict",
+            #secure=not settings.DEBUG,
+            secure=False,
+            samesite="Lax",
             max_age=60 * 60 * 24 * 7  # 7 days
         )
 
         return response
 
+class ResendOTPStaffView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def post(self, request):
+        phone = str(request.data.get("phone_number", "")).strip()
+        role = str(request.data.get("role", "")).lower().strip()
+
+        # Input validation
+        if not phone or not role:
+            return Response({"error": "phone_number and role are required"},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if not _phone_is_valid(phone):
+            return Response({"error": "Invalid phone_number format"},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if not _role_is_valid(role):
+            return Response({"error": f"Invalid role. Allowed: {', '.join(sorted(VALID_STAFF_ROLES))}"},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        # Check if user exists and role is valid
+        try:
+            user = User.objects.get(username=phone)
+            if not user.groups.filter(name=role).exists():
+                return Response({
+                    "exists": True,
+                    "status": "role_mismatch",
+                    "message": f"User exists but not in role '{role}'",
+                    "role": role,
+                    "username": phone
+                }, status=status.HTTP_403_FORBIDDEN)
+            if not user.is_active:
+                return Response({
+                    "exists": True,
+                    "status": "not_approved",
+                    "message": "User exists but not yet approved by Admin.",
+                    "role": role,
+                    "username": phone
+                }, status=status.HTTP_403_FORBIDDEN)
+        except User.DoesNotExist:
+            return Response({
+                "exists": False,
+                "status": "new_user",
+                "message": "User does not exist. Please register first.",
+                "role": role,
+                "username": phone
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        # Check resend cooldown & limit
+        cache_key = _resend_cache_key(role, phone)
+        resend_info = cache.get(cache_key, {"count": 0, "last_time": 0})
+        current_time = int(time.time())
+
+        if current_time - resend_info["last_time"] < RESEND_COOLDOWN_SECONDS:
+            return Response({
+                "status": "cooldown",
+                "message": f"Please wait {RESEND_COOLDOWN_SECONDS - (current_time - resend_info['last_time'])} seconds before resending OTP."
+            }, status=status.HTTP_429_TOO_MANY_REQUESTS)
+
+        if resend_info["count"] >= MAX_RESEND_COUNT:
+            return Response({
+                "status": "limit_reached",
+                "message": f"Maximum {MAX_RESEND_COUNT} OTP resend attempts reached. Try after some time."
+            }, status=status.HTTP_429_TOO_MANY_REQUESTS)
+
+        # Generate OTP
+        otp = _generate_otp()
+        _store_otp(role, phone, otp)
+
+        # Update resend info
+        resend_info["count"] += 1
+        resend_info["last_time"] = current_time
+        cache.set(cache_key, resend_info, timeout=OTP_TTL_SECONDS)
+
+        # TODO: integrate with SMS gateway in production
+        print(f"[DEV] Resend OTP for {phone} ({role}): {otp}")
+
+        response = {
+            "exists": True,
+            "status": "otp_resent",
+            "message": "OTP resent successfully.",
+            "role": role,
+            "username": phone
+        }
+        if settings.DEBUG:
+            response["OTP"] = otp
+
+        return Response(response, status=status.HTTP_200_OK)
 
 class RefreshTokenStaffView(APIView):
     """

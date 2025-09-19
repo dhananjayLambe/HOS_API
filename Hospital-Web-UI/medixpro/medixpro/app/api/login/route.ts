@@ -9,24 +9,31 @@ export async function POST(req: Request) {
     console.log("Request Body:", body);
 
     // Call Django backend API
-    const res = await fetch(`http://localhost:8000/api/auth/send-otp/`, {
+    const res = await fetch(`${BASE_URL}auth/send-otp/`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "include", // 🔑 needed to receive/set cookies
       body: JSON.stringify(body),
     });
 
-    if (!res.ok) {
-      const error = await res.json().catch(() => ({}));
-      console.error("Error from Django API:", error);
-      return NextResponse.json(
-        { error: error.message || "Failed to send OTP" }, 
-        { status: res.status }
-      );
+    const data = await res.json();
+
+    // Create NextResponse and forward cookies
+    const nextRes = NextResponse.json(data, { status: res.status });
+
+    // Forward all Set-Cookie headers from Django
+    const setCookies = res.headers.get("set-cookie");
+    if (setCookies) {
+      // Split multiple cookies if needed
+      const cookies = setCookies.split(/,(?=[^ ]*?=)/);
+      cookies.forEach(cookie => {
+        nextRes.headers.append("Set-Cookie", cookie);
+      });
     }
 
-    const data = await res.json();
-    return NextResponse.json(data, { status: 200 });
+    return nextRes;
   } catch (err: any) {
+    console.error("login proxy error:", err);
     return NextResponse.json(
       { error: err.message || "Internal Server Error" },
       { status: 500 }

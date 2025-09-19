@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import * as React from "react";
 import { useRouter } from "next/navigation";
+const RESEND_COOLDOWN = 30; // 30 seconds cooldown
 
 const Button = ({ className = "", variant = "default", size = "default", ...props }) => {
   const baseClasses =
@@ -110,7 +111,17 @@ export default function OTPLoginPage() {
     { name: "LabAdmin", icon: FlaskConical },
     { name: "SuperUser", icon: Shield },
   ];
-
+  const [resendCooldown, setResendCooldown] = useState(0);
+  // Timer effect
+  React.useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (resendCooldown > 0) {
+      timer = setInterval(() => {
+        setResendCooldown((prev) => Math.max(prev - 1, 0));
+      }, 1000);
+    }
+    return () => timer && clearInterval(timer);
+  }, [resendCooldown]);
   const handleRoleSelect = (roleName: string) => {
     setSelectedRole(roleName);
     setStep(2);
@@ -190,6 +201,7 @@ export default function OTPLoginPage() {
       const res = await fetch("/api/verify-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include", // 🔑 ensures cookies are sent/received
         body: JSON.stringify({
           phone_number: phoneNumber,
           role: selectedRole,
@@ -202,12 +214,13 @@ export default function OTPLoginPage() {
       if (res.ok) {
         // ✅ Success
         setSuccessMessage(data.message || "OTP verified successfully. Logged in.");
-
+        
+        // 🚀 Redirect based on role (tokens are already in cookies)
         // 🔑 Save JWT tokens
-        if (data.tokens) {
-          localStorage.setItem("access_token", data.tokens.access);
-          localStorage.setItem("refresh_token", data.tokens.refresh);
-        }
+        // if (data.tokens) {
+        //   localStorage.setItem("access_token", data.tokens.access);
+        //   localStorage.setItem("refresh_token", data.tokens.refresh);
+        // }
 
         // 🚀 Redirect based on role
         let redirectPath = "/dashboard"; // fallback
@@ -244,11 +257,11 @@ export default function OTPLoginPage() {
     setSuccessMessage("");
     setIsLoading(true);
 
-    // TODO: Replace with real resend API if different
     try {
-      const res = await fetch("/api/login", {
+      const res = await fetch("/api/resend-otp", { // 🔑 call the backend resend API
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include", // necessary if using HttpOnly cookies
         body: JSON.stringify({
           phone_number: phoneNumber,
           role: selectedRole,
@@ -258,9 +271,14 @@ export default function OTPLoginPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        setErrorMessage(data.error || data.message || "Something went wrong");
+        setErrorMessage(data.error || data.message || "Failed to resend OTP.");
       } else {
         setSuccessMessage(data.message || "OTP resent successfully.");
+
+        // Start cooldown if backend allows
+        if (data.status === "otp_resent" || data.status === "otp_sent") {
+          setResendCooldown(RESEND_COOLDOWN);
+        }
       }
     } catch (err: any) {
       setErrorMessage(err.message || "Something went wrong");
@@ -268,7 +286,6 @@ export default function OTPLoginPage() {
       setIsLoading(false);
     }
   };
-
   const handleGoBack = () => {
     if (step > 1) {
       setStep(step - 1);
@@ -362,7 +379,7 @@ export default function OTPLoginPage() {
                       placeholder="e.g., 9876543210"
                       className="pl-9 pr-4 py-2 border-slate-200 dark:border-slate-700 rounded-xl focus-visible:ring-purple-500 transition-colors"
                       value={phoneNumber}
-                      onChange={(e) => setPhoneNumber(e.target.value)}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPhoneNumber(e.target.value)}
                       disabled={step === 3 || isLoading}
                     />
                   </div>
@@ -377,7 +394,7 @@ export default function OTPLoginPage() {
                       placeholder="Enter 6-digit OTP"
                       className="text-center tracking-[0.5em] text-xl font-mono border-slate-200 dark:border-slate-700 rounded-xl focus-visible:ring-purple-500 transition-colors"
                       value={otp}
-                      onChange={(e) => setOtp(e.target.value)}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setOtp(e.target.value)}
                       disabled={isLoading}
                     />
                   </div>
@@ -418,12 +435,12 @@ export default function OTPLoginPage() {
                         )}
                       </Button>
                       <Button
-                        variant="link"
-                        onClick={handleResendOtp}
-                        disabled={isLoading}
-                        className="w-full text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
-                      >
-                        Resend OTP
+                          variant="link"
+                          onClick={handleResendOtp}
+                          disabled={isLoading || resendCooldown > 0}
+                          className="w-full text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                        >
+                          {resendCooldown > 0 ? `Resend OTP in ${resendCooldown}s` : "Resend OTP"}
                       </Button>
                     </>
                   )}
