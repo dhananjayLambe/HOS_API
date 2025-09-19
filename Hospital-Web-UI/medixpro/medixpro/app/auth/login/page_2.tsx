@@ -12,8 +12,8 @@ import {
   Heart,
 } from "lucide-react";
 import * as React from "react";
-import { useRouter } from "next/navigation";
 
+// Reusable UI Components
 const Button = ({ className = "", variant = "default", size = "default", ...props }) => {
   const baseClasses =
     "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50";
@@ -42,10 +42,7 @@ const Button = ({ className = "", variant = "default", size = "default", ...prop
 };
 
 const Card = ({ className = "", ...props }) => (
-  <div
-    className={`rounded-xl border bg-card text-card-foreground shadow ${className}`}
-    {...props}
-  />
+  <div className={`rounded-xl border bg-card text-card-foreground shadow ${className}`} {...props} />
 );
 
 const CardHeader = ({ className = "", ...props }) => (
@@ -78,21 +75,16 @@ const Badge = ({ className = "", variant = "default", ...props }) => {
   return <div className={combinedClasses} {...props} />;
 };
 
-const Input = ({ className = "", type = "text", ...props }) => {
-  return (
-    <input
-      type={type}
-      className={`flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
-      {...props}
-    />
-  );
-};
-
-const Label = ({ className = "", ...props }) => (
-  <label
-    className={`text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 ${className}`}
+const Input = ({ className = "", type = "text", ...props }) => (
+  <input
+    type={type}
+    className={`flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
     {...props}
   />
+);
+
+const Label = ({ className = "", ...props }) => (
+  <label className={`text-sm font-medium leading-none ${className}`} {...props} />
 );
 
 export default function OTPLoginPage() {
@@ -103,7 +95,7 @@ export default function OTPLoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
-  const router = useRouter();
+
   const roles = [
     { name: "Doctor", icon: Stethoscope },
     { name: "HelpDesk", icon: Users },
@@ -129,21 +121,16 @@ export default function OTPLoginPage() {
     }
 
     setIsLoading(true);
-
     try {
       const res = await fetch("/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          phone_number: phoneNumber,
-          role: selectedRole,
-        }),
+        body: JSON.stringify({ phone_number: phoneNumber, role: selectedRole }),
       });
-
       const data = await res.json();
 
       if (!res.ok) {
-        setErrorMessage(data.error || data.message || "Something went wrong");
+        setErrorMessage(data.error || data.message || "Failed to send OTP");
       } else {
         setStep(3);
         setSuccessMessage(data.message || "OTP sent successfully.");
@@ -154,25 +141,6 @@ export default function OTPLoginPage() {
       setIsLoading(false);
     }
   };
-
-  // const handleLogin = async (e: React.FormEvent) => {
-  //   e.preventDefault();
-  //   setErrorMessage("");
-  //   setSuccessMessage("");
-
-  //   if (!otp || otp.length < 4) {
-  //     setErrorMessage("Please enter a valid OTP.");
-  //     return;
-  //   }
-
-  //   setIsLoading(true);
-
-  //   // TODO: Replace with actual verify-otp call
-  //   setTimeout(() => {
-  //     setIsLoading(false);
-  //     setSuccessMessage("Login successful!");
-  //   }, 1500);
-  // };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -185,80 +153,43 @@ export default function OTPLoginPage() {
     }
 
     setIsLoading(true);
-
     try {
       const res = await fetch("/api/verify-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          phone_number: phoneNumber,
-          role: selectedRole,
-          otp: otp,
-        }),
+        body: JSON.stringify({ phone_number: phoneNumber, role: selectedRole, otp }),
       });
-
       const data = await res.json();
 
-      if (res.ok) {
-        // ✅ Success
-        setSuccessMessage(data.message || "OTP verified successfully. Logged in.");
-
-        // 🔑 Save JWT tokens
-        if (data.tokens) {
-          localStorage.setItem("access_token", data.tokens.access);
-          localStorage.setItem("refresh_token", data.tokens.refresh);
-        }
-
-        // 🚀 Redirect based on role
-        let redirectPath = "/dashboard"; // fallback
-        switch (data.role?.toLowerCase()) {
-          case "doctor":
-            redirectPath = "/doctor-dashboard";
-            break;
-          case "helpdesk":
-            redirectPath = "/helpdesk-dashboard";
-            break;
-          case "labadmin":
-            redirectPath = "/lab-dashboard";
-            break;
-          case "superuser":
-            redirectPath = "/admin-dashboard";
-            break;
-        }
-
-        setTimeout(() => {
-          router.push(redirectPath);
-        }, 1000);
+      if (!res.ok) {
+        setErrorMessage(data.error || data.message || "OTP verification failed");
       } else {
-        // ❌ Show backend errors (otp mismatch, expired, role mismatch, etc.)
-        setErrorMessage(data.error || data.message || "OTP verification failed.");
+        setSuccessMessage(data.message || "Login successful!");
+        // TODO: handle token storage or redirect
+        console.log("Login success:", data);
       }
     } catch (err: any) {
-      setErrorMessage(err.message || "Something went wrong. Please try again.");
+      setErrorMessage(err.message || "Something went wrong");
     } finally {
       setIsLoading(false);
     }
   };
+
   const handleResendOtp = async () => {
     setErrorMessage("");
     setSuccessMessage("");
     setIsLoading(true);
 
-    // TODO: Replace with real resend API if different
     try {
       const res = await fetch("/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          phone_number: phoneNumber,
-          role: selectedRole,
-        }),
+        body: JSON.stringify({ phone_number: phoneNumber, role: selectedRole }),
       });
-
       const data = await res.json();
 
       if (!res.ok) {
-        setErrorMessage(data.error || data.message || "Something went wrong");
+        setErrorMessage(data.error || data.message || "Failed to resend OTP");
       } else {
         setSuccessMessage(data.message || "OTP resent successfully.");
       }
@@ -280,26 +211,23 @@ export default function OTPLoginPage() {
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-slate-50 dark:bg-slate-950 p-4">
-      <Card className="w-full max-w-lg mx-auto rounded-3xl overflow-hidden shadow-2xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
-        <CardHeader className="p-6 md:p-8">
+      <Card className="w-full max-w-lg mx-auto rounded-3xl shadow-2xl bg-white dark:bg-slate-900">
+        <CardHeader>
           <div className="flex items-center justify-center space-x-2 mb-4">
             <div className="p-2 rounded-xl bg-gradient-to-br from-purple-600 to-violet-600 shadow-lg">
               <Heart className="h-6 w-6 text-white" />
             </div>
             <span className="text-3xl font-bold text-slate-900 dark:text-white">MedixPro</span>
           </div>
-
-          <CardTitle className="text-3xl font-bold text-center text-slate-900 dark:text-white">
-            Secure Login
-          </CardTitle>
-          <CardDescription className="text-center text-base text-slate-600 dark:text-slate-300 mt-2">
+          <CardTitle className="text-3xl font-bold text-center">Secure Login</CardTitle>
+          <CardDescription className="text-center mt-2">
             {step === 1 && "Select your role to get started."}
             {step === 2 && `Logging in as: ${selectedRole}. Please enter your mobile number.`}
             {step === 3 && `Enter the OTP sent to your mobile number.`}
           </CardDescription>
         </CardHeader>
 
-        <CardContent className="p-6 md:p-8 pt-0">
+        <CardContent>
           {step === 1 && (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {roles.map((role) => {
@@ -307,23 +235,16 @@ export default function OTPLoginPage() {
                 return (
                   <Card
                     key={role.name}
-                    className={`
-                      relative cursor-pointer transition-all duration-300 rounded-xl
-                      hover:shadow-lg hover:scale-[1.02] group
-                      ${selectedRole === role.name
-                        ? "border-purple-500 ring-2 ring-purple-500"
-                        : "border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700"
-                      }
-                    `}
+                    className={`cursor-pointer transition-all rounded-xl hover:shadow-lg hover:scale-[1.02] ${
+                      selectedRole === role.name ? "border-purple-500 ring-2 ring-purple-500" : "border"
+                    }`}
                     onClick={() => handleRoleSelect(role.name)}
                   >
                     <CardContent className="flex flex-col items-center justify-center p-4">
-                      <div className="p-3 rounded-full bg-slate-100 dark:bg-slate-800 group-hover:bg-purple-100 dark:group-hover:bg-purple-900/30 transition-colors duration-300">
+                      <div className="p-3 rounded-full bg-slate-100 dark:bg-slate-800">
                         <Icon className="h-8 w-8 text-purple-600" />
                       </div>
-                      <span className="mt-3 text-center text-sm font-semibold text-slate-700 dark:text-slate-300">
-                        {role.name}
-                      </span>
+                      <span className="mt-3 text-sm font-semibold">{role.name}</span>
                     </CardContent>
                   </Card>
                 );
@@ -334,39 +255,26 @@ export default function OTPLoginPage() {
           {(step === 2 || step === 3) && (
             <>
               <div className="flex justify-between items-center mb-6">
-                <Button
-                  variant="link"
-                  size="sm"
-                  className="text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 p-0"
-                  onClick={handleGoBack}
-                >
+                <Button variant="link" size="sm" onClick={handleGoBack}>
                   &larr; Back
                 </Button>
-                <Badge
-                  variant="secondary"
-                  className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 font-semibold"
-                >
-                  <ArrowRight className="h-3 w-3 mr-2" />
-                  {selectedRole}
-                </Badge>
+                <Badge variant="secondary">{selectedRole}</Badge>
               </div>
 
               <form className="space-y-6">
-                <div className="space-y-2">
-                  <Label htmlFor="phone">Mobile Number</Label>
-                  <div className="relative">
-                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                {step === 2 && (
+                  <div className="space-y-2">
+                    <Label htmlFor="phone">Mobile Number</Label>
                     <Input
                       id="phone"
                       type="tel"
                       placeholder="e.g., 9876543210"
-                      className="pl-9 pr-4 py-2 border-slate-200 dark:border-slate-700 rounded-xl focus-visible:ring-purple-500 transition-colors"
                       value={phoneNumber}
                       onChange={(e) => setPhoneNumber(e.target.value)}
-                      disabled={step === 3 || isLoading}
+                      disabled={isLoading}
                     />
                   </div>
-                </div>
+                )}
 
                 {step === 3 && (
                   <div className="space-y-2">
@@ -375,7 +283,6 @@ export default function OTPLoginPage() {
                       id="otp"
                       type="text"
                       placeholder="Enter 6-digit OTP"
-                      className="text-center tracking-[0.5em] text-xl font-mono border-slate-200 dark:border-slate-700 rounded-xl focus-visible:ring-purple-500 transition-colors"
                       value={otp}
                       onChange={(e) => setOtp(e.target.value)}
                       disabled={isLoading}
@@ -383,46 +290,21 @@ export default function OTPLoginPage() {
                   </div>
                 )}
 
-                {errorMessage && (
-                  <div className="text-sm text-center text-red-500">{errorMessage}</div>
-                )}
-                {successMessage && (
-                  <div className="text-sm text-center text-green-600">{successMessage}</div>
-                )}
+                {errorMessage && <div className="text-sm text-center text-red-500">{errorMessage}</div>}
+                {successMessage && <div className="text-sm text-center text-green-600">{successMessage}</div>}
 
                 <div className="space-y-4">
                   {step === 2 && (
-                    <Button
-                      onClick={handleRequestOtp}
-                      disabled={isLoading}
-                      className="w-full bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-700 hover:to-violet-700 shadow-lg text-lg px-8 py-6 rounded-xl transition-all duration-300"
-                    >
-                      {isLoading ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        "Get OTP"
-                      )}
+                    <Button onClick={handleRequestOtp} disabled={isLoading} className="w-full">
+                      {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Get OTP"}
                     </Button>
                   )}
                   {step === 3 && (
                     <>
-                      <Button
-                        onClick={handleLogin}
-                        disabled={isLoading}
-                        className="w-full bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-700 hover:to-violet-700 shadow-lg text-lg px-8 py-6 rounded-xl transition-all duration-300"
-                      >
-                        {isLoading ? (
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        ) : (
-                          "Login"
-                        )}
+                      <Button onClick={handleLogin} disabled={isLoading} className="w-full">
+                        {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Login"}
                       </Button>
-                      <Button
-                        variant="link"
-                        onClick={handleResendOtp}
-                        disabled={isLoading}
-                        className="w-full text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
-                      >
+                      <Button variant="link" onClick={handleResendOtp} disabled={isLoading} className="w-full text-sm">
                         Resend OTP
                       </Button>
                     </>

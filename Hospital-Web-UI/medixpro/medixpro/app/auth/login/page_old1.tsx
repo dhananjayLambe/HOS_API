@@ -9,43 +9,39 @@ import {
   Phone,
   ArrowRight,
   Loader2,
-  Heart,
+  Heart
 } from "lucide-react";
-import * as React from "react";
-import { useRouter } from "next/navigation";
+import * as React from "react"
+
+// --- Local component definitions to make the file truly self-contained ---
 
 const Button = ({ className = "", variant = "default", size = "default", ...props }) => {
-  const baseClasses =
-    "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50";
+  const baseClasses = "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50";
 
-  const variantClasses =
-    {
-      default: "bg-primary text-primary-foreground hover:bg-primary/90",
-      destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
-      outline: "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
-      secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-      ghost: "hover:bg-accent hover:text-accent-foreground",
-      link: "text-primary underline-offset-4 hover:underline",
-    }[variant] || variant;
+  const variantClasses = {
+    default: "bg-primary text-primary-foreground hover:bg-primary/90",
+    destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
+    outline: "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
+    secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+    ghost: "hover:bg-accent hover:text-accent-foreground",
+    link: "text-primary underline-offset-4 hover:underline",
+  }[variant] || variant;
 
-  const sizeClasses =
-    {
-      default: "h-10 px-4 py-2",
-      sm: "h-9 rounded-md px-3",
-      lg: "h-11 rounded-md px-8",
-      icon: "h-10 w-10",
-    }[size] || size;
+  const sizeClasses = {
+    default: "h-10 px-4 py-2",
+    sm: "h-9 rounded-md px-3",
+    lg: "h-11 rounded-md px-8",
+    icon: "h-10 w-10",
+  }[size] || size;
 
   const combinedClasses = `${baseClasses} ${variantClasses} ${sizeClasses} ${className}`;
 
   return <button className={combinedClasses} {...props} />;
 };
 
+
 const Card = ({ className = "", ...props }) => (
-  <div
-    className={`rounded-xl border bg-card text-card-foreground shadow ${className}`}
-    {...props}
-  />
+  <div className={`rounded-xl border bg-card text-card-foreground shadow ${className}`} {...props} />
 );
 
 const CardHeader = ({ className = "", ...props }) => (
@@ -64,19 +60,20 @@ const CardContent = ({ className = "", ...props }) => (
   <div className={`p-6 pt-0 ${className}`} {...props} />
 );
 
+
 const Badge = ({ className = "", variant = "default", ...props }) => {
-  const variantClasses =
-    {
-      default: "border-transparent bg-primary text-primary-foreground hover:bg-primary/80",
-      secondary: "border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80",
-      destructive: "border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80",
-      outline: "text-foreground",
-    }[variant] || variant;
+  const variantClasses = {
+    default: "border-transparent bg-primary text-primary-foreground hover:bg-primary/80",
+    secondary: "border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80",
+    destructive: "border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80",
+    outline: "text-foreground",
+  }[variant] || variant;
 
   const combinedClasses = `inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ${variantClasses} ${className}`;
 
   return <div className={combinedClasses} {...props} />;
 };
+
 
 const Input = ({ className = "", type = "text", ...props }) => {
   return (
@@ -89,11 +86,10 @@ const Input = ({ className = "", type = "text", ...props }) => {
 };
 
 const Label = ({ className = "", ...props }) => (
-  <label
-    className={`text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 ${className}`}
-    {...props}
-  />
+  <label className={`text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 ${className}`} {...props} />
 );
+
+// --- End of local component definitions ---
 
 export default function OTPLoginPage() {
   const [step, setStep] = useState(1);
@@ -102,8 +98,7 @@ export default function OTPLoginPage() {
   const [otp, setOtp] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
-  const [successMessage, setSuccessMessage] = useState("");
-  const router = useRouter();
+
   const roles = [
     { name: "Doctor", icon: Stethoscope },
     { name: "HelpDesk", icon: Users },
@@ -114,14 +109,28 @@ export default function OTPLoginPage() {
   const handleRoleSelect = (roleName: string) => {
     setSelectedRole(roleName);
     setStep(2);
-    setErrorMessage("");
-    setSuccessMessage("");
   };
 
-  const handleRequestOtp = async (e: React.FormEvent) => {
+  // const handleRequestOtp = (e: React.FormEvent) => {
+  //   e.preventDefault();
+  //   setErrorMessage("");
+  //   if (!phoneNumber || phoneNumber.length < 10) {
+  //     setErrorMessage("Please enter a valid 10-digit mobile number.");
+  //     return;
+  //   }
+
+  //   setIsLoading(true);
+
+  //   setTimeout(() => {
+  //     setIsLoading(false);
+  //     setStep(3);
+  //     console.log(`[API Call]: Simulating OTP request for role '${selectedRole}' to number '${phoneNumber}'`);
+  //   }, 1500);
+  // };
+
+    const handleRequestOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage("");
-    setSuccessMessage("");
 
     if (!phoneNumber || phoneNumber.length < 10) {
       setErrorMessage("Please enter a valid 10-digit mobile number.");
@@ -143,42 +152,21 @@ export default function OTPLoginPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        setErrorMessage(data.error || data.message || "Something went wrong");
-      } else {
-        setStep(3);
-        setSuccessMessage(data.message || "OTP sent successfully.");
+        throw new Error(data.error || "Failed to send OTP");
       }
+
+      // ✅ OTP successfully sent
+      setStep(3);
+      console.log("OTP Sent:", data);
     } catch (err: any) {
-      setErrorMessage(err.message || "Something went wrong");
+      setErrorMessage(err.message);
     } finally {
       setIsLoading(false);
     }
   };
-
-  // const handleLogin = async (e: React.FormEvent) => {
-  //   e.preventDefault();
-  //   setErrorMessage("");
-  //   setSuccessMessage("");
-
-  //   if (!otp || otp.length < 4) {
-  //     setErrorMessage("Please enter a valid OTP.");
-  //     return;
-  //   }
-
-  //   setIsLoading(true);
-
-  //   // TODO: Replace with actual verify-otp call
-  //   setTimeout(() => {
-  //     setIsLoading(false);
-  //     setSuccessMessage("Login successful!");
-  //   }, 1500);
-  // };
-
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage("");
-    setSuccessMessage("");
-
     if (!otp || otp.length < 4) {
       setErrorMessage("Please enter a valid OTP.");
       return;
@@ -186,94 +174,25 @@ export default function OTPLoginPage() {
 
     setIsLoading(true);
 
-    try {
-      const res = await fetch("/api/verify-otp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          phone_number: phoneNumber,
-          role: selectedRole,
-          otp: otp,
-        }),
-      });
-
-      const data = await res.json();
-
-      if (res.ok) {
-        // ✅ Success
-        setSuccessMessage(data.message || "OTP verified successfully. Logged in.");
-
-        // 🔑 Save JWT tokens
-        if (data.tokens) {
-          localStorage.setItem("access_token", data.tokens.access);
-          localStorage.setItem("refresh_token", data.tokens.refresh);
-        }
-
-        // 🚀 Redirect based on role
-        let redirectPath = "/dashboard"; // fallback
-        switch (data.role?.toLowerCase()) {
-          case "doctor":
-            redirectPath = "/doctor-dashboard";
-            break;
-          case "helpdesk":
-            redirectPath = "/helpdesk-dashboard";
-            break;
-          case "labadmin":
-            redirectPath = "/lab-dashboard";
-            break;
-          case "superuser":
-            redirectPath = "/admin-dashboard";
-            break;
-        }
-
-        setTimeout(() => {
-          router.push(redirectPath);
-        }, 1000);
-      } else {
-        // ❌ Show backend errors (otp mismatch, expired, role mismatch, etc.)
-        setErrorMessage(data.error || data.message || "OTP verification failed.");
-      }
-    } catch (err: any) {
-      setErrorMessage(err.message || "Something went wrong. Please try again.");
-    } finally {
+    setTimeout(() => {
       setIsLoading(false);
-    }
+      console.log(`[API Call]: Simulating login for '${selectedRole}' with number '${phoneNumber}' and OTP '${otp}'`);
+    }, 1500);
   };
-  const handleResendOtp = async () => {
-    setErrorMessage("");
-    setSuccessMessage("");
-    setIsLoading(true);
 
-    // TODO: Replace with real resend API if different
-    try {
-      const res = await fetch("/api/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          phone_number: phoneNumber,
-          role: selectedRole,
-        }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        setErrorMessage(data.error || data.message || "Something went wrong");
-      } else {
-        setSuccessMessage(data.message || "OTP resent successfully.");
-      }
-    } catch (err: any) {
-      setErrorMessage(err.message || "Something went wrong");
-    } finally {
-      setIsLoading(false);
-    }
+  const handleResendOtp = () => {
+      setErrorMessage("");
+      setIsLoading(true);
+      setTimeout(() => {
+        setIsLoading(false);
+        console.log(`[API Call]: Simulating OTP resend to number '${phoneNumber}'`);
+      }, 1500);
   };
 
   const handleGoBack = () => {
     if (step > 1) {
       setStep(step - 1);
       setErrorMessage("");
-      setSuccessMessage("");
       setIsLoading(false);
     }
   };
@@ -288,7 +207,7 @@ export default function OTPLoginPage() {
             </div>
             <span className="text-3xl font-bold text-slate-900 dark:text-white">MedixPro</span>
           </div>
-
+          
           <CardTitle className="text-3xl font-bold text-center text-slate-900 dark:text-white">
             Secure Login
           </CardTitle>
@@ -334,9 +253,9 @@ export default function OTPLoginPage() {
           {(step === 2 || step === 3) && (
             <>
               <div className="flex justify-between items-center mb-6">
-                <Button
-                  variant="link"
-                  size="sm"
+                <Button 
+                  variant="link" 
+                  size="sm" 
                   className="text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 p-0"
                   onClick={handleGoBack}
                 >
@@ -362,7 +281,7 @@ export default function OTPLoginPage() {
                       placeholder="e.g., 9876543210"
                       className="pl-9 pr-4 py-2 border-slate-200 dark:border-slate-700 rounded-xl focus-visible:ring-purple-500 transition-colors"
                       value={phoneNumber}
-                      onChange={(e) => setPhoneNumber(e.target.value)}
+                      onChange={(e: { target: { value: React.SetStateAction<string>; }; }) => setPhoneNumber(e.target.value)}
                       disabled={step === 3 || isLoading}
                     />
                   </div>
@@ -377,17 +296,16 @@ export default function OTPLoginPage() {
                       placeholder="Enter 6-digit OTP"
                       className="text-center tracking-[0.5em] text-xl font-mono border-slate-200 dark:border-slate-700 rounded-xl focus-visible:ring-purple-500 transition-colors"
                       value={otp}
-                      onChange={(e) => setOtp(e.target.value)}
+                      onChange={(e: { target: { value: React.SetStateAction<string>; }; }) => setOtp(e.target.value)}
                       disabled={isLoading}
                     />
                   </div>
                 )}
 
                 {errorMessage && (
-                  <div className="text-sm text-center text-red-500">{errorMessage}</div>
-                )}
-                {successMessage && (
-                  <div className="text-sm text-center text-green-600">{successMessage}</div>
+                  <div className="text-sm text-center text-red-500">
+                    {errorMessage}
+                  </div>
                 )}
 
                 <div className="space-y-4">
