@@ -1,3 +1,4 @@
+"use client";
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -31,7 +32,6 @@ import {
 import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-
 export default function ProfileSettingsPage() {
   return (
     <div className="flex flex-col gap-6 p-4 md:p-8">
@@ -108,8 +108,10 @@ export default function ProfileSettingsPage() {
 
             <Separator className="my-6" />
 
-            <Button variant="outline" className="w-full text-destructive hover:bg-destructive/10">
-              <LogOut className="mr-2 h-4 w-4" />
+            <Button variant="outline" 
+            className="w-full text-destructive hover:bg-destructive/10" 
+            >
+              <LogOut className="mr-2 h-4 w-4"/>
               Sign Out
             </Button>
           </CardContent>

@@ -1,3 +1,4 @@
+//app/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -27,15 +28,41 @@ import HeroAnimation from "@/components/landing/hero-animation";
 import ScrollToTop from "@/components/landing/scroll-to-top";
 import ClientOnly from "@/components/client-only";
 import BackgroundTest from "@/components/background-test";
+import { useRouter } from "next/navigation";
 
 export default function LandingPage() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
-
+  const router = useRouter();
   useEffect(() => {
     setIsMounted(true);
   }, []);
+  // useEffect(() => {
+  //   const role = document.cookie
+  //     .split("; ")
+  //     .find((row) => row.startsWith("role="))
+  //     ?.split("=")[1];
 
+  //   if (role) {
+  //     // ✅ Redirect logged-in users to their dashboard
+  //     switch (role.toLowerCase()) {
+  //       case "doctor":
+  //         router.replace("/doctor-dashboard");
+  //         break;
+  //       case "helpdesk":
+  //         router.replace("/helpdesk-dashboard");
+  //         break;
+  //       case "labadmin":
+  //         router.replace("/lab-dashboard");
+  //         break;
+  //       case "superuser":
+  //         router.replace("/admin-dashboard");
+  //         break;
+  //       default:
+  //         break;
+  //     }
+  //   }
+  // }, [router]);
   const features = [
     {
       icon: <Stethoscope className="h-8 w-8 text-purple-500" />,

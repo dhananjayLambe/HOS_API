@@ -1,3 +1,4 @@
+//app/auth/login/page.tsx
 "use client";
 
 import { useState } from "react";
@@ -102,8 +103,10 @@ export default function OTPLoginPage() {
   const [phoneNumber, setPhoneNumber] = useState("");
   const [otp, setOtp] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+
   const router = useRouter();
   const roles = [
     { name: "Doctor", icon: Stethoscope },
@@ -122,6 +125,46 @@ export default function OTPLoginPage() {
     }
     return () => timer && clearInterval(timer);
   }, [resendCooldown]);
+  React.useEffect(() => {
+    async function autoLogin() {
+      try {
+        const res = await fetch("/api/refresh-token", {
+          method: "POST",
+          credentials: "include",
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const role = data.role?.toLowerCase();
+
+          switch (role) {
+            case "doctor":
+              router.replace("/doctor-dashboard");
+              break;
+            case "helpdesk":
+              router.replace("/helpdesk-dashboard");
+              break;
+            case "labadmin":
+              router.replace("/lab-dashboard");
+              break;
+            case "superadmin":
+              router.replace("/admin-dashboard");
+              break;
+            default:
+              setCheckingSession(false); // fallback to OTP UI
+              return;
+          }
+          return; // Don't show OTP UI
+        }
+      } catch (err) {
+        console.log("No active session, showing OTP login");
+      } finally {
+        setCheckingSession(false);
+      }
+    }
+
+    autoLogin();
+  }, [router]);
   const handleRoleSelect = (roleName: string) => {
     setSelectedRole(roleName);
     setStep(2);
@@ -294,7 +337,9 @@ export default function OTPLoginPage() {
       setIsLoading(false);
     }
   };
-
+  if (checkingSession) {
+    return <Loader2 className="h-8 w-8 animate-spin" />;
+  }
   return (
     <div className="flex items-center justify-center min-h-screen bg-slate-50 dark:bg-slate-950 p-4">
       <Card className="w-full max-w-lg mx-auto rounded-3xl overflow-hidden shadow-2xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">

@@ -7,8 +7,11 @@ import { HelpCircle, LogOut, MessageCircle, Settings, User } from "lucide-react"
 import { NotificationDropdown } from "./notification-dropdown";
 import { ThemeToggle } from "./theme-toggle";
 import Link from "next/link";
+import { useAuth } from "@/lib/authContext" 
 
 export function UserNav() {
+  const { logout, user, role } = useAuth();
+  console.log("AuthContext values:", { user, role, logout });
   return (
     <div className="flex items-center gap-4">
       <ThemeToggle />
@@ -57,11 +60,21 @@ export function UserNav() {
             </DropdownMenuItem>
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
-          <DropdownMenuItem>
-            <Link href="/auth/login" className="flex items-center gap-2">
+          {/* <DropdownMenuItem>
+            <Link href="/api/logout" className="flex items-center gap-2">
               <LogOut className="mr-2 h-4 w-4" />
               <span>Log out</span>
             </Link>
+          </DropdownMenuItem> */}
+          <DropdownMenuItem
+              onClick={() => {
+                console.log("Logout clicked from UserNav");
+                logout();
+              }}
+              className="flex items-center gap-2 cursor-pointer"
+            >
+              <LogOut className="mr-2 h-4 w-4" />
+              <span>Log out</span>
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
