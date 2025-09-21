@@ -208,26 +208,6 @@ export default function OTPLoginPage() {
       setIsLoading(false);
     }
   };
-
-  // const handleLogin = async (e: React.FormEvent) => {
-  //   e.preventDefault();
-  //   setErrorMessage("");
-  //   setSuccessMessage("");
-
-  //   if (!otp || otp.length < 4) {
-  //     setErrorMessage("Please enter a valid OTP.");
-  //     return;
-  //   }
-
-  //   setIsLoading(true);
-
-  //   // TODO: Replace with actual verify-otp call
-  //   setTimeout(() => {
-  //     setIsLoading(false);
-  //     setSuccessMessage("Login successful!");
-  //   }, 1500);
-  // };
-
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage("");
@@ -342,6 +322,14 @@ export default function OTPLoginPage() {
   }
   return (
     <div className="flex items-center justify-center min-h-screen bg-slate-50 dark:bg-slate-950 p-4">
+      {/* This is the "Back to Home" link. 
+        It is positioned absolutely at the top-left of the page.
+      */}
+      <a href="/"
+        className="absolute top-4 left-4 md:top-8 md:left-8 z-10 text-sm font-medium text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300"
+      >
+        &larr; Back to Home
+      </a>
       <Card className="w-full max-w-lg mx-auto rounded-3xl overflow-hidden shadow-2xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
         <CardHeader className="p-6 md:p-8">
           <div className="flex items-center justify-center space-x-2 mb-4">
