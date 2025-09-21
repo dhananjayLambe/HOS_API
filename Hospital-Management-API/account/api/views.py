@@ -1,5 +1,4 @@
 # authentication/views.py
-
 # Standard library imports
 import random
 import re
@@ -9,7 +8,6 @@ import time
 
 # Django imports
 from django.conf import settings
-from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, User
 from django.core.cache import cache
 from django.db import transaction
@@ -57,7 +55,9 @@ PHONE_REGEX = re.compile(r"^\d{10,15}$")
 MAX_RESEND_COUNT = 3
 RESEND_COOLDOWN_SECONDS = 30  # 30 seconds cooldown
 OTP_TTL_SECONDS = 60  # 1 min OTP validity
-
+COOLDOWN =  30
+RESEND_LIMIT = 5
+RESEND_WINDOW = 60
 # -------------------
 # Helper functions
 # -------------------
@@ -78,13 +78,27 @@ def _otp_cache_key(role: str, phone: str) -> str:
 # OTP Redis Helpers Production 
 # -------------------
 
-def _store_otp(role: str, phone: str, otp: str):
-    """Store OTP in Redis with TTL"""
+def _store_or_get_otp(role: str, phone: str, otp: str = None):
+    """
+    Store OTP in Redis with TTL.
+    - If OTP already exists (not expired), return it.
+    - If no OTP exists and `otp` is provided, store that OTP.
+    - If no OTP exists and no `otp` provided, generate a new one.
+    """
     cache_key = _otp_cache_key(role, phone)
     try:
+        existing_otp = cache.get(cache_key)
+        if existing_otp:
+            return existing_otp  # reuse until TTL expires
+
+        # store provided OTP or generate new one
+        if otp is None:
+            otp = _generate_otp()
+
         cache.set(cache_key, otp, timeout=OTP_TTL_SECONDS)
+        return otp
     except Exception as e:
-        logging.error(f"Redis OTP store failed for {cache_key}: {e}")
+        logging.error(f"Redis OTP store/get failed for {cache_key}: {e}")
         raise
 
 def _get_otp(role: str, phone: str):
@@ -142,60 +156,6 @@ def update_resend_counters(role: str, phone: str):
 def _resend_cache_key(role, phone):
     return f"resend_otp:{role}:{phone}"
 
-# -------------------
-# OTP In-Memory Helpers (DEV)
-# -------------------
-
-# import logging
-# import time
-
-# # Simple dict for OTP storage in DEV
-# DEV_OTP_STORE = {}
-
-# # TTL for OTP (same as production)
-# OTP_TTL_SECONDS = 300  # 5 minutes
-
-
-# def _store_otp(role: str, phone: str, otp: str):
-#     """Store OTP in memory with TTL (DEV only)"""
-#     cache_key = _otp_cache_key(role, phone)
-#     expiry = time.time() + OTP_TTL_SECONDS
-#     try:
-#         DEV_OTP_STORE[cache_key] = {"otp": otp, "expiry": expiry}
-#         print(f"[DEV] OTP stored for {phone} ({role}) -> {otp}")
-#     except Exception as e:
-#         logging.error(f"In-memory OTP store failed for {cache_key}: {e}")
-#         raise
-
-
-# def _get_otp(role: str, phone: str):
-#     """Fetch OTP from memory (DEV only)"""
-#     cache_key = _otp_cache_key(role, phone)
-#     try:
-#         entry = DEV_OTP_STORE.get(cache_key)
-#         if not entry:
-#             return None
-#         if time.time() > entry["expiry"]:  # expired
-#             _delete_otp(role, phone)
-#             return None
-#         return entry["otp"]
-#     except Exception as e:
-#         logging.error(f"In-memory OTP fetch failed for {cache_key}: {e}")
-#         return None
-
-
-# def _delete_otp(role: str, phone: str):
-#     """Delete OTP from memory (DEV only)"""
-#     cache_key = _otp_cache_key(role, phone)
-#     try:
-#         if cache_key in DEV_OTP_STORE:
-#             del DEV_OTP_STORE[cache_key]
-#             print(f"[DEV] OTP deleted for {phone} ({role})")
-#     except Exception as e:
-#         logging.error(f"In-memory OTP delete failed for {cache_key}: {e}")
-# # -------------------
-
-
 def _generate_jwt_tokens(user, role: str):
     now = datetime.datetime.utcnow()
     access_exp = now + ACCESS_TOKEN_LIFETIME
@@ -229,7 +189,6 @@ def _generate_jwt_tokens(user, role: str):
         "access_expires_at": access_exp.isoformat() + "Z",
         "refresh_expires_at": refresh_exp.isoformat() + "Z",
     }
-
 
 class CheckUserStatusView(APIView):
     """
@@ -316,6 +275,9 @@ class CheckUserStatusView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+#TO-DO
+#need to add an logic to send an same OTP for 1 min 
+#or not allow to send an OTP
 
 # -------------------
 # Staff Send OTP API
@@ -376,7 +338,7 @@ class StaffSendOTPView(APIView):
         otp = _generate_otp()
 
         # Store OTP in Redis or DB
-        _store_otp(role, phone, otp)
+        otp = _store_or_get_otp(role, phone, otp)
 
         # TODO: Integrate with external SMS gateway in production
         print(f"[DEV] OTP for {phone} ({role}): {otp}")
@@ -394,8 +356,6 @@ class StaffSendOTPView(APIView):
 
         return Response(response, status=status.HTTP_200_OK)
 
-#need to add an logic to send an same OTP for 1 min 
-#or not allow to send an OTP 
 # -------------------
 # Staff Verify OTP API
 # -------------------
@@ -423,27 +383,25 @@ class VerifyOTPStaffView(APIView):
 
         # OTP check
         cached_otp = _get_otp(role, phone)
-        print("cached OTP",cached_otp)
+        print("cached OTP", cached_otp)
         if not cached_otp:
-            #For DEV: allow manual OTP entry if needed
             return Response({"status": "otp_expired", "message": "OTP expired or not found."},
                             status=status.HTTP_401_UNAUTHORIZED)
 
-        if str(cached_otp) != str(otp) and settings.DEBUG:
-            print(f"[DEV] OTP mismatch: entered={otp}, cached={cached_otp}")
-
         if str(cached_otp) != str(otp):
+            if settings.DEBUG:
+                print(f"[DEV] OTP mismatch: entered={otp}, cached={cached_otp}")
             return Response(
                 {"status": "otp_mismatch", "message": "OTP mismatched."},
                 status=status.HTTP_401_UNAUTHORIZED
             )
+
         # Fetch user
         user = User.objects.filter(username=phone).prefetch_related("groups").first()
         if not user:
             return Response({"status": "user_not_found", "message": "User not found. Contact admin."},
                             status=status.HTTP_404_NOT_FOUND)
 
-        # Role & approval check
         if not user.groups.filter(name=role).exists():
             return Response({"status": "role_mismatch", "message": "User does not belong to the requested role."},
                             status=status.HTTP_403_FORBIDDEN)
@@ -451,54 +409,52 @@ class VerifyOTPStaffView(APIView):
             return Response({"status": "not_approved", "message": "User not approved by admin."},
                             status=status.HTTP_403_FORBIDDEN)
 
-        # OTP passed: consume OTP (optional for DEV)
+        # OTP passed → consume OTP
         with transaction.atomic():
             _delete_otp(role, phone)
 
         # Generate JWT tokens
         tokens = _generate_jwt_tokens(user, role)
-         # --- 🔐 Secure Cookies ---
-        response =Response({
+
+        # --- 🔐 Secure Cookies ---
+        response = Response({
             "status": "login_success",
             "message": "OTP verified successfully. Logged in.",
             "role": role,
             "username": user.username,
             "user_id": str(user.id),
-            #"tokens": tokens. 
         }, status=status.HTTP_200_OK)
+
         response.set_cookie(
             key="role",
             value=role,
-            httponly=False,  # role is safe to expose to client
-            #secure=not settings.DEBUG,
-            secure=False, #For DEV
-            samesite="Lax", #For DEV for Production srict
-            max_age=60 * 60 * 24 * 7  # match refresh token lifetime
+            httponly=False,
+            secure=False,  # For DEV
+            samesite="Lax",
+            max_age=60 * 60 * 24 * 7
         )
-        # Access token (short-lived)
         response.set_cookie(
             key="access_token",
             value=tokens["access"],
             httponly=True,
-            #secure=not settings.DEBUG,  # only secure in production
-            secure=False, #For DEV
+            secure=False,
             samesite="Lax",
-            max_age=60 * 15  # 15 min
+            max_age=60 * 15
         )
-
-        # Refresh token (longer-lived)
         response.set_cookie(
             key="refresh_token",
             value=tokens["refresh"],
             httponly=True,
-            #secure=not settings.DEBUG,
             secure=False,
             samesite="Lax",
-            max_age=60 * 60 * 24 * 7  # 7 days
+            max_age=60 * 60 * 24 * 7
         )
 
         return response
 
+# -------------------
+# Staff Resend OTP API
+# -------------------
 class ResendOTPStaffView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
@@ -547,32 +503,20 @@ class ResendOTPStaffView(APIView):
             }, status=status.HTTP_404_NOT_FOUND)
 
         # Check resend cooldown & limit
-        cache_key = _resend_cache_key(role, phone)
-        resend_info = cache.get(cache_key, {"count": 0, "last_time": 0})
-        current_time = int(time.time())
-
-        if current_time - resend_info["last_time"] < RESEND_COOLDOWN_SECONDS:
+        allowed_to_resend, cooldown_message, remaining_cooldown = can_resend_otp(role, phone)
+        if not allowed_to_resend:
             return Response({
-                "status": "cooldown",
-                "message": f"Please wait {RESEND_COOLDOWN_SECONDS - (current_time - resend_info['last_time'])} seconds before resending OTP."
+                "status": "cooldown" if remaining_cooldown > 0 else "limit_reached",
+                "message": cooldown_message,
+                "remaining_cooldown": remaining_cooldown
             }, status=status.HTTP_429_TOO_MANY_REQUESTS)
 
-        if resend_info["count"] >= MAX_RESEND_COUNT:
-            return Response({
-                "status": "limit_reached",
-                "message": f"Maximum {MAX_RESEND_COUNT} OTP resend attempts reached. Try after some time."
-            }, status=status.HTTP_429_TOO_MANY_REQUESTS)
-
-        # Generate OTP
-        otp = _generate_otp()
-        _store_otp(role, phone, otp)
+        # ✅ Get or generate OTP
+        otp = _store_or_get_otp(role, phone, None) # Pass None to indicate we just want to get/reuse it
 
         # Update resend info
-        resend_info["count"] += 1
-        resend_info["last_time"] = current_time
-        cache.set(cache_key, resend_info, timeout=OTP_TTL_SECONDS)
+        update_resend_counters(role, phone)
 
-        # TODO: integrate with SMS gateway in production
         print(f"[DEV] Resend OTP for {phone} ({role}): {otp}")
 
         response = {
@@ -590,27 +534,32 @@ class ResendOTPStaffView(APIView):
 class RefreshTokenStaffView(APIView):
     """
     POST /auth/staff/refresh-token/
-    Request: { "refresh": "<refresh_token>" }
 
     Features:
-    1. Validates token expiry, signature, type.
-    2. Validates role inside token.
-    3. Checks user existence and is_active.
-    4. Issues new access + refresh tokens with role-based lifetime.
-    5. Handles all error scenarios.
+    1. Reads refresh token from HttpOnly cookie.
+    2. Validates token expiry, signature, type.
+    3. Validates role inside token.
+    4. Checks user existence and is_active.
+    5. Issues new access + refresh tokens with role-based lifetime.
+    6. Returns tokens & metadata (frontend can choose to ignore refresh token).
     """
 
     permission_classes = [AllowAny]
     authentication_classes = []
 
     def post(self, request):
-        refresh_token = (request.data.get("refresh") or "").strip()
+        refresh_token = request.COOKIES.get("refresh_token")
 
         if not refresh_token:
-            return Response({"error": "Refresh token required"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "Refresh token cookie missing"}, status=status.HTTP_401_UNAUTHORIZED)
 
         try:
-            payload = jwt.decode(refresh_token, settings.SECRET_KEY, algorithms=[JWT_ALGORITHM], options={"verify_exp": True})
+            payload = jwt.decode(
+                refresh_token,
+                settings.SECRET_KEY,
+                algorithms=[JWT_ALGORITHM],
+                options={"verify_exp": True}
+            )
 
             # Check token type
             if payload.get("type") != "refresh":
@@ -634,7 +583,7 @@ class RefreshTokenStaffView(APIView):
             # Generate new tokens
             tokens = _generate_jwt_tokens(user, role)
 
-            return Response({
+            response_data = {
                 "status": "refresh_success",
                 "message": "New access and refresh tokens generated.",
                 "role": role,
@@ -644,9 +593,40 @@ class RefreshTokenStaffView(APIView):
                     "access": tokens["access"],
                     "refresh": tokens["refresh"],
                     "access_expires_at": tokens["access_expires_at"],
-                    "refresh_expires_at": tokens["refresh_expires_at"]
-                }
-            }, status=status.HTTP_200_OK)
+                    "refresh_expires_at": tokens["refresh_expires_at"],
+                },
+            }
+
+            response = Response(response_data, status=status.HTTP_200_OK)
+
+            # 🔹 Set cookies directly here (backend controls cookie lifecycle)
+            response.set_cookie(
+                key="access_token",
+                value=tokens["access"],
+                httponly=True,
+                secure=not settings.DEBUG,
+                samesite="Lax",
+                max_age=60 * 15,  # 15 minutes
+                path="/"
+            )
+            response.set_cookie(
+                key="refresh_token",
+                value=tokens["refresh"],
+                httponly=True,
+                secure=not settings.DEBUG,
+                samesite="Lax",
+                max_age=60 * 60 * 24 * 7,  # 7 days
+                path="/"
+            )
+            response.set_cookie(
+                key="role",
+                value=role,
+                httponly=False,  # frontend can read this
+                max_age=60 * 60 * 24 * 7,
+                path="/"
+            )
+
+            return response
 
         except jwt.ExpiredSignatureError:
             return Response({"error": "Refresh token expired"}, status=status.HTTP_401_UNAUTHORIZED)
@@ -654,3 +634,21 @@ class RefreshTokenStaffView(APIView):
             return Response({"error": "Invalid refresh token"}, status=status.HTTP_401_UNAUTHORIZED)
         except Exception as e:
             return Response({"error": f"Token validation error: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+
+class LogoutView(APIView):
+    permission_classes = []
+
+    def post(self, request):
+        refresh_token = request.COOKIES.get("refresh_token")
+        if refresh_token:
+            # ✅ Optionally blacklist the refresh token
+            # BlacklistToken.objects.create(token=refresh_token)
+            pass
+
+        response = Response({"message": "Logged out successfully"}, status=status.HTTP_200_OK)
+        # Delete cookies
+        response.delete_cookie("access_token")
+        response.delete_cookie("refresh_token")
+        response.delete_cookie("role")
+        return response
+

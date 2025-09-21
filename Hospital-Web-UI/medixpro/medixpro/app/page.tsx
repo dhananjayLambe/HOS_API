@@ -37,32 +37,6 @@ export default function LandingPage() {
   useEffect(() => {
     setIsMounted(true);
   }, []);
-  // useEffect(() => {
-  //   const role = document.cookie
-  //     .split("; ")
-  //     .find((row) => row.startsWith("role="))
-  //     ?.split("=")[1];
-
-  //   if (role) {
-  //     // ✅ Redirect logged-in users to their dashboard
-  //     switch (role.toLowerCase()) {
-  //       case "doctor":
-  //         router.replace("/doctor-dashboard");
-  //         break;
-  //       case "helpdesk":
-  //         router.replace("/helpdesk-dashboard");
-  //         break;
-  //       case "labadmin":
-  //         router.replace("/lab-dashboard");
-  //         break;
-  //       case "superuser":
-  //         router.replace("/admin-dashboard");
-  //         break;
-  //       default:
-  //         break;
-  //     }
-  //   }
-  // }, [router]);
   const features = [
     {
       icon: <Stethoscope className="h-8 w-8 text-purple-500" />,

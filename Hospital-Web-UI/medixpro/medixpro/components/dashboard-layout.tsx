@@ -7,8 +7,6 @@ import { cn } from "@/lib/utils";
 import { Menu } from "lucide-react";
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
-// import { AuthProvider } from "@/lib/authContext";
-// import ThemeProvider from "@/lib/provider";
 
 export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const isMobile = useMobile();
@@ -37,8 +35,6 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-      // <AuthProvider>
-      // <ThemeProvider>
     <div className="flex min-h-screen flex-col ">
       <header className={cn("sticky top-0 z-40 border-b bg-background duration-300 xl:ml-64", !isSidebarOpen && "xl:ml-0")}>
         <div className="flex h-16 items-center justify-between px-4 md:px-6">
@@ -57,7 +53,5 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
         <main className={cn("flex-1 overflow-auto duration-300 p-4 xl:p-6 xl:ml-64", !isSidebarOpen && "xl:ml-0")}>{children}</main>
       </div>
     </div>
-    // </ThemeProvider>
-    // </AuthProvider>
   );
 }

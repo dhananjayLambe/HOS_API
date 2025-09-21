@@ -4,9 +4,9 @@ import { NextResponse } from "next/server";
 export async function POST() {
   try {
     console.log("Logout API called");
-
+    const BASE_URL = process.env.DJANGO_API_URL || "http://localhost:8000/api/";
     // Call Django backend logout API
-    const res = await fetch("http://localhost:8000/api/auth/logout/", {
+    const res = await fetch(`${BASE_URL}auth/logout/`, {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
