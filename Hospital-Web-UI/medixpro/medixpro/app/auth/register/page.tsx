@@ -1,189 +1,187 @@
-"use client"
+"use client";
+import React, { useState } from 'react';
 
-import type React from "react"
+import {
+  Stethoscope,
+  Users,
+  FlaskConical,
+  Shield,
+} from "lucide-react";
 
-import { useState } from "react"
-import Link from "next/link"
-import { useRouter } from "next/navigation"
-import { Eye, EyeOff, Lock, Mail, User } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+// Re-implementing the components with inline styles for a single-file application
+const Card = ({ className = '', ...props }) => (
+  <div
+    className={`rounded-xl border bg-card text-card-foreground shadow-sm ${className}`}
+    {...props}
+  />
+);
 
-export default function RegisterPage() {
-  const [isLoading, setIsLoading] = useState<boolean>(false)
-  const [showPassword, setShowPassword] = useState<boolean>(false)
-  const [showConfirmPassword, setShowConfirmPassword] = useState<boolean>(false)
-  const [name, setName] = useState<string>("")
-  const [email, setEmail] = useState<string>("")
-  const [password, setPassword] = useState<string>("")
-  const [confirmPassword, setConfirmPassword] = useState<string>("")
-  const [acceptTerms, setAcceptTerms] = useState<boolean>(false)
-  const [error, setError] = useState<string | null>(null)
-  const router = useRouter()
+const CardHeader = ({ className = '', ...props }) => (
+  <div className={`flex flex-col space-y-1.5 p-6 ${className}`} {...props} />
+);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsLoading(true)
-    setError(null)
+const CardTitle = ({ className = '', ...props }) => (
+  <h3 className={`text-2xl font-semibold leading-none tracking-tight ${className}`} {...props} />
+);
 
-    // Basic validation
-    if (password !== confirmPassword) {
-      setError("Passwords do not match")
-      setIsLoading(false)
-      return
-    }
+const CardDescription = ({ className = '', ...props }) => (
+  <p className={`text-sm text-muted-foreground ${className}`} {...props} />
+);
 
-    if (!acceptTerms) {
-      setError("You must accept the terms and conditions")
-      setIsLoading(false)
-      return
-    }
+const CardContent = ({ className = '', ...props }) => (
+  <div className={`p-6 pt-0 ${className}`} {...props} />
+);
 
-    try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1500))
+const Badge = ({ className = '', variant = 'default', ...props }) => {
+  const variantClasses =
+    {
+      default: 'border-transparent bg-primary text-primary-foreground hover:bg-primary/80',
+      secondary: 'border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80',
+      destructive: 'border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80',
+      outline: 'text-foreground',
+    }[variant] || variant;
 
-      // For demo purposes, redirect to login
-      router.push("/auth/login")
-    } catch (err) {
-      setError("An error occurred. Please try again.")
-    } finally {
-      setIsLoading(false)
-    }
-  }
+  const combinedClasses = `inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ${variantClasses} ${className}`;
+
+  return <div className={combinedClasses} {...props} />;
+};
+
+const Button = ({ className = '', variant = 'default', ...props }) => {
+  const baseClasses =
+    'inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50';
+
+  const variantClasses =
+    {
+      default: 'bg-primary text-primary-foreground hover:bg-primary/90',
+      destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive/90',
+      outline: 'border border-input bg-background hover:bg-accent hover:text-accent-foreground',
+      secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
+      ghost: 'hover:bg-accent hover:text-accent-foreground',
+      link: 'text-primary underline-offset-4 hover:underline',
+    }[variant] || variant;
+
+  const combinedClasses = `${baseClasses} h-10 px-4 py-2 ${className}`;
+
+  return <button className={combinedClasses} {...props} />;
+};
+
+// Inline SVG icons to avoid external dependencies
+const HeartIcon = (props: React.JSX.IntrinsicAttributes & React.SVGProps<SVGSVGElement>) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="24"
+    height="24"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    {...props}
+  >
+    <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.87 0-3.69.83-5.12 2.72L12 7.5l-1.38-1.78C9.19 3.83 7.37 3 5.5 3A5.5 5.5 0 0 0 0 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
+  </svg>
+);
+
+// This is the default exported component that Next.js will render as the page.
+export default function RegistrationPage() {
+  const [selectedRole, setSelectedRole] = useState(null);
+  const [isRedirecting, setIsRedirecting] = useState(false);
+
+  const roles = [
+    { name: 'Doctor', icon: Stethoscope, path: 'register/doctor-registration' },
+    { name: 'HelpDesk', icon: Users, path: '/helpdesk-registration' },
+    { name: 'LabAdmin', icon: FlaskConical, path: '/lab-registration' },
+    { name: 'SuperUser', icon: Shield, path: '/superuser-registration' },
+  ];
+
+  const handleRoleSelect = (role: React.SetStateAction<null>) => {
+    setSelectedRole(role);
+    setIsRedirecting(true);
+    // In a real application, you would use a router here.
+    // For this example, we'll simulate the redirection.
+    window.location.href = role.path;
+  };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-950 px-4 py-12">
-      <div className="w-full max-w-md space-y-8">
-        <div className="text-center">
-          <h2 className="text-2xl lg:text-3xl font-bold tracking-tight mb-2">Clinic Management</h2>
-          <p className="mt-2 text-gray-400">Create your account</p>
-        </div>
+    <div className="flex items-center justify-center min-h-screen bg-slate-50 dark:bg-slate-950 p-4"
+      // style={{
+      //   backgroundImage: 'radial-gradient(at 100% 0, rgb(233, 213, 255) 0, transparent 50%), radial-gradient(at 0 100%, rgb(254, 249, 195) 0, transparent 50%)'
+      // }}
+    >
+      {/* Back to Home Link */}
+      <a href="/"
+        className="absolute top-4 left-4 md:top-8 md:left-8 z-10 text-sm font-medium text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300"
+      >
+        &larr; Back to Home
+      </a>
+      
+      {/* Main Card Container */}
+      <Card className="w-full max-w-lg mx-auto rounded-3xl overflow-hidden shadow-2xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-slate-200 dark:border-slate-800">
+        <CardHeader className="p-6 md:p-8">
+          <div className="flex items-center justify-center space-x-2 mb-4">
+            <div className="p-2 rounded-xl bg-gradient-to-br from-purple-600 to-violet-600 shadow-lg">
+              <HeartIcon className="h-6 w-6 text-white" />
+            </div>
+            <span className="text-3xl font-bold text-slate-900 dark:text-white">MedixPro</span>
+          </div>
+          <CardTitle className="text-3xl font-bold text-center text-slate-900 dark:text-white">
+            Secure Registration
+          </CardTitle>
+          <CardDescription className="text-center text-base text-slate-600 dark:text-slate-300 mt-2">
+            Select your role to register.
+          </CardDescription>
+        </CardHeader>
 
-        <Card className="border-gray-800 bg-gray-900">
-          <CardHeader>
-            <CardTitle className="text-xl text-white">Sign up</CardTitle>
-            <CardDescription className="text-gray-400">Enter your information to create an account</CardDescription>
-          </CardHeader>
-          <form onSubmit={handleSubmit}>
-            <CardContent className="space-y-4">
-              {error && <div className="rounded-md bg-red-900/20 p-3 text-sm text-red-400">{error}</div>}
-              <div className="space-y-2">
-                <Label htmlFor="name" className="text-gray-300">
-                  Full Name
-                </Label>
-                <div className="relative">
-                  <User className="absolute left-3 top-3 h-4 w-4 text-gray-500" />
-                  <Input
-                    id="name"
-                    type="text"
-                    placeholder="John Doe"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="border-gray-800 bg-gray-800 pl-10 text-white placeholder:text-gray-500"
-                    required
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-gray-300">
-                  Email
-                </Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-500" />
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="name@clinic.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="border-gray-800 bg-gray-800 pl-10 text-white placeholder:text-gray-500"
-                    required
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="password" className="text-gray-300">
-                  Password
-                </Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-500" />
-                  <Input
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="border-gray-800 bg-gray-800 pl-10 text-white placeholder:text-gray-500"
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-3 text-gray-500 hover:text-gray-400"
+        <CardContent className="p-6 md:p-8 pt-0">
+          {!isRedirecting ? (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {roles.map((role) => {
+                const Icon = role.icon;
+                return (
+                  <Card
+                    key={role.name}
+                    className={`
+                      relative cursor-pointer transition-all duration-300 rounded-xl
+                      hover:shadow-lg hover:scale-105 group
+                      ${selectedRole && selectedRole.name === role.name
+                        ? 'border-purple-500 ring-2 ring-purple-500 shadow-xl scale-105'
+                        : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                      }
+                    `}
+                    onClick={() => handleRoleSelect(role)}
                   >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="confirmPassword" className="text-gray-300">
-                  Confirm Password
-                </Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-500" />
-                  <Input
-                    id="confirmPassword"
-                    type={showConfirmPassword ? "text" : "password"}
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="border-gray-800 bg-gray-800 pl-10 text-white placeholder:text-gray-500"
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute right-3 top-3 text-gray-500 hover:text-gray-400"
-                  >
-                    {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-              </div>
-              <div className="flex items-start space-x-2">
-                <Checkbox
-                  id="terms"
-                  checked={acceptTerms}
-                  onCheckedChange={(checked) => setAcceptTerms(checked as boolean)}
-                  className="mt-1 border-gray-700 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
-                />
-                <Label htmlFor="terms" className="text-sm text-gray-300">
-                  I agree to the{" "}
-                  <Link href="#" className="text-blue-400 hover:text-blue-300">
-                    Terms of Service
-                  </Link>{" "}
-                  and{" "}
-                  <Link href="#" className="text-blue-400 hover:text-blue-300">
-                    Privacy Policy
-                  </Link>
-                </Label>
-              </div>
-            </CardContent>
-            <CardFooter className="flex flex-col space-y-4">
-              <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700" disabled={isLoading}>
-                {isLoading ? "Creating account..." : "Create account"}
-              </Button>
-              <p className="text-center text-sm text-gray-400">
-                Already have an account?{" "}
-                <Link href="/auth/login" className="text-blue-400 hover:text-blue-300">
-                  Sign in
-                </Link>
+                    <CardContent className="flex flex-col items-center justify-center p-4">
+                      <div className="p-3 rounded-full bg-slate-100 dark:bg-slate-800 group-hover:bg-purple-100 dark:group-hover:bg-purple-900/30 transition-colors duration-300">
+                        <Icon className="h-8 w-8 text-purple-600" />
+                      </div>
+                      <span className="mt-3 text-center text-sm font-semibold text-slate-700 dark:text-slate-300">
+                        {role.name}
+                      </span>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-center">
+              <p className="text-lg font-semibold text-green-600 dark:text-green-400">
+                You have selected {selectedRole ? selectedRole.name : ""}.
               </p>
-            </CardFooter>
-          </form>
-        </Card>
-      </div>
+              <p className="text-sm text-slate-600 dark:text-slate-400 mt-2">
+                Redirecting to {selectedRole.path}...
+              </p>
+              <Button
+                  variant="link"
+                  className="mt-4 p-0"
+                  onClick={() => setIsRedirecting(false)}
+                >
+                &larr; Go Back to Role Selection
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
-  )
+  );
 }

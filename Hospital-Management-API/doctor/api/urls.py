@@ -2,6 +2,7 @@ from django.urls import path, include
 from rest_framework_simplejwt.views import TokenVerifyView
 from rest_framework.routers import DefaultRouter
 from doctor.api.views import (
+    DoctorOnboardingPhase1View,
     DoctorDetailsAPIView,DoctorAddressViewSet,
     DoctorRegistrationAPIView,PendingHelpdeskRequestsView,
     UserView,DoctorProfileUpdateAPIView,ApproveHelpdeskUserView,
@@ -46,6 +47,7 @@ urlpatterns = [
     path('', include(router.urls)),
     # Doctor Authentication Endpoints
     path('check-doctor-user/', CheckUserStatusView.as_view(), name='check-doctor-user'),
+    path("onboarding/phase1/", DoctorOnboardingPhase1View.as_view(), name="doctor-onboarding-phase1"),
     path('login/', DoctorLoginView.as_view(), name='doctor_login'),
     path('logout/', DoctorLogoutView.as_view(), name='doctor_logout'),
     path('token/refresh/', DoctorTokenRefreshView.as_view(), name='doctor_token_refresh'),

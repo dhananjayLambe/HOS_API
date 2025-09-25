@@ -22,6 +22,15 @@ class doctor(models.Model):
     photo = models.ImageField(upload_to=doctor_photo_upload_path, blank=True, null=True)
     years_of_experience = models.PositiveIntegerField(default=1)
     avg_rating = models.DecimalField(max_digits=3, decimal_places=2, default=5.0)
+    gender = models.CharField(
+        max_length=10,
+        choices=[("M", "Male"), ("F", "Female"), ("O", "Other")],
+        null=True, blank=True
+    )
+    #KYC Information
+    digital_signature_consent = models.BooleanField(default=False)
+    terms_and_conditions_acceptance = models.BooleanField(default=False)
+    consent_for_data_storage = models.BooleanField(default=False)  # Data Storage
     title = models.CharField(
         max_length=255,
         default="Consultant Physician",

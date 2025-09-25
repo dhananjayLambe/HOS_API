@@ -19,6 +19,7 @@ from hospital_mgmt.models import Hospital
 from helpdesk.models import HelpdeskClinicUser
 from account.models import User
 
+
 class UserSerializer(serializers.ModelSerializer):
     password2 = serializers.CharField(write_only=True)
 
@@ -102,8 +103,7 @@ class GovernmentIDSerializer(serializers.ModelSerializer):
     class Meta:
         model = GovernmentID
         fields = [
-            'id', 'pan_card_number', 'aadhar_card_number',
-            'created_at', 'updated_at'
+            'id', 'pan_card_number', 'aadhar_card_number','created_at', 'updated_at'
         ]
 
     def validate_pan_card_number(self, value):
@@ -993,3 +993,309 @@ class DoctorOPDStatusSerializer(serializers.ModelSerializer):
             attrs['check_out_time'] = timezone.now()
 
         return attrs
+    
+
+
+# Lightweight user serializer for OTP-based accounts (no password)
+class OnboardUserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ("username", "first_name", "last_name", "email")
+        extra_kwargs = {
+            "email": {"required": False, "allow_blank": True},
+            "first_name": {"required": False, "allow_blank": True},
+            "last_name": {"required": False, "allow_blank": True},
+            "username": {"required": False, "allow_blank": True},
+        }
+
+    def validate_username(self, value):
+        # Always return the value without any validation for development
+        return value
+
+    def validate_email(self, value):
+        # Always return the value without any validation for development
+        return value
+
+    def create(self, validated_data):
+        # Create user without password (OTP-based). status=False (inactive) by default.
+        user = User.objects.create(
+            username=validated_data["username"],
+            first_name=validated_data["first_name"],
+            last_name=validated_data["last_name"],
+            email=validated_data.get("email", ""),
+            status=False,
+            is_active=True,  # keep active so OTP login works; adjust if you want inactive until verification
+        )
+        return user
+
+
+class GovernmentIDPhase1Serializer(serializers.ModelSerializer):
+    class Meta:
+        model = GovernmentID
+        fields = ("pan_card_number", "aadhar_card_number","pan_card_file","aadhar_card_file")
+        extra_kwargs = {
+            "pan_card_number": {"required": False, "allow_blank": True},
+            "aadhar_card_number": {"required": False, "allow_blank": True},
+        }
+
+    # def validate(self, data):
+    #     if not data.get("pan_card_number") and not data.get("aadhar_card_number"):
+    #         raise serializers.ValidationError("Either PAN or Aadhar number must be provided.")
+    #     return data
+
+    def validate_pan_card_number(self, value):
+        # Always return the value without any validation for development
+        return value
+
+    def validate_aadhar_card_number(self, value):
+        # Always return the value without any validation for development
+        return value
+
+
+class RegistrationPhase1Serializer(serializers.ModelSerializer):
+    class Meta:
+        model = Registration
+        fields = ("medical_registration_number", "medical_council")
+        extra_kwargs = {
+            "medical_registration_number": {"required": False, "allow_blank": True},
+            "medical_council": {"required": False, "allow_blank": True},
+        }
+
+    def validate_medical_registration_number(self, value):
+        # Always return the value without any validation for development
+        return value
+
+
+# class DoctorPhase1Serializer(serializers.ModelSerializer):
+#     user = OnboardUserSerializer()
+#     government_ids = GovernmentIDPhase1Serializer(required=True)
+#     registration = RegistrationPhase1Serializer(required=True)
+
+#     class Meta:
+#         model = doctor
+#         # Only Phase-1 required fields
+#         fields = (
+#             "user",
+#             "dob",
+#             "gender",
+#             "secondary_mobile_number",
+#             "digital_signature_consent",
+#             "terms_and_conditions_acceptance",
+#             "consent_for_data_storage",
+#             "government_ids",
+#             "registration",
+#         )
+
+#     def validate_dob(self, value):
+#         if not value:
+#             raise serializers.ValidationError("Date of birth is required.")
+#         today = date.today()
+#         age = today.year - value.year - ((today.month, today.day) < (value.month, value.day))
+#         if age < 23:
+#             raise serializers.ValidationError("Doctor must be at least 23 years old.")
+#         return value
+
+#     def validate_digital_signature_consent(self, value):
+#         if value is not True:
+#             raise serializers.ValidationError("Digital signature consent is mandatory.")
+#         return value
+
+#     def validate_secondary_mobile_number(self, value):
+#         if value and value != "NA":
+#             if not value.isdigit() or not (7 <= len(value) <= 15):
+#                 raise serializers.ValidationError("Secondary mobile must be numeric and between 7-15 digits or 'NA'.")
+#             # unique check
+#             qs = doctor.objects.filter(secondary_mobile_number=value)
+#             if qs.exists():
+#                 raise serializers.ValidationError("Secondary mobile number already in use.")
+#         return value
+
+#     @transaction.atomic
+#     def create(self, validated_data):
+#         user_data = validated_data.pop("user")
+#         gov_data = validated_data.pop("government_ids")
+#         reg_data = validated_data.pop("registration")
+
+#         # Create User (OTP-based; no password)
+#         user_serializer = OnboardUserSerializer(data=user_data)
+#         user_serializer.is_valid(raise_exception=True)
+#         user = user_serializer.save()
+
+#         # Add user to 'doctor' group
+#         doctor_group, _ = Group.objects.get_or_create(name="doctor")
+#         user.groups.add(doctor_group)
+
+#         # Build doctor fields
+#         doctor_data = validated_data
+#         # secondary_mobile_number default handled by model but we may have provided one
+#         doctor_obj = doctor.objects.create(user=user, **doctor_data)
+
+#         # Create GovernmentID (one-to-one)
+#         GovernmentID.objects.create(doctor=doctor_obj, **gov_data)
+
+#         # Create Registration entry (one-to-one)
+#         Registration.objects.create(doctor=doctor_obj, **reg_data)
+
+#         # Mark kyc_completed to True if you want to indicate doc uploaded IDs (optional)
+#         doctor_obj.kyc_completed = True
+#         doctor_obj.save(update_fields=["kyc_completed"])
+
+#         return doctor_obj
+
+#     def to_representation(self, instance):
+#         # Provide a friendly response
+#         return {
+#             "id": str(instance.id),
+#             "user": {
+#                 "id": str(instance.user.id),
+#                 "username": instance.user.username,
+#                 "first_name": instance.user.first_name,
+#                 "last_name": instance.user.last_name,
+#                 "email": instance.user.email,
+#                 "is_active": instance.user.is_active,
+#                 "status": instance.user.status,
+#             },
+#             "dob": instance.dob.isoformat() if instance.dob else None,
+#             "gender": instance.gender,
+#             "secondary_mobile_number": instance.secondary_mobile_number,
+#             "digital_signature_consent": instance.digital_signature_consent,
+#             "terms_and_conditions_acceptance": instance.terms_and_conditions_acceptance,
+#             "consent_for_data_storage": instance.consent_for_data_storage,
+#             "kyc_completed": instance.kyc_completed,
+#             "kyc_verified": instance.kyc_verified,
+#             "created_at": instance.created_at.isoformat() if instance.created_at else None,
+#         }
+
+class DoctorPhase1Serializer(serializers.ModelSerializer):
+    user = OnboardUserSerializer()
+    government_ids = GovernmentIDPhase1Serializer(required=False)
+    registration = RegistrationPhase1Serializer(required=False)
+
+    # Map frontend JSON keys to model field names
+    terms_conditions_accepted = serializers.BooleanField(source="terms_and_conditions_acceptance")
+    data_storage_consent = serializers.BooleanField(source="consent_for_data_storage")
+    
+    # Override dob field to handle empty strings
+    dob = serializers.DateField(required=False, allow_null=True)
+
+    def validate_dob(self, value):
+        # Handle empty string or None values
+        if value == "" or value is None:
+            return None
+        return value
+
+    class Meta:
+        model = doctor  # ✅ use correct model
+        fields = (
+            "user",
+            "dob",
+            "gender",
+            "digital_signature_consent",
+            "terms_conditions_accepted",   # ✅ aliased
+            "data_storage_consent",        # ✅ aliased
+            "government_ids",
+            "registration",
+        )
+        extra_kwargs = {
+            "dob": {"required": False, "allow_null": True, "allow_blank": True},
+            "gender": {"required": False, "allow_blank": True},
+            "digital_signature_consent": {"required": False},
+            "terms_conditions_accepted": {"required": False},
+            "data_storage_consent": {"required": False},
+            "secondary_mobile_number": {"required": False, "allow_blank": True},
+        }
+
+    def validate_dob(self, value):
+        # Always return the value without any validation for development
+        return value
+
+    def validate_digital_signature_consent(self, value):
+        # Always return the value without any validation for development
+        return value
+
+    # def validate_secondary_mobile_number(self, value):
+    #     if value and value != "NA":
+    #         if not value.isdigit() or not (7 <= len(value) <= 15):
+    #             raise serializers.ValidationError("Secondary mobile must be numeric and between 7-15 digits or 'NA'.")
+    #         if doctor.objects.filter(secondary_mobile_number=value).exists():
+    #             raise serializers.ValidationError("Secondary mobile number already in use.")
+    #     return value
+
+    @transaction.atomic
+    def create(self, validated_data):
+        user_data = validated_data.pop("user", {})
+        gov_data = validated_data.pop("government_ids", {})
+        reg_data = validated_data.pop("registration", {})
+
+        # Create User with default values if data is missing
+        username = user_data.get("username", f"doctor_{timezone.now().timestamp()}")
+        first_name = user_data.get("first_name", "Doctor")
+        last_name = user_data.get("last_name", "User")
+        email = user_data.get("email", f"doctor_{timezone.now().timestamp()}@example.com")
+        
+        user = User.objects.create(
+            username=username,
+            first_name=first_name,
+            last_name=last_name,
+            email=email,
+            status=False,
+            is_active=True,
+        )
+
+        # Add user to 'doctor' group
+        doctor_group, _ = Group.objects.get_or_create(name="doctor")
+        user.groups.add(doctor_group)
+
+        # Create Doctor with provided or default values
+        doctor_data = {
+            "dob": validated_data.get("dob"),
+            "gender": validated_data.get("gender", "Male"),
+            "digital_signature_consent": validated_data.get("digital_signature_consent", False),
+            "terms_and_conditions_acceptance": validated_data.get("terms_conditions_accepted", False),
+            "consent_for_data_storage": validated_data.get("data_storage_consent", False),
+            "secondary_mobile_number": validated_data.get("secondary_mobile_number", ""),
+        }
+        doctor_obj = doctor.objects.create(user=user, **doctor_data)
+
+        # Create GovernmentID with provided or default values
+        gov_defaults = {
+            "pan_card_number": gov_data.get("pan_card_number", ""),
+            "aadhar_card_number": gov_data.get("aadhar_card_number", ""),
+        }
+        GovernmentID.objects.create(doctor=doctor_obj, **gov_defaults)
+
+        # Create Registration with provided or default values
+        reg_defaults = {
+            "medical_registration_number": reg_data.get("medical_registration_number", ""),
+            "medical_council": reg_data.get("medical_council", ""),
+        }
+        Registration.objects.create(doctor=doctor_obj, **reg_defaults)
+
+        # Mark KYC completed
+        doctor_obj.kyc_completed = True
+        doctor_obj.save(update_fields=["kyc_completed"])
+
+        return doctor_obj
+
+    def to_representation(self, instance):
+        return {
+            "id": str(instance.id),
+            "user": {
+                "id": str(instance.user.id),
+                "username": instance.user.username,
+                "first_name": instance.user.first_name,
+                "last_name": instance.user.last_name,
+                "email": instance.user.email,
+                "is_active": instance.user.is_active,
+                "status": instance.user.status,
+            },
+            "dob": instance.dob.isoformat() if instance.dob else None,
+            "gender": instance.gender,
+            "secondary_mobile_number": instance.secondary_mobile_number,
+            "digital_signature_consent": instance.digital_signature_consent,
+            "terms_conditions_accepted": instance.terms_and_conditions_acceptance,
+            "data_storage_consent": instance.consent_for_data_storage,
+            "kyc_completed": instance.kyc_completed,
+            "kyc_verified": instance.kyc_verified,
+            "created_at": instance.created_at.isoformat() if instance.created_at else None,
+        }

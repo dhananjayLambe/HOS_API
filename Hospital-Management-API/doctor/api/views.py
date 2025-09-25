@@ -16,6 +16,7 @@ from django.db.models.functions import (
 )
 from django.shortcuts import get_object_or_404
 from django.utils.timezone import now
+from rest_framework.generics import GenericAPIView
 
 # Third-party imports
 from rest_framework import generics, status, viewsets, permissions
@@ -51,6 +52,7 @@ from doctor.api.serializers import (
     GovernmentIDUploadSerializer, KYCStatusSerializer, KYCVerifySerializer,
     DoctorSearchSerializer,DoctorFeeStructureSerializer,FollowUpPolicySerializer,
     DoctorAvailabilitySerializer,DoctorLeaveSerializer,DoctorOPDStatusSerializer,
+    DoctorPhase1Serializer,
 )
 from consultations.models import Consultation, PatientFeedback
 from appointments.models import Appointment
@@ -65,6 +67,26 @@ CACHE_TIMEOUT = 300  # 5 minutes
 
 # Logger
 logger = logging.getLogger(__name__)
+
+class DoctorOnboardingPhase1View(GenericAPIView):
+    """
+    POST: Phase 1 onboarding. Creates User (OTP-based), doctor profile, GovernmentID and Registration.
+    Note: OTP verification should be performed before calling this endpoint in your flow.
+    """
+    serializer_class = DoctorPhase1Serializer
+    permission_classes = [permissions.AllowAny]  # OTP auth should be enforced at the router or middleware
+
+    def post(self, request, *args, **kwargs):
+        print("I am in phase 1 onboarding")
+        serializer = self.get_serializer(data=request.data, context={"request": request})
+        if not serializer.is_valid():
+            print("Validation errors:", serializer.errors)
+            #return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"status": "error", "errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+        serializer.is_valid(raise_exception=True)
+        with transaction.atomic():
+            doctor_obj = serializer.save()
+        return Response(self.get_serializer(doctor_obj).data, status=status.HTTP_201_CREATED)
 
 #Determines if the user is new or existing.
 

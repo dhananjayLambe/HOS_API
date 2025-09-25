@@ -5,7 +5,8 @@ import type React from "react";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"] });
-
+import GlobalLoader from "@/components/GlobalLoader";
+import { Toaster } from "react-hot-toast";
 export const metadata: Metadata = {
   title: "MedixPro - Modern Healthcare Management System",
   description: "Streamline your clinic operations with our comprehensive, HIPAA-compliant platform designed for modern healthcare providers. Patient management, appointment scheduling, digital prescriptions, and more.",
@@ -41,6 +42,8 @@ export default function RootLayout({
       </head>
       <body className={inter.className} suppressHydrationWarning style={{ backgroundColor: 'white' }}>
         <ThemeProvider>{children}</ThemeProvider>
+        <GlobalLoader /> {/* ⬅ loader always available */}
+        <Toaster position="center" />
       </body>
     </html>
   );
