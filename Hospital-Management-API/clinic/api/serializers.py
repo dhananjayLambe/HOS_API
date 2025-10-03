@@ -306,3 +306,86 @@ class ClinicSummarySerializer(serializers.ModelSerializer):
     class Meta:
         model = Clinic
         fields = ['id', 'name', 'contact_number_primary', 'contact_number_secondary', 'email_address',  'emergency_contact_number','emergency_email_address','address']
+
+class ClinicAddressOnboardingSerializer(serializers.ModelSerializer):
+    addressLine1 = serializers.CharField(source="address")
+
+    class Meta:
+        model = ClinicAddress
+        fields = ["addressLine1", "city", "state", "pincode"]
+
+
+class ClinicSpecializationOnboardingSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ClinicSpecialization
+        fields = ["specialization_name", "description"]
+
+class ClinicOnboardingSerializer(serializers.ModelSerializer):
+    address = ClinicAddressOnboardingSerializer(required=True)
+    specializations = ClinicSpecializationOnboardingSerializer(many=True, required=False)
+
+    class Meta:
+        model = Clinic
+        fields = [
+            "id", "name", "contact_number_primary", 
+            "email_address", "registration_number", 
+            "address", "specializations", "created_at", "updated_at"
+        ]
+        optional_fields = ["contact_number_secondary", "gst_number"]
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+    def create(self, validated_data):
+        address_data = validated_data.pop("address")
+        specializations_data = validated_data.pop("specializations", [])
+
+        clinic = Clinic.objects.create(**validated_data)
+
+        ClinicAddress.objects.create(
+            clinic=clinic,
+            address=address_data.get("address", ""),
+            city=address_data.get("city"),
+            state=address_data.get("state"),
+            pincode=address_data.get("pincode")
+        )
+
+        for spec in specializations_data:
+            ClinicSpecialization.objects.create(clinic=clinic, **spec)
+
+        return clinic
+
+    def update(self, instance, validated_data):
+        address_data = validated_data.pop("address", None)
+        specializations_data = validated_data.pop("specializations", None)
+
+        # Update clinic fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        # Update / Create address
+        if address_data:
+            ClinicAddress.objects.update_or_create(
+                clinic=instance,
+                defaults={
+                    "address": address_data.get("address", ""),
+                    "city": address_data.get("city"),
+                    "state": address_data.get("state"),
+                    "pincode": address_data.get("pincode")
+                }
+            )
+
+        # Update specializations (replace with new set)
+        if specializations_data is not None:
+            instance.specializations.all().delete()
+            for spec in specializations_data:
+                ClinicSpecialization.objects.create(clinic=instance, **spec)
+
+        return instance
+
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        if hasattr(instance, "address"):
+            rep["address"] = ClinicAddressOnboardingSerializer(instance.address).data
+        rep["specializations"] = ClinicSpecializationOnboardingSerializer(instance.specializations.all(), many=True).data
+        return rep
+

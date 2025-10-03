@@ -190,49 +190,130 @@ def _generate_jwt_tokens(user, role: str):
         "refresh_expires_at": refresh_exp.isoformat() + "Z",
     }
 
+# class CheckUserStatusView(APIView):
+#     """
+#     POST /check-user-status/
+#     Payload: {"phone_number": "9876543210", "role": "doctor"}
+
+#     - Checks if the user exists and belongs to the given role.
+#     - Returns role, mobile, status, exists flag.
+#     """
+
+#     permission_classes = [AllowAny]
+#     authentication_classes = []  # No auth needed
+
+#     def post(self, request):
+#         phone_number = request.data.get("phone_number")
+#         role = request.data.get("role")
+
+#         # Validate inputs
+#         if not phone_number or not role:
+#             return Response(
+#                 {
+#                     "success": False,
+#                     "message": "phone_number and role are required",
+#                     "status": "invalid_request",
+#                 },
+#                 status=status.HTTP_400_BAD_REQUEST,
+#             )
+
+#         # Ensure role is valid
+#         allowed_roles = ["doctor", "helpdesk", "labadmin", "patient", "superadmin"]
+#         if role not in allowed_roles:
+#             return Response(
+#                 {
+#                     "success": False,
+#                     "message": f"Invalid role. Allowed: {allowed_roles}",
+#                     "status": "invalid_role",
+#                 },
+#                 status=status.HTTP_400_BAD_REQUEST,
+#             )
+
+#         try:
+#             # Fetch user in a single query
+#             user = (
+#                 User.objects.select_related()
+#                 .prefetch_related("groups")
+#                 .get(username=phone_number)
+#             )
+#         except User.DoesNotExist:
+#             return Response(
+#                 {
+#                     "success": False,
+#                     "exists": False,
+#                     "mobile": phone_number,
+#                     "role": "",
+#                     "status": "new_user",
+#                     "message": f"Mobile number not registered as {role}",
+#                 },
+#                 status=status.HTTP_400_BAD_REQUEST,
+#             )
+
+#         # Check group membership
+#         if user.groups.filter(name=role).exists():
+#             return Response(
+#                 {
+#                     "success": True,
+#                     "exists": True,
+#                     "mobile": phone_number,
+#                     "role": role,
+#                     "status": "existing_user",
+#                     "message": f"User exists as {role}",
+#                 },
+#                 status=status.HTTP_200_OK,
+#             )
+#         else:
+#             return Response(
+#                 {
+#                     "success": False,
+#                     "exists": True,
+#                     "mobile": phone_number,
+#                     "role": role,
+#                     "status": "role_mismatch",
+#                     "message": f"User exists but not assigned to role {role}",
+#                 },
+#                 status=status.HTTP_403_FORBIDDEN,
+#             )
+
+
+
+
 class CheckUserStatusView(APIView):
     """
     POST /check-user-status/
-    Payload: {"phone_number": "9876543210", "role": "doctor"}
+    Payload: {"phone_number": "9876543210"}
 
-    - Checks if the user exists and belongs to the given role.
-    - Returns role, mobile, status, exists flag.
+    - Checks if the user exists.
+    - Infers role(s) from groups.
+    - Returns status:
+        - new_user → Not registered
+        - no_role_assigned → Registered but no role assigned
+        - pending_approval → Registered, waiting for admin
+        - approved → Approved and active
+        - rejected → Explicitly rejected by admin
     """
 
     permission_classes = [AllowAny]
-    authentication_classes = []  # No auth needed
+    authentication_classes = []  # No auth required
 
     def post(self, request):
         phone_number = request.data.get("phone_number")
-        role = request.data.get("role")
 
         # Validate inputs
-        if not phone_number or not role:
+        if not phone_number:
             return Response(
                 {
                     "success": False,
-                    "message": "phone_number and role are required",
+                    "message": "phone_number is required",
                     "status": "invalid_request",
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Ensure role is valid
-        allowed_roles = ["doctor", "helpdesk", "labadmin", "patient", "superadmin"]
-        if role not in allowed_roles:
-            return Response(
-                {
-                    "success": False,
-                    "message": f"Invalid role. Allowed: {allowed_roles}",
-                    "status": "invalid_role",
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
         try:
-            # Fetch user in a single query
+            # Fetch user
             user = (
-                User.objects.select_related()
+                User.objects.select_related("doctor")  # include doctor relation
                 .prefetch_related("groups")
                 .get(username=phone_number)
             )
@@ -242,42 +323,96 @@ class CheckUserStatusView(APIView):
                     "success": False,
                     "exists": False,
                     "mobile": phone_number,
-                    "role": "",
+                    "role": [],
                     "status": "new_user",
-                    "message": f"Mobile number not registered as {role}",
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        # Check group membership
-        if user.groups.filter(name=role).exists():
-            return Response(
-                {
-                    "success": True,
-                    "exists": True,
-                    "mobile": phone_number,
-                    "role": role,
-                    "status": "existing_user",
-                    "message": f"User exists as {role}",
+                    "message": "This mobile number is not registered. Please register first.",
                 },
                 status=status.HTTP_200_OK,
             )
-        else:
+
+        # Get roles (groups)
+        roles = list(user.groups.values_list("name", flat=True))
+
+        # Case 1: User registered but no role
+        if not roles:
             return Response(
                 {
                     "success": False,
                     "exists": True,
                     "mobile": phone_number,
-                    "role": role,
-                    "status": "role_mismatch",
-                    "message": f"User exists but not assigned to role {role}",
+                    "role": [],
+                    "status": "no_role_assigned",
+                    "message": "User exists but no role has been assigned yet. Please contact admin.",
                 },
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-#TO-DO
-#need to add an logic to send an same OTP for 1 min 
-#or not allow to send an OTP
+        # Doctor-specific approval flow
+        if "doctor" in roles:
+            doctor_profile = getattr(user, "doctor", None)
+            if doctor_profile:
+                if doctor_profile.status == "pending":
+                    return Response(
+                        {
+                            "success": True,
+                            "exists": True,
+                            "mobile": phone_number,
+                            "role": roles,
+                            "status": "pending_approval",
+                            "message": "Your registration as doctor is pending admin approval.",
+                        },
+                        status=status.HTTP_200_OK,
+                    )
+                elif doctor_profile.status == "rejected":
+                    return Response(
+                        {
+                            "success": False,
+                            "exists": True,
+                            "mobile": phone_number,
+                            "role": roles,
+                            "status": "rejected",
+                            "message": f"Your registration was rejected. Reason: {doctor_profile.rejection_reason or 'Not specified'}",
+                        },
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+                elif doctor_profile.status == "approved" and user.is_active:
+                    return Response(
+                        {
+                            "success": True,
+                            "exists": True,
+                            "mobile": phone_number,
+                            "role": roles,
+                            "status": "approved",
+                            "message": "User exists and approved as doctor.",
+                        },
+                        status=status.HTTP_200_OK,
+                    )
+
+        # Non-doctor roles (helpdesk, labadmin, patient, superadmin)
+        if not user.is_active:
+            return Response(
+                {
+                    "success": True,
+                    "exists": True,
+                    "mobile": phone_number,
+                    "role": roles,
+                    "status": "pending_approval",
+                    "message": f"Your registration as {', '.join(roles)} is pending admin approval.",
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        return Response(
+            {
+                "success": True,
+                "exists": True,
+                "mobile": phone_number,
+                "role": roles,
+                "status": "approved",
+                "message": f"User exists and approved as {', '.join(roles)}.",
+            },
+            status=status.HTTP_200_OK,
+        )
 
 # -------------------
 # Staff Send OTP API
@@ -315,6 +450,8 @@ class StaffSendOTPView(APIView):
                     "username": phone
                 }, status=status.HTTP_403_FORBIDDEN)
 
+            #NEED to change the condition for Admin Approval as we are using the the falg
+            #status = 
             # Admin approval check
             if not user.is_active:
                 return Response({

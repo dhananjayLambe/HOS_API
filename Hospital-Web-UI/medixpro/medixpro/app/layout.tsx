@@ -1,3 +1,4 @@
+//app/layout.tsx
 import ThemeProvider from "@/lib/provider";
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";

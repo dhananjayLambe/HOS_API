@@ -4,6 +4,12 @@ from django.db import models
 from account.models import User
 from django.utils import timezone
 
+
+STATUS_CHOICES = [
+    ("pending", "Pending Approval"),
+    ("approved", "Approved"),
+    ("rejected", "Rejected"),
+]
 class Clinic(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     # Basic Information
@@ -17,6 +23,14 @@ class Clinic(models.Model):
     # Emergency Contact Information
     emergency_contact_number = models.CharField(max_length=15, default='NA')
     emergency_email_address = models.EmailField(max_length=255, default='NA')
+
+    # Approval workflow
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending") #optional
+    rejection_reason = models.TextField(blank=True, null=True)#optinal we can use later
+    is_featured = models.BooleanField(default=False, help_text="Featured in search results")
+    is_approved = models.BooleanField(default=False)
+    kyc_completed = models.BooleanField(default=False)
+    kyc_verified = models.BooleanField(default=False)
 
     created_at = models.DateTimeField(auto_now_add=True)  # Mandatory
     updated_at = models.DateTimeField(auto_now=True)  # Mandatory
@@ -42,7 +56,6 @@ class ClinicAddress(models.Model):
     def __str__(self):
         return f"{self.address}, {self.city}, {self.state}, {self.pincode}"
 
-
 class ClinicSpecialization(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     clinic = models.ForeignKey("Clinic", on_delete=models.CASCADE, related_name="specializations")
@@ -58,8 +71,7 @@ class ClinicSpecialization(models.Model):
 
 class ClinicSchedule(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    clinic = models.OneToOneField(Clinic, on_delete=models.CASCADE, related_name="schedule")
-
+    clinic = models.OneToOneField(Clinic, on_delete=models.CASCADE, related_name="schedules")
     # Working Hours
     morning_start = models.TimeField(blank=True, null=True, default=time(9, 0))  # Default to 9:00 AM
     morning_end = models.TimeField(blank=True, null=True, default=time(12, 0))   # Default to 12:00 PM

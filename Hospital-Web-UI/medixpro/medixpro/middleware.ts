@@ -16,6 +16,9 @@ export function middleware(req: NextRequest) {
     "/api/send-otp",
     "/api/auth/refresh",
     "/api/doctor/onboarding/phase1",
+    "api/auth/check-user-status/",
+    "/api/clinic/clinics/onboarding/",
+    "auth/register/clinic-registration"
   ];
 
   if (publicPaths.some((path) => pathname.startsWith(path))) {

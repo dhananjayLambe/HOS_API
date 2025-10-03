@@ -28,19 +28,39 @@ from clinic.api.serializers import (
     ClinicServiceListSerializer,
     ClinicServiceSerializer,
     ClinicSpecializationSerializer,
+    ClinicOnboardingSerializer,
 )
 
 from clinic.models import (
     Clinic,
     ClinicAddress,
-    ClinicSchedule,
     ClinicService,
     ClinicServiceList,
+    ClinicSchedule,
     ClinicSpecialization,
 )
 from account.permissions import IsDoctor
 logger = logging.getLogger(__name__)
 from clinic.utils import api_response
+
+
+class ClinicOnboardingView(APIView):
+    print("i am in clinic onboarding view API ")
+    permission_classes = []
+
+    @transaction.atomic
+    def post(self, request):
+        serializer = ClinicOnboardingSerializer(data=request.data)
+        if serializer.is_valid():
+            reg_no = serializer.validated_data.get("registration_number")
+            if reg_no and Clinic.objects.filter(registration_number=reg_no).exists():
+                return api_response(status.HTTP_400_BAD_REQUEST, "Clinic already registered with this registration number.")
+            clinic = serializer.save()
+            return api_response(status.HTTP_201_CREATED, "Clinic created successfully.", ClinicOnboardingSerializer(clinic).data)
+        return api_response(status.HTTP_400_BAD_REQUEST, "Invalid clinic data.", serializer.errors)
+
+
+
 # Create Clinic
 class ClinicCreateView(APIView):
     permission_classes = [AllowAny]

@@ -4,14 +4,14 @@
 
 /* Force white background for the entire application */
 html, body {
-  background-color: rgb(203, 188, 237) !important;
+  background-color: rgb(215, 208, 231) !important;
   color: rgb(246, 247, 250) !important;
   font-family: Arial, Helvetica, sans-serif;
 }
 
 /* Dark mode support */
 .dark html, .dark body {
-  background-color: rgb(3, 10, 42) !important;
+  background-color: rgb(231, 231, 231) !important;
   color: white !important;
 }
 

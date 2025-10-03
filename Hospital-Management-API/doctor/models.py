@@ -11,7 +11,16 @@ from datetime import datetime, timedelta
 from doctor.utils.uploads import(
     doctor_photo_upload_path,doctor_kyc_upload_path,
     doctor_education_upload_path,pan_card_upload_path,aadhar_card_upload_path)
+STATUS_CHOICES = [
+    ("pending", "Pending Approval"),
+    ("approved", "Approved"),
+    ("rejected", "Rejected"),
+]
+def default_consultation_modes():
+    return [ "in_clinic"]
 
+def default_languages_spoken():
+    return ["English"]
 class doctor(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     #Personal Information
@@ -37,12 +46,24 @@ class doctor(models.Model):
         help_text="Displayed title in prescriptions, e.g., 'Consultant Cardiologist'"
     )
     primary_specialization = models.CharField(max_length=100, default="General", help_text="Primary specialization for indexing/search")
-    consultation_modes = models.JSONField(default=list, help_text="Available consultation modes (e.g., ['video', 'in_clinic'])")
-    languages_spoken = models.JSONField(default=list, help_text="Languages the doctor can speak")
+    # consultation_modes = models.JSONField(default=list, help_text="Available consultation modes (e.g., ['video', 'in_clinic'])")
+    # languages_spoken = models.JSONField(default=list, help_text="Languages the doctor can speak")
+    consultation_modes = models.JSONField(
+        default=default_consultation_modes,
+        help_text="Available consultation modes (e.g., ['video', 'in_clinic'])"
+    )
+    languages_spoken = models.JSONField(
+        default=default_languages_spoken,
+        help_text="Languages the doctor can speak"
+    )
+    # Approval workflow
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+    rejection_reason = models.TextField(blank=True, null=True)
     is_featured = models.BooleanField(default=False, help_text="Featured in search results")
     is_approved = models.BooleanField(default=False)
     kyc_completed = models.BooleanField(default=False)
     kyc_verified = models.BooleanField(default=False)
+
     # Relationships
     clinics = models.ManyToManyField(Clinic, related_name='doctors')
     created_at = models.DateTimeField(auto_now_add=True)
