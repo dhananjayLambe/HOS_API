@@ -15,6 +15,11 @@ STATUS_CHOICES = [
     ('COMPLETED', 'Completed'),
     ('CANCELLED', 'Cancelled')
 ]
+STATUS_CHOICES = [
+    ("pending", "Pending Approval"),
+    ("approved", "Approved"),
+    ("rejected", "Rejected"),
+]
 def generate_test_pnr():
     while True:
         pnr = str(random.randint(1000000000, 9999999999))  # 10-digit number
@@ -108,6 +113,39 @@ class MedicalTest(models.Model):
     def __str__(self):
         return f"{self.name.title()} ({self.type})"
 
+class ServiceCategory(models.Model):
+    """
+    High-level categorization of services offered by diagnostic labs.
+    Example: Pathology, Radiology, Imaging, Home Collection, Health Check Packages, etc.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=150, unique=True)
+    slug = models.SlugField(max_length=150, unique=True, blank=True)
+    description = models.TextField(blank=True, null=True)
+    icon = models.CharField(max_length=100, blank=True, null=True, help_text="Optional icon name for UI display")
+    is_active = models.BooleanField(default=True)
+    display_order = models.PositiveIntegerField(default=0)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def save(self, *args, **kwargs):
+        if self.name:
+            self.slug = slugify(self.name.strip())
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        ordering = ["display_order", "name"]
+        indexes = [
+            models.Index(fields=["slug"]),
+            models.Index(fields=["is_active"]),
+        ]
+        verbose_name = "Service Category"
+        verbose_name_plural = "Service Categories"
+
 class DiagnosticLab(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=255, unique=True)
@@ -123,11 +161,17 @@ class DiagnosticLab(models.Model):
         max_length=100,
         choices=[
             ('collection_center', 'Collection Center'),
-            ('diagnostic_lab', 'Diagnostic Lab'),
+            ('Diagnostic Lab','diagnostic_lab'),
             ('pathology_lab', 'Pathology Lab'),
             ('radiology_center', 'Radiology Center'),
         ],
         default='diagnostic_lab'
+    )
+    service_categories = models.ManyToManyField(
+        "diagnostic.ServiceCategory",
+        related_name="labs",
+        blank=True,
+        help_text="Categories of diagnostic services offered by this lab (e.g., Pathology, Radiology, Imaging)"
     )
     test_types_supported = models.JSONField(default=list, blank=True, help_text="E.g., ['blood', 'urine', 'MRI', 'CT', 'ultrasound']")
     home_sample_collection = models.BooleanField(default=False)
@@ -463,10 +507,19 @@ class LabCommissionLedger(models.Model):
 class LabAdminUser(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="lab_admin_profile")
-    mobile_number = models.CharField(max_length=15, unique=True,default="NA")
-    lab = models.OneToOneField("diagnostic.DiagnosticLab", on_delete=models.CASCADE, related_name="lab_admin")
-
+    secondary_mobile_number = models.CharField(max_length=15, unique=False,default="NA")
+    lab = models.ForeignKey("diagnostic.DiagnosticLab", on_delete=models.CASCADE, related_name="lab_admin")
+    # Approval / KYC Workflow
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+    rejection_reason = models.TextField(blank=True, null=True)
+    is_approved = models.BooleanField(default=False)
+    kyc_completed = models.BooleanField(default=False)
+    kyc_verified = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
+    # ✅ Optional KYC document fields
+    kyc_document_type = models.CharField(max_length=50, blank=True, null=True)
+    kyc_document_number = models.CharField(max_length=50, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -482,8 +535,8 @@ class DiagnosticLabAddress(models.Model):
     state = models.CharField(max_length=100, default='NA')
     pincode = models.CharField(max_length=10, default='NA')
     country = models.CharField(max_length=100, default="India")
-    latitude = models.DecimalField(max_digits=9, decimal_places=6, blank=True, null=True)
-    longitude = models.DecimalField(max_digits=9, decimal_places=6, blank=True, null=True)
+    latitude = models.DecimalField(max_digits=30, decimal_places=6, blank=True, null=True)
+    longitude = models.DecimalField(max_digits=30, decimal_places=6, blank=True, null=True)
     google_place_id = models.CharField(max_length=255, blank=True, null=True)
     google_maps_url = models.URLField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -568,3 +621,4 @@ class TestReport(models.Model):
             models.Index(fields=["patient_profile"]),
             models.Index(fields=["is_active"]),
         ]
+

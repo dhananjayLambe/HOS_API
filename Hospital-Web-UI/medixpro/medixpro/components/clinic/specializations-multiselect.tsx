@@ -112,7 +112,7 @@ export default function SpecializationsMultiSelect({
           aria-label="Specializations suggestions"
           className="absolute z-50 mt-1 w-full rounded-md border border-border bg-popover text-popover-foreground shadow-sm"
         >
-          <ul className="max-h-56 overflow-auto py-1">
+          <ul className="max-h-56 overflow-auto py-1 bg-gray-100">
             {filtered.map((opt) => (
               <li key={opt}>
                 <button

@@ -389,3 +389,22 @@ class ClinicOnboardingSerializer(serializers.ModelSerializer):
         rep["specializations"] = ClinicSpecializationOnboardingSerializer(instance.specializations.all(), many=True).data
         return rep
 
+
+class ClinicListFrontendSerializer(serializers.ModelSerializer):
+    location = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Clinic
+        fields = ["id", "name", "location"]
+
+    def get_location(self, obj):
+        """
+        Combines city and state into a single 'location' field.
+        Falls back gracefully if address is missing.
+        """
+        address = getattr(obj, "address", None)
+        if address:
+            city = address.city or ""
+            state = address.state or ""
+            return f"{city}, {state}".strip(", ")
+        return "NA"

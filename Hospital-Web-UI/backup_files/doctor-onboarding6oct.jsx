@@ -292,6 +292,33 @@ export function DoctorOnboarding() {
   }
 
   useEffect(() => {
+    // const fetchClinics = async () => {
+    //   setIsClinicsLoading(true)
+    //   try {
+    //     const response = await fetch("/api/clinic/clinics-list")
+
+    //     if (!response.ok) {
+    //       console.log("Failed to fetch clinics:", response.status)
+    //       setClinics([])
+    //       return
+    //     }
+
+    //     const data = await response.json()
+
+    //     if (data.success && Array.isArray(data.data)) {
+    //       setClinics(data.data)
+    //     } else {
+    //       console.error("Invalid clinic data format:", data)
+    //       setClinics([])
+    //     }
+    //   } catch (error) {
+    //     console.error("Error fetching clinics:", error)
+    //     setClinics([])
+    //   } finally {
+    //     setIsClinicsLoading(false)
+    //   }
+    // }
+
     fetchClinics()
   }, [])
 
@@ -319,79 +346,28 @@ export function DoctorOnboarding() {
     const newErrors: ValidationErrors = {}
 
     if (step === 1) {
-      if (!formData.user.first_name.trim()) {
-        newErrors.first_name = "First name is required"
-      }
-
-      if (!formData.user.last_name.trim()) {
-        newErrors.last_name = "Last name is required"
-      }
-
-      if (!formData.user.username.trim()) {
-        newErrors.username = "Mobile number is required"
-      } else if (!validateMobile(formData.user.username)) {
-        newErrors.username = "Please enter a valid 10-digit mobile number"
-      }
-
-      if (!formData.user.email.trim()) {
-        newErrors.email = "Email address is required"
-      } else if (!validateEmail(formData.user.email)) {
-        newErrors.email = "Please enter a valid email address"
-      }
-
-      if (!formData.dob) {
-        newErrors.dob = "Date of birth is required"
-      }
-
-      if (!formData.gender) {
-        newErrors.gender = "Gender is required"
-      }
-
-      if (formData.secondary_mobile_number && !validateMobile(formData.secondary_mobile_number)) {
-        newErrors.secondary_mobile_number = "Please enter a valid 10-digit mobile number"
-      }
+      //FOR DEV PURPOSES, SKIPPING VALIDATION
+      console.log("Validating Step 1")
     }
 
     if (step === 2) {
-      if (!formData.government_ids.aadhar_card_number.trim()) {
-        newErrors.aadhar = "Aadhar card number is required"
-      } else if (!validateAadhar(formData.government_ids.aadhar_card_number)) {
-        newErrors.aadhar = "Please enter a valid 12-digit Aadhar number"
-      }
-
-      if (!formData.government_ids.pan_card_number.trim()) {
-        newErrors.pan = "PAN card number is required"
-      } else if (!validatePAN(formData.government_ids.pan_card_number)) {
-        newErrors.pan = "Please enter a valid PAN number (e.g., ABCDE1234F)"
-      }
+      //FOR DEV PURPOSES, SKIPPING VALIDATION
+      console.log("Validating Step 2")
     }
 
     if (step === 3) {
-      if (!formData.registration.medical_registration_number.trim()) {
-        newErrors.medical_registration = "Medical registration number is required"
-      }
-
-      if (!formData.registration.medical_council) {
-        newErrors.medical_council = "Medical council is required"
-      }
+      console.log("Validating Step 3")
+      //FOR DEV PURPOSES, SKIPPING VALIDATION
     }
 
     if (step === 4) {
-      if (!formData.digital_signature_consent) {
-        newErrors.digital_consent = "You must consent to use digital signatures"
-      }
-
-      if (!formData.terms_conditions_accepted) {
-        newErrors.terms_conditions = "You must accept the terms and conditions"
-      }
-
-      if (!formData.data_storage_consent) {
-        newErrors.data_storage = "You must consent to data storage"
-      }
+      console.log("Validating Step 4")
+      //FOR DEV PURPOSES, SKIPPING VALIDATION
     }
 
-    setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
+    //setErrors(newErrors)
+    //return Object.keys(newErrors).length === 0
+    return true // FOR DEV PURPOSES, ALLOWING TO PROCEED WITHOUT VALIDATION
   }
 
   const updateFormData = (section: keyof FormData, field: string, value: any) => {
@@ -897,7 +873,7 @@ export function DoctorOnboarding() {
                   <svg className="w-3 h-3 text-destructive" fill="currentColor" viewBox="0 0 20 20">
                     <path
                       fillRule="evenodd"
-                      d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1H9z"
+                      d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
                       clipRule="evenodd"
                     />
                   </svg>
@@ -1054,17 +1030,8 @@ export function DoctorOnboarding() {
                       placeholder="Enter your first name"
                       className={`h-11 sm:h-12 ${errors.first_name ? "border-destructive" : ""}`}
                       required
-                      aria-invalid={!!errors.first_name}
-                      aria-describedby={errors.first_name ? "first_name-error" : undefined}
                     />
-                    {errors.first_name && (
-                      <p id="first_name-error" className="text-sm text-destructive text-red-500">
-                        {errors.first_name}
-                      </p>
-                    )}
-                    {!errors.first_name && (
-                      <p className="text-xs text-muted-foreground">Enter your first name as per official documents.</p>
-                    )}
+                    {errors.first_name && <p className="text-xs sm:text-sm text-destructive">{errors.first_name}</p>}
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="last_name" className="text-sm font-medium">
@@ -1077,17 +1044,8 @@ export function DoctorOnboarding() {
                       placeholder="Enter your last name"
                       className={`h-11 sm:h-12 ${errors.last_name ? "border-destructive" : ""}`}
                       required
-                      aria-invalid={!!errors.last_name}
-                      aria-describedby={errors.last_name ? "last_name-error" : undefined}
                     />
-                    {errors.last_name && (
-                      <p id="last_name-error" className="text-sm text-destructive text-red-500">
-                        {errors.last_name}
-                      </p>
-                    )}
-                    {!errors.last_name && (
-                      <p className="text-xs text-muted-foreground">Enter your last name as per official documents.</p>
-                    )}
+                    {errors.last_name && <p className="text-xs sm:text-sm text-destructive">{errors.last_name}</p>}
                   </div>
                 </div>
 
@@ -1102,17 +1060,8 @@ export function DoctorOnboarding() {
                     placeholder="Enter your mobile number"
                     className={`h-11 sm:h-12 ${errors.username ? "border-destructive" : ""}`}
                     required
-                    aria-invalid={!!errors.username}
-                    aria-describedby={errors.username ? "username-error" : undefined}
                   />
-                  {errors.username && (
-                    <p id="username-error" className="text-sm text-destructive text-red-500">
-                      {errors.username}
-                    </p>
-                  )}
-                  {!errors.username && (
-                    <p className="text-xs text-muted-foreground">10-digit mobile number starting with 6-9.</p>
-                  )}
+                  {errors.username && <p className="text-xs sm:text-sm text-destructive">{errors.username}</p>}
                 </div>
 
                 <div className="space-y-2">
@@ -1127,17 +1076,8 @@ export function DoctorOnboarding() {
                     placeholder="Enter your email address"
                     className={`h-11 sm:h-12 ${errors.email ? "border-destructive" : ""}`}
                     required
-                    aria-invalid={!!errors.email}
-                    aria-describedby={errors.email ? "email-error" : undefined}
                   />
-                  {errors.email && (
-                    <p id="email-error" className="text-sm text-destructive text-red-500">
-                      {errors.email}
-                    </p>
-                  )}
-                  {!errors.email && (
-                    <p className="text-xs text-muted-foreground">We'll use this for all communications.</p>
-                  )}
+                  {errors.email && <p className="text-xs sm:text-sm text-destructive">{errors.email}</p>}
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
@@ -1164,11 +1104,7 @@ export function DoctorOnboarding() {
                         }
                       }}
                     >
-                      <SelectTrigger
-                        className={`h-11 sm:h-12 ${errors.gender ? "border-destructive" : ""}`}
-                        aria-invalid={!!errors.gender}
-                        aria-describedby={errors.gender ? "gender-error" : undefined}
-                      >
+                      <SelectTrigger className={`h-11 sm:h-12 ${errors.gender ? "border-destructive" : ""}`}>
                         <SelectValue placeholder="Select gender" />
                       </SelectTrigger>
                       <SelectContent>
@@ -1177,12 +1113,7 @@ export function DoctorOnboarding() {
                         <SelectItem value="O">Other</SelectItem>
                       </SelectContent>
                     </Select>
-                    {errors.gender && (
-                      <p id="gender-error" className="text-sm text-destructive text-red-500">
-                        {errors.gender}
-                      </p>
-                    )}
-                    {!errors.gender && <p className="text-xs text-muted-foreground">Select your gender.</p>}
+                    {errors.gender && <p className="text-xs sm:text-sm text-destructive">{errors.gender}</p>}
                   </div>
                 </div>
 
@@ -1195,18 +1126,8 @@ export function DoctorOnboarding() {
                     value={formData.secondary_mobile_number}
                     onChange={(e) => setFormData((prev) => ({ ...prev, secondary_mobile_number: e.target.value }))}
                     placeholder="Enter secondary mobile number (optional)"
-                    className={`h-11 sm:h-12 ${errors.secondary_mobile_number ? "border-destructive" : ""}`}
-                    aria-invalid={!!errors.secondary_mobile_number}
-                    aria-describedby={errors.secondary_mobile_number ? "secondary_mobile-error" : undefined}
+                    className="h-11 sm:h-12"
                   />
-                  {errors.secondary_mobile_number && (
-                    <p id="secondary_mobile-error" className="text-sm text-destructive text-red-500">
-                      {errors.secondary_mobile_number}
-                    </p>
-                  )}
-                  {!errors.secondary_mobile_number && (
-                    <p className="text-xs text-muted-foreground">Optional alternate contact number.</p>
-                  )}
                 </div>
               </div>
             )}
@@ -1242,19 +1163,11 @@ export function DoctorOnboarding() {
                         maxLength={12}
                         className={`h-11 sm:h-12 ${errors.aadhar ? "border-destructive" : ""}`}
                         required
-                        aria-invalid={!!errors.aadhar}
-                        aria-describedby={errors.aadhar ? "aadhar-error" : undefined}
                       />
-                      {errors.aadhar && (
-                        <p id="aadhar-error" className="text-sm text-destructive text-red-500">
-                          {errors.aadhar}
-                        </p>
-                      )}
-                      {!errors.aadhar && (
-                        <p className="text-xs text-muted-foreground">
-                          Enter 12-digit Aadhar number without spaces or dashes
-                        </p>
-                      )}
+                      {errors.aadhar && <p className="text-xs sm:text-sm text-destructive">{errors.aadhar}</p>}
+                      <p className="text-xs text-muted-foreground">
+                        Enter 12-digit Aadhar number without spaces or dashes
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -1282,19 +1195,11 @@ export function DoctorOnboarding() {
                         maxLength={10}
                         className={`h-11 sm:h-12 ${errors.pan ? "border-destructive" : ""}`}
                         required
-                        aria-invalid={!!errors.pan}
-                        aria-describedby={errors.pan ? "pan-error" : undefined}
                       />
-                      {errors.pan && (
-                        <p id="pan-error" className="text-sm text-destructive text-red-500">
-                          {errors.pan}
-                        </p>
-                      )}
-                      {!errors.pan && (
-                        <p className="text-xs text-muted-foreground">
-                          Enter 10-character PAN number (5 letters + 4 digits + 1 letter)
-                        </p>
-                      )}
+                      {errors.pan && <p className="text-xs sm:text-sm text-destructive">{errors.pan}</p>}
+                      <p className="text-xs text-muted-foreground">
+                        Enter 10-character PAN number (5 letters + 4 digits + 1 letter)
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -1334,16 +1239,9 @@ export function DoctorOnboarding() {
                     placeholder="Enter your medical registration number"
                     className={`h-11 sm:h-12 ${errors.medical_registration ? "border-destructive" : ""}`}
                     required
-                    aria-invalid={!!errors.medical_registration}
-                    aria-describedby={errors.medical_registration ? "medical_registration-error" : undefined}
                   />
                   {errors.medical_registration && (
-                    <p id="medical_registration-error" className="text-sm text-destructive text-red-500">
-                      {errors.medical_registration}
-                    </p>
-                  )}
-                  {!errors.medical_registration && (
-                    <p className="text-xs text-muted-foreground">Your unique medical registration number.</p>
+                    <p className="text-xs sm:text-sm text-destructive">{errors.medical_registration}</p>
                   )}
                 </div>
 
@@ -1358,8 +1256,6 @@ export function DoctorOnboarding() {
                         role="combobox"
                         aria-expanded={openMedicalCouncil}
                         className={`h-11 sm:h-12 w-full justify-between ${errors.medical_council ? "border-destructive" : ""}`}
-                        aria-invalid={!!errors.medical_council}
-                        aria-describedby={errors.medical_council ? "medical_council-error" : undefined}
                       >
                         {formData.registration.medical_council
                           ? medicalCouncils.find((council) => council.value === formData.registration.medical_council)
@@ -1421,21 +1317,18 @@ export function DoctorOnboarding() {
                     </PopoverContent>
                   </Popover>
                   {errors.medical_council && (
-                    <p id="medical_council-error" className="text-sm text-destructive text-red-500">
-                      {errors.medical_council}
-                    </p>
+                    <p className="text-xs sm:text-sm text-destructive">{errors.medical_council}</p>
                   )}
-                  {!errors.medical_council && (
-                    <p className="text-xs text-muted-foreground">
-                      Type to search from State Medical Councils or National Medical Commission
-                    </p>
-                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Type to search from State Medical Councils or National Medical Commission
+                  </p>
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="clinic" className="text-sm font-medium">
                     Clinic (Optional)
                   </Label>
+                  {/* <Popover open={openClinic} onOpenChange={setOpenClinic}> */}
                   <Popover
                     open={openClinic}
                     onOpenChange={(open) => {
@@ -1450,8 +1343,6 @@ export function DoctorOnboarding() {
                         aria-expanded={openClinic}
                         disabled={isClinicsLoading}
                         className={`h-11 sm:h-12 w-full justify-between ${errors.clinic_id ? "border-destructive" : ""}`}
-                        aria-invalid={!!errors.clinic_id}
-                        aria-describedby={errors.clinic_id ? "clinic_id-error" : undefined}
                       >
                         {isClinicsLoading
                           ? "Loading clinics..."
@@ -1515,16 +1406,10 @@ export function DoctorOnboarding() {
                       </Command>
                     </PopoverContent>
                   </Popover>
-                  {errors.clinic_id && (
-                    <p id="clinic_id-error" className="text-sm text-destructive text-red-500">
-                      {errors.clinic_id}
-                    </p>
-                  )}
-                  {!errors.clinic_id && (
-                    <p className="text-xs text-muted-foreground">
-                      Type to search and select the clinic you are associated with
-                    </p>
-                  )}
+                  {errors.clinic_id && <p className="text-xs sm:text-sm text-destructive">{errors.clinic_id}</p>}
+                  <p className="text-xs text-muted-foreground">
+                    Type to search and select the clinic you are associated with
+                  </p>
                 </div>
               </div>
             )}
@@ -1561,8 +1446,6 @@ export function DoctorOnboarding() {
                           }
                         }}
                         className="mt-1"
-                        aria-invalid={!!errors.digital_consent}
-                        aria-describedby={errors.digital_consent ? "digital_consent-error" : undefined}
                       />
                       <div className="space-y-2 flex-1">
                         <Label
@@ -1577,11 +1460,7 @@ export function DoctorOnboarding() {
                             applicable regulations.
                           </p>
                         </div>
-                        {errors.digital_consent && (
-                          <p id="digital_consent-error" className="text-sm text-destructive text-red-500">
-                            {errors.digital_consent}
-                          </p>
-                        )}
+                        {errors.digital_consent && <p className="text-xs text-destructive">{errors.digital_consent}</p>}
                       </div>
                     </div>
                   </div>
@@ -1602,8 +1481,6 @@ export function DoctorOnboarding() {
                           }
                         }}
                         className="mt-1"
-                        aria-invalid={!!errors.terms_conditions}
-                        aria-describedby={errors.terms_conditions ? "terms_conditions-error" : undefined}
                       />
                       <div className="space-y-2 flex-1">
                         <Label
@@ -1636,9 +1513,7 @@ export function DoctorOnboarding() {
                           </p>
                         </div>
                         {errors.terms_conditions && (
-                          <p id="terms_conditions-error" className="text-sm text-destructive text-red-500">
-                            {errors.terms_conditions}
-                          </p>
+                          <p className="text-xs text-destructive">{errors.terms_conditions}</p>
                         )}
                       </div>
                     </div>
@@ -1660,8 +1535,6 @@ export function DoctorOnboarding() {
                           }
                         }}
                         className="mt-1"
-                        aria-invalid={!!errors.data_storage}
-                        aria-describedby={errors.data_storage ? "data_storage-error" : undefined}
                       />
                       <div className="space-y-2 flex-1">
                         <Label
@@ -1693,11 +1566,7 @@ export function DoctorOnboarding() {
                             per applicable regulations.
                           </p>
                         </div>
-                        {errors.data_storage && (
-                          <p id="data_storage-error" className="text-sm text-destructive text-red-500">
-                            {errors.data_storage}
-                          </p>
-                        )}
+                        {errors.data_storage && <p className="text-xs text-destructive">{errors.data_storage}</p>}
                       </div>
                     </div>
                   </div>

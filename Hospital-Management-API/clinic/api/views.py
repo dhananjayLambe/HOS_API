@@ -43,6 +43,14 @@ from account.permissions import IsDoctor
 logger = logging.getLogger(__name__)
 from clinic.utils import api_response
 
+from django.utils.decorators import method_decorator
+from django.views.decorators.cache import cache_page
+from rest_framework import viewsets, mixins, filters
+from rest_framework.permissions import AllowAny
+from django_filters.rest_framework import DjangoFilterBackend
+from clinic.models import Clinic
+from clinic.api.serializers import ClinicListFrontendSerializer
+from clinic.pagination import ClinicPageNumberPagination
 
 class ClinicOnboardingView(APIView):
     print("i am in clinic onboarding view API ")
@@ -639,3 +647,35 @@ class ClinicAdminTokenRefreshView(TokenRefreshView):
 
 class ClinicAdminTokenVerifyView(TokenVerifyView):
     serializer_class = ClinicAdminTokenVerifySerializer
+
+
+
+class ClinicListViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
+    print("ClinicListViewSet")
+    """
+    Endpoint: GET /api/clinics/
+    Returns paginated clinics in frontend-friendly format.
+    """
+    serializer_class = ClinicListFrontendSerializer
+    permission_classes = [AllowAny]
+    pagination_class = ClinicPageNumberPagination
+
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ["address__city", "address__state", "is_approved"]
+    search_fields = ["name", "address__city", "address__state"]
+    ordering_fields = ["name", "created_at"]
+    ordering = ["created_at"]
+
+    def get_queryset(self):
+        qs = Clinic.objects.select_related("address").all()
+
+        # Only approved by default
+        # if self.request.query_params.get("is_approved") is None:
+        #     qs = qs.filter(is_approved=True)
+
+        return qs
+
+    # Cache list endpoint for 5 minutes
+    @method_decorator(cache_page(60 * 5))
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)

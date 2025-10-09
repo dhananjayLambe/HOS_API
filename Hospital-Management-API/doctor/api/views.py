@@ -77,16 +77,24 @@ class DoctorOnboardingPhase1View(GenericAPIView):
     permission_classes = [permissions.AllowAny]  # OTP auth should be enforced at the router or middleware
 
     def post(self, request, *args, **kwargs):
-        print("I am in phase 1 onboarding")
-        serializer = self.get_serializer(data=request.data, context={"request": request})
-        if not serializer.is_valid():
-            print("Validation errors:", serializer.errors)
-            #return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-            return Response({"status": "error", "errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
-        serializer.is_valid(raise_exception=True)
-        with transaction.atomic():
-            doctor_obj = serializer.save()
-        return Response(self.get_serializer(doctor_obj).data, status=status.HTTP_201_CREATED)
+        try:
+            print("I am in DOCTOR phase 1 onboarding")
+            #print("Request data:", request.data)
+            serializer = self.get_serializer(data=request.data, context={"request": request})
+            #print("Serializer:", serializer.data)
+            #print("serializer.is_valid()",serializer.is_valid())
+            if not serializer.is_valid():
+                print("Validation errors:", serializer.errors)
+                #return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                return Response({"status": "error", "errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+            serializer.is_valid(raise_exception=True)
+            with transaction.atomic():
+                doctor_obj = serializer.save()
+            #print("Doctor object:", doctor_obj)
+            return Response(self.get_serializer(doctor_obj).data, status=status.HTTP_201_CREATED)
+        except Exception as e:
+            print("Exception:", e)
+            return Response({"status": "error", "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 #Determines if the user is new or existing.
 

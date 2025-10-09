@@ -18,7 +18,8 @@ export function middleware(req: NextRequest) {
     "/api/doctor/onboarding/phase1",
     "api/auth/check-user-status/",
     "/api/clinic/clinics/onboarding/",
-    "auth/register/clinic-registration"
+    "auth/register/clinic-registration",
+    "/api/lab-admin/onboarding/"
   ];
 
   if (publicPaths.some((path) => pathname.startsWith(path))) {

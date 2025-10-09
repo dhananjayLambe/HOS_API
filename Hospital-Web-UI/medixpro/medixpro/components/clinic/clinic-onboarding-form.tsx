@@ -274,7 +274,7 @@ export default function ClinicOnboardingForm() {
               aria-describedby={errors.clinicName ? "clinic-name-error" : undefined}
             />
             {errors.clinicName ? (
-              <p id="clinic-name-error" className="text-sm text-destructive">
+              <p id="clinic-name-error" className="text-sm text-destructive text-red-500">
                 {errors.clinicName}
               </p>
             ) : (
@@ -291,7 +291,7 @@ export default function ClinicOnboardingForm() {
               placeholder="Type to search or add..."
             />
             {errors.specializations ? (
-              <p className="text-sm text-destructive">{errors.specializations}</p>
+              <p className="text-sm text-destructive text-red-500">{errors.specializations}</p>
             ) : (
               <p className="text-xs text-muted-foreground">Select one or more. Add new if not listed.</p>
             )}
@@ -309,7 +309,7 @@ export default function ClinicOnboardingForm() {
               aria-describedby={errors.primaryPhone ? "primary-phone-error" : undefined}
             />
             {errors.primaryPhone && (
-              <p id="primary-phone-error" className="text-sm text-destructive">
+              <p id="primary-phone-error" className="text-sm text-destructive text-red-500">
                 {errors.primaryPhone}
               </p>
             )}
@@ -344,7 +344,7 @@ export default function ClinicOnboardingForm() {
               aria-describedby={errors.email ? "email-error" : undefined}
             />
             {errors.email && (
-              <p id="email-error" className="text-sm text-destructive">
+              <p id="email-error" className="text-sm text-destructive text-red-500">
                 {errors.email}
               </p>
             )}
@@ -373,7 +373,7 @@ export default function ClinicOnboardingForm() {
               aria-describedby={errors.address1 ? "address1-error" : undefined}
             />
             {errors.address1 && (
-              <p id="address1-error" className="text-sm text-destructive">
+              <p id="address1-error" className="text-sm text-destructive text-red-500">
                 {errors.address1}
               </p>
             )}
@@ -400,7 +400,7 @@ export default function ClinicOnboardingForm() {
                 aria-describedby={errors.city ? "city-error" : undefined}
               />
               {errors.city && (
-                <p id="city-error" className="text-sm text-destructive">
+                <p id="city-error" className="text-sm text-destructive text-red-500">
                   {errors.city}
                 </p>
               )}
@@ -416,7 +416,7 @@ export default function ClinicOnboardingForm() {
                 aria-describedby={errors.state ? "state-error" : undefined}
               />
               {errors.state && (
-                <p id="state-error" className="text-sm text-destructive">
+                <p id="state-error" className="text-sm text-destructive text-red-500">
                   {errors.state}
                 </p>
               )}
@@ -434,7 +434,7 @@ export default function ClinicOnboardingForm() {
                 aria-describedby={errors.pincode ? "pincode-error" : undefined}
               />
               {errors.pincode && (
-                <p id="pincode-error" className="text-sm text-destructive">
+                <p id="pincode-error" className="text-sm text-destructive text-red-500">
                   {errors.pincode}
                 </p>
               )}
@@ -459,7 +459,7 @@ export default function ClinicOnboardingForm() {
               aria-describedby={errors.registrationNumber ? "regno-error" : undefined}
             />
             {errors.registrationNumber && (
-              <p id="regno-error" className="text-sm text-destructive">
+              <p id="regno-error" className="text-sm text-destructive text-red-500">
                 {errors.registrationNumber}
               </p>
             )}

@@ -3,7 +3,11 @@ from django.utils.text import slugify
 from diagnostic.models import (
     MedicalTest, TestCategory, ImagingView, TestRecommendation,PackageRecommendation,
     TestPackage,DiagnosticLabAddress,TestLabMapping,PackageLabMapping,TestRecommendation,
-    TestBooking,BookingGroup,TestReport
+    TestBooking,BookingGroup,TestReport,
+    DiagnosticLab,
+    DiagnosticLabAddress,
+    LabAdminUser,
+    ServiceCategory,
     )
 from django.db import transaction
 from account.models import User
@@ -15,6 +19,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from consultations.models import Consultation
 from patient_account.api.serializers import PatientProfileSearchSerializer,PatientInfoSerializer
 import os
+
 class PackageRecommendationSerializer(serializers.ModelSerializer):
     package_name = serializers.CharField(source='package.name', read_only=True)
 
@@ -608,3 +613,191 @@ class TestReportDetailsSerializer(serializers.ModelSerializer):
             'id', 'file', 'test_pnr', 'comments', 'is_external', 'uploaded_at',
             'consultation_id', 'patient_profile_id', 'test_name', 'lab_name'
         ]
+
+
+
+class AdminDetailsSerializer(serializers.Serializer):
+    first_name = serializers.CharField(max_length=150)
+    last_name = serializers.CharField(max_length=150, required=False, allow_blank=True)
+    username = serializers.CharField(max_length=15)  # mobile number used as username
+    email = serializers.EmailField(required=False, allow_blank=True)
+    designation = serializers.CharField(max_length=100, required=False, allow_blank=True)
+
+
+class LabDetailsSerializer(serializers.Serializer):
+    lab_name = serializers.CharField(max_length=255)
+    lab_type = serializers.ChoiceField(
+        choices=[c[0] for c in DiagnosticLab._meta.get_field("lab_type").choices],
+        default="diagnostic_lab",
+    )
+    license_number = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    license_valid_till = serializers.DateField(required=False, allow_null=True)
+    certifications = serializers.CharField(required=False, allow_blank=True)
+    service_categories = serializers.ListField(
+        child=serializers.CharField(max_length=150),
+        allow_empty=True,
+        required=False,
+    )
+    home_sample_collection = serializers.BooleanField(required=False, default=False)
+    pricing_tier = serializers.ChoiceField(
+        choices=[c[0] for c in DiagnosticLab._meta.get_field("pricing_tier").choices],
+        default="medium",
+    )
+    turnaround_time_hours = serializers.IntegerField(required=False, default=24)
+
+
+class AddressDetailsSerializer(serializers.Serializer):
+    address = serializers.CharField(max_length=255)
+    address2 = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    city = serializers.CharField(max_length=100)
+    state = serializers.CharField(max_length=100)
+    pincode = serializers.CharField(max_length=10)
+    latitude = serializers.DecimalField(max_digits=30, decimal_places=20, required=False, allow_null=True)
+    longitude = serializers.DecimalField(max_digits=30, decimal_places=20, required=False, allow_null=True)
+
+
+class KYCDetailsSerializer(serializers.Serializer):
+    kyc_document_type = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    kyc_document_number = serializers.CharField(max_length=50, required=False, allow_blank=True)
+
+
+class LabOnboardSerializer(serializers.Serializer):
+    admin_details = AdminDetailsSerializer()
+    lab_details = LabDetailsSerializer()
+    address_details = AddressDetailsSerializer()
+    kyc_details = KYCDetailsSerializer(required=False)
+
+    def validate_admin_details(self, value):
+        username = value.get("username")
+        if not username:
+            raise serializers.ValidationError("username (mobile number) is required.")
+        if User.objects.filter(username=username).exists():
+            raise serializers.ValidationError(
+                "This mobile number is already registered. Please use a different one."
+            )
+        return value
+
+    def validate_lab_details(self, value):
+        lab_name = value.get("lab_name")
+        if DiagnosticLab.objects.filter(name__iexact=lab_name.strip()).exists():
+            raise serializers.ValidationError({"lab_name": "This lab name already exists."})
+        return value
+
+    def _get_or_create_service_categories(self, category_names):
+        categories = []
+        for name in category_names or []:
+            name = name.strip()
+            if not name:
+                continue
+            category = ServiceCategory.objects.filter(name__iexact=name).first()
+            if not category:
+                category = ServiceCategory.objects.create(name=name)
+            categories.append(category)
+        return categories
+
+    @transaction.atomic
+    def create(self, validated_data):
+        admin_data = validated_data["admin_details"]
+        lab_data = validated_data["lab_details"]
+        address_data = validated_data["address_details"]
+        kyc_data = validated_data.get("kyc_details", {})
+
+        # ✅ Create User
+        username = admin_data["username"].strip()
+        user = User.objects.create(
+            username=username,
+            first_name=admin_data.get("first_name", "").strip(),
+            last_name=admin_data.get("last_name", "").strip(),
+            email=admin_data.get("email", "").strip(),
+            is_active=False,
+        )
+        user.set_unusable_password()  # OTP-based login
+        # Add user to 'lab-admin' group
+        lab_admin_group, _ = Group.objects.get_or_create(name="lab-admin")
+        user.groups.add(lab_admin_group)
+        user.save()
+
+        # ✅ Create Lab
+        lab = DiagnosticLab.objects.create(
+            name=lab_data["lab_name"].strip(),
+            lab_type=lab_data.get("lab_type", "diagnostic_lab"),
+            license_number=lab_data.get("license_number") or None,
+            license_valid_till=lab_data.get("license_valid_till") or None,
+            certifications=lab_data.get("certifications") or None,
+            home_sample_collection=lab_data.get("home_sample_collection", False),
+            pricing_tier=lab_data.get("pricing_tier", "medium"),
+            turnaround_time_hours=lab_data.get("turnaround_time_hours", 24),
+            contact=username,
+            is_active=False,  # until admin approval
+        )
+
+        # ✅ Link Service Categories
+        category_list = self._get_or_create_service_categories(lab_data.get("service_categories", []))
+        if hasattr(lab, "service_categories"):
+            lab.service_categories.add(*category_list)
+
+        # ✅ Create Address
+        DiagnosticLabAddress.objects.create(
+            lab=lab,
+            address=address_data.get("address"),
+            address2=address_data.get("address2") or "",
+            city=address_data.get("city"),
+            state=address_data.get("state"),
+            pincode=address_data.get("pincode"),
+            latitude=address_data.get("latitude"),
+            longitude=address_data.get("longitude"),
+        )
+
+        # ✅ Create Lab Admin
+        lab_admin = LabAdminUser.objects.create(
+            user=user,
+            lab=lab,
+            secondary_mobile_number="NA",
+            status="pending",
+            is_approved=False,
+            kyc_completed=bool(kyc_data.get("kyc_document_number")),
+            kyc_verified=False,
+            kyc_document_type=kyc_data.get("kyc_document_type"),
+            kyc_document_number=kyc_data.get("kyc_document_number"),
+            is_active=False,
+        )
+
+        return {"lab": lab, "lab_admin": lab_admin}
+
+    def to_representation(self, instance):
+        lab = instance["lab"]
+        lab_admin = instance["lab_admin"]
+
+        categories = (
+            list(lab.service_categories.values_list("name", flat=True))
+            if hasattr(lab, "service_categories")
+            else []
+        )
+
+        return {
+            "message": "Lab registration submitted successfully. Pending approval by DoctorProCare Admin.",
+            "data": {
+                "lab_id": str(lab.id),
+                "lab_name": lab.name,
+                "lab_type": lab.lab_type,
+                "status": lab_admin.status,
+                "is_approved": lab_admin.is_approved,
+                "service_categories": categories,
+                "lab_admin": {
+                    "admin_id": str(lab_admin.id),
+                    "name": f"{lab_admin.user.first_name} {lab_admin.user.last_name}".strip(),
+                    "username": lab_admin.user.username,
+                    "email": lab_admin.user.email,
+                    "status": lab_admin.status,
+                    "is_approved": lab_admin.is_approved,
+                    "kyc_completed": lab_admin.kyc_completed,
+                },
+                "address": {
+                    "address": lab.address.address if hasattr(lab, "address") else "",
+                    "city": lab.address.city if hasattr(lab, "address") else "",
+                    "state": lab.address.state if hasattr(lab, "address") else "",
+                    "pincode": lab.address.pincode if hasattr(lab, "address") else "",
+                },
+                "created_at": lab.created_at.isoformat(),
+            },
+        }

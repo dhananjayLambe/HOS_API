@@ -18,6 +18,7 @@ from diagnostic.api.views import (
     PatientReportHistoryView,
     DoctorReportHistoryView,
     AdminReportHistoryView,
+    LabOnboardView
 )
 urlpatterns =[]
 router = DefaultRouter()
@@ -35,6 +36,8 @@ router.register(r'package-recommendations', PackageRecommendationViewSet, basena
 urlpatterns += router.urls
 
 urlpatterns += [
+    path("lab-onboard/", LabOnboardView.as_view(), name="lab-onboard"),
+
     # Lab Admin Registration
     path("lab-admin/register/", LabAdminRegisterView.as_view(), name="lab-register"),
     path("lab-admin/login/", LabAdminLoginView.as_view(), name="lab-admin-login"),

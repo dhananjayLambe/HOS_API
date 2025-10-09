@@ -1006,6 +1006,7 @@ class OnboardUserSerializer(serializers.ModelSerializer):
             "first_name": {"required": False, "allow_blank": True},
             "last_name": {"required": False, "allow_blank": True},
             "username": {"required": False, "allow_blank": True},
+            "clinics": {"required": False},  # make M2M optional
         }
 
     def validate_username(self, value):
@@ -1017,6 +1018,7 @@ class OnboardUserSerializer(serializers.ModelSerializer):
         return value
 
     def create(self, validated_data):
+        clinic_id = validated_data.pop("clinic_id", None)
         # Create user without password (OTP-based). status=False (inactive) by default.
         user = User.objects.create(
             username=validated_data["username"],
@@ -1026,6 +1028,12 @@ class OnboardUserSerializer(serializers.ModelSerializer):
             status=False,
             is_active=True,  # keep active so OTP login works; adjust if you want inactive until verification
         )
+        if clinic_id:
+            try:
+                clinic = Clinic.objects.get(id=clinic_id)
+                user.clinics.add(clinic)
+            except Clinic.DoesNotExist:
+                raise serializers.ValidationError({"clinic_id": "Invalid clinic ID"})
         return user
 
 
@@ -1203,6 +1211,7 @@ class DoctorPhase1Serializer(serializers.ModelSerializer):
             "terms_conditions_accepted": {"required": False},
             "data_storage_consent": {"required": False},
             "secondary_mobile_number": {"required": False, "allow_blank": True},
+            "clinic_id": {"required": False},
         }
 
     def validate_dob(self, value):
@@ -1223,9 +1232,13 @@ class DoctorPhase1Serializer(serializers.ModelSerializer):
 
     @transaction.atomic
     def create(self, validated_data):
+        print("validated_data:", validated_data)
         user_data = validated_data.pop("user", {})
         gov_data = validated_data.pop("government_ids", {})
         reg_data = validated_data.pop("registration", {})
+        # Extract clinic_id from user_data if present
+        clinic_id = validated_data.pop("clinic_id", None)
+        print("clinic_id:", clinic_id)
 
         # Create User with default values if data is missing
         username = user_data.get("username", f"doctor_{timezone.now().timestamp()}")
@@ -1241,7 +1254,6 @@ class DoctorPhase1Serializer(serializers.ModelSerializer):
             status=False,
             is_active=True,
         )
-
         # Add user to 'doctor' group
         doctor_group, _ = Group.objects.get_or_create(name="doctor")
         user.groups.add(doctor_group)
@@ -1256,7 +1268,14 @@ class DoctorPhase1Serializer(serializers.ModelSerializer):
             "secondary_mobile_number": validated_data.get("secondary_mobile_number", ""),
         }
         doctor_obj = doctor.objects.create(user=user, **doctor_data)
-
+        # 4️⃣ Attach clinic if provided
+        if clinic_id:
+            try:
+                clinic = Clinic.objects.get(id=clinic_id)
+                doctor_obj.clinics.add(clinic)
+                print(f"✅ Clinic {clinic} linked to doctor {doctor_obj}")
+            except Clinic.DoesNotExist:
+                raise serializers.ValidationError({"clinic_id": "Invalid clinic ID"})
         # Create GovernmentID with provided or default values
         gov_defaults = {
             "pan_card_number": gov_data.get("pan_card_number", ""),
@@ -1295,6 +1314,7 @@ class DoctorPhase1Serializer(serializers.ModelSerializer):
             "digital_signature_consent": instance.digital_signature_consent,
             "terms_conditions_accepted": instance.terms_and_conditions_acceptance,
             "data_storage_consent": instance.consent_for_data_storage,
+            "clinic_id": instance.clinics.first().id if instance.clinics.exists() else None,
             "kyc_completed": instance.kyc_completed,
             "kyc_verified": instance.kyc_verified,
             "created_at": instance.created_at.isoformat() if instance.created_at else None,

@@ -52,7 +52,8 @@ from diagnostic.api.serializers import (
     HomeCollectionConfirmSerializer,HomeCollectionRejectSerializer,
     HomeCollectionRescheduleSerializer,MarkCollectedSerializer,
     BookingGroupListSerializer,LabReportUploadSerializer,BookingGroupTestListSerializer,
-    TestReportDownloadSerializer,TestReportDetailsSerializer,TestReportDetailsSerializer,)
+    TestReportDownloadSerializer,TestReportDetailsSerializer,TestReportDetailsSerializer,
+    LabOnboardSerializer)
 from consultations.models import Consultation
 from account.permissions import IsDoctor, IsAdminUser,IsLabAdmin,IsPatient,IsHelpdeskOrLabAdmin
 from django.core.exceptions import ValidationError
@@ -71,6 +72,11 @@ from django.shortcuts import get_object_or_404
 from rest_framework.exceptions import NotFound
 from rest_framework.generics import ListAPIView
 from patient_account.models import PatientProfile, PatientAccount
+from rest_framework import status, permissions
+from rest_framework.exceptions import ParseError
+from django.db import IntegrityError, transaction
+
+
 class ImagingViewViewSet(viewsets.ModelViewSet):
     queryset = ImagingView.objects.all().order_by('name')
     serializer_class = ImagingViewSerializer
@@ -2261,3 +2267,37 @@ class AdminReportHistoryView(ListAPIView):
             "data": serializer.data
         }, status=200)
 
+
+
+class LabOnboardView(APIView):
+    """
+    POST /api/diagnostic/lab-onboard/
+    Public endpoint for lab + lab admin onboarding.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        serializer = LabOnboardSerializer(data=request.data)
+        try:
+            serializer.is_valid(raise_exception=True)
+            with transaction.atomic():
+                created = serializer.save()
+        except IntegrityError as e:
+            return Response(
+                {"error": True, "message": "Database integrity error.", "details": str(e)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return Response(
+                {
+                    "error": True,
+                    "message": "Something went wrong during onboarding. Please try again later.",
+                    "error_message": str(e),
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        result = serializer.to_representation(created)
+        return Response(result, status=status.HTTP_201_CREATED)

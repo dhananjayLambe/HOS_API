@@ -5,7 +5,7 @@ from clinic.api.views import (
     ClinicDetailView, ClinicUpdateView,
     ClinicDeleteView,ClinicAddressViewSet,
     ClinicSpecializationViewSet,ClinicAdminRegisterView,
-    ClinicScheduleViewSet,
+    ClinicScheduleViewSet,ClinicListViewSet,
     ClinicServiceViewSet,
     ClinicServiceListViewSet,ClinicAdminLoginView,
     ClinicRegistrationView,ClinicProfileUpdateView,
@@ -18,6 +18,7 @@ router.register(r'clinic-specializations', ClinicSpecializationViewSet, basename
 router.register(r'clinic-schedules', ClinicScheduleViewSet, basename='clinic-schedule')
 router.register(r'clinic-services', ClinicServiceViewSet, basename='clinic-service')
 router.register(r'clinic-service-list', ClinicServiceListViewSet, basename='clinic-service-list')
+router.register(r"clinic-list-ui", ClinicListViewSet, basename="clinic")
 
 urlpatterns = [
     path("clinics/onboarding/", ClinicOnboardingView.as_view(), name="clinic-create"),
