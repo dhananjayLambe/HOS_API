@@ -713,7 +713,7 @@ class LabOnboardSerializer(serializers.Serializer):
         )
         user.set_unusable_password()  # OTP-based login
         # Add user to 'lab-admin' group
-        lab_admin_group, _ = Group.objects.get_or_create(name="lab-admin")
+        lab_admin_group, _ = Group.objects.get_or_create(name="labadmin")
         user.groups.add(lab_admin_group)
         user.save()
 

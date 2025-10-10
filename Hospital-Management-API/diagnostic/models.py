@@ -160,10 +160,10 @@ class DiagnosticLab(models.Model):
     lab_type = models.CharField(
         max_length=100,
         choices=[
-            ('collection_center', 'Collection Center'),
+            ('Collection Center','collection_center'),
             ('Diagnostic Lab','diagnostic_lab'),
-            ('pathology_lab', 'Pathology Lab'),
-            ('radiology_center', 'Radiology Center'),
+            ('Pathology Lab','pathology_lab'),
+            ( 'Radiology Center','radiology_center'),
         ],
         default='diagnostic_lab'
     )

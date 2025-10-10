@@ -23,11 +23,11 @@ from django.core.cache import cache
 # Local app imports
 from account.models import User
 
-VALID_ROLES = ["doctor", "helpdesk", "labadmin", "superadmin"]
+VALID_ROLES = ["doctor", "helpdesk", "superadmin","labadmin"]
 # ----------------------
 # Configuration / constants
 # ----------------------
-VALID_STAFF_ROLES = {"doctor", "helpdesk", "labadmin", "superadmin"}
+VALID_STAFF_ROLES = {"doctor", "helpdesk", "superadmin","labadmin"}
 
 # Access token lifetime (common short-lived token)
 ACCESS_TOKEN_LIFETIME = datetime.timedelta(hours=1)
@@ -425,6 +425,8 @@ class StaffSendOTPView(APIView):
         phone = str(request.data.get("phone_number", "")).strip()
         role = str(request.data.get("role", "")).lower().strip()
         print("I am in send OTP")
+        print("phone:", phone)
+        print("role:", role)
 
         # Input validation
         if not phone or not role:
