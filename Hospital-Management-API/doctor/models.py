@@ -16,6 +16,56 @@ STATUS_CHOICES = [
     ("approved", "Approved"),
     ("rejected", "Rejected"),
 ]
+SPECIALIZATION_CHOICES = [
+    ('CL', 'Cardiologist'),
+    ('DL', 'Dermatologist'),
+    ('EMC', 'Emergency Medicine Specialist'),
+    ('IL', 'Immunologist'),
+    ('AL', 'Anesthesiologist'),
+    ('CRS', 'Colon and Rectal Surgeon'),
+    ('END', 'Endocrinologist'),
+    ('GAS', 'Gastroenterologist'),
+    ('HIM', 'Hematologist'),
+    ('ONC', 'Oncologist'),
+    ('NEU', 'Neurologist'),
+    ('NS', 'Neurosurgeon'),
+    ('PED', 'Pediatrician'),
+    ('PLS', 'Plastic Surgeon'),
+    ('PMR', 'Physical Medicine and Rehabilitation Specialist'),
+    ('PSY', 'Psychiatrist'),
+    ('RAD', 'Radiologist'),
+    ('RHU', 'Rheumatologist'),
+    ('THS', 'Thoracic Surgeon'),
+    ('URO', 'Urologist'),
+    ('ENT', 'Otorhinolaryngologist (ENT Specialist)'),
+    ('OPH', 'Ophthalmologist'),
+    ('MFS', 'Maternal-Fetal Medicine Specialist'),
+    ('NEON', 'Neonatologist'),
+    ('GYN', 'Gynecologist'),
+    ('ORT', 'Orthopedic Surgeon'),
+    ('VCS', 'Vascular Surgeon'),
+    ('IMM', 'Allergy and Immunology Specialist'),
+    ('PAIN', 'Pain Medicine Specialist'),
+    ('PATH', 'Pathologist'),
+    ('NM', 'Nuclear Medicine Specialist'),
+    ('SLE', 'Sleep Medicine Specialist'),
+    ('OT', 'Occupational Medicine Specialist'),
+    ('SM', 'Sports Medicine Specialist'),
+    ('PS', 'Palliative Medicine Specialist'),
+    ('DER', 'Dermatosurgeon'),
+    ('FM', 'Family Medicine Specialist'),
+    ('GEN', 'General Practitioner'),
+    ('GER', 'Geriatrician'),
+    ('ID', 'Infectious Disease Specialist'),
+    ('TOX', 'Toxicologist'),
+    ('GENS', 'General Surgeon'),
+    ('TRS', 'Transplant Surgeon'),
+    ('CRIT', 'Critical Care Specialist'),
+    ('COS', 'Cosmetic Surgeon'),
+    ('LAB', 'Lab Medicine Specialist'),
+    ('CLG', 'Clinical Geneticist'),
+]
+
 def default_consultation_modes():
     return [ "in_clinic"]
 
@@ -31,6 +81,7 @@ class doctor(models.Model):
     photo = models.ImageField(upload_to=doctor_photo_upload_path, blank=True, null=True)
     years_of_experience = models.PositiveIntegerField(default=1)
     avg_rating = models.DecimalField(max_digits=3, decimal_places=2, default=5.0)
+    slug = models.SlugField(unique=True, null=True, blank=True)
     gender = models.CharField(
         max_length=10,
         choices=[("M", "Male"), ("F", "Female"), ("O", "Other")],
@@ -63,11 +114,15 @@ class doctor(models.Model):
     is_approved = models.BooleanField(default=False)
     kyc_completed = models.BooleanField(default=False)
     kyc_verified = models.BooleanField(default=False)
+    profile_completion = models.PositiveIntegerField(default=0)
+    profile_verification_Badges = models.JSONField(default=list, help_text="List of badges earned by the doctor")
 
     # Relationships
     clinics = models.ManyToManyField(Clinic, related_name='doctors')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)  # Mandatory  default=timezone.now
+    
+    profile_progress = models.IntegerField(default=0)
     @property
     def get_name(self):
         return self.user.first_name+" "+self.user.last_name
@@ -126,6 +181,7 @@ class GovernmentID(models.Model):
     aadhar_card_number = models.CharField(max_length=12, unique=True,
                             validators=[RegexValidator(regex='^[0-9]{12}$', message="Invalid Aadhar number.")])
     aadhar_card_file = models.FileField(upload_to=aadhar_card_upload_path, null=True, blank=True)
+    is_verified = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     def __str__(self):
@@ -138,6 +194,7 @@ class Education(models.Model):
     institute = models.CharField(max_length=255, help_text="Name of the institution")
     year_of_completion = models.PositiveIntegerField()
     certificate = models.FileField(upload_to=doctor_education_upload_path, null=True, blank=True)
+    is_verified = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)  # Mandatory  default=timezone.now
     updated_at = models.DateTimeField(auto_now=True)  # Mandatory  default=timezone.now
 
@@ -160,55 +217,6 @@ class CustomSpecialization(models.Model):
 
 class Specialization(models.Model):
     # Define the list of specialties (same as before)
-    SPECIALIZATION_CHOICES = [
-        ('CL', 'Cardiologist'),
-        ('DL', 'Dermatologist'),
-        ('EMC', 'Emergency Medicine Specialist'),
-        ('IL', 'Immunologist'),
-        ('AL', 'Anesthesiologist'),
-        ('CRS', 'Colon and Rectal Surgeon'),
-        ('END', 'Endocrinologist'),
-        ('GAS', 'Gastroenterologist'),
-        ('HIM', 'Hematologist'),
-        ('ONC', 'Oncologist'),
-        ('NEU', 'Neurologist'),
-        ('NS', 'Neurosurgeon'),
-        ('PED', 'Pediatrician'),
-        ('PLS', 'Plastic Surgeon'),
-        ('PMR', 'Physical Medicine and Rehabilitation Specialist'),
-        ('PSY', 'Psychiatrist'),
-        ('RAD', 'Radiologist'),
-        ('RHU', 'Rheumatologist'),
-        ('THS', 'Thoracic Surgeon'),
-        ('URO', 'Urologist'),
-        ('ENT', 'Otorhinolaryngologist (ENT Specialist)'),
-        ('OPH', 'Ophthalmologist'),
-        ('MFS', 'Maternal-Fetal Medicine Specialist'),
-        ('NEON', 'Neonatologist'),
-        ('GYN', 'Gynecologist'),
-        ('ORT', 'Orthopedic Surgeon'),
-        ('VCS', 'Vascular Surgeon'),
-        ('IMM', 'Allergy and Immunology Specialist'),
-        ('PAIN', 'Pain Medicine Specialist'),
-        ('PATH', 'Pathologist'),
-        ('NM', 'Nuclear Medicine Specialist'),
-        ('SLE', 'Sleep Medicine Specialist'),
-        ('OT', 'Occupational Medicine Specialist'),
-        ('SM', 'Sports Medicine Specialist'),
-        ('PS', 'Palliative Medicine Specialist'),
-        ('DER', 'Dermatosurgeon'),
-        ('FM', 'Family Medicine Specialist'),
-        ('GEN', 'General Practitioner'),
-        ('GER', 'Geriatrician'),
-        ('ID', 'Infectious Disease Specialist'),
-        ('TOX', 'Toxicologist'),
-        ('GENS', 'General Surgeon'),
-        ('TRS', 'Transplant Surgeon'),
-        ('CRIT', 'Critical Care Specialist'),
-        ('COS', 'Cosmetic Surgeon'),
-        ('LAB', 'Lab Medicine Specialist'),
-        ('CLG', 'Clinical Geneticist'),
-    ]
 
     # Fields for the model
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -311,8 +319,10 @@ class KYCStatus(models.Model):
 
     pan_status = models.CharField(max_length=10, choices=[("pending", "Pending"), ("approved", "Approved"), ("rejected", "Rejected")], default="pending")
     pan_reason = models.TextField(null=True, blank=True)
+    digital_signature = models.FileField(upload_to='digital_signature/', null=True, blank=True)  # path need to update 
 
     kya_verified = models.BooleanField(default=False)
+    reviewed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
     verified_at = models.DateTimeField(null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -450,7 +460,7 @@ class DoctorLeave(models.Model):
         default="other",
     )
     reason = models.TextField(blank=True, null=True, help_text="Optional reason for leave")
-    
+    approved = models.BooleanField(default=False, help_text="Is the leave approved?")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -498,3 +508,33 @@ class DoctorOPDStatus(models.Model):
     def __str__(self):
         status = "Available" if self.is_available else "Away"
         return f"Dr. {self.doctor.get_name} - {status}"
+
+class DoctorMembership(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    doctor = models.ForeignKey("doctor.doctor", on_delete=models.CASCADE, related_name="memberships")
+    organization_name = models.CharField(max_length=255, help_text="e.g., Indian Medical Association (IMA)")
+    membership_id = models.CharField(max_length=100, blank=True, null=True)
+    designation = models.CharField(max_length=100, blank=True, null=True, help_text="e.g., Life Member, Fellow")
+    year_of_joining = models.PositiveIntegerField(blank=True, null=True)
+    certificate = models.FileField(upload_to="doctor/memberships/", null=True, blank=True)
+    is_verified = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["organization_name"]
+
+    def __str__(self):
+        return f"{self.organization_name} - {self.membership_id or 'N/A'}"
+
+class DoctorBankDetails(models.Model):
+    doctor = models.OneToOneField("doctor.doctor", on_delete=models.CASCADE, related_name="bank_details")
+    account_holder_name = models.CharField(max_length=255)
+    account_number = models.CharField(max_length=20)
+    ifsc_code = models.CharField(max_length=11)
+    bank_name = models.CharField(max_length=255)
+    branch_name = models.CharField(max_length=255, blank=True, null=True)
+    upi_id = models.CharField(max_length=50, blank=True, null=True)
+    verified = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)

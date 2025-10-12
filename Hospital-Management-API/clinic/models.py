@@ -10,6 +10,8 @@ STATUS_CHOICES = [
     ("approved", "Approved"),
     ("rejected", "Rejected"),
 ]
+clinic_logo_upload_path = "clinic/logos/"
+clinic_cover_upload_path = "clinic/cover_photos/"
 class Clinic(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     # Basic Information
@@ -36,6 +38,18 @@ class Clinic(models.Model):
     updated_at = models.DateTimeField(auto_now=True)  # Mandatory
     def __str__(self):
         return self.name
+
+class ClinicProfile(models.Model):
+    clinic = models.OneToOneField(Clinic, on_delete=models.CASCADE)
+    logo = models.ImageField(upload_to=clinic_logo_upload_path, null=True, blank=True)
+    cover_photo = models.ImageField(upload_to=clinic_cover_upload_path, null=True, blank=True)
+    about = models.TextField(blank=True, null=True)
+    established_year = models.PositiveIntegerField(null=True, blank=True)
+    kyc_verified = models.BooleanField(default=False)
+    profile_completion = models.PositiveIntegerField(default=0)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
 class ClinicAddress(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -190,31 +204,6 @@ class ClinicAdminProfile(models.Model):
     def __str__(self):
         return f"Clinic Admin: {self.user.get_full_name()} for {self.clinic.name}"
 
-
-# class ClinicFrontDeskUser(models.Model):
-#     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-#     user = models.OneToOneField(User, on_delete=models.CASCADE)  # Link to Django's User model
-#     clinic = models.ForeignKey(
-#         Clinic,
-#         on_delete=models.CASCADE,
-#         related_name='clinic_helpdesk_users',
-#         null=True,  # Allow nullable initially
-#         blank=True,
-#         default=None
-#     )
-#     role = models.CharField(
-#         max_length=50,
-#         default='helpdesk',
-#         choices=[('helpdesk', 'Helpdesk')]
-#     )  # Define specific roles for clarity and scalability
-#     can_book_appointments = models.BooleanField(default=True)  # Permission to book appointments
-#     can_add_patients = models.BooleanField(default=True)  # Permission to add patients
-#     can_update_details = models.BooleanField(default=True)  # Permission to modify patient details
-#     created_at = models.DateTimeField(auto_now_add=True)
-#     updated_at = models.DateTimeField(auto_now=True)
-
-#     def __str__(self):
-#         return f"{self.user.username} ({self.clinic.name if self.clinic else 'No Clinic Assigned'})"
 
 '''
 class ClinicBilling(models.Model):

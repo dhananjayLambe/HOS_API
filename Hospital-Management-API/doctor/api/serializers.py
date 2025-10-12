@@ -13,12 +13,28 @@ from doctor.models import (
     DoctorService,DoctorSocialLink, Education, GovernmentID,
     Registration, Specialization, CustomSpecialization,
     doctor,KYCStatus,DoctorFeeStructure,FollowUpPolicy,DoctorAvailability,DoctorLeave,
-    DoctorOPDStatus
+    DoctorOPDStatus,DoctorMembership,DoctorBankDetails
 )
 from hospital_mgmt.models import Hospital
 from helpdesk.models import HelpdeskClinicUser
 from account.models import User
+from doctor.utils.progress_calculator import calculate_doctor_profile_progress
+from clinic.api.serializers import ClinicSerializer
+class DoctorBasicSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source="user.username", read_only=True)
+    first_name = serializers.CharField(source="user.first_name", read_only=True)
+    last_name = serializers.CharField(source="user.last_name", read_only=True)
+    email = serializers.EmailField(source="user.email", read_only=True)
+    profile_photo = serializers.ImageField(source="photo", allow_null=True, required=False)
 
+    class Meta:
+        model = doctor
+        fields = [
+            "id","username", "first_name", "last_name", "email", "profile_photo",
+            "gender", "dob", "about", "years_of_experience",
+            "avg_rating", "title", "consultation_modes", "languages_spoken",
+            "primary_specialization",
+        ]
 
 class UserSerializer(serializers.ModelSerializer):
     password2 = serializers.CharField(write_only=True)
@@ -994,6 +1010,26 @@ class DoctorOPDStatusSerializer(serializers.ModelSerializer):
 
         return attrs
     
+class DoctorMembershipSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DoctorMembership
+        fields = "__all__"
+
+class DoctorBankDetailsSerializer(serializers.ModelSerializer):
+    account_number_masked = serializers.SerializerMethodField()
+
+    def get_account_number_masked(self, obj):
+        acct = getattr(obj, "account_number", None)
+        if not acct:
+            return None
+        return "****" + acct[-4:]
+
+    class Meta:
+        model = DoctorBankDetails
+        fields = [
+            "id", "account_holder_name", "account_number_masked",
+            "ifsc_code", "bank_name", "branch_name", "upi_id",
+        ]
 
 
 # Lightweight user serializer for OTP-based accounts (no password)
@@ -1073,107 +1109,6 @@ class RegistrationPhase1Serializer(serializers.ModelSerializer):
         # Always return the value without any validation for development
         return value
 
-
-# class DoctorPhase1Serializer(serializers.ModelSerializer):
-#     user = OnboardUserSerializer()
-#     government_ids = GovernmentIDPhase1Serializer(required=True)
-#     registration = RegistrationPhase1Serializer(required=True)
-
-#     class Meta:
-#         model = doctor
-#         # Only Phase-1 required fields
-#         fields = (
-#             "user",
-#             "dob",
-#             "gender",
-#             "secondary_mobile_number",
-#             "digital_signature_consent",
-#             "terms_and_conditions_acceptance",
-#             "consent_for_data_storage",
-#             "government_ids",
-#             "registration",
-#         )
-
-#     def validate_dob(self, value):
-#         if not value:
-#             raise serializers.ValidationError("Date of birth is required.")
-#         today = date.today()
-#         age = today.year - value.year - ((today.month, today.day) < (value.month, value.day))
-#         if age < 23:
-#             raise serializers.ValidationError("Doctor must be at least 23 years old.")
-#         return value
-
-#     def validate_digital_signature_consent(self, value):
-#         if value is not True:
-#             raise serializers.ValidationError("Digital signature consent is mandatory.")
-#         return value
-
-#     def validate_secondary_mobile_number(self, value):
-#         if value and value != "NA":
-#             if not value.isdigit() or not (7 <= len(value) <= 15):
-#                 raise serializers.ValidationError("Secondary mobile must be numeric and between 7-15 digits or 'NA'.")
-#             # unique check
-#             qs = doctor.objects.filter(secondary_mobile_number=value)
-#             if qs.exists():
-#                 raise serializers.ValidationError("Secondary mobile number already in use.")
-#         return value
-
-#     @transaction.atomic
-#     def create(self, validated_data):
-#         user_data = validated_data.pop("user")
-#         gov_data = validated_data.pop("government_ids")
-#         reg_data = validated_data.pop("registration")
-
-#         # Create User (OTP-based; no password)
-#         user_serializer = OnboardUserSerializer(data=user_data)
-#         user_serializer.is_valid(raise_exception=True)
-#         user = user_serializer.save()
-
-#         # Add user to 'doctor' group
-#         doctor_group, _ = Group.objects.get_or_create(name="doctor")
-#         user.groups.add(doctor_group)
-
-#         # Build doctor fields
-#         doctor_data = validated_data
-#         # secondary_mobile_number default handled by model but we may have provided one
-#         doctor_obj = doctor.objects.create(user=user, **doctor_data)
-
-#         # Create GovernmentID (one-to-one)
-#         GovernmentID.objects.create(doctor=doctor_obj, **gov_data)
-
-#         # Create Registration entry (one-to-one)
-#         Registration.objects.create(doctor=doctor_obj, **reg_data)
-
-#         # Mark kyc_completed to True if you want to indicate doc uploaded IDs (optional)
-#         doctor_obj.kyc_completed = True
-#         doctor_obj.save(update_fields=["kyc_completed"])
-
-#         return doctor_obj
-
-#     def to_representation(self, instance):
-#         # Provide a friendly response
-#         return {
-#             "id": str(instance.id),
-#             "user": {
-#                 "id": str(instance.user.id),
-#                 "username": instance.user.username,
-#                 "first_name": instance.user.first_name,
-#                 "last_name": instance.user.last_name,
-#                 "email": instance.user.email,
-#                 "is_active": instance.user.is_active,
-#                 "status": instance.user.status,
-#             },
-#             "dob": instance.dob.isoformat() if instance.dob else None,
-#             "gender": instance.gender,
-#             "secondary_mobile_number": instance.secondary_mobile_number,
-#             "digital_signature_consent": instance.digital_signature_consent,
-#             "terms_and_conditions_acceptance": instance.terms_and_conditions_acceptance,
-#             "consent_for_data_storage": instance.consent_for_data_storage,
-#             "kyc_completed": instance.kyc_completed,
-#             "kyc_verified": instance.kyc_verified,
-#             "created_at": instance.created_at.isoformat() if instance.created_at else None,
-#         }
-
 class DoctorPhase1Serializer(serializers.ModelSerializer):
     user = OnboardUserSerializer()
     government_ids = GovernmentIDPhase1Serializer(required=False)
@@ -1221,14 +1156,6 @@ class DoctorPhase1Serializer(serializers.ModelSerializer):
     def validate_digital_signature_consent(self, value):
         # Always return the value without any validation for development
         return value
-
-    # def validate_secondary_mobile_number(self, value):
-    #     if value and value != "NA":
-    #         if not value.isdigit() or not (7 <= len(value) <= 15):
-    #             raise serializers.ValidationError("Secondary mobile must be numeric and between 7-15 digits or 'NA'.")
-    #         if doctor.objects.filter(secondary_mobile_number=value).exists():
-    #             raise serializers.ValidationError("Secondary mobile number already in use.")
-    #     return value
 
     @transaction.atomic
     def create(self, validated_data):
@@ -1319,3 +1246,81 @@ class DoctorPhase1Serializer(serializers.ModelSerializer):
             "kyc_verified": instance.kyc_verified,
             "created_at": instance.created_at.isoformat() if instance.created_at else None,
         }
+
+
+class DoctorFullProfileSerializer(serializers.Serializer):
+    """Aggregated serializer used only for GET profile response"""
+    personal_info = DoctorBasicSerializer(source="*", read_only=True)
+    address = serializers.SerializerMethodField()
+    professional = serializers.SerializerMethodField()
+    kyc = serializers.SerializerMethodField()
+    clinic_association = serializers.SerializerMethodField()
+    fee_structure = serializers.SerializerMethodField()
+    followup_policy = serializers.SerializerMethodField()
+    services = serializers.SerializerMethodField()
+    awards = serializers.SerializerMethodField()
+    certifications = serializers.SerializerMethodField()
+    memberships = serializers.SerializerMethodField()
+    bank_details = serializers.SerializerMethodField()
+    profile_progress = serializers.SerializerMethodField()
+    def get_address(self, obj):
+        try:
+            addr = obj.address
+            return DoctorAddressSerializer(addr).data
+        except DoctorAddress.DoesNotExist:
+            return None
+
+    def get_professional(self, obj):
+        data = {
+            "primary_specialization": obj.primary_specialization,
+            "specializations": SpecializationSerializer(obj.specializations.all(), many=True).data,
+            "education": EducationSerializer(obj.education.all(), many=True).data,
+        }
+        return data
+
+    def get_kyc(self, obj):
+        reg = getattr(obj, "registration", None)
+        govt = getattr(obj, "government_ids", None)
+        return {
+            "registration": RegistrationSerializer(reg).data if reg else None,
+            "government_id": GovernmentIDSerializer(govt).data if govt else None,
+            "kyc_status": getattr(getattr(obj, "kyc_status", None), "kya_verified", False)  # note: your model uses kya_verified
+        }
+
+    def get_clinic_association(self, obj):
+        clinics = obj.clinics.all()
+        return ClinicSerializer(clinics, many=True).data
+
+    def get_fee_structure(self, obj):
+        fees = DoctorFeeStructure.objects.filter(doctor=obj)
+        return DoctorFeeStructureSerializer(fees, many=True).data
+
+    def get_followup_policy(self, obj):
+        policies = FollowUpPolicy.objects.filter(doctor=obj)
+        return FollowUpPolicySerializer(policies, many=True).data
+
+    def get_services(self, obj):
+        return DoctorServiceSerializer(obj.services.all(), many=True).data
+
+    def get_awards(self, obj):
+        return AwardSerializer(obj.awards.all(), many=True).data
+
+    def get_certifications(self, obj):
+        return CertificationSerializer(obj.certifications.all(), many=True).data
+
+    def get_memberships(self, obj):
+        if DoctorMembership and DoctorMembershipSerializer:
+            return DoctorMembershipSerializer(DoctorMembership.objects.filter(doctor=obj), many=True).data
+        return []
+
+    def get_bank_details(self, obj):
+        if DoctorBankDetails and DoctorBankDetailsSerializer:
+            try:
+                bank = DoctorBankDetails.objects.get(doctor=obj)
+                return DoctorBankDetailsSerializer(bank).data
+            except DoctorBankDetails.DoesNotExist:
+                return None
+        return None
+
+    def get_profile_progress(self, obj):
+        return calculate_doctor_profile_progress(obj)

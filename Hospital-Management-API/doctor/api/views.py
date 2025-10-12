@@ -52,7 +52,7 @@ from doctor.api.serializers import (
     GovernmentIDUploadSerializer, KYCStatusSerializer, KYCVerifySerializer,
     DoctorSearchSerializer,DoctorFeeStructureSerializer,FollowUpPolicySerializer,
     DoctorAvailabilitySerializer,DoctorLeaveSerializer,DoctorOPDStatusSerializer,
-    DoctorPhase1Serializer,
+    DoctorPhase1Serializer,DoctorFullProfileSerializer,
 )
 from consultations.models import Consultation, PatientFeedback
 from appointments.models import Appointment
@@ -243,6 +243,47 @@ class UserView(APIView):
         user.delete()
         return Response({"message": "User deleted successfully"}, status=status.HTTP_204_NO_CONTENT)
 
+class DoctorFullProfileAPIView(APIView):
+    """
+    Fetch full doctor profile based on JWT token.
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        """
+        Return complete doctor profile for the authenticated doctor.
+        """
+        user = request.user
+
+        # Defensive check — ensure the logged-in user is mapped to a doctor
+        try:
+            doctor_obj = (
+                doctor.objects
+                .select_related("user", "address", "registration", "government_ids")
+                .prefetch_related(
+                    "education",
+                    "specializations__custom_specialization",
+                    "services",
+                    "awards",
+                    "certifications",
+                    "clinics",
+                )
+                .get(user=user)
+            )
+        except doctor.DoesNotExist:
+            return Response(
+                {"detail": "Doctor profile not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Serialize complete profile
+        serializer = DoctorFullProfileSerializer(doctor_obj, context={"request": request})
+        return Response(
+            {"doctor_profile": serializer.data},
+            status=status.HTTP_200_OK
+        )
+  
 class DoctorRegistrationAPIView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []

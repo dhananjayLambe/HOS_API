@@ -19,6 +19,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
 from rest_framework import status
 from django.core.cache import cache
+from rest_framework_simplejwt.tokens import RefreshToken
 
 # Local app imports
 from account.models import User
@@ -156,7 +157,7 @@ def update_resend_counters(role: str, phone: str):
 def _resend_cache_key(role, phone):
     return f"resend_otp:{role}:{phone}"
 
-def _generate_jwt_tokens(user, role: str):
+def _generate_jwt_tokens_old(user, role: str):
     now = datetime.datetime.utcnow()
     access_exp = now + ACCESS_TOKEN_LIFETIME
     access_payload = {
@@ -190,6 +191,20 @@ def _generate_jwt_tokens(user, role: str):
         "refresh_expires_at": refresh_exp.isoformat() + "Z",
     }
 
+def _generate_jwt_tokens(user, role: str):
+    # Create refresh token
+    refresh = RefreshToken.for_user(user)
+    refresh["role"] = role  # add custom claim if needed
+
+    # Access token is derived from refresh token
+    access = refresh.access_token
+
+    return {
+        "access": str(access),
+        "refresh": str(refresh),
+        "access_expires_at": access.current_time + access.lifetime,
+        "refresh_expires_at": refresh.current_time + refresh.lifetime,
+    }
 # class CheckUserStatusView(APIView):
 #     """
 #     POST /check-user-status/
@@ -554,7 +569,7 @@ class VerifyOTPStaffView(APIView):
 
         # Generate JWT tokens
         tokens = _generate_jwt_tokens(user, role)
-
+        print(f"JWT tokens:access_token: {tokens['access']}", f"JWT tokens:refresh_token: {tokens['refresh']}")
         # --- 🔐 Secure Cookies ---
         response = Response({
             "status": "login_success",
