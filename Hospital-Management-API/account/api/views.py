@@ -577,6 +577,9 @@ class VerifyOTPStaffView(APIView):
             "role": role,
             "username": user.username,
             "user_id": str(user.id),
+            "first_name": getattr(user, "first_name", "") or "",
+            "last_name": getattr(user, "last_name", "") or "",
+            "email": getattr(user, "email", "") or "",
             "tokens": {
                 "access": tokens["access"],
                 "refresh": tokens["refresh"],
