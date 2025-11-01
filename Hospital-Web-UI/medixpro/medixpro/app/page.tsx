@@ -29,6 +29,32 @@ import ScrollToTop from "@/components/landing/scroll-to-top";
 import ClientOnly from "@/components/client-only";
 import BackgroundTest from "@/components/background-test";
 import { useRouter } from "next/navigation";
+import { getRoleRedirectPath, isTokenValid } from "@/lib/jwtUtils";
+import { ACCESS_TOKEN_KEY } from "@/lib/axiosClient";
+
+// Component to handle login link with auto-redirect if already logged in
+function LoginLink({ children, className, ...props }: { children: React.ReactNode; className?: string; [key: string]: any }) {
+  const router = useRouter();
+
+  const handleClick = (e: React.MouseEvent) => {
+    if (typeof window === "undefined") return;
+    
+    // Check if user is already logged in
+    const accessToken = localStorage.getItem(ACCESS_TOKEN_KEY);
+    if (accessToken && isTokenValid(accessToken)) {
+      e.preventDefault();
+      const storedRole = localStorage.getItem("role");
+      const redirectPath = getRoleRedirectPath(storedRole);
+      router.push(redirectPath);
+    }
+  };
+
+  return (
+    <Link href="/auth/login" className={className} onClick={handleClick} {...props}>
+      {children}
+    </Link>
+  );
+}
 
 export default function LandingPage() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -120,7 +146,7 @@ export default function LandingPage() {
               <Link href="#testimonials" className="text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white transition-colors font-medium">Testimonials</Link>
               <Link href="#contact" className="text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white transition-colors font-medium">Contact</Link>
               <Button variant="outline" className="border-slate-200 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:hover:border-slate-600 dark:hover:bg-slate-800" asChild>
-                <Link href="/auth/login">Sign In</Link>
+                <LoginLink>Sign In</LoginLink>
               </Button>
               <Button className="bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-700 hover:to-violet-700 shadow-lg" asChild>
                 <Link href="/auth/register">Get Started</Link>
@@ -149,7 +175,7 @@ export default function LandingPage() {
                 <Link href="#contact" className="block px-3 py-2 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors">Contact</Link>
                 <div className="px-3 py-2 space-y-2">
                   <Button variant="outline" className="w-full border-slate-200 dark:border-slate-700" asChild>
-                    <Link href="/auth/login">Sign In</Link>
+                    <LoginLink>Sign In</LoginLink>
                   </Button>
                   <Button className="w-full bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-700 hover:to-violet-700" asChild>
                     <Link href="/auth/register">Get Started</Link>

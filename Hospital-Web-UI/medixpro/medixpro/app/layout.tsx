@@ -1,5 +1,6 @@
 //app/layout.tsx
 import ThemeProvider from "@/lib/provider";
+import { AuthProvider } from "@/lib/authContext";
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import type React from "react";
@@ -42,9 +43,11 @@ export default function RootLayout({
         }} />
       </head>
       <body className={inter.className} suppressHydrationWarning style={{ backgroundColor: 'white' }}>
-        <ThemeProvider>{children}</ThemeProvider>
-        <GlobalLoader /> {/* ⬅ loader always available */}
-        <Toaster position="center" />
+        <AuthProvider>
+          <ThemeProvider>{children}</ThemeProvider>
+          <GlobalLoader /> {/* ⬅ loader always available */}
+          <Toaster position="center" />
+        </AuthProvider>
       </body>
     </html>
   );

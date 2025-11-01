@@ -3,12 +3,14 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import axiosClient, { ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY, ROLE_KEY } from "./axiosClient";
+import { isTokenValid, getRoleRedirectPath } from "./jwtUtils";
 
 interface AuthContextType {
   user: string | null;
   role: string | null;
   logout: () => void;
   refreshAccessToken: () => Promise<boolean>;
+  isAuthenticated: boolean;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -16,6 +18,7 @@ const AuthContext = createContext<AuthContextType>({
   role: null,
   logout: () => {},
   refreshAccessToken: async () => false,
+  isAuthenticated: false,
 });
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -23,22 +26,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [role, setRole] = useState<string | null>(null);
   const [sessionChecked, setSessionChecked] = useState(false);
   const router = useRouter();
-
-  // Initialize from localStorage
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const storedRole = localStorage.getItem(ROLE_KEY);
-      const storedUser = localStorage.getItem("username") || localStorage.getItem("user");
-      const storedAccessToken = localStorage.getItem(ACCESS_TOKEN_KEY);
-      
-      // Only set role/user if we have valid tokens
-      if (storedAccessToken && storedRole) {
-        setRole(storedRole);
-        if (storedUser) setUser(storedUser);
-      }
-      setSessionChecked(true);
-    }
-  }, []);
 
   // Auto-refresh access token
   const refreshAccessToken = async (skipLogout = false): Promise<boolean> => {
@@ -114,6 +101,64 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  // Verify token and auto-login on app start
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      setSessionChecked(true);
+      return;
+    }
+
+    const verifyAndAutoLogin = async () => {
+      try {
+        const storedAccessToken = localStorage.getItem(ACCESS_TOKEN_KEY);
+        const storedRefreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
+        const storedRole = localStorage.getItem(ROLE_KEY);
+        const storedUser = localStorage.getItem("username") || localStorage.getItem("user");
+
+        // If no tokens, user is not logged in
+        if (!storedAccessToken && !storedRefreshToken) {
+          setSessionChecked(true);
+          return;
+        }
+
+        // Check if access token is valid
+        if (storedAccessToken && isTokenValid(storedAccessToken)) {
+          // Token is valid, restore user session
+          if (storedRole) setRole(storedRole);
+          if (storedUser) setUser(storedUser);
+          setSessionChecked(true);
+          return;
+        }
+
+        // Access token expired, try to refresh
+        if (storedRefreshToken && isTokenValid(storedRefreshToken)) {
+          const refreshed = await refreshAccessToken(true);
+          if (refreshed) {
+            // Token refreshed successfully, restore session
+            const newRole = localStorage.getItem(ROLE_KEY);
+            const newUser = localStorage.getItem("username") || localStorage.getItem("user");
+            if (newRole) setRole(newRole);
+            if (newUser) setUser(newUser);
+          } else {
+            // Refresh failed, clear tokens
+            logout();
+          }
+        } else {
+          // Both tokens invalid, clear and logout
+          logout();
+        }
+      } catch (error) {
+        console.error("Auto-login error:", error);
+        logout();
+      } finally {
+        setSessionChecked(true);
+      }
+    };
+
+    verifyAndAutoLogin();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Set up periodic refresh only if we have a role (user is logged in)
   useEffect(() => {
     if (!role) return;
@@ -134,8 +179,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, [role]);
 
+  const isAuthenticated = !!(user && role);
+
   return (
-    <AuthContext.Provider value={{ user, role, logout, refreshAccessToken }}>
+    <AuthContext.Provider value={{ user, role, logout, refreshAccessToken, isAuthenticated }}>
       {sessionChecked ? children : null} {/* Wait until session is checked */}
     </AuthContext.Provider>
   );

@@ -14,6 +14,8 @@ import {
 } from "lucide-react";
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import { isTokenValid } from "@/lib/jwtUtils";
+import { ACCESS_TOKEN_KEY } from "@/lib/axiosClient";
 const RESEND_COOLDOWN = 30; // 30 seconds cooldown
 
 const Button = ({ className = "", variant = "default", size = "default", ...props }) => {
@@ -125,57 +127,85 @@ export default function OTPLoginPage() {
     }
     return () => timer && clearInterval(timer);
   }, [resendCooldown]);
+  // Check if user is already logged in and redirect to dashboard
   React.useEffect(() => {
-    async function autoLogin() {
+    const checkExistingSession = async () => {
       try {
-        const refreshToken = localStorage.getItem("refresh_token");
-        if (!refreshToken) {
-          setCheckingSession(false);
+        // Check if we have a valid access token
+        const accessToken = localStorage.getItem(ACCESS_TOKEN_KEY);
+        
+        if (accessToken && isTokenValid(accessToken)) {
+          // User is already logged in, redirect to appropriate dashboard
+          const storedRole = localStorage.getItem("role");
+          
+          let redirectPath = "/dashboard";
+          switch (storedRole?.toLowerCase()) {
+            case "doctor":
+              redirectPath = "/doctor-dashboard";
+              break;
+            case "helpdesk":
+              redirectPath = "/helpdesk-dashboard";
+              break;
+            case "labadmin":
+              redirectPath = "/lab-dashboard";
+              break;
+            case "superuser":
+            case "superadmin":
+              redirectPath = "/admin-dashboard";
+              break;
+          }
+          
+          router.replace(redirectPath);
           return;
         }
 
-        const res = await fetch("/api/refresh-token", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ refresh_token: refreshToken }),
-        });
+        // If access token expired, try to refresh
+        const refreshToken = localStorage.getItem("refresh_token");
+        if (refreshToken && isTokenValid(refreshToken)) {
+          const res = await fetch("/api/refresh-token", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ refresh_token: refreshToken }),
+          });
 
-        if (res.ok) {
-          const data = await res.json();
-          const role = data.role?.toLowerCase();
+          if (res.ok) {
+            const data = await res.json();
+            const refreshedRole = data.role?.toLowerCase();
 
-          // Store tokens if provided
-          if (data.tokens) {
-            localStorage.setItem("access_token", data.tokens.access);
-            localStorage.setItem("refresh_token", data.tokens.refresh);
-            if (data.role) {
-              localStorage.setItem("role", data.role);
+            // Store tokens if provided
+            if (data.tokens) {
+              localStorage.setItem("access_token", data.tokens.access);
+              localStorage.setItem("refresh_token", data.tokens.refresh);
+              if (data.role) {
+                localStorage.setItem("role", data.role);
+              }
             }
-          }
 
-          switch (role) {
-            case "doctor":
-              router.replace("/doctor-dashboard");
-              break;
-            case "helpdesk":
-              router.replace("/helpdesk-dashboard");
-              break;
-            case "labadmin":
-              router.replace("/lab-dashboard");
-              break;
-            case "superadmin":
-              router.replace("/admin-dashboard");
-              break;
-            default:
-              setCheckingSession(false); // fallback to OTP UI
-              return;
+            // Redirect based on role
+            let redirectPath = "/dashboard";
+            switch (refreshedRole) {
+              case "doctor":
+                redirectPath = "/doctor-dashboard";
+                break;
+              case "helpdesk":
+                redirectPath = "/helpdesk-dashboard";
+                break;
+              case "labadmin":
+                redirectPath = "/lab-dashboard";
+                break;
+              case "superadmin":
+                redirectPath = "/admin-dashboard";
+                break;
+            }
+            
+            router.replace(redirectPath);
+            return;
+          } else {
+            // Clear invalid tokens
+            localStorage.removeItem("access_token");
+            localStorage.removeItem("refresh_token");
+            localStorage.removeItem("role");
           }
-          return; // Don't show OTP UI
-        } else {
-          // Clear invalid tokens
-          localStorage.removeItem("access_token");
-          localStorage.removeItem("refresh_token");
-          localStorage.removeItem("role");
         }
       } catch (err) {
         console.log("No active session, showing OTP login");
@@ -186,9 +216,9 @@ export default function OTPLoginPage() {
       } finally {
         setCheckingSession(false);
       }
-    }
+    };
 
-    autoLogin();
+    checkExistingSession();
   }, [router]);
   const handleRoleSelect = (roleName: string) => {
     setSelectedRole(roleName);
