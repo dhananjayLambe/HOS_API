@@ -1,10 +1,22 @@
 import { NextResponse } from "next/server";
 
-export async function POST() {
+export async function POST(req: Request) {
   try {
-    const backendRes = await fetch(`${process.env.BACKEND_URL}/auth/staff/refresh-token/`, {
+    const body = await req.json();
+    const refreshToken = body.refresh_token || body.refresh;
+
+    if (!refreshToken) {
+      return NextResponse.json(
+        { error: "Refresh token is required" },
+        { status: 400 }
+      );
+    }
+
+    const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8000/api/";
+    const backendRes = await fetch(`${BACKEND_URL}auth/staff/refresh-token/`, {
       method: "POST",
-      credentials: "include", // 🔹 send cookies automatically
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: refreshToken }),
     });
 
     const data = await backendRes.json();
@@ -13,7 +25,7 @@ export async function POST() {
       return NextResponse.json(data, { status: backendRes.status });
     }
 
-    // No need to set cookies here (backend already did it)
+    // Return tokens in response body
     return NextResponse.json(data, { status: 200 });
   } catch (err: any) {
     return NextResponse.json({ error: err.message || "Refresh failed" }, { status: 500 });

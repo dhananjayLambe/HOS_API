@@ -3,47 +3,36 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 export function middleware(req: NextRequest) {
-  const accessToken = req.cookies.get("access_token")?.value;
-  const role = req.cookies.get("role")?.value;
   const { pathname } = req.nextUrl;
 
-  // Public routes
+  // Public routes (no auth required)
   const publicPaths = [
     "/",
     "/auth/login",
     "/auth/register",
     "/api/verify-otp",
     "/api/send-otp",
+    "/api/login",
+    "/api/resend-otp",
+    "/api/refresh-token",
+    "/api/logout",
     "/api/auth/refresh",
     "/api/doctor/onboarding/phase1",
-    "api/auth/check-user-status/",
+    "/api/auth/check-user-status/",
     "/api/clinic/clinics/onboarding/",
-    "auth/register/clinic-registration",
+    "/auth/register/clinic-registration",
     "/api/lab-admin/onboarding/"
   ];
 
+  // All public paths are allowed
   if (publicPaths.some((path) => pathname.startsWith(path))) {
-    // ✅ Redirect logged-in users away from login page or landing page
-    if (accessToken && pathname.startsWith("/auth/login")) {
-      switch (role) {
-        case "doctor":
-          return NextResponse.redirect(new URL("/doctor-dashboard", req.url));
-        case "helpdesk":
-          return NextResponse.redirect(new URL("/helpdesk-dashboard", req.url));
-        case "labadmin":
-          return NextResponse.redirect(new URL("/lab-dashboard", req.url));
-        case "superadmin":
-          return NextResponse.redirect(new URL("/admin-dashboard", req.url));
-      }
-}
     return NextResponse.next();
   }
 
-  // Protected routes: redirect to login if no token
-  if (!accessToken) {
-    return NextResponse.redirect(new URL("/auth/login", req.url));
-  }
-
+  // For protected routes, let the frontend handle auth checks
+  // The frontend will redirect to login if needed
+  // We don't check tokens here since middleware runs on server and can't access localStorage
+  
   return NextResponse.next();
 }
 

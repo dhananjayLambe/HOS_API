@@ -128,14 +128,30 @@ export default function OTPLoginPage() {
   React.useEffect(() => {
     async function autoLogin() {
       try {
+        const refreshToken = localStorage.getItem("refresh_token");
+        if (!refreshToken) {
+          setCheckingSession(false);
+          return;
+        }
+
         const res = await fetch("/api/refresh-token", {
           method: "POST",
-          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ refresh_token: refreshToken }),
         });
 
         if (res.ok) {
           const data = await res.json();
           const role = data.role?.toLowerCase();
+
+          // Store tokens if provided
+          if (data.tokens) {
+            localStorage.setItem("access_token", data.tokens.access);
+            localStorage.setItem("refresh_token", data.tokens.refresh);
+            if (data.role) {
+              localStorage.setItem("role", data.role);
+            }
+          }
 
           switch (role) {
             case "doctor":
@@ -155,9 +171,18 @@ export default function OTPLoginPage() {
               return;
           }
           return; // Don't show OTP UI
+        } else {
+          // Clear invalid tokens
+          localStorage.removeItem("access_token");
+          localStorage.removeItem("refresh_token");
+          localStorage.removeItem("role");
         }
       } catch (err) {
         console.log("No active session, showing OTP login");
+        // Clear tokens on error
+        localStorage.removeItem("access_token");
+        localStorage.removeItem("refresh_token");
+        localStorage.removeItem("role");
       } finally {
         setCheckingSession(false);
       }
@@ -224,7 +249,6 @@ export default function OTPLoginPage() {
       const res = await fetch("/api/verify-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include", // 🔑 ensures cookies are sent/received
         body: JSON.stringify({
           phone_number: phoneNumber,
           role: selectedRole,
@@ -238,12 +262,20 @@ export default function OTPLoginPage() {
         // ✅ Success
         setSuccessMessage(data.message || "OTP verified successfully. Logged in.");
         
-        // 🚀 Redirect based on role (tokens are already in cookies)
-        // 🔑 Save JWT tokens
-        // if (data.tokens) {
-        //   localStorage.setItem("access_token", data.tokens.access);
-        //   localStorage.setItem("refresh_token", data.tokens.refresh);
-        // }
+        // 🔑 Save JWT tokens to localStorage
+        if (data.tokens) {
+          localStorage.setItem("access_token", data.tokens.access);
+          localStorage.setItem("refresh_token", data.tokens.refresh);
+        }
+        if (data.role) {
+          localStorage.setItem("role", data.role);
+        }
+        if (data.username) {
+          localStorage.setItem("username", data.username);
+        }
+        if (data.user_id) {
+          localStorage.setItem("user_id", data.user_id);
+        }
 
         // 🚀 Redirect based on role
         let redirectPath = "/dashboard"; // fallback
@@ -258,13 +290,15 @@ export default function OTPLoginPage() {
             redirectPath = "/lab-dashboard";
             break;
           case "superuser":
+          case "superadmin":
             redirectPath = "/admin-dashboard";
             break;
         }
 
+        // Use window.location for immediate redirect to avoid React state issues
         setTimeout(() => {
-          router.push(redirectPath);
-        }, 1000);
+          window.location.href = redirectPath;
+        }, 500);
       } else {
         // ❌ Show backend errors (otp mismatch, expired, role mismatch, etc.)
         setErrorMessage(data.error || data.message || "OTP verification failed.");
@@ -284,7 +318,6 @@ export default function OTPLoginPage() {
       const res = await fetch("/api/resend-otp", { // 🔑 call the backend resend API
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include", // necessary if using HttpOnly cookies
         body: JSON.stringify({
           phone_number: phoneNumber,
           role: selectedRole,

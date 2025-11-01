@@ -13,7 +13,6 @@ export async function POST(req: Request) {
       headers: {
         "Content-Type": "application/json",
       },
-      credentials: "include", // 🔑 ensures cookies are sent/received
       body: JSON.stringify(body),
     });
 

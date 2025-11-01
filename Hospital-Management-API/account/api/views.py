@@ -18,7 +18,6 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
 from rest_framework import status
-from django.core.cache import cache
 from rest_framework_simplejwt.tokens import RefreshToken
 
 # Local app imports
@@ -570,39 +569,21 @@ class VerifyOTPStaffView(APIView):
         # Generate JWT tokens
         tokens = _generate_jwt_tokens(user, role)
         print(f"JWT tokens:access_token: {tokens['access']}", f"JWT tokens:refresh_token: {tokens['refresh']}")
-        # --- 🔐 Secure Cookies ---
+        
+        # Return tokens in response body for Authorization header usage
         response = Response({
             "status": "login_success",
             "message": "OTP verified successfully. Logged in.",
             "role": role,
             "username": user.username,
             "user_id": str(user.id),
+            "tokens": {
+                "access": tokens["access"],
+                "refresh": tokens["refresh"],
+                "access_expires_at": tokens["access_expires_at"].isoformat() if hasattr(tokens["access_expires_at"], "isoformat") else str(tokens["access_expires_at"]),
+                "refresh_expires_at": tokens["refresh_expires_at"].isoformat() if hasattr(tokens["refresh_expires_at"], "isoformat") else str(tokens["refresh_expires_at"]),
+            },
         }, status=status.HTTP_200_OK)
-
-        response.set_cookie(
-            key="role",
-            value=role,
-            httponly=False,
-            secure=False,  # For DEV
-            samesite="Lax",
-            max_age=60 * 60 * 24 * 7
-        )
-        response.set_cookie(
-            key="access_token",
-            value=tokens["access"],
-            httponly=True,
-            secure=False,
-            samesite="Lax",
-            max_age=60 * 15
-        )
-        response.set_cookie(
-            key="refresh_token",
-            value=tokens["refresh"],
-            httponly=True,
-            secure=False,
-            samesite="Lax",
-            max_age=60 * 60 * 24 * 7
-        )
 
         return response
 
@@ -690,49 +671,50 @@ class RefreshTokenStaffView(APIView):
     POST /auth/staff/refresh-token/
 
     Features:
-    1. Reads refresh token from HttpOnly cookie.
-    2. Validates token expiry, signature, type.
+    1. Reads refresh token from request body.
+    2. Validates token using SimpleJWT RefreshToken.
     3. Validates role inside token.
     4. Checks user existence and is_active.
-    5. Issues new access + refresh tokens with role-based lifetime.
-    6. Returns tokens & metadata (frontend can choose to ignore refresh token).
+    5. Issues new access + refresh tokens.
+    6. Returns tokens & metadata in response body.
     """
 
     permission_classes = [AllowAny]
     authentication_classes = []
 
     def post(self, request):
-        refresh_token = request.COOKIES.get("refresh_token")
+        refresh_token_str = request.data.get("refresh_token") or request.data.get("refresh")
 
-        if not refresh_token:
-            return Response({"error": "Refresh token cookie missing"}, status=status.HTTP_401_UNAUTHORIZED)
+        if not refresh_token_str:
+            return Response({"error": "Refresh token is required in request body"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            payload = jwt.decode(
-                refresh_token,
-                settings.SECRET_KEY,
-                algorithms=[JWT_ALGORITHM],
-                options={"verify_exp": True}
-            )
-
-            # Check token type
-            if payload.get("type") != "refresh":
-                return Response({"error": "Token type invalid, must be refresh"}, status=status.HTTP_400_BAD_REQUEST)
-
-            role = payload.get("role")
-            username = payload.get("username")
-            user_id = payload.get("user_id")
-
-            # Validate role
-            if role not in VALID_STAFF_ROLES:
-                return Response({"error": "Role in token is invalid"}, status=status.HTTP_403_FORBIDDEN)
-
-            # Validate user
-            user = User.objects.filter(id=user_id, username=username).first()
+            # Use SimpleJWT's RefreshToken for validation
+            refresh_token = RefreshToken(refresh_token_str)
+            
+            # Get user from token - SimpleJWT stores user_id in the token payload
+            user_id = refresh_token["user_id"]
+            user = User.objects.filter(id=user_id).first()
+            
             if not user:
                 return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+            
             if not user.is_active:
                 return Response({"error": "User not active"}, status=status.HTTP_403_FORBIDDEN)
+
+            # Get role from token (added in _generate_jwt_tokens)
+            role = refresh_token.get("role")
+            
+            # Validate role if present
+            if role and role not in VALID_STAFF_ROLES:
+                return Response({"error": "Role in token is invalid"}, status=status.HTTP_403_FORBIDDEN)
+            
+            # If role not in token, try to get it from user's groups
+            if not role:
+                user_groups = user.groups.values_list("name", flat=True)
+                role = next((r for r in VALID_STAFF_ROLES if r in user_groups), None)
+                if not role:
+                    return Response({"error": "User does not have a valid role"}, status=status.HTTP_403_FORBIDDEN)
 
             # Generate new tokens
             tokens = _generate_jwt_tokens(user, role)
@@ -741,68 +723,51 @@ class RefreshTokenStaffView(APIView):
                 "status": "refresh_success",
                 "message": "New access and refresh tokens generated.",
                 "role": role,
-                "username": username,
+                "username": user.username,
                 "user_id": str(user.id),
                 "tokens": {
                     "access": tokens["access"],
                     "refresh": tokens["refresh"],
-                    "access_expires_at": tokens["access_expires_at"],
-                    "refresh_expires_at": tokens["refresh_expires_at"],
+                    "access_expires_at": tokens["access_expires_at"].isoformat() if hasattr(tokens["access_expires_at"], "isoformat") else str(tokens["access_expires_at"]),
+                    "refresh_expires_at": tokens["refresh_expires_at"].isoformat() if hasattr(tokens["refresh_expires_at"], "isoformat") else str(tokens["refresh_expires_at"]),
                 },
             }
 
-            response = Response(response_data, status=status.HTTP_200_OK)
+            return Response(response_data, status=status.HTTP_200_OK)
 
-            # 🔹 Set cookies directly here (backend controls cookie lifecycle)
-            response.set_cookie(
-                key="access_token",
-                value=tokens["access"],
-                httponly=True,
-                secure=not settings.DEBUG,
-                samesite="Lax",
-                max_age=60 * 15,  # 15 minutes
-                path="/"
-            )
-            response.set_cookie(
-                key="refresh_token",
-                value=tokens["refresh"],
-                httponly=True,
-                secure=not settings.DEBUG,
-                samesite="Lax",
-                max_age=60 * 60 * 24 * 7,  # 7 days
-                path="/"
-            )
-            response.set_cookie(
-                key="role",
-                value=role,
-                httponly=False,  # frontend can read this
-                max_age=60 * 60 * 24 * 7,
-                path="/"
-            )
-
-            return response
-
-        except jwt.ExpiredSignatureError:
-            return Response({"error": "Refresh token expired"}, status=status.HTTP_401_UNAUTHORIZED)
-        except jwt.InvalidTokenError:
-            return Response({"error": "Invalid refresh token"}, status=status.HTTP_401_UNAUTHORIZED)
         except Exception as e:
-            return Response({"error": f"Token validation error: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+            # SimpleJWT RefreshToken will raise exceptions for invalid/expired tokens
+            error_message = str(e)
+            if "expired" in error_message.lower():
+                return Response({"error": "Refresh token expired"}, status=status.HTTP_401_UNAUTHORIZED)
+            elif "blacklisted" in error_message.lower() or "blacklist" in error_message.lower():
+                return Response({"error": "Refresh token has been blacklisted"}, status=status.HTTP_401_UNAUTHORIZED)
+            else:
+                return Response({"error": f"Invalid refresh token: {error_message}"}, status=status.HTTP_400_BAD_REQUEST)
 
 class LogoutView(APIView):
-    permission_classes = []
+    """
+    POST /auth/logout/
+    
+    Logs out user by blacklisting the refresh token.
+    Accepts refresh_token in request body.
+    """
+    permission_classes = [AllowAny]
+    authentication_classes = []
 
     def post(self, request):
-        refresh_token = request.COOKIES.get("refresh_token")
-        if refresh_token:
-            # ✅ Optionally blacklist the refresh token
-            # BlacklistToken.objects.create(token=refresh_token)
-            pass
-
-        response = Response({"message": "Logged out successfully"}, status=status.HTTP_200_OK)
-        # Delete cookies
-        response.delete_cookie("access_token")
-        response.delete_cookie("refresh_token")
-        response.delete_cookie("role")
-        return response
+        refresh_token_str = request.data.get("refresh_token") or request.data.get("refresh")
+        
+        if not refresh_token_str:
+            return Response({"error": "Refresh token is required in request body"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            # Blacklist the refresh token using SimpleJWT
+            refresh_token = RefreshToken(refresh_token_str)
+            refresh_token.blacklist()
+            return Response({"message": "Logged out successfully"}, status=status.HTTP_200_OK)
+        except Exception as e:
+            # If token is invalid or already blacklisted, still return success
+            # (idempotent logout - don't leak info about token state)
+            return Response({"message": "Logged out successfully"}, status=status.HTTP_200_OK)
 

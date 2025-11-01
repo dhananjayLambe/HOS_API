@@ -2,46 +2,11 @@
 
 import { useLoadingStore } from "@/store/loadingStore";
 import { toast } from "react-hot-toast";
+import axiosClient from "./axiosClient";
+import { AxiosRequestConfig } from "axios";
 
 const setGlobalLoading = (value: boolean) =>
   useLoadingStore.getState().setLoading(value);
-
-// export async function apiClient<T>(
-//   url: string,
-//   options: RequestInit = {}
-// ): Promise<T> {
-//   setGlobalLoading(true);
-
-//   try {
-//     const res = await fetch(url, {
-//       ...options,
-//       headers: {
-//         "Content-Type": "application/json",
-//         ...(options.headers || {}),
-//       },
-//       credentials: "include", // keep cookies/session
-//     });
-
-//     if (!res.ok) {
-//       let message = "Something went wrong";
-//       try {
-//         const errorData = await res.json();
-//         message = errorData.detail || errorData.message || message;
-//       } catch {}
-//       toast.error(message);
-//       throw new Error(message);
-//     }
-
-//     return res.json() as Promise<T>;
-//   } catch (err) {
-//     console.error("API Error:", err);
-//     throw err;
-//   } finally {
-//     setGlobalLoading(false);
-//   }
-// }
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api"
 
 export class APIError extends Error {
   constructor(
@@ -54,170 +19,148 @@ export class APIError extends Error {
   }
 }
 
-interface RequestOptions extends RequestInit {
-  token?: string
-}
-
-async function apiRequest<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
-  const { token, ...fetchOptions } = options
-
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    ...(fetchOptions.headers as Record<string, string>),
-  }
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`
-  }
-
-  // If sending FormData, let the browser/node set the correct multipart boundary
-  const isFormDataBody = typeof FormData !== "undefined" && fetchOptions.body instanceof FormData
-  if (isFormDataBody) {
-    delete headers["Content-Type"]
+async function apiRequest<T>(endpoint: string, options: AxiosRequestConfig = {}): Promise<T> {
+  // If sending FormData, remove Content-Type header to let browser set it
+  const isFormDataBody = typeof FormData !== "undefined" && options.data instanceof FormData
+  if (isFormDataBody && options.headers) {
+    delete options.headers["Content-Type"]
   }
 
   try {
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-      ...fetchOptions,
-      headers,
-      // Include cookies for same-origin requests to Next.js app routes
-      credentials: "include",
+    const response = await axiosClient({
+      url: endpoint,
+      ...options,
+      // Headers will be merged by axios
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
     })
 
-    const data = await response.json()
-
-    if (!response.ok) {
-      throw new APIError(data.message || data.detail || "An error occurred", response.status, data.errors)
+    return response.data
+  } catch (error: any) {
+    if (error.response) {
+      // Server responded with error
+      const status = error.response.status
+      const data = error.response.data || {}
+      const message = data.message || data.detail || "An error occurred"
+      const apiError = new APIError(message, status, data.errors)
+      toast.error(message)
+      throw apiError
+    } else if (error.request) {
+      // Request made but no response
+      throw new APIError("Network error. Please check your connection.", 0)
+    } else {
+      // Error setting up request
+      throw new APIError(error.message || "An error occurred", 0)
     }
-
-    return data
-  } catch (error) {
-    if (error instanceof APIError) {
-      throw error
-    }
-    throw new APIError("Network error. Please check your connection.", 0)
   }
 }
 
 // Doctor Profile API
 export const doctorAPI = {
-  // Get doctor profile
-  getProfile: (token: string) =>
+  // Get doctor profile (token auto-attached by axios interceptor)
+  getProfile: () =>
     apiRequest<any>("/doctor/profile", {
       method: "GET",
-      token,
     }),
 
   // Update personal information
-  updatePersonalInfo: (data: any, token: string) =>
+  updatePersonalInfo: (data: any) =>
     apiRequest<any>("/doctor/profile", {
       method: "PATCH",
-      token,
-      body: JSON.stringify(data),
+      data,
     }),
 
   // Update address
-  updateAddress: (data: any, token: string) =>
+  updateAddress: (data: any) =>
     apiRequest<any>("/doctor/profile/address", {
       method: "POST",
-      token,
-      body: JSON.stringify(data),
+      data,
     }),
 
   // Education
-  addEducation: (data: any, token: string) =>
+  addEducation: (data: any) =>
     apiRequest<any>("/doctor/profile/education", {
       method: "POST",
-      token,
-      body: JSON.stringify(data),
+      data,
     }),
 
-  updateEducation: (id: string, data: any, token: string) =>
+  updateEducation: (id: string, data: any) =>
     apiRequest<any>(`/doctor/profile/education?id=${id}`, {
       method: "PATCH",
-      token,
-      body: JSON.stringify(data),
+      data,
     }),
 
-  deleteEducation: (id: string, token: string) =>
+  deleteEducation: (id: string) =>
     apiRequest<any>(`/doctor/profile/education?id=${id}`, {
       method: "DELETE",
-      token,
     }),
 
   // Certifications
-  addCertification: (data: any, token: string) =>
+  addCertification: (data: any) =>
     apiRequest<any>("/doctor/profile/certification", {
       method: "POST",
-      token,
-      body: JSON.stringify(data),
+      data,
     }),
 
-  updateCertification: (id: string, data: any, token: string) =>
+  updateCertification: (id: string, data: any) =>
     apiRequest<any>(`/doctor/profile/certification?id=${id}`, {
       method: "PATCH",
-      token,
-      body: JSON.stringify(data),
+      data,
     }),
 
-  deleteCertification: (id: string, token: string) =>
+  deleteCertification: (id: string) =>
     apiRequest<any>(`/doctor/profile/certification?id=${id}`, {
       method: "DELETE",
-      token,
     }),
 
   // KYC Documents
-  uploadKYCDocument: (formData: FormData, token: string) =>
+  uploadKYCDocument: (formData: FormData) =>
     apiRequest<any>("/doctor/profile/kyc", {
       method: "POST",
-      token,
-      body: formData,
+      data: formData,
       headers: {}, // Let browser set Content-Type for FormData
     }),
 
   // Clinic Association
-  getClinics: (token: string) =>
+  getClinics: () =>
     apiRequest<any>("/doctor/profile/clinics", {
       method: "GET",
-      token,
     }),
 
-  addClinic: (data: any, token: string) =>
+  addClinic: (data: any) =>
     apiRequest<any>("/doctor/profile/clinics", {
       method: "POST",
-      token,
-      body: JSON.stringify(data),
+      data,
     }),
 
   // Fee Structure
-  updateFeeStructure: (data: any, token: string) =>
+  updateFeeStructure: (data: any) =>
     apiRequest<any>("/doctor/profile/fee-structure", {
       method: "POST",
-      token,
-      body: JSON.stringify(data),
+      data,
     }),
 
   // Services
-  updateServices: (data: any, token: string) =>
+  updateServices: (data: any) =>
     apiRequest<any>("/doctor/profile/services", {
       method: "POST",
-      token,
-      body: JSON.stringify(data),
+      data,
     }),
 
   // Bank Details
-  updateBankDetails: (data: any, token: string) =>
+  updateBankDetails: (data: any) =>
     apiRequest<any>("/doctor/profile/bank-details", {
       method: "POST",
-      token,
-      body: JSON.stringify(data),
+      data,
     }),
 
   // Upload profile photo
-  uploadPhoto: (formData: FormData, token: string) =>
+  uploadPhoto: (formData: FormData) =>
     apiRequest<any>("/doctor/profile/photo", {
       method: "POST",
-      token,
-      body: formData,
+      data: formData,
       headers: {}, // Let browser set Content-Type for FormData
     }),
 }
@@ -225,84 +168,70 @@ export const doctorAPI = {
 export const apiClient = {
   // Personal Information
   updatePersonalInfo: async (data: any) => {
-    const token = localStorage.getItem("authToken") || ""
-    return doctorAPI.updatePersonalInfo(data, token)
+    return doctorAPI.updatePersonalInfo(data)
   },
 
   // Address
   updateAddress: async (data: any) => {
-    const token = localStorage.getItem("authToken") || ""
-    return doctorAPI.updateAddress(data, token)
+    return doctorAPI.updateAddress(data)
   },
 
   // Education
   addEducation: async (data: any) => {
-    const token = localStorage.getItem("authToken") || ""
-    return doctorAPI.addEducation(data, token)
+    return doctorAPI.addEducation(data)
   },
 
   updateEducation: async (id: string, data: any) => {
-    const token = localStorage.getItem("authToken") || ""
-    return doctorAPI.updateEducation(id, data, token)
+    return doctorAPI.updateEducation(id, data)
   },
 
   deleteEducation: async (id: string) => {
-    const token = localStorage.getItem("authToken") || ""
-    return doctorAPI.deleteEducation(id, token)
+    return doctorAPI.deleteEducation(id)
   },
 
   // Certifications
   addCertification: async (data: any) => {
-    const token = localStorage.getItem("authToken") || ""
-    return doctorAPI.addCertification(data, token)
+    return doctorAPI.addCertification(data)
   },
 
   updateCertification: async (id: string, data: any) => {
-    const token = localStorage.getItem("authToken") || ""
-    return doctorAPI.updateCertification(id, data, token)
+    return doctorAPI.updateCertification(id, data)
   },
 
   deleteCertification: async (id: string) => {
-    const token = localStorage.getItem("authToken") || ""
-    return doctorAPI.deleteCertification(id, token)
+    return doctorAPI.deleteCertification(id)
   },
 
   // KYC
   uploadKYCDocument: async (formData: FormData) => {
-    const token = localStorage.getItem("authToken") || ""
-    return doctorAPI.uploadKYCDocument(formData, token)
+    return doctorAPI.uploadKYCDocument(formData)
   },
 
   // Clinics
   updateClinics: async (clinics: any[]) => {
-    const token = localStorage.getItem("authToken") || ""
     // For now, we'll add each clinic individually
     // In production, you might want a bulk update endpoint
-    const promises = clinics.map((clinic) => doctorAPI.addClinic(clinic, token))
+    const promises = clinics.map((clinic) => doctorAPI.addClinic(clinic))
     return Promise.all(promises)
   },
 
   // Fee Structure
   updateFeeStructure: async (data: any) => {
-    const token = localStorage.getItem("authToken") || ""
-    return doctorAPI.updateFeeStructure(data, token)
+    return doctorAPI.updateFeeStructure(data)
   },
 
   // Services
   updateServices: async (data: any) => {
-    const token = localStorage.getItem("authToken") || ""
-    return doctorAPI.updateServices(data, token)
+    return doctorAPI.updateServices(data)
   },
 
   // Bank Details
   updateBankDetails: async (data: any) => {
-    const token = localStorage.getItem("authToken") || ""
-    return doctorAPI.updateBankDetails(data, token)
+    return doctorAPI.updateBankDetails(data)
   },
 
   // Profile Photo
   uploadPhoto: async (formData: FormData) => {
-    const token = localStorage.getItem("authToken") || ""
-    return doctorAPI.uploadPhoto(formData, token)
+    return doctorAPI.uploadPhoto(formData)
   },
 }
