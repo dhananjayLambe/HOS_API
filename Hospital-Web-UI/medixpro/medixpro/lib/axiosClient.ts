@@ -119,6 +119,15 @@ axiosClient.interceptors.response.use(
           localStorage.setItem(ROLE_KEY, response.data.role);
         }
 
+        // Update user info if provided in refresh response
+        if (response.data.user_id || response.data.username || response.data.first_name || response.data.last_name || response.data.email) {
+          if (response.data.user_id) localStorage.setItem("user_id", response.data.user_id);
+          if (response.data.username) localStorage.setItem("username", response.data.username);
+          if (response.data.first_name) localStorage.setItem("first_name", response.data.first_name);
+          if (response.data.last_name) localStorage.setItem("last_name", response.data.last_name);
+          if (response.data.email) localStorage.setItem("email", response.data.email);
+        }
+
         // Update Authorization header and retry original request
         if (originalRequest.headers) {
           originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;

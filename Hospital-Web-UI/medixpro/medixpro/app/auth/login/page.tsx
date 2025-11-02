@@ -16,6 +16,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { isTokenValid } from "@/lib/jwtUtils";
 import { ACCESS_TOKEN_KEY } from "@/lib/axiosClient";
+import { useAuth } from "@/lib/authContext";
 const RESEND_COOLDOWN = 30; // 30 seconds cooldown
 
 const Button = ({ className = "", variant = "default", size = "default", ...props }) => {
@@ -110,6 +111,7 @@ export default function OTPLoginPage() {
   const [successMessage, setSuccessMessage] = useState("");
 
   const router = useRouter();
+  const { setUserInfo } = useAuth();
   const roles = [
     { name: "Doctor", icon: Stethoscope },
     { name: "HelpDesk", icon: Users },
@@ -179,6 +181,15 @@ export default function OTPLoginPage() {
               if (data.role) {
                 localStorage.setItem("role", data.role);
               }
+            }
+
+            // Store user info if provided in refresh response
+            if (data.user_id || data.username || data.first_name || data.last_name || data.email) {
+              if (data.user_id) localStorage.setItem("user_id", data.user_id);
+              if (data.username) localStorage.setItem("username", data.username);
+              if (data.first_name) localStorage.setItem("first_name", data.first_name);
+              if (data.last_name) localStorage.setItem("last_name", data.last_name);
+              if (data.email) localStorage.setItem("email", data.email);
             }
 
             // Redirect based on role
@@ -300,11 +311,25 @@ export default function OTPLoginPage() {
         if (data.role) {
           localStorage.setItem("role", data.role);
         }
-        if (data.username) {
-          localStorage.setItem("username", data.username);
-        }
-        if (data.user_id) {
-          localStorage.setItem("user_id", data.user_id);
+        
+        // 💾 Save user info to localStorage and context
+        if (data.user_id || data.username || data.first_name || data.last_name || data.email) {
+          // Store in localStorage
+          if (data.user_id) localStorage.setItem("user_id", data.user_id);
+          if (data.username) localStorage.setItem("username", data.username);
+          if (data.first_name) localStorage.setItem("first_name", data.first_name);
+          if (data.last_name) localStorage.setItem("last_name", data.last_name);
+          if (data.email) localStorage.setItem("email", data.email);
+          
+          // Update context
+          setUserInfo({
+            user_id: data.user_id,
+            username: data.username,
+            first_name: data.first_name,
+            last_name: data.last_name,
+            email: data.email,
+            role: data.role,
+          });
         }
 
         // 🚀 Redirect based on role

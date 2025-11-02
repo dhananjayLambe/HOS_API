@@ -11,6 +11,7 @@ import { usePathname } from "next/navigation";
 import type React from "react";
 import { useEffect, useState } from "react";
 import AnimateHeight from "react-animate-height";
+import { useAuth } from "@/lib/authContext";
 interface SidebarProps {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
@@ -27,6 +28,52 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
   const pathname = usePathname();
   const isMobile = useMobile();
   const [openSubmenu, setOpenSubmenu] = useState<string | null>(null);
+  const { user, role } = useAuth();
+
+  // Helper function to get user's full name
+  const getUserFullName = () => {
+    if (user?.first_name || user?.last_name) {
+      const firstName = user.first_name || "";
+      const lastName = user.last_name || "";
+      const fullName = `${firstName} ${lastName}`.trim();
+      return `Dr. ${fullName}`;
+    }
+    return "User";
+  };
+
+  // Helper function to get user's initials for avatar fallback
+  const getUserInitials = () => {
+    if (user?.first_name && user?.last_name) {
+      return `${user.first_name[0]}${user.last_name[0]}`.toUpperCase();
+    }
+    if (user?.first_name) {
+      return user.first_name[0].toUpperCase();
+    }
+    if (user?.username) {
+      return user.username[0].toUpperCase();
+    }
+    return "U";
+  };
+
+  // Helper function to get user's role display name
+  const getRoleDisplayName = () => {
+    if (role) {
+      // Capitalize first letter and handle common role names
+      const roleMap: Record<string, string> = {
+        doctor: "Doctor",
+        helpdesk: "Helpdesk",
+        labadmin: "Lab Administrator",
+        superadmin: "Administrator",
+        patient: "Patient",
+      };
+      return roleMap[role.toLowerCase()] || role.charAt(0).toUpperCase() + role.slice(1);
+    }
+    return "User";
+  };
+
+  const displayName = getUserFullName();
+  const displayRole = getRoleDisplayName();
+  const initials = getUserInitials();
 
   const sidebarItems: SidebarItem[] = [
     {
@@ -347,12 +394,12 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
       <div className="border-t p-4 shrink-0">
         <div className="flex items-center gap-3">
           <Avatar className="h-8 w-8">
-            <AvatarImage src="/placeholder-user.jpg" alt="Dr. Sarah Johnson" />
-            <AvatarFallback>SJ</AvatarFallback>
+            <AvatarImage src="/placeholder-user.jpg" alt={displayName} />
+            <AvatarFallback>{initials}</AvatarFallback>
           </Avatar>
           <div className="space-y-0.5">
-            <p className="text-sm font-medium">Dr. Sarah Johnson</p>
-            <p className="text-xs text-muted-foreground">Administrator</p>
+            <p className="text-sm font-medium">{displayName}</p>
+            <p className="text-xs text-muted-foreground">{displayRole}</p>
           </div>
         </div>
       </div>

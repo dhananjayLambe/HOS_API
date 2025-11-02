@@ -1,3 +1,5 @@
+"use client";
+
 import { ArrowUpRight, CalendarClock, ClipboardList, FileText, Users } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -10,13 +12,27 @@ import { DoctorTasks } from "@/components/doctor/doctor-tasks";
 import { PatientNotes } from "@/components/doctor/patient-notes";
 import { RecentPrescriptions } from "@/components/doctor/recent-prescriptions";
 import { DoctorStats } from "@/components/doctor/doctor-stats";
+import { useAuth } from "@/lib/authContext";
 
 export default function DoctorDashboardPage() {
+  const { user } = useAuth();
+  
+  // Build welcome message with user's name
+  const getWelcomeMessage = () => {
+    if (user?.first_name || user?.last_name) {
+      const firstName = user.first_name || "";
+      const lastName = user.last_name || "";
+      const fullName = `${firstName} ${lastName}`.trim();
+      return `Welcome back, Dr. ${fullName}`;
+    }
+    return "Welcome back, Doctor";
+  };
+
   return (
     <div className="flex min-h-screen w-full flex-col">
       <main className="flex-1 space-y-6">
         <div className="flex flex-col space-y-2">
-          <h2 className="text-2xl lg:text-3xl font-bold tracking-tight">Welcome back, Dr. Sarah</h2>
+          <h2 className="text-2xl lg:text-3xl font-bold tracking-tight">{getWelcomeMessage()}</h2>
           <p className="text-muted-foreground">Here's what's happening with your patients today.</p>
         </div>
 
