@@ -86,12 +86,12 @@ REST_FRAMEWORK={
         'patient': timedelta(days=30),  # Patient token expires after 30 days
     },
     'DEFAULT_THROTTLE_CLASSES': [
-        'rest_framework.throttling.UserRateThrottle',
+        # 'rest_framework.throttling.UserRateThrottle',  # Disabled for development
     ],
     'DEFAULT_THROTTLE_RATES': {
         'registration': '10/min',
-        'user': '1000/day',   # Set this to whatever rate limit you prefer
-        'anon': '100/day',
+        'user': '10000/day',   # Increased limit for development
+        'anon': '1000/day',
     },
      "DATETIME_FORMAT": "%Y-%m-%d %H:%M:%S",
 }

@@ -50,6 +50,7 @@ from doctor.api.serializers import (
     EducationCertificateUploadSerializer, DoctorProfilePhotoUploadSerializer,
     DoctorProfileSerializer, RegistrationDocumentUploadSerializer,
     GovernmentIDUploadSerializer, KYCStatusSerializer, KYCVerifySerializer,
+    DigitalSignatureUploadSerializer,
     DoctorSearchSerializer,DoctorFeeStructureSerializer,FollowUpPolicySerializer,
     DoctorAvailabilitySerializer,DoctorLeaveSerializer,DoctorOPDStatusSerializer,
     DoctorPhase1Serializer,DoctorFullProfileSerializer,
@@ -245,10 +246,11 @@ class UserView(APIView):
 
 class DoctorFullProfileAPIView(APIView):
     """
-    Fetch full doctor profile based on JWT token.
+    Fetch and update full doctor profile based on JWT token.
     """
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
+    throttle_classes = []  # Disable throttling for profile endpoint
 
     def get(self, request, *args, **kwargs):
         """
@@ -283,6 +285,51 @@ class DoctorFullProfileAPIView(APIView):
             {"doctor_profile": serializer.data},
             status=status.HTTP_200_OK
         )
+
+    def patch(self, request, *args, **kwargs):
+        """
+        Update doctor profile fields (partial update).
+        """
+        user = request.user
+
+        try:
+            doctor_instance = doctor.objects.get(user=user)
+        except doctor.DoesNotExist:
+            return Response(
+                {"error": "Doctor profile not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Log incoming data for debugging
+        print(f"[DEBUG] PATCH request data: {request.data}")
+        print(f"[DEBUG] Current doctor gender before update: {doctor_instance.gender}")
+
+        # Use DoctorProfileUpdateSerializer for updates
+        serializer = DoctorProfileUpdateSerializer(
+            doctor_instance, 
+            data=request.data, 
+            partial=True, 
+            context={'request': request}
+        )
+        
+        if serializer.is_valid():
+            serializer.save()
+            
+            # Refresh from database to get updated values
+            doctor_instance.refresh_from_db()
+            print(f"[DEBUG] Doctor gender after save: {doctor_instance.gender}")
+            print(f"[DEBUG] Doctor dob after save: {doctor_instance.dob}")
+            print(f"[DEBUG] Doctor about after save: {doctor_instance.about}")
+            
+            # Return updated profile using DoctorFullProfileSerializer
+            updated_serializer = DoctorFullProfileSerializer(doctor_instance, context={"request": request})
+            return Response(
+                {"doctor_profile": updated_serializer.data},
+                status=status.HTTP_200_OK
+            )
+        
+        print(f"[DEBUG] Serializer errors: {serializer.errors}")
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
   
 class DoctorRegistrationAPIView(APIView):
     permission_classes = [AllowAny]
@@ -483,15 +530,29 @@ class DoctorAddressViewSet(viewsets.ViewSet):
             return None
 
     def list(self, request):
-        address = self.get_object(request.user.doctor)
+        try:
+            doctor_instance = request.user.doctor
+        except AttributeError:
+            return Response({"status": "error", "message": "Doctor profile not found"}, status=404)
+        
+        address = self.get_object(doctor_instance)
         if not address:
             return Response({"status": "error", "message": "Address not found"}, status=404)
-        serializer = DoctorAddressSerializer(address)
-        return Response({"status": "success", "data": serializer.data})
+        
+        try:
+            serializer = DoctorAddressSerializer(address)
+            return Response({"status": "success", "data": serializer.data})
+        except Exception as e:
+            logger.error(f"Error serializing address: {str(e)}")
+            return Response({"status": "error", "message": "Failed to retrieve address data"}, status=500)
 
     @transaction.atomic
     def create(self, request):
-        doctor = request.user.doctor
+        try:
+            doctor = request.user.doctor
+        except AttributeError:
+            return Response({"status": "error", "message": "Doctor profile not found"}, status=404)
+        
         if self.get_object(doctor):
             return Response({"status": "error", "message": "Address already exists"}, status=409)
         serializer = DoctorAddressSerializer(data=request.data)
@@ -500,35 +561,94 @@ class DoctorAddressViewSet(viewsets.ViewSet):
             return Response({"status": "success", "message": "Address created", "data": serializer.data}, status=201)
         return Response({"status": "error", "message": "Validation failed", "errors": serializer.errors}, status=400)
 
+    @action(detail=False, methods=['put', 'patch'], url_path='', url_name='update-address')
     @transaction.atomic
-    def update(self, request, pk=None):
-        address = self.get_object(request.user.doctor)
+    def update_address(self, request):
+        """Handle both PUT and PATCH requests for updating address"""
+        try:
+            doctor_instance = request.user.doctor
+        except AttributeError:
+            return Response({"status": "error", "message": "Doctor profile not found"}, status=404)
+        
+        address = self.get_object(doctor_instance)
         if not address:
             return Response({"status": "error", "message": "Address not found"}, status=404)
-        serializer = DoctorAddressSerializer(address, data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response({"status": "success", "message": "Address updated", "data": serializer.data})
-        return Response({"status": "error", "message": "Validation failed", "errors": serializer.errors}, status=400)
+        
+        # Use partial=True for PATCH, full update for PUT
+        is_partial = request.method == 'PATCH'
+        
+        try:
+            serializer = DoctorAddressSerializer(address, data=request.data, partial=is_partial)
+            if serializer.is_valid():
+                serializer.save()
+                message = "Address partially updated" if is_partial else "Address updated"
+                return Response({"status": "success", "message": message, "data": serializer.data})
+            return Response({"status": "error", "message": "Validation failed", "errors": serializer.errors}, status=400)
+        except Exception as e:
+            logger.error(f"Error updating address: {str(e)}")
+            return Response({"status": "error", "message": f"Failed to update address: {str(e)}"}, status=500)
+
+    @transaction.atomic
+    def update(self, request, pk=None):
+        """Handle PUT requests for updating address (full update)"""
+        try:
+            doctor_instance = request.user.doctor
+        except AttributeError:
+            return Response({"status": "error", "message": "Doctor profile not found"}, status=404)
+        
+        address = self.get_object(doctor_instance)
+        if not address:
+            return Response({"status": "error", "message": "Address not found"}, status=404)
+        
+        try:
+            serializer = DoctorAddressSerializer(address, data=request.data, partial=False)
+            if serializer.is_valid():
+                serializer.save()
+                return Response({"status": "success", "message": "Address updated", "data": serializer.data})
+            return Response({"status": "error", "message": "Validation failed", "errors": serializer.errors}, status=400)
+        except Exception as e:
+            logger.error(f"Error updating address: {str(e)}")
+            return Response({"status": "error", "message": f"Failed to update address: {str(e)}"}, status=500)
 
     @transaction.atomic
     def partial_update(self, request, pk=None):
-        address = self.get_object(request.user.doctor)
+        """Handle PATCH requests for updating address (partial update)"""
+        try:
+            doctor_instance = request.user.doctor
+        except AttributeError:
+            return Response({"status": "error", "message": "Doctor profile not found"}, status=404)
+        
+        address = self.get_object(doctor_instance)
         if not address:
             return Response({"status": "error", "message": "Address not found"}, status=404)
-        serializer = DoctorAddressSerializer(address, data=request.data, partial=True)
-        if serializer.is_valid():
-            serializer.save()
-            return Response({"status": "success", "message": "Address partially updated", "data": serializer.data})
-        return Response({"status": "error", "message": "Validation failed", "errors": serializer.errors}, status=400)
+        
+        try:
+            serializer = DoctorAddressSerializer(address, data=request.data, partial=True)
+            if serializer.is_valid():
+                serializer.save()
+                return Response({"status": "success", "message": "Address partially updated", "data": serializer.data})
+            return Response({"status": "error", "message": "Validation failed", "errors": serializer.errors}, status=400)
+        except Exception as e:
+            logger.error(f"Error updating address: {str(e)}")
+            return Response({"status": "error", "message": f"Failed to update address: {str(e)}"}, status=500)
 
     @transaction.atomic
     def destroy(self, request, pk=None):
-        address = self.get_object(request.user.doctor)
+        try:
+            doctor_instance = request.user.doctor
+        except AttributeError:
+            return Response({"status": "error", "message": "Doctor profile not found"}, status=404)
+        
+        address = self.get_object(doctor_instance)
         if not address:
             return Response({"status": "error", "message": "Address not found"}, status=404)
-        address.delete()
-        return Response({"status": "success", "message": "Address deleted"}, status=204)
+        
+        try:
+            address.delete()
+            return Response({"status": "success", "message": "Address deleted"}, status=204)
+        except Exception as e:
+            logger.error(f"Error deleting address: {str(e)}")
+            return Response({"status": "error", "message": f"Failed to delete address: {str(e)}"}, status=500)
    
 class RegistrationView(APIView):
     authentication_classes = [JWTAuthentication]
@@ -716,6 +836,43 @@ class EducationViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return Education.objects.filter(doctor=self.request.user.doctor)
 
+    @transaction.atomic
+    def create(self, request, *args, **kwargs):
+        doctor_instance = request.user.doctor
+        qualification = request.data.get('qualification')
+        institute = request.data.get('institute')
+        year_of_completion = request.data.get('year_of_completion')
+        
+        # Check for duplicate education entry
+        if qualification and institute and year_of_completion:
+            existing = Education.objects.filter(
+                doctor=doctor_instance,
+                qualification=qualification,
+                institute=institute,
+                year_of_completion=year_of_completion
+            ).first()
+            
+            if existing:
+                # Update existing education entry instead of creating duplicate
+                serializer = self.get_serializer(existing, data=request.data, partial=True, context={'request': request})
+                serializer.is_valid(raise_exception=True)
+                self.perform_update(serializer)
+                return Response({
+                    "status": "success",
+                    "message": "Education entry updated successfully",
+                    "data": serializer.data
+                }, status=status.HTTP_200_OK)
+        
+        # Create new education entry
+        serializer = self.get_serializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        return Response({
+            "status": "success",
+            "message": "Education entry created successfully",
+            "data": serializer.data
+        }, status=status.HTTP_201_CREATED)
+
     def perform_create(self, serializer):
         serializer.save(doctor=self.request.user.doctor)
 
@@ -724,6 +881,35 @@ class EducationViewSet(viewsets.ModelViewSet):
 
 
 class SpecializationViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing doctor specializations.
+    
+    Supports unified API approach:
+    - Accept 'specialization_name' (string) to automatically handle predefined or custom specializations
+    - Or use 'specialization' (code) and 'custom_specialization' (ID) for backward compatibility
+    
+    Example requests:
+    1. Unified approach (recommended):
+       POST /api/doctor/specializations/
+       {
+         "specialization_name": "Cardiologist",  // or any custom name
+         "is_primary": true
+       }
+    
+    2. Predefined specialization:
+       POST /api/doctor/specializations/
+       {
+         "specialization": "CL",
+         "is_primary": true
+       }
+    
+    3. Custom specialization:
+       POST /api/doctor/specializations/
+       {
+         "custom_specialization": "<uuid>",
+         "is_primary": false
+       }
+    """
     serializer_class = SpecializationSerializer
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated, IsDoctor]
@@ -731,8 +917,119 @@ class SpecializationViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return Specialization.objects.filter(doctor=self.request.user.doctor).order_by('-created_at')
 
+    def list(self, request, *args, **kwargs):
+        """List all specializations for the authenticated doctor"""
+        queryset = self.get_queryset()
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({
+            "status": "success",
+            "message": "Specializations retrieved successfully",
+            "data": serializer.data
+        }, status=status.HTTP_200_OK)
+
+    def retrieve(self, request, *args, **kwargs):
+        """Retrieve a specific specialization"""
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return Response({
+            "status": "success",
+            "message": "Specialization retrieved successfully",
+            "data": serializer.data
+        }, status=status.HTTP_200_OK)
+
     @transaction.atomic
     def create(self, request, *args, **kwargs):
+        """
+        Create a new specialization.
+        
+        Handles three input modes:
+        1. specialization_name (string) - Unified approach (recommended)
+        2. specialization (code) - Predefined specialization
+        3. custom_specialization (ID) - Existing custom specialization
+        """
+        doctor_instance = request.user.doctor
+        specialization_name = request.data.get('specialization_name')
+        specialization = request.data.get('specialization')
+        custom_specialization_id = request.data.get('custom_specialization')
+        
+        # Unified approach: if specialization_name is provided, use it
+        if specialization_name:
+            from doctor.models import SPECIALIZATION_CHOICES, CustomSpecialization
+            
+            specialization_name = specialization_name.strip()
+            
+            # Check if it matches predefined specialization
+            matched_code = None
+            for code, display_name in SPECIALIZATION_CHOICES:
+                if display_name.lower() == specialization_name.lower():
+                    matched_code = code
+                    break
+            
+            if matched_code:
+                # Check for duplicate predefined specialization
+                existing = Specialization.objects.filter(
+                    doctor=doctor_instance,
+                    specialization=matched_code
+                ).first()
+                if existing:
+                    return Response({
+                        "status": "error",
+                        "message": "Specialization already exists for this doctor.",
+                        "data": self.get_serializer(existing).data
+                    }, status=status.HTTP_400_BAD_REQUEST)
+            else:
+                # It's a custom specialization - find or create
+                custom_spec, created = CustomSpecialization.objects.get_or_create(
+                    name__iexact=specialization_name,
+                    defaults={'name': specialization_name}
+                )
+                
+                # Check for duplicate custom specialization
+                existing = Specialization.objects.filter(
+                    doctor=doctor_instance,
+                    custom_specialization=custom_spec
+                ).first()
+                if existing:
+                    return Response({
+                        "status": "error",
+                        "message": "Custom specialization already exists for this doctor.",
+                        "data": self.get_serializer(existing).data
+                    }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Backward compatibility: check for duplicates with old approach
+        elif specialization:
+            existing = Specialization.objects.filter(
+                doctor=doctor_instance,
+                specialization=specialization
+            ).first()
+            if existing:
+                return Response({
+                    "status": "error",
+                    "message": "Specialization already exists for this doctor.",
+                    "data": self.get_serializer(existing).data
+                }, status=status.HTTP_400_BAD_REQUEST)
+        elif custom_specialization_id:
+            existing = Specialization.objects.filter(
+                doctor=doctor_instance,
+                custom_specialization_id=custom_specialization_id
+            ).first()
+            if existing:
+                # Update existing specialization instead of creating duplicate
+                serializer = self.get_serializer(existing, data=request.data, partial=True, context={'request': request})
+                serializer.is_valid(raise_exception=True)
+                self.perform_update(serializer)
+                return Response({
+                    "status": "success",
+                    "message": "Specialization updated successfully",
+                    "data": serializer.data
+                }, status=status.HTTP_200_OK)
+        else:
+            return Response({
+                "status": "error",
+                "message": "Either specialization_name, specialization, or custom_specialization must be provided."
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Create new specialization
         serializer = self.get_serializer(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
@@ -744,8 +1041,58 @@ class SpecializationViewSet(viewsets.ModelViewSet):
 
     @transaction.atomic
     def update(self, request, *args, **kwargs):
+        """
+        Update an existing specialization.
+        
+        Supports updating via specialization_name (unified approach) or 
+        traditional fields (specialization/custom_specialization).
+        """
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
+        
+        # If specialization_name is provided, handle it
+        specialization_name = request.data.get('specialization_name')
+        if specialization_name:
+            from doctor.models import SPECIALIZATION_CHOICES, CustomSpecialization
+            
+            specialization_name = specialization_name.strip()
+            
+            # Check if it matches predefined specialization
+            matched_code = None
+            for code, display_name in SPECIALIZATION_CHOICES:
+                if display_name.lower() == specialization_name.lower():
+                    matched_code = code
+                    break
+            
+            if matched_code:
+                # Check if another specialization with this code already exists
+                existing = Specialization.objects.filter(
+                    doctor=request.user.doctor,
+                    specialization=matched_code
+                ).exclude(id=instance.id).first()
+                if existing:
+                    return Response({
+                        "status": "error",
+                        "message": "Another specialization with this name already exists.",
+                    }, status=status.HTTP_400_BAD_REQUEST)
+            else:
+                # It's a custom specialization - find or create
+                custom_spec, created = CustomSpecialization.objects.get_or_create(
+                    name__iexact=specialization_name,
+                    defaults={'name': specialization_name}
+                )
+                
+                # Check if another specialization with this custom spec already exists
+                existing = Specialization.objects.filter(
+                    doctor=request.user.doctor,
+                    custom_specialization=custom_spec
+                ).exclude(id=instance.id).first()
+                if existing:
+                    return Response({
+                        "status": "error",
+                        "message": "Another specialization with this name already exists.",
+                    }, status=status.HTTP_400_BAD_REQUEST)
+        
         serializer = self.get_serializer(instance, data=request.data, partial=partial, context={'request': request})
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)
@@ -753,10 +1100,11 @@ class SpecializationViewSet(viewsets.ModelViewSet):
             "status": "success",
             "message": "Specialization updated successfully",
             "data": serializer.data
-        })
+        }, status=status.HTTP_200_OK)
 
     @transaction.atomic
     def destroy(self, request, *args, **kwargs):
+        """Delete a specialization"""
         instance = self.get_object()
         self.perform_destroy(instance)
         return Response({
@@ -781,6 +1129,20 @@ class CustomSpecializationViewSet(viewsets.ModelViewSet):
 
     @transaction.atomic
     def create(self, request, *args, **kwargs):
+        name = request.data.get('name', '').strip()
+        
+        # Check if custom specialization with this name already exists
+        existing = CustomSpecialization.objects.filter(name__iexact=name).first()
+        
+        if existing:
+            # Return existing specialization instead of error
+            return Response({
+                "status": "success",
+                "message": "Custom specialization already exists. Returning existing.",
+                "data": self.get_serializer(existing).data
+            }, status=status.HTTP_200_OK)
+        
+        # Create new specialization
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         instance = serializer.save()
@@ -902,6 +1264,32 @@ class CertificationViewSet(viewsets.ModelViewSet):
 
     @transaction.atomic
     def create(self, request, *args, **kwargs):
+        doctor_instance = request.user.doctor
+        title = request.data.get('title')
+        issued_by = request.data.get('issued_by')
+        date_of_issue = request.data.get('date_of_issue')
+        
+        # Check for duplicate certification entry
+        if title and issued_by and date_of_issue:
+            existing = Certification.objects.filter(
+                doctor=doctor_instance,
+                title__iexact=title,
+                issued_by__iexact=issued_by,
+                date_of_issue=date_of_issue
+            ).first()
+            
+            if existing:
+                # Update existing certification instead of creating duplicate
+                serializer = self.get_serializer(existing, data=request.data, partial=True, context={'request': request})
+                serializer.is_valid(raise_exception=True)
+                instance = serializer.save()
+                return Response({
+                    "status": "success",
+                    "message": "Certification updated successfully",
+                    "data": self.get_serializer(instance).data
+                }, status=status.HTTP_200_OK)
+        
+        # Create new certification
         serializer = self.get_serializer(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
         instance = serializer.save(doctor=request.user.doctor)
@@ -1277,6 +1665,59 @@ class KYCVerifyView(APIView):
             "message": "Validation failed",
             "errors": serializer.errors
         }, status=400)
+
+class UploadDigitalSignatureView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctor]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def patch(self, request):
+        print("UploadDigitalSignatureView request received")
+        doctor = request.user.doctor
+        try:
+            kyc_status, _ = KYCStatus.objects.get_or_create(doctor=doctor)
+            print(f"KYC Status retrieved: {kyc_status.id}, Doctor: {doctor.id}")
+        except Exception as e:
+            logger.error(f"Failed to get or create KYC status: {str(e)}")
+            return Response({
+                "status": "error",
+                "message": f"Failed to get or create KYC status: {str(e)}"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # Check if file is in request
+        if 'digital_signature' not in request.FILES:
+            return Response({
+                "status": "error",
+                "message": "No file provided in request"
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        file = request.FILES['digital_signature']
+        print(f"File received: {file.name}, Size: {file.size}, Content type: {file.content_type}")
+
+        # Use serializer for validation and file upload (same pattern as PAN/Aadhaar)
+        serializer = DigitalSignatureUploadSerializer(kyc_status, data=request.data, partial=True)
+        if serializer.is_valid():
+            instance = serializer.save()
+            print(f"File saved. Digital signature path: {instance.digital_signature.name if instance.digital_signature else 'None'}")
+            print(f"Digital signature URL: {instance.digital_signature.url if instance.digital_signature else 'None'}")
+            
+            # Refresh from DB to ensure we have the latest data
+            instance.refresh_from_db()
+            
+            return Response({
+                "status": "success",
+                "message": "Digital signature uploaded successfully.",
+                "data": {
+                    "digital_signature": instance.digital_signature.url if instance.digital_signature else None,
+                    "digital_signature_path": instance.digital_signature.name if instance.digital_signature else None
+                }
+            }, status=status.HTTP_200_OK)
+        
+        logger.error(f"Serializer validation failed: {serializer.errors}")
+        return Response({
+            "status": "error",
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
 
 class DoctorSearchView(APIView):
     permission_classes = [IsAuthenticated]

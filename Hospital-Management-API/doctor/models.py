@@ -10,7 +10,8 @@ from django.core.validators import RegexValidator
 from datetime import datetime, timedelta
 from doctor.utils.uploads import(
     doctor_photo_upload_path,doctor_kyc_upload_path,
-    doctor_education_upload_path,pan_card_upload_path,aadhar_card_upload_path)
+    doctor_education_upload_path,pan_card_upload_path,aadhar_card_upload_path,
+    digital_signature_upload_path)
 STATUS_CHOICES = [
     ("pending", "Pending Approval"),
     ("approved", "Approved"),
@@ -115,7 +116,7 @@ class doctor(models.Model):
     kyc_completed = models.BooleanField(default=False)
     kyc_verified = models.BooleanField(default=False)
     profile_completion = models.PositiveIntegerField(default=0)
-    profile_verification_Badges = models.JSONField(default=list, help_text="List of badges earned by the doctor")
+    profile_verification_Badges = models.JSONField(default=list,null=True,blank=True, help_text="List of badges earned by the doctor")
 
     # Relationships
     clinics = models.ManyToManyField(Clinic, related_name='doctors')
@@ -200,6 +201,7 @@ class Education(models.Model):
 
     class Meta:
         unique_together = ('doctor', 'qualification', 'institute', 'year_of_completion')
+        ordering = ['-year_of_completion', '-created_at']
 
     def __str__(self):
         return f"{self.qualification} - {self.institute} ({self.year_of_completion})"
@@ -319,7 +321,7 @@ class KYCStatus(models.Model):
 
     pan_status = models.CharField(max_length=10, choices=[("pending", "Pending"), ("approved", "Approved"), ("rejected", "Rejected")], default="pending")
     pan_reason = models.TextField(null=True, blank=True)
-    digital_signature = models.FileField(upload_to='digital_signature/', null=True, blank=True)  # path need to update 
+    digital_signature = models.FileField(upload_to=digital_signature_upload_path, null=True, blank=True) 
 
     kya_verified = models.BooleanField(default=False)
     reviewed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)

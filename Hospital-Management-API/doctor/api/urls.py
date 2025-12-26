@@ -14,7 +14,7 @@ from doctor.api.views import (
     UploadDoctorPhotoView,DoctorProfileView,
     UploadRegistrationCertificateView,
     UploadEducationCertificateView,UploadGovernmentIDView,DoctorKYCStatusView,
-    KYCVerifyView,DoctorSearchView,
+    KYCVerifyView,DoctorSearchView,UploadDigitalSignatureView,
     DoctorFeeStructureViewSet,FollowUpPolicyViewSet,DoctorAvailabilityView,DoctorLeaveCreateView,
     DoctorLeaveCreateView,DoctorLeaveListView,DoctorLeaveUpdateView,DoctorLeaveDeleteView,
     DoctorOPDStatusViewSet,
@@ -23,7 +23,8 @@ from doctor.api.views import (
 
 app_name='doctor'
 router = DefaultRouter()
-router.register(r'address', DoctorAddressViewSet, basename='doctor-address')
+# Address is handled explicitly below to support PUT/PATCH at base URL without pk
+# router.register(r'address', DoctorAddressViewSet, basename='doctor-address')
 router.register(r'education', EducationViewSet, basename='education')
 router.register(r'specializations', SpecializationViewSet, basename='specialization')
 router.register(r'custom-specializations', CustomSpecializationViewSet, basename='custom-specialization')
@@ -43,7 +44,16 @@ government_id_view = GovernmentIDViewSet.as_view({
     'delete': 'destroy',
 })
 
+address_view = DoctorAddressViewSet.as_view({
+    'get': 'list',
+    'post': 'create',
+    'put': 'update',
+    'patch': 'partial_update',
+    'delete': 'destroy',
+})
+
 urlpatterns = [
+    path('address/', address_view, name='doctor-address'),
     path('', include(router.urls)),
     # Doctor Authentication Endpoints
     path('check-doctor-user/', CheckUserStatusView.as_view(), name='check-doctor-user'),
@@ -70,6 +80,7 @@ urlpatterns = [
     path('kyc/upload/registration/', UploadRegistrationCertificateView.as_view(), name='doctor-kyc-registration-upload'),
     path('kyc/upload/education/', UploadEducationCertificateView.as_view(), name='doctor-kyc-education-upload'),
     path('kyc/upload/govt-id/', UploadGovernmentIDView.as_view(), name='upload-govt-id'),
+    path('kyc/upload/digital-signature/', UploadDigitalSignatureView.as_view(), name='upload-digital-signature'),
     path('kyc/status/', DoctorKYCStatusView.as_view(), name='doctor-kyc-status'),
     path("kyc/admin-verify/<uuid:doctor_id>/", KYCVerifyView.as_view(), name="kyc-admin-verify"),
     path("search-doctors/", DoctorSearchView.as_view(), name="search-doctors"),

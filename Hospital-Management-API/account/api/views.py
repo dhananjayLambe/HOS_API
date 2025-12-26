@@ -198,11 +198,14 @@ def _generate_jwt_tokens(user, role: str):
     # Access token is derived from refresh token
     access = refresh.access_token
 
+    # Get current time and calculate expiration times
+    now = datetime.datetime.utcnow()
+    
     return {
         "access": str(access),
         "refresh": str(refresh),
-        "access_expires_at": access.current_time + access.lifetime,
-        "refresh_expires_at": refresh.current_time + refresh.lifetime,
+        "access_expires_at": now + access.lifetime,
+        "refresh_expires_at": now + refresh.lifetime,
     }
 # class CheckUserStatusView(APIView):
 #     """
@@ -671,7 +674,7 @@ class ResendOTPStaffView(APIView):
 
 class RefreshTokenStaffView(APIView):
     """
-    POST /auth/staff/refresh-token/
+    POST /api/auth/refresh-token/
 
     Features:
     1. Reads refresh token from request body.

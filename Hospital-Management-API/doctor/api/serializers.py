@@ -26,6 +26,9 @@ class DoctorBasicSerializer(serializers.ModelSerializer):
     last_name = serializers.CharField(source="user.last_name", read_only=True)
     email = serializers.EmailField(source="user.email", read_only=True)
     profile_photo = serializers.ImageField(source="photo", allow_null=True, required=False)
+    dob = serializers.DateField(format=None, allow_null=True, required=False)
+    gender = serializers.CharField(allow_null=True, required=False, allow_blank=True)
+    about = serializers.CharField(allow_null=True, required=False, allow_blank=True)
 
     class Meta:
         model = doctor
@@ -35,6 +38,30 @@ class DoctorBasicSerializer(serializers.ModelSerializer):
             "avg_rating", "title", "consultation_modes", "languages_spoken",
             "primary_specialization",
         ]
+    
+    def to_representation(self, instance):
+        """Override to ensure dates are formatted correctly"""
+        representation = super().to_representation(instance)
+        
+        # Format date of birth as string in YYYY-MM-DD format
+        if instance.dob:
+            representation['dob'] = instance.dob.isoformat()
+        else:
+            representation['dob'] = None
+        
+        # Ensure gender is returned as string (M/F/O) - handle null values
+        if instance.gender:
+            representation['gender'] = str(instance.gender).upper()
+        else:
+            representation['gender'] = None  # Keep as None if not set
+        
+        # Ensure about is returned as string (empty string if None)
+        if instance.about:
+            representation['about'] = str(instance.about)
+        else:
+            representation['about'] = ""
+        
+        return representation
 
 class UserSerializer(serializers.ModelSerializer):
     password2 = serializers.CharField(write_only=True)
@@ -107,7 +134,7 @@ class DoctorRegistrationSerializer(serializers.Serializer):
 class RegistrationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Registration
-        fields = ['id','medical_registration_number', 'medical_council', 'created_at', 'updated_at']
+        fields = ['id','medical_registration_number', 'medical_council', 'registration_certificate', 'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']
 
     def validate_medical_registration_number(self, value):
@@ -119,7 +146,7 @@ class GovernmentIDSerializer(serializers.ModelSerializer):
     class Meta:
         model = GovernmentID
         fields = [
-            'id', 'pan_card_number', 'aadhar_card_number','created_at', 'updated_at'
+            'id', 'pan_card_number', 'aadhar_card_number', 'pan_card_file', 'aadhar_card_file', 'created_at', 'updated_at'
         ]
 
     def validate_pan_card_number(self, value):
@@ -148,16 +175,8 @@ class EducationSerializer(serializers.ModelSerializer):
         validated_data['doctor'] = request.user.doctor
         return super().create(validated_data)
     
-    def validate(self, attrs):
-        doctor = self.context['request'].user.doctor
-        if Education.objects.filter(
-            doctor=doctor,
-            qualification=attrs.get('qualification'),
-            institute=attrs.get('institute'),
-            year_of_completion=attrs.get('year_of_completion')
-        ).exists():
-            raise serializers.ValidationError("Duplicate education entry already exists.")
-        return attrs
+    # Removed validate() method - duplicate checking is now handled in EducationViewSet.create()
+    # to allow updating existing entries instead of raising errors
 
 class CustomSpecializationSerializer(serializers.ModelSerializer):
     class Meta:
@@ -288,7 +307,7 @@ class DoctorProfileUpdateSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         nested_fields = [
-            'education', 'languages', 'certifications', 'services', 
+            'education', 'certifications', 'services', 
             'awards', 'social_links', 'specializations','government_ids',
             'registration'
         ]
@@ -304,20 +323,27 @@ class DoctorProfileUpdateSerializer(serializers.ModelSerializer):
         for field in nested_fields:            
             if field in validated_data:
                 nested_data = validated_data.pop(field)
-                related_manager = getattr(instance, field)
-                if field == 'government_ids':
-                    related_manager = instance.government_id
-                    if nested_data:
-                        related_manager.pan_card_number = nested_data['pan_card_number']
-                        related_manager.aadhar_card_number = nested_data['aadhar_card_number']
-                        related_manager.save()
-                else:
-                    related_manager.all().delete()
-                    for item in nested_data:
-                        related_manager.create(**item)
+                try:
+                    related_manager = getattr(instance, field)
+                    if field == 'government_ids':
+                        related_manager = instance.government_id
+                        if nested_data:
+                            related_manager.pan_card_number = nested_data.get('pan_card_number', related_manager.pan_card_number)
+                            related_manager.aadhar_card_number = nested_data.get('aadhar_card_number', related_manager.aadhar_card_number)
+                            related_manager.save()
+                    else:
+                        related_manager.all().delete()
+                        for item in nested_data:
+                            related_manager.create(**item)
+                except AttributeError as e:
+                    # Skip fields that don't exist as related managers
+                    # They will be handled as regular fields below
+                    pass
 
+        # Update all remaining fields (including gender, dob, about, languages_spoken, consultation_modes)
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
+        
         instance.save()
         return instance
 
@@ -425,22 +451,127 @@ class DoctorSummarySerializer(serializers.ModelSerializer):
         ]
 
 class SpecializationSerializer(serializers.ModelSerializer):
+    # Override specialization to accept free-text (bypasses model choices validation on input).
+    specialization = serializers.CharField(required=False, allow_blank=True)
+    # New field for unified input - accepts specialization name as string
+    specialization_name = serializers.CharField(
+        write_only=True,
+        required=False,
+        help_text=(
+            "Name of specialization (e.g., 'Cardiologist' or 'Custom Specialization Name'). "
+            "If provided, will automatically match predefined or create custom specialization."
+        ),
+    )
+
+    # Display fields for read operations
+    specialization_display = serializers.SerializerMethodField(read_only=True)
+    custom_specialization_name = serializers.CharField(
+        source="custom_specialization.name",
+        read_only=True,
+    )
+
     class Meta:
         model = Specialization
         fields = [
-            'id', 'specialization', 'custom_specialization',
-            'is_primary', 'created_at', 'updated_at'
+            "id",
+            "specialization",
+            "custom_specialization",
+            "specialization_name",
+            "specialization_display",
+            "custom_specialization_name",
+            "is_primary",
+            "created_at",
+            "updated_at",
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+    def get_specialization_display(self, obj):
+        """Return the display name of predefined specialization"""
+        if obj.specialization:
+            return obj.get_specialization_display()
+        return None
 
     def validate(self, attrs):
         request = self.context['request']
-        doctor = request.user.doctor  # assuming OneToOneField from User to Doctor
+        doctor = request.user.doctor
+        specialization_input = attrs.get('specialization')
+        custom_specialization = attrs.get('custom_specialization')
+        specialization_name = attrs.pop('specialization_name', None)  # Remove from attrs after validation
+        
+        # Validate that only one input method is used
+        input_methods = [bool(specialization_name), bool(specialization_input), bool(custom_specialization)]
+        if sum(input_methods) > 1:
+            raise serializers.ValidationError(
+                "Please provide only one of: specialization_name, specialization, or custom_specialization. "
+                "Do not mix different input methods."
+            )
+        
+        # New unified approach: if specialization_name is provided, process it
+        if specialization_name:
+            # Import here to avoid circular imports
+            from doctor.models import SPECIALIZATION_CHOICES, CustomSpecialization
+            
+            # Normalize the input name
+            specialization_name = specialization_name.strip()
+            
+            if not specialization_name:
+                raise serializers.ValidationError("specialization_name cannot be empty.")
+            
+            # Check if it matches any predefined specialization (case-insensitive)
+            matched_code = None
+            for code, display_name in SPECIALIZATION_CHOICES:
+                if display_name.lower() == specialization_name.lower():
+                    matched_code = code
+                    break
+            
+            if matched_code:
+                # Use predefined specialization
+                attrs['specialization'] = matched_code
+                attrs['custom_specialization'] = None
+            else:
+                # It's a custom specialization - find or create it
+                custom_spec, created = CustomSpecialization.objects.get_or_create(
+                    name__iexact=specialization_name,
+                    defaults={'name': specialization_name}
+                )
+                attrs['custom_specialization'] = custom_spec
+                attrs['specialization'] = None
+        elif specialization_input:
+            # Treat the provided specialization field as either a code or a name
+            from doctor.models import SPECIALIZATION_CHOICES, CustomSpecialization
+
+            specialization_input = specialization_input.strip()
+            if not specialization_input:
+                attrs['specialization'] = None
+            else:
+                # First try to match predefined codes directly
+                codes = {code: code for code, _ in SPECIALIZATION_CHOICES}
+                # Also map display names to codes for flexibility
+                display_to_code = {display_name.lower(): code for code, display_name in SPECIALIZATION_CHOICES}
+
+                if specialization_input in codes:
+                    attrs['specialization'] = specialization_input
+                    attrs['custom_specialization'] = None
+                elif specialization_input.lower() in display_to_code:
+                    attrs['specialization'] = display_to_code[specialization_input.lower()]
+                    attrs['custom_specialization'] = None
+                else:
+                    # Treat as custom specialization name
+                    custom_spec, created = CustomSpecialization.objects.get_or_create(
+                        name__iexact=specialization_input,
+                        defaults={'name': specialization_input}
+                    )
+                    attrs['custom_specialization'] = custom_spec
+                    attrs['specialization'] = None
+        
+        # Backward compatibility: validate existing fields
         specialization = attrs.get('specialization')
         custom_specialization = attrs.get('custom_specialization')
 
         if not specialization and not custom_specialization:
-            raise serializers.ValidationError("Either specialization or custom_specialization must be provided.")
+            raise serializers.ValidationError(
+                "Either specialization, custom_specialization, or specialization_name must be provided."
+            )
 
         # Prevent duplicate specialization
         if self.instance is None:  # Creation
@@ -514,18 +645,8 @@ class CertificationSerializer(serializers.ModelSerializer):
         fields = ['id', 'title', 'issued_by', 'date_of_issue', 'expiry_date', 'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']
 
-    def validate(self, data):
-        doctor = self.context['request'].user.doctor
-        title = data.get('title')
-        issued_by = data.get('issued_by')
-        date_of_issue = data.get('date_of_issue')
-
-        qs = Certification.objects.filter(doctor=doctor, title__iexact=title, issued_by__iexact=issued_by, date_of_issue=date_of_issue)
-        if self.instance:
-            qs = qs.exclude(id=self.instance.id)
-        if qs.exists():
-            raise serializers.ValidationError("This certification already exists for this doctor.")
-        return data
+    # Removed validate() method - duplicate checking is now handled in CertificationViewSet.create()
+    # to allow updating existing entries instead of raising errors
 
 class DoctorDashboardSummarySerializer(serializers.Serializer):
     total_patients_today = serializers.IntegerField()
@@ -736,13 +857,73 @@ class GovernmentIDUploadSerializer(serializers.ModelSerializer):
 
         return super().update(instance, validated_data)
 
+class DigitalSignatureUploadSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = KYCStatus
+        fields = ['digital_signature']
+
+    def validate(self, data):
+        digital_signature_file = data.get("digital_signature")
+
+        if digital_signature_file:
+            # File size validation (2MB limit, same as PAN/Aadhaar)
+            if digital_signature_file.size > 2 * 1024 * 1024:
+                raise serializers.ValidationError({"digital_signature": "Digital signature file size should be under 2MB."})
+
+            # File type validation (same as PAN/Aadhaar)
+            valid_extensions = ['pdf', 'jpg', 'jpeg', 'png']
+            ext = digital_signature_file.name.split('.')[-1].lower()
+            if ext not in valid_extensions:
+                raise serializers.ValidationError({"digital_signature": "Only PDF, JPG, JPEG, PNG files are allowed."})
+
+        return data
+
+    def update(self, instance, validated_data):
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        # Delete old file if exists (same as PAN/Aadhaar)
+        if validated_data.get("digital_signature") and instance.digital_signature:
+            old_file_path = instance.digital_signature.name
+            logger.info(f"Deleting old digital signature file: {old_file_path}")
+            try:
+                instance.digital_signature.delete(save=False)
+            except Exception as e:
+                logger.warning(f"Error deleting old file (may not exist): {str(e)}")
+
+        # Log before update
+        digital_signature_file = validated_data.get("digital_signature")
+        if digital_signature_file:
+            logger.info(f"Updating digital signature: {digital_signature_file.name}, Size: {digital_signature_file.size}")
+            logger.info(f"KYCStatus instance doctor: {instance.doctor.id if instance.doctor else 'None'}")
+            logger.info(f"KYCStatus instance ID: {instance.id}")
+        
+        # Call super().update() which will handle the file upload and call upload_to
+        # This should automatically use the upload_to function from the model field
+        updated_instance = super().update(instance, validated_data)
+        
+        # Ensure the instance is saved (Django should do this automatically, but let's be explicit)
+        updated_instance.save()
+        
+        # Log after update
+        if updated_instance.digital_signature:
+            logger.info(f"Digital signature saved successfully. Path: {updated_instance.digital_signature.name}")
+            logger.info(f"Digital signature URL: {updated_instance.digital_signature.url}")
+            logger.info(f"Digital signature file exists: {updated_instance.digital_signature.storage.exists(updated_instance.digital_signature.name) if hasattr(updated_instance.digital_signature, 'storage') else 'Unknown'}")
+        else:
+            logger.error("Digital signature field is None after update!")
+        
+        return updated_instance
+
 class KYCStatusSerializer(serializers.ModelSerializer):
     kyc_status = serializers.SerializerMethodField()
     sections = serializers.SerializerMethodField()
+    digital_signature = serializers.SerializerMethodField()
+    detailed_status = serializers.SerializerMethodField()
 
     class Meta:
         model = doctor
-        fields = ['id', 'kyc_completed', 'kyc_verified', 'kyc_status', 'sections']
+        fields = ['id', 'kyc_completed', 'kyc_verified', 'kyc_status', 'sections', 'digital_signature', 'detailed_status']
 
     def get_kyc_status(self, obj):
         if not obj.kyc_completed:
@@ -764,6 +945,54 @@ class KYCStatusSerializer(serializers.ModelSerializer):
             "aadhar_uploaded": bool(gov_id and gov_id.aadhar_card_file),
             "education_uploaded": obj.education.exists()
         }
+
+    def get_digital_signature(self, obj):
+        """Get digital signature file from related KYCStatus"""
+        try:
+            kyc_status = obj.kyc_status
+            if kyc_status and kyc_status.digital_signature:
+                request = self.context.get('request')
+                if request:
+                    return request.build_absolute_uri(kyc_status.digital_signature.url)
+                return kyc_status.digital_signature.url if kyc_status.digital_signature else None
+        except:
+            pass
+        return None
+
+    def get_detailed_status(self, obj):
+        """Get detailed KYC status for each document type with approval status and rejection reasons"""
+        try:
+            kyc_status = obj.kyc_status
+            if not kyc_status:
+                return None
+            
+            return {
+                "registration": {
+                    "status": kyc_status.registration_status,
+                    "reason": kyc_status.registration_reason,
+                },
+                "pan": {
+                    "status": kyc_status.pan_status,
+                    "reason": kyc_status.pan_reason,
+                },
+                "aadhar": {
+                    "status": kyc_status.aadhar_status,
+                    "reason": kyc_status.aadhar_reason,
+                },
+                "photo": {
+                    "status": kyc_status.photo_status,
+                    "reason": kyc_status.photo_reason,
+                },
+                "education": {
+                    "status": kyc_status.education_status,
+                    "reason": kyc_status.education_reason,
+                },
+                "kya_verified": kyc_status.kya_verified,
+                "verified_at": kyc_status.verified_at.isoformat() if kyc_status.verified_at else None,
+                "updated_at": kyc_status.updated_at.isoformat() if kyc_status.updated_at else None,
+            }
+        except Exception as e:
+            return None
 
 class KYCVerifySerializer(serializers.ModelSerializer):
     registration_status = serializers.ChoiceField(
