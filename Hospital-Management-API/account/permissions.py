@@ -113,3 +113,43 @@ class IsHelpdeskOrLabAdmin(BasePermission):
             request.user.is_authenticated and
             request.user.groups.filter(name__in=['helpdesk', 'lab-admin']).exists()
         )
+
+
+class IsDoctorOrClinicAdminOrSuperuser(BasePermission):
+    """
+    Custom permission to allow access to Doctors, Clinic Admins, or Superusers.
+    Used for CREATE, UPDATE, DELETE operations on clinic information.
+    """
+
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
+        
+        # Superuser always has access
+        if request.user.is_superuser:
+            return True
+        
+        # Check if user is in doctor or clinic_admin group
+        return bool(
+            request.user.groups.filter(name__in=['doctor', 'clinic_admin']).exists()
+        )
+
+
+class IsDoctorOrHelpdeskOrClinicAdminOrSuperuser(BasePermission):
+    """
+    Custom permission to allow access to Doctors, Helpdesk, Clinic Admins, or Superusers.
+    Used for READ operations on clinic information.
+    """
+
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
+        
+        # Superuser always has access
+        if request.user.is_superuser:
+            return True
+        
+        # Check if user is in doctor, helpdesk, or clinic_admin group
+        return bool(
+            request.user.groups.filter(name__in=['doctor', 'helpdesk', 'clinic_admin']).exists()
+        )

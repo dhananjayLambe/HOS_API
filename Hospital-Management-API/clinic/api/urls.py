@@ -10,7 +10,15 @@ from clinic.api.views import (
     ClinicServiceListViewSet,ClinicAdminLoginView,
     ClinicRegistrationView,ClinicProfileUpdateView,
     ClinicAdminLogoutView,ClinicOnboardingView,
-    ClinicAdminTokenRefreshView,ClinicAdminTokenVerifyView)
+    ClinicAdminTokenRefreshView,ClinicAdminTokenVerifyView,
+    # New production-ready APIs
+    ClinicCreateAPIView,
+    ClinicRetrieveUpdateDeleteAPIView,
+    ClinicAddressUpsertAPIView,
+    ClinicProfileDetailUpdateAPIView,
+    ClinicScheduleListCreateAPIView,
+    ClinicAdminMyClinicAPIView,
+)
 
 router = routers.DefaultRouter()
 router.register(r'clinic-address', ClinicAddressViewSet)
@@ -21,19 +29,41 @@ router.register(r'clinic-service-list', ClinicServiceListViewSet, basename='clin
 router.register(r"clinic-list-ui", ClinicListViewSet, basename="clinic")
 
 urlpatterns = [
-    path("clinics/onboarding/", ClinicOnboardingView.as_view(), name="clinic-create"),
-    path('clinics/', ClinicListView.as_view(), name='clinic-list'),
-    path('clinics/create/', ClinicCreateView.as_view(), name='clinic-create'),
-    path('clinics/<uuid:pk>/', ClinicDetailView.as_view(), name='clinic-detail'),
-    path('clinics/update/<uuid:pk>/', ClinicUpdateView.as_view(), name='clinic-update'),
-    path('clinics/delete/<uuid:pk>/', ClinicDeleteView.as_view(), name='clinic-delete'),
+    # ========================================================================
+    # Production-Ready Clinic Information APIs (Following Requirement Doc)
+    # ========================================================================
+    # Base URL: /api/clinic/
+    
+    # Clinic CRUD APIs
+    path('clinics/', ClinicCreateAPIView.as_view(), name='clinic-create'),
+    path('clinics/<uuid:clinic_id>/', ClinicRetrieveUpdateDeleteAPIView.as_view(), name='clinic-retrieve-update-delete'),
+    
+    # Clinic Address APIs (POST and PUT both use same endpoint)
+    path('clinics/<uuid:clinic_id>/address/', ClinicAddressUpsertAPIView.as_view(), name='clinic-address-upsert'),
+    
+    # Clinic Profile APIs (Branding) - GET and PATCH use same endpoint
+    path('clinics/<uuid:clinic_id>/profile/', ClinicProfileDetailUpdateAPIView.as_view(), name='clinic-profile-detail-update'),
+    
+    # Clinic Schedule APIs (Operating Hours) - POST and GET use same endpoint
+    path('clinics/<uuid:clinic_id>/schedules/', ClinicScheduleListCreateAPIView.as_view(), name='clinic-schedule-list-create'),
+    
+    # ========================================================================
+    # Legacy/Other APIs (Keeping for backward compatibility)
+    # ========================================================================
+    path("clinics/onboarding/", ClinicOnboardingView.as_view(), name="clinic-onboarding"),
+    path('clinics/list/', ClinicListView.as_view(), name='clinic-list'),
+    path('clinics/create/', ClinicCreateView.as_view(), name='clinic-create-legacy'),
+    path('clinics/<uuid:pk>/detail/', ClinicDetailView.as_view(), name='clinic-detail-legacy'),
+    path('clinics/update/<uuid:pk>/', ClinicUpdateView.as_view(), name='clinic-update-legacy'),
+    path('clinics/delete/<uuid:pk>/', ClinicDeleteView.as_view(), name='clinic-delete-legacy'),
     
     #path('registration/', ClinicRegistrationView.as_view(), name='clinic-register'),
-    path('profilupdate/<uuid:clinic_id>/', ClinicProfileUpdateView.as_view(), name='clinic-profile-update'),
+    path('profilupdate/<uuid:clinic_id>/', ClinicProfileUpdateView.as_view(), name='clinic-profile-update-legacy'),
     path('', include(router.urls)),
     path('clinic-admin/register/', ClinicAdminRegisterView.as_view(), name='clinic-admin-register'),
     path('clinic-admin/login/', ClinicAdminLoginView.as_view(), name='clinic-admin-login'),
     path('clinic-admin/logout/', ClinicAdminLogoutView.as_view(), name='clinic-admin-logout'),
+    path('clinic-admin/my-clinic/', ClinicAdminMyClinicAPIView.as_view(), name='clinic-admin-my-clinic'),
     path('api/clinic-admin/token/refresh/', ClinicAdminTokenRefreshView.as_view(), name='clinic_admin_token_refresh'),
     path('api/clinic-admin/token/verify/', ClinicAdminTokenVerifyView.as_view(), name='clinic_admin_token_verify'),
 

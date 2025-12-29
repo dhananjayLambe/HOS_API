@@ -18,14 +18,16 @@ class Clinic(models.Model):
     name = models.CharField(max_length=255,default='NA') #unique=True
     contact_number_primary = models.CharField(max_length=15,default='NA')  # Mandatory
     contact_number_secondary = models.CharField(max_length=15,default='NA')  # Mandatory
+    website_url = models.URLField(max_length=255,default='NA')  # Optional
     email_address = models.EmailField(max_length=255,default='NA')  # Optional)  # Optional
     registration_number = models.CharField(max_length=255,unique=True, null=True, blank=True,default=None)  # Mandatory it should be unique
     gst_number = models.CharField(max_length=15, default='NA')  # Optional
 
     # Emergency Contact Information
+    emergency_contact_name = models.CharField(max_length=255, default='NA')
     emergency_contact_number = models.CharField(max_length=15, default='NA')
     emergency_email_address = models.EmailField(max_length=255, default='NA')
-
+    emergency_instructions_text = models.TextField(blank=True, null=True)
     # Approval workflow
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending") #optional
     rejection_reason = models.TextField(blank=True, null=True)#optinal we can use later
@@ -83,70 +85,98 @@ class ClinicSpecialization(models.Model):
     def __str__(self):
         return f"{self.specialization_name} - {self.clinic.name}"
 
+#previous model for reference
+# class ClinicSchedule(models.Model):
+#     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+#     clinic = models.OneToOneField(Clinic, on_delete=models.CASCADE, related_name="schedules")
+#     # Working Hours
+#     morning_start = models.TimeField(blank=True, null=True, default=time(9, 0))  # Default to 9:00 AM
+#     morning_end = models.TimeField(blank=True, null=True, default=time(12, 0))   # Default to 12:00 PM
+#     afternoon_start = models.TimeField(blank=True, null=True, default=time(13, 0))  # Default to 1:00 PM
+#     afternoon_end = models.TimeField(blank=True, null=True, default=time(17, 0))    # Default to 5:00 PM
+#     evening_start = models.TimeField(blank=True, null=True, default=time(18, 0))    # Default to 6:00 PM
+#     evening_end = models.TimeField(blank=True, null=True, default=time(21, 0))      # Default to 9:00 PM
+
+#     # Appointment Slot Details
+#     day_of_week = models.CharField(max_length=10, choices=[('Monday', 'Monday'), ('Tuesday', 'Tuesday'), ('Wednesday', 'Wednesday'), ('Thursday', 'Thursday'), ('Friday', 'Friday'), ('Saturday', 'Saturday'), ('Sunday', 'Sunday')],default='Monday')
+#     slot_duration = models.PositiveIntegerField(default=15)  # Slot duration in minutes (e.g., 15, 30)
+
+#     # Holidays and Special Dates
+#     holidays = models.JSONField(blank=True, null=True)  # Store holiday dates as a list
+#     special_dates = models.JSONField(blank=True, null=True)  # Special schedules for specific dates
+
+#     # Doctor Availability
+#     is_doctor_present = models.BooleanField(default=False)  # Indicates real-time doctor presence
+#     doctor_checkin_time = models.DateTimeField(blank=True, null=True)  # Check-in time for the day
+#     doctor_checkout_time = models.DateTimeField(blank=True, null=True)  # Check-out time for the day
+
+#     # Metadata
+#     created_at = models.DateTimeField(auto_now_add=True)  # Mandatory #auto_now_add=True,
+#     updated_at = models.DateTimeField(auto_now=True)  # Mandatory #auto_now=True,
+
+
+#     def __str__(self):
+#         return f"Schedule for {self.clinic.name}"
+
+#     def generate_slots(self, session_start, session_end):
+#         """
+#         Generate time slots for a given session based on slot duration.
+#         """
+#         from datetime import datetime, timedelta
+
+#         if not session_start or not session_end:
+#             return []
+
+#         slots = []
+#         current_time = datetime.combine(datetime.today(), session_start)
+#         end_time = datetime.combine(datetime.today(), session_end)
+
+#         while current_time < end_time:
+#             slot_start = current_time.time()
+#             current_time += timedelta(minutes=self.slot_duration)
+#             slot_end = current_time.time()
+
+#             if current_time <= end_time:
+#                 slots.append((slot_start, slot_end))
+#         return slots
+
+#     def get_all_slots(self):
+#         """
+#         Get all available slots for morning, afternoon, and evening sessions.
+#         """
+#         all_slots = {
+#             "morning": self.generate_slots(self.morning_start, self.morning_end),
+#             "afternoon": self.generate_slots(self.afternoon_start, self.afternoon_end),
+#             "evening": self.generate_slots(self.evening_start, self.evening_end),
+#         }
+#         return all_slots
+
 class ClinicSchedule(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    clinic = models.OneToOneField(Clinic, on_delete=models.CASCADE, related_name="schedules")
-    # Working Hours
-    morning_start = models.TimeField(blank=True, null=True, default=time(9, 0))  # Default to 9:00 AM
-    morning_end = models.TimeField(blank=True, null=True, default=time(12, 0))   # Default to 12:00 PM
-    afternoon_start = models.TimeField(blank=True, null=True, default=time(13, 0))  # Default to 1:00 PM
-    afternoon_end = models.TimeField(blank=True, null=True, default=time(17, 0))    # Default to 5:00 PM
-    evening_start = models.TimeField(blank=True, null=True, default=time(18, 0))    # Default to 6:00 PM
-    evening_end = models.TimeField(blank=True, null=True, default=time(21, 0))      # Default to 9:00 PM
+    clinic = models.ForeignKey(Clinic, on_delete=models.CASCADE, related_name="schedules")
+    day_of_week = models.CharField(
+        max_length=10,
+        choices=[
+            ('Monday', 'Monday'),
+            ('Tuesday', 'Tuesday'),
+            ('Wednesday', 'Wednesday'),
+            ('Thursday', 'Thursday'),
+            ('Friday', 'Friday'),
+            ('Saturday', 'Saturday'),
+            ('Sunday', 'Sunday'),
+        ]
+    )
 
-    # Appointment Slot Details
-    day_of_week = models.CharField(max_length=10, choices=[('Monday', 'Monday'), ('Tuesday', 'Tuesday'), ('Wednesday', 'Wednesday'), ('Thursday', 'Thursday'), ('Friday', 'Friday'), ('Saturday', 'Saturday'), ('Sunday', 'Sunday')],default='Monday')
-    slot_duration = models.PositiveIntegerField(default=15)  # Slot duration in minutes (e.g., 15, 30)
+    is_closed = models.BooleanField(default=False)
 
-    # Holidays and Special Dates
-    holidays = models.JSONField(blank=True, null=True)  # Store holiday dates as a list
-    special_dates = models.JSONField(blank=True, null=True)  # Special schedules for specific dates
+    open_time = models.TimeField(null=True, blank=True)
+    close_time = models.TimeField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
-    # Doctor Availability
-    is_doctor_present = models.BooleanField(default=False)  # Indicates real-time doctor presence
-    doctor_checkin_time = models.DateTimeField(blank=True, null=True)  # Check-in time for the day
-    doctor_checkout_time = models.DateTimeField(blank=True, null=True)  # Check-out time for the day
-
-    # Metadata
-    created_at = models.DateTimeField(auto_now_add=True)  # Mandatory #auto_now_add=True,
-    updated_at = models.DateTimeField(auto_now=True)  # Mandatory #auto_now=True,
-
-
-    def __str__(self):
-        return f"Schedule for {self.clinic.name}"
-
-    def generate_slots(self, session_start, session_end):
-        """
-        Generate time slots for a given session based on slot duration.
-        """
-        from datetime import datetime, timedelta
-
-        if not session_start or not session_end:
-            return []
-
-        slots = []
-        current_time = datetime.combine(datetime.today(), session_start)
-        end_time = datetime.combine(datetime.today(), session_end)
-
-        while current_time < end_time:
-            slot_start = current_time.time()
-            current_time += timedelta(minutes=self.slot_duration)
-            slot_end = current_time.time()
-
-            if current_time <= end_time:
-                slots.append((slot_start, slot_end))
-        return slots
-
-    def get_all_slots(self):
-        """
-        Get all available slots for morning, afternoon, and evening sessions.
-        """
-        all_slots = {
-            "morning": self.generate_slots(self.morning_start, self.morning_end),
-            "afternoon": self.generate_slots(self.afternoon_start, self.afternoon_end),
-            "evening": self.generate_slots(self.evening_start, self.evening_end),
-        }
-        return all_slots
+    class Meta:
+        unique_together = ('clinic', 'day_of_week')
 
 class ClinicService(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

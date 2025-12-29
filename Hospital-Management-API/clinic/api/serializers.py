@@ -1,9 +1,11 @@
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import Group
 from django.contrib.auth.password_validation import validate_password
-from django.core.validators import RegexValidator
+from django.core.validators import RegexValidator, URLValidator
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
+import re
 
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
@@ -21,16 +23,29 @@ from clinic.models import (
     Clinic,
     ClinicAddress,
     ClinicAdminProfile,
+    ClinicProfile,
     ClinicSchedule,
     ClinicService,
     ClinicServiceList,
     ClinicSpecialization,
 )
+
+# Phone number validator
+phone_regex = RegexValidator(
+    regex=r'^\+?1?\d{9,15}$',
+    message="Phone number must be entered in the format: '+999999999'. Up to 15 digits allowed."
+)
+
 class ClinicSerializer(serializers.ModelSerializer):
     class Meta:
         model = Clinic
         fields = '__all__'
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'status', 'is_approved']
+
+    def validate_name(self, value):
+        if len(value) < 3:
+            raise serializers.ValidationError("Name must be at least 3 characters long.")
+        return value
 
     def validate_registration_number(self, value):
         if value:
@@ -39,6 +54,38 @@ class ClinicSerializer(serializers.ModelSerializer):
                 qs = qs.exclude(id=self.instance.id)
             if qs.exists():
                 raise serializers.ValidationError("A clinic with this registration number already exists.")
+        return value
+
+    def validate_contact_number_primary(self, value):
+        if value and value != 'NA':
+            if not re.match(r'^\+?1?\d{9,15}$', value):
+                raise serializers.ValidationError("Enter a valid phone number.")
+        return value
+
+    def validate_contact_number_secondary(self, value):
+        if value and value != 'NA':
+            if not re.match(r'^\+?1?\d{9,15}$', value):
+                raise serializers.ValidationError("Enter a valid phone number.")
+        return value
+
+    def validate_emergency_contact_number(self, value):
+        if value and value != 'NA':
+            if not re.match(r'^\+?1?\d{9,15}$', value):
+                raise serializers.ValidationError("Enter a valid phone number.")
+        return value
+
+    def validate_gst_number(self, value):
+        if value and value != 'NA' and len(value) != 15:
+            raise serializers.ValidationError("GST number must be 15 characters long.")
+        return value
+
+    def validate_website_url(self, value):
+        if value and value != 'NA':
+            validator = URLValidator()
+            try:
+                validator(value)
+            except ValidationError:
+                raise serializers.ValidationError("Enter a valid URL.")
         return value
 
 
@@ -78,6 +125,33 @@ class ClinicScheduleSerializer(serializers.ModelSerializer):
     class Meta:
         model = ClinicSchedule
         fields = '__all__'
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def validate(self, data):
+        is_closed = data.get('is_closed', False)
+        open_time = data.get('open_time')
+        close_time = data.get('close_time')
+
+        # If clinic is closed, open_time and close_time should be null
+        if is_closed:
+            if open_time is not None or close_time is not None:
+                raise serializers.ValidationError({
+                    'non_field_errors': ['If clinic is closed, open_time and close_time must be null.']
+                })
+        else:
+            # If clinic is open, both times are required
+            if not open_time or not close_time:
+                raise serializers.ValidationError({
+                    'non_field_errors': ['Both open_time and close_time are required when clinic is open.']
+                })
+            
+            # Validate that open_time is before close_time
+            if open_time >= close_time:
+                raise serializers.ValidationError({
+                    'non_field_errors': ['Open time must be earlier than close time.']
+                })
+
+        return data
 
 class ClinicServiceSerializer(serializers.ModelSerializer):
     created_at = serializers.SerializerMethodField()
@@ -287,6 +361,7 @@ class ClinicAddressSerializer(serializers.ModelSerializer):
     class Meta:
         model = ClinicAddress
         fields = '__all__'
+        read_only_fields = ['id', 'created_at', 'updated_at']
 
     def get_created_at(self, obj):
         return timezone.localtime(obj.created_at).isoformat()
@@ -294,11 +369,79 @@ class ClinicAddressSerializer(serializers.ModelSerializer):
     def get_updated_at(self, obj):
         return timezone.localtime(obj.updated_at).isoformat()
 
+    def validate_pincode(self, value):
+        if value and value != 'NA':
+            # Validate Indian pincode (6 digits)
+            if not re.match(r'^\d{6}$', value):
+                raise serializers.ValidationError("Pincode must be 6 digits.")
+        return value
+
+    def validate_latitude(self, value):
+        if value is not None:
+            if value < -90 or value > 90:
+                raise serializers.ValidationError("Latitude must be between -90 and 90.")
+        return value
+
+    def validate_longitude(self, value):
+        if value is not None:
+            if value < -180 or value > 180:
+                raise serializers.ValidationError("Longitude must be between -180 and 180.")
+        return value
+
     def validate(self, data):
         clinic = data.get('clinic')
-        if self.instance is None and ClinicAddress.objects.filter(clinic=clinic).exists():
+        if self.instance is None and clinic and ClinicAddress.objects.filter(clinic=clinic).exists():
             raise serializers.ValidationError({'clinic': 'Address for this clinic already exists.'})
         return data
+
+
+class ClinicProfileSerializer(serializers.ModelSerializer):
+    created_at = serializers.SerializerMethodField()
+    updated_at = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ClinicProfile
+        fields = '__all__'
+        read_only_fields = ['id', 'clinic', 'created_at', 'updated_at', 'kyc_verified', 'profile_completion', 'status']
+
+    def get_created_at(self, obj):
+        return timezone.localtime(obj.created_at).isoformat()
+
+    def get_updated_at(self, obj):
+        return timezone.localtime(obj.updated_at).isoformat()
+
+    def validate_logo(self, value):
+        if value:
+            # Check file size (2MB = 2 * 1024 * 1024 bytes)
+            if value.size > 2 * 1024 * 1024:
+                raise serializers.ValidationError("Logo file size must be less than 2MB.")
+            
+            # Check file extension
+            allowed_extensions = ['jpg', 'jpeg', 'png', 'webp']
+            file_extension = value.name.split('.')[-1].lower()
+            if file_extension not in allowed_extensions:
+                raise serializers.ValidationError(f"Logo must be one of: {', '.join(allowed_extensions)}")
+        return value
+
+    def validate_cover_photo(self, value):
+        if value:
+            # Check file size (2MB)
+            if value.size > 2 * 1024 * 1024:
+                raise serializers.ValidationError("Cover photo file size must be less than 2MB.")
+            
+            # Check file extension
+            allowed_extensions = ['jpg', 'jpeg', 'png', 'webp']
+            file_extension = value.name.split('.')[-1].lower()
+            if file_extension not in allowed_extensions:
+                raise serializers.ValidationError(f"Cover photo must be one of: {', '.join(allowed_extensions)}")
+        return value
+
+    def validate_established_year(self, value):
+        if value:
+            current_year = timezone.now().year
+            if value < 1800 or value > current_year:
+                raise serializers.ValidationError(f"Established year must be between 1800 and {current_year}.")
+        return value
 
 class ClinicSummarySerializer(serializers.ModelSerializer):
     address = ClinicAddressSerializer()

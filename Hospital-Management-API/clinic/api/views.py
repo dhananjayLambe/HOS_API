@@ -15,7 +15,7 @@ from rest_framework_simplejwt.views import (
     TokenVerifyView,
 )
 from rest_framework_simplejwt.authentication import JWTAuthentication
-from account.permissions import IsClinicAdmin
+from account.permissions import IsClinicAdmin, IsDoctorOrClinicAdminOrSuperuser, IsDoctorOrHelpdeskOrClinicAdminOrSuperuser
 
 from clinic.api.serializers import (
     ClinicAddressSerializer,
@@ -29,15 +29,18 @@ from clinic.api.serializers import (
     ClinicServiceSerializer,
     ClinicSpecializationSerializer,
     ClinicOnboardingSerializer,
+    ClinicProfileSerializer,
 )
 
 from clinic.models import (
     Clinic,
     ClinicAddress,
+    ClinicProfile,
     ClinicService,
     ClinicServiceList,
     ClinicSchedule,
     ClinicSpecialization,
+    ClinicAdminProfile,
 )
 from account.permissions import IsDoctor
 logger = logging.getLogger(__name__)
@@ -679,3 +682,534 @@ class ClinicListViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
     @method_decorator(cache_page(60 * 5))
     def list(self, request, *args, **kwargs):
         return super().list(request, *args, **kwargs)
+
+
+# ============================================================================
+# Production-Ready Clinic Information APIs (Following Requirement Document)
+# ============================================================================
+
+class ClinicCreateAPIView(APIView):
+    """
+    POST /api/clinics/
+    Create a new clinic
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctorOrClinicAdminOrSuperuser]
+
+    @transaction.atomic
+    def post(self, request):
+        serializer = ClinicSerializer(data=request.data)
+        if serializer.is_valid():
+            clinic = serializer.save()
+            return Response({
+                "success": True,
+                "message": "Clinic created successfully",
+                "data": ClinicSerializer(clinic).data
+            }, status=status.HTTP_201_CREATED)
+        
+        return Response({
+            "success": False,
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ClinicDetailAPIView(APIView):
+    """
+    GET /api/clinics/{clinic_id}/
+    Get clinic details
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctorOrHelpdeskOrClinicAdminOrSuperuser]
+
+    def get(self, request, clinic_id):
+        try:
+            clinic = Clinic.objects.get(id=clinic_id)
+        except Clinic.DoesNotExist:
+            return Response({
+                "success": False,
+                "message": "Clinic not found."
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        serializer = ClinicSerializer(clinic)
+        return Response({
+            "success": True,
+            "message": "Clinic retrieved successfully",
+            "data": serializer.data
+        }, status=status.HTTP_200_OK)
+
+
+class ClinicRetrieveUpdateDeleteAPIView(APIView):
+    """
+    Combined view for GET, PUT, PATCH, DELETE /api/clinics/{clinic_id}/
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+    
+    # Immutable fields that cannot be updated
+    IMMUTABLE_FIELDS = ['registration_number', 'status', 'is_approved']
+
+    def check_permissions(self, request):
+        """Check permissions based on HTTP method"""
+        if request.method == 'GET':
+            permission = IsDoctorOrHelpdeskOrClinicAdminOrSuperuser()
+        else:
+            permission = IsDoctorOrClinicAdminOrSuperuser()
+        
+        if not permission.has_permission(request, self):
+            self.permission_denied(
+                request, message=getattr(permission, 'message', None)
+            )
+
+    def get(self, request, clinic_id):
+        """GET /api/clinics/{clinic_id}/"""
+        self.check_permissions(request)
+        
+        try:
+            clinic = Clinic.objects.get(id=clinic_id)
+        except Clinic.DoesNotExist:
+            return Response({
+                "success": False,
+                "message": "Clinic not found."
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        serializer = ClinicSerializer(clinic)
+        return Response({
+            "success": True,
+            "message": "Clinic retrieved successfully",
+            "data": serializer.data
+        }, status=status.HTTP_200_OK)
+
+    def _check_immutable_fields(self, request_data):
+        """Check if immutable fields are being updated"""
+        immutable_in_request = [field for field in self.IMMUTABLE_FIELDS if field in request_data]
+        if immutable_in_request:
+            return {
+                "success": False,
+                "errors": {
+                    field: [f"{field} cannot be updated."] for field in immutable_in_request
+                }
+            }
+        return None
+
+    @transaction.atomic
+    def put(self, request, clinic_id):
+        """PUT /api/clinics/{clinic_id}/"""
+        self.check_permissions(request)
+        
+        try:
+            clinic = Clinic.objects.get(id=clinic_id)
+        except Clinic.DoesNotExist:
+            return Response({
+                "success": False,
+                "message": "Clinic not found."
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        # Check for immutable fields
+        immutable_error = self._check_immutable_fields(request.data)
+        if immutable_error:
+            return Response(immutable_error, status=status.HTTP_403_FORBIDDEN)
+
+        serializer = ClinicSerializer(clinic, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({
+                "success": True,
+                "message": "Clinic updated successfully",
+                "data": serializer.data
+            }, status=status.HTTP_200_OK)
+        
+        return Response({
+            "success": False,
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    @transaction.atomic
+    def patch(self, request, clinic_id):
+        """PATCH /api/clinics/{clinic_id}/"""
+        self.check_permissions(request)
+        
+        try:
+            clinic = Clinic.objects.get(id=clinic_id)
+        except Clinic.DoesNotExist:
+            return Response({
+                "success": False,
+                "message": "Clinic not found."
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        # Check for immutable fields
+        immutable_error = self._check_immutable_fields(request.data)
+        if immutable_error:
+            return Response(immutable_error, status=status.HTTP_403_FORBIDDEN)
+
+        serializer = ClinicSerializer(clinic, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({
+                "success": True,
+                "message": "Clinic updated successfully",
+                "data": serializer.data
+            }, status=status.HTTP_200_OK)
+        
+        return Response({
+            "success": False,
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    @transaction.atomic
+    def delete(self, request, clinic_id):
+        """DELETE /api/clinics/{clinic_id}/"""
+        self.check_permissions(request)
+        
+        try:
+            clinic = Clinic.objects.get(id=clinic_id)
+        except Clinic.DoesNotExist:
+            return Response({
+                "success": False,
+                "message": "Clinic not found."
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        # Check for dependencies
+        from doctor.models import doctor
+        from appointments.models import Appointment
+        
+        has_doctors = clinic.doctors.exists()
+        has_appointments = clinic.appointments.exists()
+        
+        if has_doctors or has_appointments:
+            reasons = []
+            if has_doctors:
+                reasons.append("doctors")
+            if has_appointments:
+                reasons.append("appointments")
+            
+            return Response({
+                "success": False,
+                "detail": f"Clinic cannot be deleted as active records exist: {', '.join(reasons)}."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        clinic.delete()
+        return Response({
+            "success": True,
+            "message": "Clinic deleted successfully"
+        }, status=status.HTTP_200_OK)
+
+
+
+
+class ClinicAddressUpsertAPIView(APIView):
+    """
+    GET  /api/clinics/{clinic_id}/address/
+    POST /api/clinics/{clinic_id}/address/
+    PUT  /api/clinics/{clinic_id}/address/
+    Get, create or update clinic address (upsert)
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctorOrClinicAdminOrSuperuser]
+
+    def get(self, request, clinic_id):
+        """GET /api/clinics/{clinic_id}/address/"""
+        try:
+            clinic = Clinic.objects.get(id=clinic_id)
+        except Clinic.DoesNotExist:
+            return Response({
+                "success": False,
+                "message": "Clinic not found."
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        # Get address if exists
+        try:
+            address = clinic.address
+            serializer = ClinicAddressSerializer(address)
+            return Response({
+                "success": True,
+                "message": "Address retrieved successfully",
+                "data": serializer.data
+            }, status=status.HTTP_200_OK)
+        except ClinicAddress.DoesNotExist:
+            return Response({
+                "success": False,
+                "message": "Address not found for this clinic."
+            }, status=status.HTTP_404_NOT_FOUND)
+
+    @transaction.atomic
+    def post(self, request, clinic_id):
+        return self._upsert_address(request, clinic_id)
+
+    @transaction.atomic
+    def put(self, request, clinic_id):
+        return self._upsert_address(request, clinic_id)
+
+    def _upsert_address(self, request, clinic_id):
+        try:
+            clinic = Clinic.objects.get(id=clinic_id)
+        except Clinic.DoesNotExist:
+            return Response({
+                "success": False,
+                "message": "Clinic not found."
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        # Get or create address
+        address, created = ClinicAddress.objects.get_or_create(
+            clinic=clinic,
+            defaults={}
+        )
+
+        # Add clinic to request data if not present
+        data = request.data.copy()
+        data['clinic'] = clinic.id
+
+        serializer = ClinicAddressSerializer(address, data=data, partial=not created)
+        if serializer.is_valid():
+            serializer.save()
+            message = "Address created successfully" if created else "Address updated successfully"
+            return Response({
+                "success": True,
+                "message": message,
+                "data": serializer.data
+            }, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+        
+        return Response({
+            "success": False,
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ClinicProfileDetailUpdateAPIView(APIView):
+    """
+    GET /api/clinics/{clinic_id}/profile/ - Get clinic profile
+    PATCH /api/clinics/{clinic_id}/profile/ - Update clinic profile
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def check_permissions(self, request):
+        """Check permissions based on HTTP method"""
+        if request.method == 'GET':
+            permission = IsDoctorOrHelpdeskOrClinicAdminOrSuperuser()
+        else:
+            permission = IsDoctorOrClinicAdminOrSuperuser()
+        
+        if not permission.has_permission(request, self):
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("You do not have permission to perform this action.")
+
+    def get(self, request, clinic_id):
+        """GET /api/clinics/{clinic_id}/profile/"""
+        self.check_permissions(request)
+        
+        try:
+            clinic = Clinic.objects.get(id=clinic_id)
+        except Clinic.DoesNotExist:
+            return Response({
+                "success": False,
+                "message": "Clinic not found."
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        profile, created = ClinicProfile.objects.get_or_create(clinic=clinic)
+        serializer = ClinicProfileSerializer(profile)
+        
+        return Response({
+            "success": True,
+            "message": "Profile retrieved successfully",
+            "data": serializer.data
+        }, status=status.HTTP_200_OK)
+
+    @transaction.atomic
+    def patch(self, request, clinic_id):
+        """PATCH /api/clinics/{clinic_id}/profile/"""
+        self.check_permissions(request)
+        
+        try:
+            clinic = Clinic.objects.get(id=clinic_id)
+        except Clinic.DoesNotExist:
+            return Response({
+                "success": False,
+                "message": "Clinic not found."
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        profile, created = ClinicProfile.objects.get_or_create(clinic=clinic)
+        
+        serializer = ClinicProfileSerializer(profile, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            message = "Profile created successfully" if created else "Profile updated successfully"
+            return Response({
+                "success": True,
+                "message": message,
+                "data": serializer.data
+            }, status=status.HTTP_200_OK)
+        
+        return Response({
+            "success": False,
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+
+
+
+class ClinicScheduleListCreateAPIView(APIView):
+    """
+    GET /api/clinics/{clinic_id}/schedules/ - Get weekly schedule
+    POST /api/clinics/{clinic_id}/schedules/ - Create/update day schedule
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def check_permissions(self, request):
+        """Check permissions based on HTTP method"""
+        if request.method == 'GET':
+            permission = IsDoctorOrHelpdeskOrClinicAdminOrSuperuser()
+        else:
+            permission = IsDoctorOrClinicAdminOrSuperuser()
+        
+        if not permission.has_permission(request, self):
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("You do not have permission to perform this action.")
+
+    def get(self, request, clinic_id):
+        """GET /api/clinics/{clinic_id}/schedules/"""
+        self.check_permissions(request)
+        try:
+            clinic = Clinic.objects.get(id=clinic_id)
+        except Clinic.DoesNotExist:
+            return Response({
+                "success": False,
+                "message": "Clinic not found."
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        # Get all schedules for this clinic
+        schedules = ClinicSchedule.objects.filter(clinic=clinic).order_by('day_of_week')
+        serializer = ClinicScheduleSerializer(schedules, many=True)
+        
+        # If no schedules exist, return empty list with all 7 days structure
+        days_of_week = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+        existing_days = {s['day_of_week'] for s in serializer.data}
+        
+        # Add missing days with default closed status
+        result = list(serializer.data)
+        for day in days_of_week:
+            if day not in existing_days:
+                result.append({
+                    'day_of_week': day,
+                    'is_closed': True,
+                    'open_time': None,
+                    'close_time': None,
+                    'is_active': False
+                })
+        
+        # Sort by day of week
+        day_order = {day: idx for idx, day in enumerate(days_of_week)}
+        result.sort(key=lambda x: day_order.get(x['day_of_week'], 99))
+        
+        return Response({
+            "success": True,
+            "message": "Weekly schedule retrieved successfully",
+            "data": result
+        }, status=status.HTTP_200_OK)
+
+    @transaction.atomic
+    def post(self, request, clinic_id):
+        """POST /api/clinics/{clinic_id}/schedules/"""
+        self.check_permissions(request)
+        
+        try:
+            clinic = Clinic.objects.get(id=clinic_id)
+        except Clinic.DoesNotExist:
+            return Response({
+                "success": False,
+                "message": "Clinic not found."
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        data = request.data.copy()
+        data['clinic'] = clinic.id
+
+        # Check if schedule for this day already exists
+        day_of_week = data.get('day_of_week')
+        if day_of_week:
+            schedule, created = ClinicSchedule.objects.get_or_create(
+                clinic=clinic,
+                day_of_week=day_of_week,
+                defaults={}
+            )
+            
+            serializer = ClinicScheduleSerializer(schedule, data=data, partial=not created)
+            if serializer.is_valid():
+                serializer.save()
+                message = "Schedule created successfully" if created else "Schedule updated successfully"
+                return Response({
+                    "success": True,
+                    "message": message,
+                    "data": serializer.data
+                }, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+        else:
+            serializer = ClinicScheduleSerializer(data=data)
+            if serializer.is_valid():
+                serializer.save()
+                return Response({
+                    "success": True,
+                    "message": "Schedule created successfully",
+                    "data": serializer.data
+                }, status=status.HTTP_201_CREATED)
+
+        return Response({
+            "success": False,
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ClinicAdminMyClinicAPIView(APIView):
+    """
+    GET /api/clinic/clinic-admin/my-clinic/
+    Get the clinic information for the logged-in clinic admin
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsClinicAdmin]
+
+    def get(self, request):
+        """Get clinic details for the authenticated clinic admin"""
+        try:
+            clinic_admin_profile = request.user.clinic_admin_profile
+            clinic = clinic_admin_profile.clinic
+        except ClinicAdminProfile.DoesNotExist:
+            return Response({
+                "success": False,
+                "message": "Clinic admin profile not found."
+            }, status=status.HTTP_404_NOT_FOUND)
+        except AttributeError:
+            return Response({
+                "success": False,
+                "message": "User does not have a clinic admin profile."
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        # Serialize clinic with related data
+        serializer = ClinicSerializer(clinic)
+        
+        # Get related data
+        response_data = serializer.data
+        
+        # Add address if exists
+        try:
+            address = clinic.address
+            address_serializer = ClinicAddressSerializer(address)
+            response_data['address'] = address_serializer.data
+        except ClinicAddress.DoesNotExist:
+            response_data['address'] = None
+        
+        # Add profile if exists
+        try:
+            profile = clinic.clinicprofile
+            profile_serializer = ClinicProfileSerializer(profile)
+            response_data['profile'] = profile_serializer.data
+        except ClinicProfile.DoesNotExist:
+            response_data['profile'] = None
+        
+        # Add schedules
+        schedules = ClinicSchedule.objects.filter(clinic=clinic).order_by('day_of_week')
+        schedule_serializer = ClinicScheduleSerializer(schedules, many=True)
+        response_data['schedules'] = schedule_serializer.data
+        
+        return Response({
+            "success": True,
+            "message": "Clinic information retrieved successfully",
+            "data": response_data
+        }, status=status.HTTP_200_OK)
