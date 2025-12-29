@@ -38,7 +38,7 @@ from doctor.models import (
     Award, Certification, DoctorFeedback, DoctorService,
     DoctorSocialLink, Specialization, CustomSpecialization, KYCStatus,
     DoctorFeeStructure,FollowUpPolicy,DoctorAvailability,DoctorLeave,
-    DoctorOPDStatus,
+    DoctorOPDStatus,CancellationPolicy,DoctorBankDetails,
 )
 from doctor.api.serializers import (
     DoctorRegistrationSerializer, DoctorProfileUpdateSerializer, DoctorSerializer,
@@ -53,7 +53,8 @@ from doctor.api.serializers import (
     DigitalSignatureUploadSerializer,
     DoctorSearchSerializer,DoctorFeeStructureSerializer,FollowUpPolicySerializer,
     DoctorAvailabilitySerializer,DoctorLeaveSerializer,DoctorOPDStatusSerializer,
-    DoctorPhase1Serializer,DoctorFullProfileSerializer,
+    DoctorPhase1Serializer,DoctorFullProfileSerializer,CancellationPolicySerializer,
+    DoctorBankDetailsSerializer,
 )
 from consultations.models import Consultation, PatientFeedback
 from appointments.models import Appointment
@@ -278,13 +279,26 @@ class DoctorFullProfileAPIView(APIView):
                 {"detail": "Doctor profile not found"},
                 status=status.HTTP_404_NOT_FOUND,
             )
+        except Exception as e:
+            logger.error(f"Error fetching doctor profile: {str(e)}", exc_info=True)
+            return Response(
+                {"error": "An error occurred while fetching doctor profile", "detail": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
         # Serialize complete profile
-        serializer = DoctorFullProfileSerializer(doctor_obj, context={"request": request})
-        return Response(
-            {"doctor_profile": serializer.data},
-            status=status.HTTP_200_OK
-        )
+        try:
+            serializer = DoctorFullProfileSerializer(doctor_obj, context={"request": request})
+            return Response(
+                {"doctor_profile": serializer.data},
+                status=status.HTTP_200_OK
+            )
+        except Exception as e:
+            logger.error(f"Error serializing doctor profile: {str(e)}", exc_info=True)
+            return Response(
+                {"error": "An error occurred while serializing doctor profile", "detail": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
     def patch(self, request, *args, **kwargs):
         """
@@ -1807,73 +1821,1195 @@ class StandardResultsSetPagination(PageNumberPagination):
     max_page_size = 100
 
 class DoctorFeeStructureViewSet(viewsets.ModelViewSet):
-    queryset = DoctorFeeStructure.objects.all()
+    queryset = DoctorFeeStructure.objects.select_related('doctor', 'clinic').all()
     permission_classes = [IsAuthenticated, IsDoctorOrHelpdesk]
     authentication_classes = [JWTAuthentication]
     serializer_class = DoctorFeeStructureSerializer
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter, filters.SearchFilter]
-    filterset_fields = ['doctor', 'clinic']
-    search_fields = ['doctor__name', 'clinic__name']
-    ordering_fields = ['created_at', 'updated_at', 'first_time_consultation_fee']
+    filterset_fields = ['doctor', 'clinic', 'is_active']
+    search_fields = ['doctor__user__first_name', 'doctor__user__last_name', 'clinic__name']
+    ordering_fields = ['created_at', 'updated_at', 'first_time_consultation_fee', 'follow_up_fee']
+    ordering = ['-created_at']
+    
+    def get_queryset(self):
+        print("DoctorFeeStructureViewSet initialized")
+        """Filter queryset based on user role"""
+        user = self.request.user
+        base_qs = DoctorFeeStructure.objects.select_related('doctor', 'clinic').all()
+        
+        if hasattr(user, 'doctor'):
+            # Doctor can only see their own fee structures
+            return base_qs.filter(doctor=user.doctor)
+        elif hasattr(user, 'helpdesk'):
+            # Helpdesk can see fee structures for their clinics
+            return base_qs.filter(clinic__in=user.helpdesk.clinics.all())
+        
+        return base_qs.none()
+
+    @transaction.atomic
+    def create(self, request, *args, **kwargs):
+        """Create or update a doctor fee structure (upsert)"""
+        # Ensure doctor can only create fee structures for themselves
+        user = request.user
+        doctor_id = request.data.get('doctor')
+        clinic_id = request.data.get('clinic')
+        
+        if hasattr(user, 'doctor'):
+            if doctor_id and str(user.doctor.id) != str(doctor_id):
+                return Response({
+                    "status": "error",
+                    "message": "You can only create fee structures for yourself."
+                }, status=status.HTTP_403_FORBIDDEN)
+        
+        # Check if a fee structure already exists for this doctor and clinic
+        if doctor_id and clinic_id:
+            try:
+                existing_instance = DoctorFeeStructure.objects.get(
+                    doctor_id=doctor_id,
+                    clinic_id=clinic_id
+                )
+                # Update existing instance
+                update_serializer = self.get_serializer(
+                    existing_instance, 
+                    data=request.data, 
+                    partial=True,
+                    context={'request': request}
+                )
+                update_serializer.is_valid(raise_exception=True)
+                instance = update_serializer.save()
+                return Response({
+                    "status": "success",
+                    "message": "Fee structure updated successfully",
+                    "data": self.get_serializer(instance).data
+                }, status=status.HTTP_200_OK)
+            except DoctorFeeStructure.DoesNotExist:
+                # Create new instance
+                serializer = self.get_serializer(data=request.data, context={'request': request})
+                serializer.is_valid(raise_exception=True)
+                instance = serializer.save()
+                return Response({
+                    "status": "success",
+                    "message": "Fee structure created successfully",
+                    "data": self.get_serializer(instance).data
+                }, status=status.HTTP_201_CREATED)
+        else:
+            # If doctor_id or clinic_id not provided, create new instance
+            serializer = self.get_serializer(data=request.data, context={'request': request})
+            serializer.is_valid(raise_exception=True)
+            instance = serializer.save()
+            return Response({
+                "status": "success",
+                "message": "Fee structure created successfully",
+                "data": self.get_serializer(instance).data
+            }, status=status.HTTP_201_CREATED)
+
+    def list(self, request, *args, **kwargs):
+        """List all fee structures for the authenticated user"""
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+        
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response({
+                "status": "success",
+                "message": "Fee structures retrieved successfully",
+                "data": serializer.data
+            })
+        
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({
+            "status": "success",
+            "message": "Fee structures retrieved successfully",
+            "data": serializer.data
+        }, status=status.HTTP_200_OK)
+
+    def retrieve(self, request, *args, **kwargs):
+        """Retrieve a specific fee structure"""
+        try:
+            instance = self.get_object()
+        except Exception as e:
+            logger.error(f"Error retrieving fee structure: {str(e)}")
+            return Response({
+                "status": "error",
+                "message": "Fee structure not found or you do not have permission to access it."
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        serializer = self.get_serializer(instance)
+        return Response({
+            "status": "success",
+            "message": "Fee structure retrieved successfully",
+            "data": serializer.data
+        }, status=status.HTTP_200_OK)
+
+    @transaction.atomic
+    def update(self, request, *args, **kwargs):
+        """Update an existing fee structure (full update)"""
+        partial = kwargs.pop('partial', False)
+        
+        try:
+            instance = self.get_object()
+        except Exception as e:
+            return Response({
+                "status": "error",
+                "message": "Fee structure not found or you do not have permission to access it."
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Ensure user can only update their own fee structures
+        user = request.user
+        try:
+            if hasattr(user, 'doctor'):
+                # Check if doctor relationship exists
+                try:
+                    user_doctor = user.doctor
+                except (doctor.DoesNotExist, AttributeError):
+                    return Response({
+                        "status": "error",
+                        "message": "Doctor information not available. Please refresh the page."
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                
+                if instance.doctor != user_doctor:
+                    return Response({
+                        "status": "error",
+                        "message": "You do not have permission to update this fee structure."
+                    }, status=status.HTTP_403_FORBIDDEN)
+        except AttributeError:
+            return Response({
+                "status": "error",
+                "message": "Doctor information not available. Please refresh the page."
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        serializer = self.get_serializer(instance, data=request.data, partial=partial, context={'request': request})
+        if not serializer.is_valid():
+            return Response({
+                "status": "error",
+                "message": "Validation failed",
+                "errors": serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        serializer.save()
+        
+        return Response({
+            "status": "success",
+            "message": "Fee structure updated successfully",
+            "data": serializer.data
+        }, status=status.HTTP_200_OK)
+
+    def get_object_by_doctor_clinic(self, doctor_id, clinic_id, user):
+        """Get fee structure by doctor_id and clinic_id with permission check"""
+        try:
+            instance = DoctorFeeStructure.objects.select_related('doctor', 'clinic').get(
+                doctor_id=doctor_id,
+                clinic_id=clinic_id
+            )
+            
+            # Ensure user can only access their own fee structures
+            if hasattr(user, 'doctor'):
+                try:
+                    user_doctor = user.doctor
+                    if instance.doctor != user_doctor:
+                        return None, Response({
+                            "status": "error",
+                            "message": "You do not have permission to update this fee structure."
+                        }, status=status.HTTP_403_FORBIDDEN)
+                except (doctor.DoesNotExist, AttributeError):
+                    return None, Response({
+                        "status": "error",
+                        "message": "Doctor information not available. Please refresh the page."
+                    }, status=status.HTTP_400_BAD_REQUEST)
+            
+            return instance, None
+        except DoctorFeeStructure.DoesNotExist:
+            return None, Response({
+                "status": "error",
+                "message": "Fee structure not found for the given doctor and clinic."
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error retrieving fee structure: {str(e)}")
+            return None, Response({
+                "status": "error",
+                "message": "An error occurred while retrieving the fee structure."
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    def get_object(self):
+        """Override to add better error handling"""
+        try:
+            return super().get_object()
+        except Exception as e:
+            # Log the error for debugging
+            logger.error(f"Error retrieving fee structure: {str(e)}")
+            raise
+
+    @transaction.atomic
+    def partial_update(self, request, *args, **kwargs):
+        """Partially update an existing fee structure using doctor_id and clinic_id"""
+        doctor_id = request.data.get('doctor_id') or request.query_params.get('doctor_id')
+        clinic_id = request.data.get('clinic_id') or request.query_params.get('clinic_id')
+        
+        # If doctor_id and clinic_id are provided, use them to find the instance
+        if doctor_id and clinic_id:
+            instance, error_response = self.get_object_by_doctor_clinic(doctor_id, clinic_id, request.user)
+            if error_response:
+                return error_response
+        else:
+            # Fall back to using the URL parameter (pk)
+            try:
+                instance = self.get_object()
+            except Exception as e:
+                return Response({
+                    "status": "error",
+                    "message": "Fee structure not found. Please provide doctor_id and clinic_id, or use the instance ID in the URL."
+                }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Ensure user can only update their own fee structures
+        user = request.user
+        try:
+            if hasattr(user, 'doctor'):
+                try:
+                    user_doctor = user.doctor
+                except (doctor.DoesNotExist, AttributeError):
+                    return Response({
+                        "status": "error",
+                        "message": "Doctor information not available. Please refresh the page."
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                
+                if instance.doctor != user_doctor:
+                    return Response({
+                        "status": "error",
+                        "message": "You do not have permission to update this fee structure."
+                    }, status=status.HTTP_403_FORBIDDEN)
+        except AttributeError:
+            return Response({
+                "status": "error",
+                "message": "Doctor information not available. Please refresh the page."
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Remove doctor_id and clinic_id from request data if present (they're only for lookup)
+        update_data = request.data.copy()
+        if 'doctor_id' in update_data:
+            del update_data['doctor_id']
+        if 'clinic_id' in update_data:
+            del update_data['clinic_id']
+        
+        serializer = self.get_serializer(instance, data=update_data, partial=True, context={'request': request})
+        if not serializer.is_valid():
+            return Response({
+                "status": "error",
+                "message": "Validation failed",
+                "errors": serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        serializer.save()
+        
+        return Response({
+            "status": "success",
+            "message": "Fee structure updated successfully",
+            "data": serializer.data
+        }, status=status.HTTP_200_OK)
+
+    @transaction.atomic
+    def destroy(self, request, *args, **kwargs):
+        """Delete a fee structure"""
+        instance = self.get_object()
+        
+        # Ensure user can only delete their own fee structures
+        user = request.user
+        if hasattr(user, 'doctor') and instance.doctor != user.doctor:
+            return Response({
+                "status": "error",
+                "message": "You do not have permission to delete this fee structure."
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        self.perform_destroy(instance)
+        return Response({
+            "status": "success",
+            "message": "Fee structure deleted successfully"
+        }, status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=False, methods=['patch'], url_path='update')
+    @transaction.atomic
+    def update_by_doctor_clinic(self, request):
+        """Update fee structure using doctor_id and clinic_id in request body (PATCH on base URL)"""
+        doctor_id = request.data.get('doctor_id') or request.query_params.get('doctor_id')
+        clinic_id = request.data.get('clinic_id') or request.query_params.get('clinic_id')
+        
+        if not doctor_id or not clinic_id:
+            return Response({
+                "status": "error",
+                "message": "Both doctor_id and clinic_id are required in request body or query parameters"
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        instance, error_response = self.get_object_by_doctor_clinic(doctor_id, clinic_id, request.user)
+        if error_response:
+            return error_response
+        
+        # Remove doctor_id and clinic_id from request data if present (they're only for lookup)
+        update_data = request.data.copy()
+        if 'doctor_id' in update_data:
+            del update_data['doctor_id']
+        if 'clinic_id' in update_data:
+            del update_data['clinic_id']
+        
+        serializer = self.get_serializer(instance, data=update_data, partial=True, context={'request': request})
+        if not serializer.is_valid():
+            return Response({
+                "status": "error",
+                "message": "Validation failed",
+                "errors": serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        serializer.save()
+        
+        return Response({
+            "status": "success",
+            "message": "Fee structure updated successfully",
+            "data": serializer.data
+        }, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'], url_path='by-doctor-clinic')
+    def retrieve_by_doctor_clinic(self, request):
+        """Retrieve a single fee structure by doctor_id and clinic_id"""
+        doctor_id = request.query_params.get('doctor_id')
+        clinic_id = request.query_params.get('clinic_id')
+        
+        if not doctor_id or not clinic_id:
+            return Response({
+                "status": "error",
+                "message": "Both doctor_id and clinic_id are required"
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Apply user-based filtering first
+        queryset = self.filter_queryset(self.get_queryset())
+        
+        try:
+            instance = queryset.get(doctor_id=doctor_id, clinic_id=clinic_id)
+            serializer = self.get_serializer(instance)
+            return Response({
+                "status": "success",
+                "message": "Fee structure retrieved successfully",
+                "data": serializer.data
+            }, status=status.HTTP_200_OK)
+        except DoctorFeeStructure.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "Fee structure not found for the given doctor and clinic."
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error retrieving fee structure: {str(e)}")
+            return Response({
+                "status": "error",
+                "message": "An error occurred while retrieving the fee structure."
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class FollowUpPolicyViewSet(viewsets.ModelViewSet):
-    queryset = FollowUpPolicy.objects.all()
+    queryset = FollowUpPolicy.objects.select_related('doctor', 'clinic').all()
     serializer_class = FollowUpPolicySerializer
     permission_classes = [IsAuthenticated, IsDoctorOrHelpdesk]
     authentication_classes = [JWTAuthentication]
     pagination_class = StandardResultsSetPagination
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['doctor', 'clinic']
-    search_fields = ['doctor__name', 'clinic__name']
-    ordering_fields = ['created_at', 'updated_at', 'follow_up_fee']
+    filterset_fields = ['doctor', 'clinic', 'allow_free_follow_up', 'allow_online_follow_up']
+    search_fields = ['doctor__user__first_name', 'doctor__user__last_name', 'clinic__name']
+    ordering_fields = ['created_at', 'updated_at', 'follow_up_fee', 'online_follow_up_fee', 'follow_up_duration']
     ordering = ['-created_at']
 
     def get_queryset(self):
+        """Filter queryset based on user role"""
         user = self.request.user
-        base_qs = FollowUpPolicy.objects.all()  # always fresh queryset
+        base_qs = FollowUpPolicy.objects.select_related('doctor', 'clinic').all()
+        
         if hasattr(user, 'doctor'):
+            # Doctor can only see their own policies
             return base_qs.filter(doctor=user.doctor)
         elif hasattr(user, 'helpdesk'):
+            # Helpdesk can see policies for their clinics
             return base_qs.filter(clinic__in=user.helpdesk.clinics.all())
+        
         return base_qs.none()
 
-    def perform_create(self, serializer):
+    @transaction.atomic
+    def create(self, request, *args, **kwargs):
+        """Create or update a follow-up policy (upsert)"""
+        # Ensure doctor can only create policies for themselves
+        user = request.user
+        doctor_id = request.data.get('doctor')
+        clinic_id = request.data.get('clinic')
+        
+        if hasattr(user, 'doctor'):
+            if doctor_id and str(user.doctor.id) != str(doctor_id):
+                return Response({
+                    "status": "error",
+                    "message": "You can only create follow-up policies for yourself."
+                }, status=status.HTTP_403_FORBIDDEN)
+        
+        # Check if a follow-up policy already exists for this doctor and clinic
+        if doctor_id and clinic_id:
+            try:
+                existing_instance = FollowUpPolicy.objects.get(
+                    doctor_id=doctor_id,
+                    clinic_id=clinic_id
+                )
+                # Update existing instance
+                update_serializer = self.get_serializer(
+                    existing_instance, 
+                    data=request.data, 
+                    partial=True,
+                    context={'request': request}
+                )
+                update_serializer.is_valid(raise_exception=True)
+                instance = update_serializer.save()
+                return Response({
+                    "status": "success",
+                    "message": "Follow-up policy updated successfully",
+                    "data": self.get_serializer(instance).data
+                }, status=status.HTTP_200_OK)
+            except FollowUpPolicy.DoesNotExist:
+                # Create new instance
+                serializer = self.get_serializer(data=request.data, context={'request': request})
+                serializer.is_valid(raise_exception=True)
+                instance = serializer.save()
+                return Response({
+                    "status": "success",
+                    "message": "Follow-up policy created successfully",
+                    "data": self.get_serializer(instance).data
+                }, status=status.HTTP_201_CREATED)
+        else:
+            # If doctor_id or clinic_id not provided, create new instance
+            serializer = self.get_serializer(data=request.data, context={'request': request})
+            serializer.is_valid(raise_exception=True)
+            instance = serializer.save()
+            return Response({
+                "status": "success",
+                "message": "Follow-up policy created successfully",
+                "data": self.get_serializer(instance).data
+            }, status=status.HTTP_201_CREATED)
+
+    def list(self, request, *args, **kwargs):
+        """List all follow-up policies for the authenticated user"""
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+        
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response({
+                "status": "success",
+                "message": "Follow-up policies retrieved successfully",
+                "data": serializer.data
+            })
+        
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({
+            "status": "success",
+            "message": "Follow-up policies retrieved successfully",
+            "data": serializer.data
+        }, status=status.HTTP_200_OK)
+
+    def retrieve(self, request, *args, **kwargs):
+        """Retrieve a specific follow-up policy"""
+        try:
+            instance = self.get_object()
+        except Exception as e:
+            logger.error(f"Error retrieving follow-up policy: {str(e)}")
+            return Response({
+                "status": "error",
+                "message": "Follow-up policy not found or you do not have permission to access it."
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        serializer = self.get_serializer(instance)
+        return Response({
+            "status": "success",
+            "message": "Follow-up policy retrieved successfully",
+            "data": serializer.data
+        }, status=status.HTTP_200_OK)
+
+    def get_object_by_doctor_clinic(self, doctor_id, clinic_id, user):
+        """Get follow-up policy by doctor_id and clinic_id with permission check"""
+        try:
+            instance = FollowUpPolicy.objects.select_related('doctor', 'clinic').get(
+                doctor_id=doctor_id,
+                clinic_id=clinic_id
+            )
+            
+            # Ensure user can only access their own policies
+            if hasattr(user, 'doctor'):
+                try:
+                    user_doctor = user.doctor
+                    if instance.doctor != user_doctor:
+                        return None, Response({
+                            "status": "error",
+                            "message": "You do not have permission to update this follow-up policy."
+                        }, status=status.HTTP_403_FORBIDDEN)
+                except (doctor.DoesNotExist, AttributeError):
+                    return None, Response({
+                        "status": "error",
+                        "message": "Doctor information not available. Please refresh the page."
+                    }, status=status.HTTP_400_BAD_REQUEST)
+            
+            return instance, None
+        except FollowUpPolicy.DoesNotExist:
+            return None, Response({
+                "status": "error",
+                "message": "Follow-up policy not found for the given doctor and clinic."
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error retrieving follow-up policy: {str(e)}")
+            return None, Response({
+                "status": "error",
+                "message": "An error occurred while retrieving the follow-up policy."
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @transaction.atomic
+    def update(self, request, *args, **kwargs):
+        """Update an existing follow-up policy (full update)"""
+        partial = kwargs.pop('partial', False)
+        
+        try:
+            instance = self.get_object()
+        except Exception as e:
+            return Response({
+                "status": "error",
+                "message": "Follow-up policy not found or you do not have permission to access it."
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Ensure user can only update their own policies
+        user = request.user
+        try:
+            if hasattr(user, 'doctor'):
+                try:
+                    user_doctor = user.doctor
+                except (doctor.DoesNotExist, AttributeError):
+                    return Response({
+                        "status": "error",
+                        "message": "Doctor information not available. Please refresh the page."
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                
+                if instance.doctor != user_doctor:
+                    return Response({
+                        "status": "error",
+                        "message": "You do not have permission to update this follow-up policy."
+                    }, status=status.HTTP_403_FORBIDDEN)
+        except AttributeError:
+            return Response({
+                "status": "error",
+                "message": "Doctor information not available. Please refresh the page."
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        serializer = self.get_serializer(instance, data=request.data, partial=partial, context={'request': request})
+        if not serializer.is_valid():
+            return Response({
+                "status": "error",
+                "message": "Validation failed",
+                "errors": serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
         serializer.save()
+        
+        return Response({
+            "status": "success",
+            "message": "Follow-up policy updated successfully",
+            "data": serializer.data
+        }, status=status.HTTP_200_OK)
+
+    @transaction.atomic
+    def partial_update(self, request, *args, **kwargs):
+        """Partially update an existing follow-up policy using doctor_id and clinic_id"""
+        doctor_id = request.data.get('doctor_id') or request.query_params.get('doctor_id')
+        clinic_id = request.data.get('clinic_id') or request.query_params.get('clinic_id')
+        
+        # If doctor_id and clinic_id are provided, use them to find the instance
+        if doctor_id and clinic_id:
+            instance, error_response = self.get_object_by_doctor_clinic(doctor_id, clinic_id, request.user)
+            if error_response:
+                return error_response
+        else:
+            # Fall back to using the URL parameter (pk)
+            try:
+                instance = self.get_object()
+            except Exception as e:
+                return Response({
+                    "status": "error",
+                    "message": "Follow-up policy not found. Please provide doctor_id and clinic_id, or use the instance ID in the URL."
+                }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Ensure user can only update their own policies
+        user = request.user
+        try:
+            if hasattr(user, 'doctor'):
+                try:
+                    user_doctor = user.doctor
+                except (doctor.DoesNotExist, AttributeError):
+                    return Response({
+                        "status": "error",
+                        "message": "Doctor information not available. Please refresh the page."
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                
+                if instance.doctor != user_doctor:
+                    return Response({
+                        "status": "error",
+                        "message": "You do not have permission to update this follow-up policy."
+                    }, status=status.HTTP_403_FORBIDDEN)
+        except AttributeError:
+            return Response({
+                "status": "error",
+                "message": "Doctor information not available. Please refresh the page."
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Remove doctor_id and clinic_id from request data if present (they're only for lookup)
+        update_data = request.data.copy()
+        if 'doctor_id' in update_data:
+            del update_data['doctor_id']
+        if 'clinic_id' in update_data:
+            del update_data['clinic_id']
+        
+        serializer = self.get_serializer(instance, data=update_data, partial=True, context={'request': request})
+        if not serializer.is_valid():
+            return Response({
+                "status": "error",
+                "message": "Validation failed",
+                "errors": serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        serializer.save()
+        
+        return Response({
+            "status": "success",
+            "message": "Follow-up policy updated successfully",
+            "data": serializer.data
+        }, status=status.HTTP_200_OK)
+
+    @transaction.atomic
+    def destroy(self, request, *args, **kwargs):
+        """Delete a follow-up policy"""
+        try:
+            instance = self.get_object()
+        except Exception as e:
+            logger.error(f"Error retrieving follow-up policy for deletion: {str(e)}")
+            return Response({
+                "status": "error",
+                "message": "Follow-up policy not found or you do not have permission to access it."
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Ensure user can only delete their own policies
+        user = request.user
+        try:
+            if hasattr(user, 'doctor'):
+                try:
+                    user_doctor = user.doctor
+                    if instance.doctor != user_doctor:
+                        return Response({
+                            "status": "error",
+                            "message": "You do not have permission to delete this follow-up policy."
+                        }, status=status.HTTP_403_FORBIDDEN)
+                except (doctor.DoesNotExist, AttributeError):
+                    return Response({
+                        "status": "error",
+                        "message": "Doctor information not available. Please refresh the page."
+                    }, status=status.HTTP_400_BAD_REQUEST)
+        except AttributeError:
+            return Response({
+                "status": "error",
+                "message": "Doctor information not available. Please refresh the page."
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        self.perform_destroy(instance)
+        return Response({
+            "status": "success",
+            "message": "Follow-up policy deleted successfully"
+        }, status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=False, methods=['patch'], url_path='update')
+    @transaction.atomic
+    def update_by_doctor_clinic(self, request):
+        """Update follow-up policy using doctor_id and clinic_id in request body (PATCH on base URL)"""
+        doctor_id = request.data.get('doctor_id') or request.query_params.get('doctor_id')
+        clinic_id = request.data.get('clinic_id') or request.query_params.get('clinic_id')
+        
+        if not doctor_id or not clinic_id:
+            return Response({
+                "status": "error",
+                "message": "Both doctor_id and clinic_id are required in request body or query parameters"
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        instance, error_response = self.get_object_by_doctor_clinic(doctor_id, clinic_id, request.user)
+        if error_response:
+            return error_response
+        
+        # Remove doctor_id and clinic_id from request data if present (they're only for lookup)
+        update_data = request.data.copy()
+        if 'doctor_id' in update_data:
+            del update_data['doctor_id']
+        if 'clinic_id' in update_data:
+            del update_data['clinic_id']
+        
+        serializer = self.get_serializer(instance, data=update_data, partial=True, context={'request': request})
+        if not serializer.is_valid():
+            return Response({
+                "status": "error",
+                "message": "Validation failed",
+                "errors": serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        serializer.save()
+        
+        return Response({
+            "status": "success",
+            "message": "Follow-up policy updated successfully",
+            "data": serializer.data
+        }, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['get'], url_path='by-doctor')
     def list_by_doctor(self, request):
+        """List follow-up policies by doctor ID"""
         doctor_id = request.query_params.get('doctor_id')
         if not doctor_id:
-            return Response({"error": "doctor_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({
+                "status": "error",
+                "message": "doctor_id is required"
+            }, status=status.HTTP_400_BAD_REQUEST)
 
-        policies = self.queryset.filter(doctor_id=doctor_id)
+        # Apply user-based filtering first
+        queryset = self.filter_queryset(self.get_queryset())
+        policies = queryset.filter(doctor_id=doctor_id)
+        
         if not policies.exists():
-            return Response({"message": "No policies found for this doctor"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({
+                "status": "success",
+                "message": "No policies found for this doctor",
+                "data": []
+            }, status=status.HTTP_200_OK)
 
         page = self.paginate_queryset(policies)
-        return self.get_paginated_response(self.get_serializer(page, many=True).data)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response({
+                "status": "success",
+                "message": "Follow-up policies retrieved successfully",
+                "data": serializer.data
+            })
+        
+        serializer = self.get_serializer(policies, many=True)
+        return Response({
+            "status": "success",
+            "message": "Follow-up policies retrieved successfully",
+            "data": serializer.data
+        }, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['get'], url_path='by-clinic')
     def list_by_clinic(self, request):
+        """List follow-up policies by clinic ID"""
         clinic_id = request.query_params.get('clinic_id')
         if not clinic_id:
-            return Response({"error": "clinic_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({
+                "status": "error",
+                "message": "clinic_id is required"
+            }, status=status.HTTP_400_BAD_REQUEST)
 
-        policies = self.queryset.filter(clinic_id=clinic_id)
+        # Apply user-based filtering first
+        queryset = self.filter_queryset(self.get_queryset())
+        policies = queryset.filter(clinic_id=clinic_id)
+        
         if not policies.exists():
-            return Response({"message": "No policies found for this clinic"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({
+                "status": "success",
+                "message": "No policies found for this clinic",
+                "data": []
+            }, status=status.HTTP_200_OK)
 
         page = self.paginate_queryset(policies)
-        return self.get_paginated_response(self.get_serializer(page, many=True).data)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response({
+                "status": "success",
+                "message": "Follow-up policies retrieved successfully",
+                "data": serializer.data
+            })
+        
+        serializer = self.get_serializer(policies, many=True)
+        return Response({
+            "status": "success",
+            "message": "Follow-up policies retrieved successfully",
+            "data": serializer.data
+        }, status=status.HTTP_200_OK)
 
-    def destroy(self, request, *args, **kwargs):
-        instance = self.get_object()
+    @action(detail=False, methods=['get'], url_path='by-doctor-clinic')
+    def retrieve_by_doctor_clinic(self, request):
+        """Retrieve a single follow-up policy by doctor_id and clinic_id"""
+        doctor_id = request.query_params.get('doctor_id')
+        clinic_id = request.query_params.get('clinic_id')
+        
+        if not doctor_id or not clinic_id:
+            return Response({
+                "status": "error",
+                "message": "Both doctor_id and clinic_id are required"
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Apply user-based filtering first
+        queryset = self.filter_queryset(self.get_queryset())
+        
+        try:
+            instance = queryset.get(doctor_id=doctor_id, clinic_id=clinic_id)
+            serializer = self.get_serializer(instance)
+            return Response({
+                "status": "success",
+                "message": "Follow-up policy retrieved successfully",
+                "data": serializer.data
+            }, status=status.HTTP_200_OK)
+        except FollowUpPolicy.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "Follow-up policy not found for the given doctor and clinic."
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error retrieving follow-up policy: {str(e)}")
+            return Response({
+                "status": "error",
+                "message": "An error occurred while retrieving the follow-up policy."
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class CancellationPolicyViewSet(viewsets.ModelViewSet):
+    queryset = CancellationPolicy.objects.select_related('doctor', 'clinic').all()
+    serializer_class = CancellationPolicySerializer
+    permission_classes = [IsAuthenticated, IsDoctorOrHelpdesk]
+    authentication_classes = [JWTAuthentication]
+    pagination_class = StandardResultsSetPagination
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['doctor', 'clinic', 'is_active', 'allow_cancellation', 'allow_refund']
+    search_fields = ['doctor__user__first_name', 'doctor__user__last_name', 'clinic__name']
+    ordering_fields = ['created_at', 'updated_at', 'cancellation_fee', 'rescheduling_fee', 'cancellation_window_hours']
+    ordering = ['-created_at']
+
+    def get_queryset(self):
+        """Filter queryset based on user role"""
+        user = self.request.user
+        base_qs = CancellationPolicy.objects.select_related('doctor', 'clinic').all()
+        
+        if hasattr(user, 'doctor'):
+            # Doctor can only see their own policies
+            return base_qs.filter(doctor=user.doctor)
+        elif hasattr(user, 'helpdesk'):
+            # Helpdesk can see policies for their clinics
+            return base_qs.filter(clinic__in=user.helpdesk.clinics.all())
+        
+        return base_qs.none()
+
+    @transaction.atomic
+    def create(self, request, *args, **kwargs):
+        """Create or update a cancellation policy (upsert)"""
+        # Ensure doctor can only create policies for themselves
         user = request.user
-        print("Deleting instance:", instance)
+        doctor_id = request.data.get('doctor')
+        clinic_id = request.data.get('clinic')
+        
+        if hasattr(user, 'doctor'):
+            if doctor_id and str(user.doctor.id) != str(doctor_id):
+                return Response({
+                    "status": "error",
+                    "message": "You can only create cancellation policies for yourself."
+                }, status=status.HTTP_403_FORBIDDEN)
+        
+        # Check if a cancellation policy already exists for this doctor and clinic
+        if doctor_id and clinic_id:
+            try:
+                existing_instance = CancellationPolicy.objects.get(
+                    doctor_id=doctor_id,
+                    clinic_id=clinic_id
+                )
+                # Update existing instance
+                update_serializer = self.get_serializer(
+                    existing_instance, 
+                    data=request.data, 
+                    partial=True,
+                    context={'request': request}
+                )
+                update_serializer.is_valid(raise_exception=True)
+                instance = update_serializer.save()
+                return Response({
+                    "status": "success",
+                    "message": "Cancellation policy updated successfully",
+                    "data": self.get_serializer(instance).data
+                }, status=status.HTTP_200_OK)
+            except CancellationPolicy.DoesNotExist:
+                # Create new instance
+                serializer = self.get_serializer(data=request.data, context={'request': request})
+                serializer.is_valid(raise_exception=True)
+                instance = serializer.save()
+                return Response({
+                    "status": "success",
+                    "message": "Cancellation policy created successfully",
+                    "data": self.get_serializer(instance).data
+                }, status=status.HTTP_201_CREATED)
+        else:
+            # If doctor_id or clinic_id not provided, create new instance
+            serializer = self.get_serializer(data=request.data, context={'request': request})
+            serializer.is_valid(raise_exception=True)
+            instance = serializer.save()
+            return Response({
+                "status": "success",
+                "message": "Cancellation policy created successfully",
+                "data": self.get_serializer(instance).data
+            }, status=status.HTTP_201_CREATED)
+
+    def list(self, request, *args, **kwargs):
+        """List all cancellation policies for the authenticated user"""
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+        
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response({
+                "status": "success",
+                "message": "Cancellation policies retrieved successfully",
+                "data": serializer.data
+            })
+        
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({
+            "status": "success",
+            "message": "Cancellation policies retrieved successfully",
+            "data": serializer.data
+        }, status=status.HTTP_200_OK)
+
+    def retrieve(self, request, *args, **kwargs):
+        """Retrieve a specific cancellation policy"""
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return Response({
+            "status": "success",
+            "message": "Cancellation policy retrieved successfully",
+            "data": serializer.data
+        }, status=status.HTTP_200_OK)
+
+    @transaction.atomic
+    def update(self, request, *args, **kwargs):
+        """Update an existing cancellation policy (full update)"""
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        
+        # Ensure user can only update their own policies
+        user = request.user
         if hasattr(user, 'doctor') and instance.doctor != user.doctor:
-            return Response({'error': 'You do not have permission to delete this policy.'}, status=403)
-        return super().destroy(request, *args, **kwargs)
+            return Response({
+                "status": "error",
+                "message": "You do not have permission to update this cancellation policy."
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        serializer = self.get_serializer(instance, data=request.data, partial=partial, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        
+        return Response({
+            "status": "success",
+            "message": "Cancellation policy updated successfully",
+            "data": serializer.data
+        }, status=status.HTTP_200_OK)
+
+    @transaction.atomic
+    def partial_update(self, request, *args, **kwargs):
+        """Partially update an existing cancellation policy"""
+        kwargs['partial'] = True
+        return self.update(request, *args, **kwargs)
+
+    @transaction.atomic
+    def destroy(self, request, *args, **kwargs):
+        """Delete a cancellation policy"""
+        instance = self.get_object()
+        
+        # Ensure user can only delete their own policies
+        user = request.user
+        if hasattr(user, 'doctor') and instance.doctor != user.doctor:
+            return Response({
+                "status": "error",
+                "message": "You do not have permission to delete this cancellation policy."
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        self.perform_destroy(instance)
+        return Response({
+            "status": "success",
+            "message": "Cancellation policy deleted successfully"
+        }, status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=False, methods=['patch'], url_path='update')
+    @transaction.atomic
+    def update_by_doctor_clinic(self, request):
+        """Update cancellation policy using doctor_id and clinic_id in request body (PATCH on base URL)"""
+        doctor_id = request.data.get('doctor_id') or request.query_params.get('doctor_id')
+        clinic_id = request.data.get('clinic_id') or request.query_params.get('clinic_id')
+        
+        if not doctor_id or not clinic_id:
+            return Response({
+                "status": "error",
+                "message": "Both doctor_id and clinic_id are required in request body or query parameters"
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Get the instance using doctor_id and clinic_id
+        queryset = self.filter_queryset(self.get_queryset())
+        try:
+            instance = queryset.get(doctor_id=doctor_id, clinic_id=clinic_id)
+        except CancellationPolicy.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "Cancellation policy not found for the given doctor and clinic."
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error retrieving cancellation policy: {str(e)}")
+            return Response({
+                "status": "error",
+                "message": "An error occurred while retrieving the cancellation policy."
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+        # Ensure user can only update their own policies
+        user = request.user
+        try:
+            if hasattr(user, 'doctor'):
+                try:
+                    user_doctor = user.doctor
+                    if instance.doctor != user_doctor:
+                        return Response({
+                            "status": "error",
+                            "message": "You do not have permission to update this cancellation policy."
+                        }, status=status.HTTP_403_FORBIDDEN)
+                except (doctor.DoesNotExist, AttributeError):
+                    return Response({
+                        "status": "error",
+                        "message": "Doctor information not available. Please refresh the page."
+                    }, status=status.HTTP_400_BAD_REQUEST)
+        except AttributeError:
+            return Response({
+                "status": "error",
+                "message": "Doctor information not available. Please refresh the page."
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Remove doctor_id and clinic_id from request data if present (they're only for lookup)
+        update_data = request.data.copy()
+        if 'doctor_id' in update_data:
+            del update_data['doctor_id']
+        if 'clinic_id' in update_data:
+            del update_data['clinic_id']
+        
+        serializer = self.get_serializer(instance, data=update_data, partial=True, context={'request': request})
+        if not serializer.is_valid():
+            return Response({
+                "status": "error",
+                "message": "Validation failed",
+                "errors": serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        serializer.save()
+        
+        return Response({
+            "status": "success",
+            "message": "Cancellation policy updated successfully",
+            "data": serializer.data
+        }, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'], url_path='by-doctor')
+    def list_by_doctor(self, request):
+        """List cancellation policies by doctor ID"""
+        doctor_id = request.query_params.get('doctor_id')
+        if not doctor_id:
+            return Response({
+                "status": "error",
+                "message": "doctor_id is required"
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Apply user-based filtering first
+        queryset = self.filter_queryset(self.get_queryset())
+        policies = queryset.filter(doctor_id=doctor_id)
+        
+        if not policies.exists():
+            return Response({
+                "status": "success",
+                "message": "No policies found for this doctor",
+                "data": []
+            }, status=status.HTTP_200_OK)
+
+        page = self.paginate_queryset(policies)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response({
+                "status": "success",
+                "message": "Cancellation policies retrieved successfully",
+                "data": serializer.data
+            })
+        
+        serializer = self.get_serializer(policies, many=True)
+        return Response({
+            "status": "success",
+            "message": "Cancellation policies retrieved successfully",
+            "data": serializer.data
+        }, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'], url_path='by-clinic')
+    def list_by_clinic(self, request):
+        """List cancellation policies by clinic ID"""
+        clinic_id = request.query_params.get('clinic_id')
+        if not clinic_id:
+            return Response({
+                "status": "error",
+                "message": "clinic_id is required"
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Apply user-based filtering first
+        queryset = self.filter_queryset(self.get_queryset())
+        policies = queryset.filter(clinic_id=clinic_id)
+        
+        if not policies.exists():
+            return Response({
+                "status": "success",
+                "message": "No policies found for this clinic",
+                "data": []
+            }, status=status.HTTP_200_OK)
+
+        page = self.paginate_queryset(policies)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response({
+                "status": "success",
+                "message": "Cancellation policies retrieved successfully",
+                "data": serializer.data
+            })
+        
+        serializer = self.get_serializer(policies, many=True)
+        return Response({
+            "status": "success",
+            "message": "Cancellation policies retrieved successfully",
+            "data": serializer.data
+        }, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'], url_path='by-doctor-clinic')
+    def retrieve_by_doctor_clinic(self, request):
+        """Retrieve a single cancellation policy by doctor_id and clinic_id"""
+        doctor_id = request.query_params.get('doctor_id')
+        clinic_id = request.query_params.get('clinic_id')
+        
+        if not doctor_id or not clinic_id:
+            return Response({
+                "status": "error",
+                "message": "Both doctor_id and clinic_id are required"
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Apply user-based filtering first
+        queryset = self.filter_queryset(self.get_queryset())
+        
+        try:
+            instance = queryset.get(doctor_id=doctor_id, clinic_id=clinic_id)
+            serializer = self.get_serializer(instance)
+            return Response({
+                "status": "success",
+                "message": "Cancellation policy retrieved successfully",
+                "data": serializer.data
+            }, status=status.HTTP_200_OK)
+        except CancellationPolicy.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "Cancellation policy not found for the given doctor and clinic."
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error retrieving cancellation policy: {str(e)}")
+            return Response({
+                "status": "error",
+                "message": "An error occurred while retrieving the cancellation policy."
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class DoctorAvailabilityView(APIView):
     permission_classes = [IsAuthenticated, IsDoctorOrHelpdeskOrPatient]
@@ -2018,3 +3154,219 @@ class DoctorOPDStatusViewSet(viewsets.ModelViewSet):
             return Response(self.get_serializer(instance).data, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class DoctorBankDetailsViewSet(viewsets.ViewSet):
+    """
+    ViewSet for managing doctor bank details.
+    Supports: Create, Get, Update, Partial Update, Delete
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctor]
+
+    def get_object(self, doctor):
+        """Get the active bank details for the doctor"""
+        try:
+            return DoctorBankDetails.objects.get(doctor=doctor, is_active=True)
+        except DoctorBankDetails.DoesNotExist:
+            raise NotFound("Bank details not found.")
+        except DoctorBankDetails.MultipleObjectsReturned:
+            # If multiple active records exist, get the most recent one
+            return DoctorBankDetails.objects.filter(doctor=doctor, is_active=True).latest('created_at')
+
+    def create(self, request):
+        """
+        POST /api/doctor/bank-details/
+        Create bank details for the logged-in doctor.
+        Only one active bank account allowed per doctor.
+        """
+        doctor = request.user.doctor
+        
+        # Check if doctor already has an active bank account
+        existing_active = DoctorBankDetails.objects.filter(doctor=doctor, is_active=True).first()
+        if existing_active:
+            return Response(
+                {
+                    "status": "error",
+                    "message": "You already have an active bank account. Please update or delete the existing one first."
+                },
+                status=status.HTTP_409_CONFLICT
+            )
+
+        serializer = DoctorBankDetailsSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        with transaction.atomic():
+            bank_details = serializer.save(
+                doctor=doctor,
+                verification_status="pending"
+            )
+
+        return Response(
+            {
+                "status": "success",
+                "message": "Bank details submitted for verification",
+                "data": DoctorBankDetailsSerializer(bank_details).data
+            },
+            status=status.HTTP_201_CREATED
+        )
+
+    def retrieve(self, request):
+        """
+        GET /api/doctor/bank-details/
+        Fetch current bank details of the logged-in doctor.
+        """
+        doctor = request.user.doctor
+        bank_details = self.get_object(doctor)
+        serializer = DoctorBankDetailsSerializer(bank_details)
+        return Response(
+            {
+                "status": "success",
+                "data": serializer.data
+            },
+            status=status.HTTP_200_OK
+        )
+
+    def update(self, request, pk=None):
+        """
+        PUT /api/doctor/bank-details/{id}/
+        Full update of bank details.
+        Not allowed if status is "verified".
+        Resets verification status to "pending".
+        """
+        doctor = request.user.doctor
+        
+        # Get bank details by pk if provided, otherwise get active one
+        if pk:
+            try:
+                bank_details = DoctorBankDetails.objects.get(id=pk, doctor=doctor)
+            except DoctorBankDetails.DoesNotExist:
+                return Response(
+                    {"status": "error", "message": "Bank details not found."},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        else:
+            bank_details = self.get_object(doctor)
+        
+        # Cannot modify if status is "verified"
+        if bank_details.verification_status == "verified":
+            return Response(
+                {
+                    "status": "error",
+                    "message": "You are not allowed to modify verified bank details. Please contact admin."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        serializer = DoctorBankDetailsSerializer(bank_details, data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        with transaction.atomic():
+            # Reset verification status on update
+            bank_details = serializer.save(
+                verification_status="pending",
+                verified_at=None,
+                rejection_reason=None
+            )
+
+        return Response(
+            {
+                "status": "success",
+                "message": "Bank details updated and sent for verification",
+                "data": DoctorBankDetailsSerializer(bank_details).data
+            },
+            status=status.HTTP_200_OK
+        )
+
+    def partial_update(self, request, pk=None):
+        """
+        PATCH /api/doctor/bank-details/{id}/
+        Partial update of bank details.
+        Same rules as PUT - cannot modify if status is "verified".
+        """
+        doctor = request.user.doctor
+        
+        # Get bank details by pk if provided, otherwise get active one
+        if pk:
+            try:
+                bank_details = DoctorBankDetails.objects.get(id=pk, doctor=doctor)
+            except DoctorBankDetails.DoesNotExist:
+                return Response(
+                    {"status": "error", "message": "Bank details not found."},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        else:
+            bank_details = self.get_object(doctor)
+        
+        # Cannot modify if status is "verified"
+        if bank_details.verification_status == "verified":
+            return Response(
+                {
+                    "status": "error",
+                    "message": "You are not allowed to modify verified bank details. Please contact admin."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        serializer = DoctorBankDetailsSerializer(bank_details, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+
+        with transaction.atomic():
+            # Reset verification status on update
+            bank_details = serializer.save(
+                verification_status="pending",
+                verified_at=None,
+                rejection_reason=None
+            )
+
+        return Response(
+            {
+                "status": "success",
+                "message": "Bank details updated and sent for verification",
+                "data": DoctorBankDetailsSerializer(bank_details).data
+            },
+            status=status.HTTP_200_OK
+        )
+
+    def destroy(self, request, pk=None):
+        """
+        DELETE /api/doctor/bank-details/{id}/
+        Soft delete bank details (sets is_active=False).
+        Not allowed if status is "verified".
+        """
+        doctor = request.user.doctor
+        
+        # Get bank details by pk if provided, otherwise get active one
+        if pk:
+            try:
+                bank_details = DoctorBankDetails.objects.get(id=pk, doctor=doctor)
+            except DoctorBankDetails.DoesNotExist:
+                return Response(
+                    {"status": "error", "message": "Bank details not found."},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        else:
+            bank_details = self.get_object(doctor)
+        
+        # Cannot delete if status is "verified"
+        if bank_details.verification_status == "verified":
+            return Response(
+                {
+                    "status": "error",
+                    "message": "You cannot delete verified bank details. Please contact admin."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        with transaction.atomic():
+            # Soft delete
+            bank_details.is_active = False
+            bank_details.save()
+
+        return Response(
+            {
+                "status": "success",
+                "message": "Bank details removed successfully"
+            },
+            status=status.HTTP_200_OK
+        )

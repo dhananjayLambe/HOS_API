@@ -15,10 +15,10 @@ from doctor.api.views import (
     UploadRegistrationCertificateView,
     UploadEducationCertificateView,UploadGovernmentIDView,DoctorKYCStatusView,
     KYCVerifyView,DoctorSearchView,UploadDigitalSignatureView,
-    DoctorFeeStructureViewSet,FollowUpPolicyViewSet,DoctorAvailabilityView,DoctorLeaveCreateView,
+    DoctorFeeStructureViewSet,FollowUpPolicyViewSet,CancellationPolicyViewSet,DoctorAvailabilityView,DoctorLeaveCreateView,
     DoctorLeaveCreateView,DoctorLeaveListView,DoctorLeaveUpdateView,DoctorLeaveDeleteView,
     DoctorOPDStatusViewSet,
-    CheckUserStatusView,DoctorFullProfileAPIView,
+    CheckUserStatusView,DoctorFullProfileAPIView,DoctorBankDetailsViewSet,
 )
 
 app_name='doctor'
@@ -32,8 +32,9 @@ router.register(r'services', DoctorServiceViewSet, basename='doctor-service')
 router.register(r'awards', AwardViewSet, basename='doctor-award')
 router.register(r'certifications', CertificationViewSet, basename='doctor-certification')
 router.register(r'medical-license', RegistrationViewSet, basename='medical-license')
-router.register(r'doctor-fees', DoctorFeeStructureViewSet)
-router.register(r'follow-up-policies', FollowUpPolicyViewSet)
+router.register(r'doctor-fees', DoctorFeeStructureViewSet, basename='doctor-fees')
+router.register(r'follow-up-policies', FollowUpPolicyViewSet, basename='follow-up-policies')
+router.register(r'cancellation-policies', CancellationPolicyViewSet, basename='cancellation-policies')
 router.register(r'doctor-opd-status', DoctorOPDStatusViewSet)
 
 government_id_view = GovernmentIDViewSet.as_view({
@@ -47,6 +48,17 @@ government_id_view = GovernmentIDViewSet.as_view({
 address_view = DoctorAddressViewSet.as_view({
     'get': 'list',
     'post': 'create',
+    'put': 'update',
+    'patch': 'partial_update',
+    'delete': 'destroy',
+})
+
+bank_details_view = DoctorBankDetailsViewSet.as_view({
+    'get': 'retrieve',
+    'post': 'create',
+})
+
+bank_details_detail_view = DoctorBankDetailsViewSet.as_view({
     'put': 'update',
     'patch': 'partial_update',
     'delete': 'destroy',
@@ -73,6 +85,8 @@ urlpatterns = [
     #path('api/helpdesk/<uuid:helpdesk_id>/delete/', DeleteHelpdeskUserView.as_view(), name='delete_helpdesk_user'),
     path('registration/', RegistrationView.as_view(), name='doctor-registration'),
     path('government-id/', government_id_view, name='doctor-government-id'),
+    path('bank-details/', bank_details_view, name='doctor-bank-details'),
+    path('bank-details/<int:pk>/', bank_details_detail_view, name='doctor-bank-details-detail'),
     path('dashboard/summary/', DoctorDashboardSummaryView.as_view(), name='doctor-dashboard-summary'),
     path('upload-photo/', UploadDoctorPhotoView.as_view(), name='upload-doctor-photo'),
     path('me/', DoctorProfileView.as_view(), name='doctor-profile'),

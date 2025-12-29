@@ -93,14 +93,44 @@ async function apiRequest<T>(endpoint: string, options: AxiosRequestConfig = {})
     if (error.response) {
       // Server responded with error
       const status = error.response.status
-      const data = error.response.data || {}
+      let data = error.response.data || {}
       
-      // Log full error for debugging
-      console.error(`[API Error] ${endpoint}:`, {
-        status,
-        data,
-        headers: error.response.headers,
-      })
+      // Handle 404 gracefully - don't log as error if it's expected (no data exists yet)
+      if (status === 404) {
+        // For list endpoints, 404 means no data exists yet - return empty array
+        if (endpoint.includes('/doctor-fees/') || 
+            endpoint.includes('/follow-up-policies/') || 
+            endpoint.includes('/cancellation-policies/')) {
+          // These are list endpoints - return empty array for 404
+          return [] as T
+        }
+      }
+      
+      // Log full error for debugging (only for non-404 errors or if data is not empty)
+      if (status !== 404 || Object.keys(data).length > 0) {
+        console.error(`[API Error] ${endpoint}:`, {
+          status,
+          data,
+          dataKeys: Object.keys(data),
+          dataStringified: JSON.stringify(data),
+          headers: error.response.headers,
+          responseText: error.response?.data,
+          fullError: error.response,
+        })
+      }
+      
+      // If data is empty, try to get error from response text or status text
+      if (Object.keys(data).length === 0) {
+        console.warn(`[API Error] Empty error data for ${endpoint}, status: ${status}`)
+        // Try to extract from response if available
+        if (error.response?.data && typeof error.response.data === 'string') {
+          data = { error: error.response.data }
+        } else if (error.response?.statusText) {
+          data = { error: error.response.statusText }
+        } else {
+          data = { error: `HTTP ${status} Error` }
+        }
+      }
       
       // Try multiple ways to extract error message
       let message = "An error occurred"
@@ -392,12 +422,71 @@ export const doctorAPI = {
       data,
     }),
 
-  // Fee Structure
-  updateFeeStructure: (data: any) =>
-    apiRequest<any>("/doctor/profile/fee-structure", {
-      method: "POST",
-      data,
-    }),
+  // Fee Structure - New API endpoints
+  getFeeStructures: (clinicId?: string, doctorId?: string) => {
+    const params = new URLSearchParams()
+    if (clinicId) params.append('clinic', clinicId)
+    if (doctorId) params.append('doctor', doctorId)
+    const queryString = params.toString()
+    const url = queryString 
+      ? `/doctor/doctor-fees/?${queryString}`
+      : "/doctor/doctor-fees/"
+    return apiRequest<any>(url, { method: "GET" })
+  },
+  getFeeStructure: (id: string) =>
+    apiRequest<any>(`/doctor/doctor-fees/${id}/`, { method: "GET" }),
+  createFeeStructure: (data: any) =>
+    apiRequest<any>("/doctor/doctor-fees/", { method: "POST", data }),
+  updateFeeStructure: (id: string, data: any) =>
+    apiRequest<any>(`/doctor/doctor-fees/${id}/`, { method: "PUT", data }),
+  patchFeeStructure: (id: string, data: any) =>
+    apiRequest<any>(`/doctor/doctor-fees/${id}/`, { method: "PATCH", data }),
+  deleteFeeStructure: (id: string) =>
+    apiRequest<any>(`/doctor/doctor-fees/${id}/`, { method: "DELETE" }),
+
+  // Follow-up Policy
+  getFollowUpPolicies: (clinicId?: string, doctorId?: string) => {
+    const params = new URLSearchParams()
+    if (clinicId) params.append('clinic', clinicId)
+    if (doctorId) params.append('doctor', doctorId)
+    const queryString = params.toString()
+    const url = queryString 
+      ? `/doctor/follow-up-policies/?${queryString}`
+      : "/doctor/follow-up-policies/"
+    return apiRequest<any>(url, { method: "GET" })
+  },
+  getFollowUpPolicy: (id: string) =>
+    apiRequest<any>(`/doctor/follow-up-policies/${id}/`, { method: "GET" }),
+  createFollowUpPolicy: (data: any) =>
+    apiRequest<any>("/doctor/follow-up-policies/", { method: "POST", data }),
+  updateFollowUpPolicy: (id: string, data: any) =>
+    apiRequest<any>(`/doctor/follow-up-policies/${id}/`, { method: "PUT", data }),
+  patchFollowUpPolicy: (id: string, data: any) =>
+    apiRequest<any>(`/doctor/follow-up-policies/${id}/`, { method: "PATCH", data }),
+  deleteFollowUpPolicy: (id: string) =>
+    apiRequest<any>(`/doctor/follow-up-policies/${id}/`, { method: "DELETE" }),
+
+  // Cancellation Policy
+  getCancellationPolicies: (clinicId?: string, doctorId?: string) => {
+    const params = new URLSearchParams()
+    if (clinicId) params.append('clinic', clinicId)
+    if (doctorId) params.append('doctor', doctorId)
+    const queryString = params.toString()
+    const url = queryString 
+      ? `/doctor/cancellation-policies/?${queryString}`
+      : "/doctor/cancellation-policies/"
+    return apiRequest<any>(url, { method: "GET" })
+  },
+  getCancellationPolicy: (id: string) =>
+    apiRequest<any>(`/doctor/cancellation-policies/${id}/`, { method: "GET" }),
+  createCancellationPolicy: (data: any) =>
+    apiRequest<any>("/doctor/cancellation-policies/", { method: "POST", data }),
+  updateCancellationPolicy: (id: string, data: any) =>
+    apiRequest<any>(`/doctor/cancellation-policies/${id}/`, { method: "PUT", data }),
+  patchCancellationPolicy: (id: string, data: any) =>
+    apiRequest<any>(`/doctor/cancellation-policies/${id}/`, { method: "PATCH", data }),
+  deleteCancellationPolicy: (id: string) =>
+    apiRequest<any>(`/doctor/cancellation-policies/${id}/`, { method: "DELETE" }),
 
   // Services
   updateServices: (data: any) =>
@@ -407,10 +496,23 @@ export const doctorAPI = {
     }),
 
   // Bank Details
-  updateBankDetails: (data: any) =>
+  getBankDetails: () =>
+    apiRequest<any>("/doctor/profile/bank-details", {
+      method: "GET",
+    }),
+  createBankDetails: (data: any) =>
     apiRequest<any>("/doctor/profile/bank-details", {
       method: "POST",
       data,
+    }),
+  updateBankDetails: (data: any, id?: string) =>
+    apiRequest<any>(`/doctor/profile/bank-details${id ? `?id=${id}` : ""}`, {
+      method: "PATCH",
+      data,
+    }),
+  deleteBankDetails: (id?: string) =>
+    apiRequest<any>(`/doctor/profile/bank-details${id ? `?id=${id}` : ""}`, {
+      method: "DELETE",
     }),
 
   // Upload profile photo
@@ -558,6 +660,9 @@ export const apiClient = {
   },
 
   // Clinics
+  getClinics: async () => {
+    return doctorAPI.getClinics()
+  },
   updateClinics: async (clinics: any[]) => {
     // For now, we'll add each clinic individually
     // In production, you might want a bulk update endpoint
@@ -565,9 +670,64 @@ export const apiClient = {
     return Promise.all(promises)
   },
 
-  // Fee Structure
-  updateFeeStructure: async (data: any) => {
-    return doctorAPI.updateFeeStructure(data)
+  // Fee Structure - Full CRUD
+  getFeeStructures: async (clinicId?: string, doctorId?: string) => {
+    return doctorAPI.getFeeStructures(clinicId, doctorId)
+  },
+  getFeeStructure: async (id: string) => {
+    return doctorAPI.getFeeStructure(id)
+  },
+  createFeeStructure: async (data: any) => {
+    return doctorAPI.createFeeStructure(data)
+  },
+  updateFeeStructure: async (id: string, data: any) => {
+    return doctorAPI.updateFeeStructure(id, data)
+  },
+  patchFeeStructure: async (id: string, data: any) => {
+    return doctorAPI.patchFeeStructure(id, data)
+  },
+  deleteFeeStructure: async (id: string) => {
+    return doctorAPI.deleteFeeStructure(id)
+  },
+
+  // Follow-up Policy - Full CRUD
+  getFollowUpPolicies: async (clinicId?: string, doctorId?: string) => {
+    return doctorAPI.getFollowUpPolicies(clinicId, doctorId)
+  },
+  getFollowUpPolicy: async (id: string) => {
+    return doctorAPI.getFollowUpPolicy(id)
+  },
+  createFollowUpPolicy: async (data: any) => {
+    return doctorAPI.createFollowUpPolicy(data)
+  },
+  updateFollowUpPolicy: async (id: string, data: any) => {
+    return doctorAPI.updateFollowUpPolicy(id, data)
+  },
+  patchFollowUpPolicy: async (id: string, data: any) => {
+    return doctorAPI.patchFollowUpPolicy(id, data)
+  },
+  deleteFollowUpPolicy: async (id: string) => {
+    return doctorAPI.deleteFollowUpPolicy(id)
+  },
+
+  // Cancellation Policy - Full CRUD
+  getCancellationPolicies: async (clinicId?: string, doctorId?: string) => {
+    return doctorAPI.getCancellationPolicies(clinicId, doctorId)
+  },
+  getCancellationPolicy: async (id: string) => {
+    return doctorAPI.getCancellationPolicy(id)
+  },
+  createCancellationPolicy: async (data: any) => {
+    return doctorAPI.createCancellationPolicy(data)
+  },
+  updateCancellationPolicy: async (id: string, data: any) => {
+    return doctorAPI.updateCancellationPolicy(id, data)
+  },
+  patchCancellationPolicy: async (id: string, data: any) => {
+    return doctorAPI.patchCancellationPolicy(id, data)
+  },
+  deleteCancellationPolicy: async (id: string) => {
+    return doctorAPI.deleteCancellationPolicy(id)
   },
 
   // Services
@@ -576,8 +736,17 @@ export const apiClient = {
   },
 
   // Bank Details
-  updateBankDetails: async (data: any) => {
-    return doctorAPI.updateBankDetails(data)
+  getBankDetails: async () => {
+    return doctorAPI.getBankDetails()
+  },
+  createBankDetails: async (data: any) => {
+    return doctorAPI.createBankDetails(data)
+  },
+  updateBankDetails: async (data: any, id?: string) => {
+    return doctorAPI.updateBankDetails(data, id)
+  },
+  deleteBankDetails: async (id?: string) => {
+    return doctorAPI.deleteBankDetails(id)
   },
 
   // Profile Photo

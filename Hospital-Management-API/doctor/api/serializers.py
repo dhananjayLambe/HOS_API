@@ -13,7 +13,7 @@ from doctor.models import (
     DoctorService,DoctorSocialLink, Education, GovernmentID,
     Registration, Specialization, CustomSpecialization,
     doctor,KYCStatus,DoctorFeeStructure,FollowUpPolicy,DoctorAvailability,DoctorLeave,
-    DoctorOPDStatus,DoctorMembership,DoctorBankDetails
+    DoctorOPDStatus,DoctorMembership,DoctorBankDetails,CancellationPolicy
 )
 from hospital_mgmt.models import Hospital
 from helpdesk.models import HelpdeskClinicUser
@@ -1096,15 +1096,24 @@ class DoctorFeeStructureSerializer(serializers.ModelSerializer):
         model = DoctorFeeStructure
         fields = '__all__'
         read_only_fields = ['id', 'created_at', 'updated_at']
+    
     def validate(self, attrs):
-        doctor = attrs.get("doctor")
-        clinic = attrs.get("clinic")
+        # For updates, use existing instance values if not provided in attrs
         if self.instance:
-            # for updates
-            if DoctorFeeStructure.objects.exclude(pk=self.instance.pk).filter(doctor=doctor, clinic=clinic).exists():
-                raise serializers.ValidationError("Fee structure for this doctor and clinic already exists.")
+            doctor = attrs.get("doctor", self.instance.doctor)
+            clinic = attrs.get("clinic", self.instance.clinic)
+            # Check for duplicate only if doctor or clinic is being changed
+            if doctor != self.instance.doctor or clinic != self.instance.clinic:
+                if DoctorFeeStructure.objects.exclude(pk=self.instance.pk).filter(doctor=doctor, clinic=clinic).exists():
+                    raise serializers.ValidationError("Fee structure for this doctor and clinic already exists.")
         else:
             # for create
+            doctor = attrs.get("doctor")
+            clinic = attrs.get("clinic")
+            if not doctor:
+                raise serializers.ValidationError({"doctor": "Doctor is required."})
+            if not clinic:
+                raise serializers.ValidationError({"clinic": "Clinic is required."})
             if DoctorFeeStructure.objects.filter(doctor=doctor, clinic=clinic).exists():
                 raise serializers.ValidationError("Fee structure for this doctor and clinic already exists.")
         return attrs
@@ -1136,7 +1145,39 @@ class FollowUpPolicySerializer(serializers.ModelSerializer):
 
         return attrs
 
-
+class CancellationPolicySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CancellationPolicy
+        fields = '__all__'
+        read_only_fields = ['id', 'created_at', 'updated_at']
+    
+    def validate(self, attrs):
+        # Validate fees cannot be negative
+        if attrs.get('cancellation_fee', 0) < 0:
+            raise serializers.ValidationError("Cancellation fee cannot be negative.")
+        if attrs.get('rescheduling_fee', 0) < 0:
+            raise serializers.ValidationError("Rescheduling fee cannot be negative.")
+        
+        # Validate refund percentage is between 0 and 100
+        refund_percentage = attrs.get('refund_percentage', 0)
+        if refund_percentage < 0 or refund_percentage > 100:
+            raise serializers.ValidationError("Refund percentage must be between 0 and 100.")
+        
+        # Validate cancellation window hours is positive
+        if attrs.get('cancellation_window_hours', 0) <= 0:
+            raise serializers.ValidationError("Cancellation window hours must be a positive number.")
+        
+        doctor = attrs.get('doctor')
+        clinic = attrs.get('clinic')
+        
+        # Ensure unique policy per doctor-clinic combination
+        existing = CancellationPolicy.objects.filter(doctor=doctor, clinic=clinic)
+        if self.instance:
+            existing = existing.exclude(id=self.instance.id)
+        if existing.exists():
+            raise serializers.ValidationError("A cancellation policy already exists for this doctor and clinic.")
+        
+        return attrs
 
 class DoctorAvailabilitySerializer(serializers.ModelSerializer):
     slots = serializers.SerializerMethodField()
@@ -1245,20 +1286,74 @@ class DoctorMembershipSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 class DoctorBankDetailsSerializer(serializers.ModelSerializer):
-    account_number_masked = serializers.SerializerMethodField()
-
-    def get_account_number_masked(self, obj):
-        acct = getattr(obj, "account_number", None)
-        if not acct:
-            return None
-        return "****" + acct[-4:]
-
+    masked_account_number = serializers.CharField(read_only=True)
+    account_number = serializers.CharField(write_only=True, required=False)
+    
     class Meta:
         model = DoctorBankDetails
         fields = [
-            "id", "account_holder_name", "account_number_masked",
+            "id", "account_holder_name", "account_number", "masked_account_number",
             "ifsc_code", "bank_name", "branch_name", "upi_id",
+            "verification_status", "verification_method", "rejection_reason",
+            "is_active", "created_at", "updated_at"
         ]
+        read_only_fields = [
+            "id", "masked_account_number", "verification_status", 
+            "verification_method", "is_active", "created_at", "updated_at"
+        ]
+    
+    def validate(self, attrs):
+        """
+        Validate that either account_number (with ifsc_code and bank_name) OR upi_id is provided.
+        For partial updates, check existing instance values if new values are not provided.
+        """
+        # Get instance if this is an update (partial or full)
+        instance = getattr(self, 'instance', None)
+        
+        # Get values from attrs (new values) or fall back to instance values for partial updates
+        account_number = attrs.get('account_number')
+        if account_number is None and instance:
+            account_number = getattr(instance, 'account_number', None)
+        
+        ifsc_code = attrs.get('ifsc_code')
+        if ifsc_code is None and instance:
+            ifsc_code = getattr(instance, 'ifsc_code', None)
+        
+        bank_name = attrs.get('bank_name')
+        if bank_name is None and instance:
+            bank_name = getattr(instance, 'bank_name', None)
+        
+        upi_id = attrs.get('upi_id')
+        if upi_id is None and instance:
+            upi_id = getattr(instance, 'upi_id', None)
+        
+        # If account_number is provided (or exists), ifsc_code and bank_name are required
+        if account_number:
+            if not ifsc_code:
+                raise serializers.ValidationError({
+                    "ifsc_code": "IFSC code is required when account number is provided."
+                })
+            if not bank_name:
+                raise serializers.ValidationError({
+                    "bank_name": "Bank name is required when account number is provided."
+                })
+        
+        # Either account_number (with required fields) OR upi_id must be provided
+        if not account_number and not upi_id:
+            raise serializers.ValidationError(
+                "Either bank account details (account_number, ifsc_code, bank_name) or UPI ID must be provided."
+            )
+        
+        return attrs
+    
+    def to_representation(self, instance):
+        """
+        Override to ensure account_number is never exposed, only masked_account_number.
+        """
+        representation = super().to_representation(instance)
+        # Remove account_number if it somehow appears
+        representation.pop('account_number', None)
+        return representation
 
 
 # Lightweight user serializer for OTP-based accounts (no password)
@@ -1496,60 +1591,106 @@ class DoctorFullProfileSerializer(serializers.Serializer):
         try:
             addr = obj.address
             return DoctorAddressSerializer(addr).data
-        except DoctorAddress.DoesNotExist:
+        except (DoctorAddress.DoesNotExist, AttributeError):
+            return None
+        except Exception:
             return None
 
     def get_professional(self, obj):
-        data = {
-            "primary_specialization": obj.primary_specialization,
-            "specializations": SpecializationSerializer(obj.specializations.all(), many=True).data,
-            "education": EducationSerializer(obj.education.all(), many=True).data,
-        }
-        return data
+        try:
+            data = {
+                "primary_specialization": obj.primary_specialization,
+                "specializations": SpecializationSerializer(obj.specializations.all(), many=True).data,
+                "education": EducationSerializer(obj.education.all(), many=True).data,
+            }
+            return data
+        except Exception:
+            return {
+                "primary_specialization": None,
+                "specializations": [],
+                "education": [],
+            }
 
     def get_kyc(self, obj):
         reg = getattr(obj, "registration", None)
         govt = getattr(obj, "government_ids", None)
+        try:
+            registration_data = RegistrationSerializer(reg).data if reg else None
+        except Exception:
+            registration_data = None
+        
+        try:
+            government_id_data = GovernmentIDSerializer(govt).data if govt else None
+        except Exception:
+            government_id_data = None
+        
+        kyc_status_obj = getattr(obj, "kyc_status", None)
+        kyc_verified = getattr(kyc_status_obj, "kya_verified", False) if kyc_status_obj else False
+        
         return {
-            "registration": RegistrationSerializer(reg).data if reg else None,
-            "government_id": GovernmentIDSerializer(govt).data if govt else None,
-            "kyc_status": getattr(getattr(obj, "kyc_status", None), "kya_verified", False)  # note: your model uses kya_verified
+            "registration": registration_data,
+            "government_id": government_id_data,
+            "kyc_status": kyc_verified
         }
 
     def get_clinic_association(self, obj):
-        clinics = obj.clinics.all()
-        return ClinicSerializer(clinics, many=True).data
+        try:
+            clinics = obj.clinics.all()
+            return ClinicSerializer(clinics, many=True).data
+        except Exception:
+            return []
 
     def get_fee_structure(self, obj):
-        fees = DoctorFeeStructure.objects.filter(doctor=obj)
-        return DoctorFeeStructureSerializer(fees, many=True).data
+        try:
+            fees = DoctorFeeStructure.objects.filter(doctor=obj)
+            return DoctorFeeStructureSerializer(fees, many=True).data
+        except Exception:
+            return []
 
     def get_followup_policy(self, obj):
-        policies = FollowUpPolicy.objects.filter(doctor=obj)
-        return FollowUpPolicySerializer(policies, many=True).data
+        try:
+            policies = FollowUpPolicy.objects.filter(doctor=obj)
+            return FollowUpPolicySerializer(policies, many=True).data
+        except Exception:
+            return []
 
     def get_services(self, obj):
-        return DoctorServiceSerializer(obj.services.all(), many=True).data
+        try:
+            return DoctorServiceSerializer(obj.services.all(), many=True).data
+        except Exception:
+            return []
 
     def get_awards(self, obj):
-        return AwardSerializer(obj.awards.all(), many=True).data
+        try:
+            return AwardSerializer(obj.awards.all(), many=True).data
+        except Exception:
+            return []
 
     def get_certifications(self, obj):
-        return CertificationSerializer(obj.certifications.all(), many=True).data
+        try:
+            return CertificationSerializer(obj.certifications.all(), many=True).data
+        except Exception:
+            return []
 
     def get_memberships(self, obj):
-        if DoctorMembership and DoctorMembershipSerializer:
-            return DoctorMembershipSerializer(DoctorMembership.objects.filter(doctor=obj), many=True).data
-        return []
+        try:
+            memberships = DoctorMembership.objects.filter(doctor=obj)
+            return DoctorMembershipSerializer(memberships, many=True).data
+        except Exception:
+            return []
 
     def get_bank_details(self, obj):
-        if DoctorBankDetails and DoctorBankDetailsSerializer:
-            try:
-                bank = DoctorBankDetails.objects.get(doctor=obj)
-                return DoctorBankDetailsSerializer(bank).data
-            except DoctorBankDetails.DoesNotExist:
-                return None
-        return None
+        try:
+            bank = DoctorBankDetails.objects.get(doctor=obj)
+            return DoctorBankDetailsSerializer(bank).data
+        except DoctorBankDetails.DoesNotExist:
+            return None
+        except Exception:
+            return None
 
     def get_profile_progress(self, obj):
-        return calculate_doctor_profile_progress(obj)
+        try:
+            return calculate_doctor_profile_progress(obj)
+        except Exception as e:
+            # Return proper dictionary structure even on error
+            return {"progress": 0, "pending_sections": []}

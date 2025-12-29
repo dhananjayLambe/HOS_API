@@ -333,7 +333,7 @@ class DoctorFeeStructure(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     doctor = models.ForeignKey(doctor, on_delete=models.CASCADE)
     clinic = models.ForeignKey(Clinic, on_delete=models.CASCADE)
-
+    # Core OPD Fees
     first_time_consultation_fee = models.DecimalField(max_digits=10, decimal_places=2)
     follow_up_fee = models.DecimalField(max_digits=10, decimal_places=2)
     case_paper_duration = models.PositiveIntegerField(help_text="Case paper validity in days")
@@ -344,6 +344,12 @@ class DoctorFeeStructure(models.Model):
     online_consultation_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     cancellation_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     rescheduling_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    # Time-based surcharge
+    night_consultation_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    night_hours_start = models.TimeField(null=True, blank=True)
+    night_hours_end = models.TimeField(null=True, blank=True)
+    # Active Status
+    is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     class Meta:
@@ -352,7 +358,6 @@ class DoctorFeeStructure(models.Model):
 
     def __str__(self):
         return f"Fees for {self.doctor.get_name} at {self.clinic.name}"
-
 
 class FollowUpPolicy(models.Model):
     """ Defines follow-up rules and history access for doctors """
@@ -367,6 +372,10 @@ class FollowUpPolicy(models.Model):
     allow_online_follow_up = models.BooleanField(default=True, help_text="Can follow-up be done online?")
     online_follow_up_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
 
+    # Free Follow-up
+    allow_free_follow_up = models.BooleanField(default=False)
+    free_follow_up_days = models.PositiveIntegerField(null=True, blank=True)
+    auto_apply_case_paper = models.BooleanField(default=True)
     # Patient History Access
     access_past_appointments = models.BooleanField(default=True, help_text="Can doctor view past visits?")
     access_past_prescriptions = models.BooleanField(default=True, help_text="Can doctor view old prescriptions?")
@@ -380,6 +389,28 @@ class FollowUpPolicy(models.Model):
 
     def __str__(self):
         return f"Follow-up policy for {self.doctor.get_name} at {self.clinic.name}"
+
+class CancellationPolicy(models.Model):
+    doctor = models.ForeignKey(doctor, on_delete=models.CASCADE)
+    clinic = models.ForeignKey(Clinic, on_delete=models.CASCADE)
+
+    allow_cancellation = models.BooleanField(default=True)
+    cancellation_window_hours = models.PositiveIntegerField(help_text="Before appointment")
+    cancellation_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+
+    allow_refund = models.BooleanField(default=False)
+    refund_percentage = models.PositiveIntegerField(default=0)
+
+    rescheduling_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    class Meta:
+        ordering = ['-created_at']
+        unique_together = ('doctor', 'clinic')  # Ensures one cancellation policy per doctor per clinic
+
+    def __str__(self):
+        return f"Cancellation policy for {self.doctor.get_name} at {self.clinic.name}"
 
 class DoctorAvailability(models.Model):
     """ Stores OPD shifts with per-day working schedules """
@@ -441,7 +472,6 @@ class DoctorAvailability(models.Model):
             all_slots[day] = slots
         return all_slots
 
-
 class DoctorLeave(models.Model):
     """ Stores doctor leave records for specific date ranges """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -480,7 +510,6 @@ class DoctorLeave(models.Model):
         """ Ensure start_date is before or same as end_date """
         if self.start_date > self.end_date:
             raise ValidationError("Start date cannot be after end date")
-
 
 class DoctorOPDStatus(models.Model):
     """ Tracks if a doctor is available in OPD (Live Status) """
@@ -530,13 +559,68 @@ class DoctorMembership(models.Model):
         return f"{self.organization_name} - {self.membership_id or 'N/A'}"
 
 class DoctorBankDetails(models.Model):
-    doctor = models.OneToOneField("doctor.doctor", on_delete=models.CASCADE, related_name="bank_details")
+    doctor = models.ForeignKey(
+        "doctor.doctor",
+        on_delete=models.CASCADE,
+        related_name="bank_accounts"
+    )
+
     account_holder_name = models.CharField(max_length=255)
     account_number = models.CharField(max_length=20)
-    ifsc_code = models.CharField(max_length=11)
+    masked_account_number = models.CharField(
+        max_length=20, editable=False, blank=True, null=True)
+
+    ifsc_code = models.CharField(
+        max_length=11,
+        validators=[RegexValidator(
+            regex=r"^[A-Z]{4}0[A-Z0-9]{6}$",
+            message="Invalid IFSC code"
+        )]
+    )
+
     bank_name = models.CharField(max_length=255)
     branch_name = models.CharField(max_length=255, blank=True, null=True)
-    upi_id = models.CharField(max_length=50, blank=True, null=True)
-    verified = models.BooleanField(default=False)
+
+    upi_id = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        validators=[RegexValidator(
+            regex=r"^[\w.-]+@[\w.-]+$",
+            message="Invalid UPI ID"
+        )]
+    )
+
+    verification_status = models.CharField(
+        max_length=20,
+        choices=[("pending", "Pending"), ("verified", "Verified"), ("rejected", "Rejected")],
+        default="pending"
+    )
+
+    verification_method = models.CharField(
+        max_length=20,
+        choices=[("manual", "Manual"), ("penny_drop", "Penny Drop"), ("upi", "UPI")],
+        blank=True,
+        null=True
+    )
+
+    verified_at = models.DateTimeField(blank=True, null=True)
+    verified_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="verified_bank_accounts"
+    )
+
+    rejection_reason = models.TextField(blank=True, null=True)
+
+    is_active = models.BooleanField(default=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    def save(self, *args, **kwargs):
+        if self.account_number:
+            self.masked_account_number = f"XXXXXX{self.account_number[-4:]}"
+        super().save(*args, **kwargs)

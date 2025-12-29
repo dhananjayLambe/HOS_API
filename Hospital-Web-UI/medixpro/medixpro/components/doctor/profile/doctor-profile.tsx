@@ -20,7 +20,6 @@ import { PersonalInformationSection } from "@/components/doctor/profile/personal
 import { AddressDetailsSection } from "@/components/doctor/profile/address-details"
 import { ProfessionalDetailsSection } from "@/components/doctor/profile/professional-details"
 import { KYCVerificationSection } from "@/components/doctor/profile/kyc-verification"
-import { ClinicAssociationSection } from "@/components/doctor/profile/clinic-association"
 import { FeeStructureSection } from "@/components/doctor/profile/fee-structure"
 import { ServicesOfferedSection } from "@/components/doctor/profile/services-offered"
 import { MembershipsSection } from "@/components/doctor/profile/memberships"
@@ -103,7 +102,11 @@ export function DoctorProfile() {
           if (profile && !profile.detail) {
             const personalInfo = profile.personal_info || {}
             const registration = profile.kyc?.registration || {}
-            const progress = profile.profile_progress || 0
+            // profile_progress is an object: {progress: number, pending_sections: []}
+            const profileProgressData = profile.profile_progress || {}
+            const progress = typeof profileProgressData === "object" && profileProgressData !== null
+              ? (profileProgressData.progress ?? 0)
+              : (typeof profileProgressData === "number" ? profileProgressData : 0)
 
             // Format name from first_name and last_name
             const fullName = personalInfo.first_name && personalInfo.last_name
@@ -121,7 +124,7 @@ export function DoctorProfile() {
                 : "0 years",
               profilePhoto: personalInfo.profile_photo || null,
               isVerified: profile.kyc?.kyc_status || false,
-              profileCompletion: typeof progress === "number" ? progress : 0,
+              profileCompletion: progress,
             })
           } else if (profile?.detail) {
             console.warn("API returned error detail:", profile.detail)
@@ -280,7 +283,7 @@ export function DoctorProfile() {
         }}
       >
         <CreditCard className="h-5 w-5" />
-        <span>Financial Details</span>
+        <span>Fee Structure</span>
       </Button>
     </div>
   )
@@ -393,7 +396,7 @@ export function DoctorProfile() {
                   className="relative gap-2 rounded-none border-b-2 border-transparent px-4 pb-3 pt-3 text-xs font-medium transition-all data-[state=active]:border-primary data-[state=active]:bg-primary/5 data-[state=active]:text-primary data-[state=active]:shadow-none lg:px-6 lg:pb-4 lg:pt-4 lg:text-sm"
                 >
                   <CreditCard className="h-4 w-4" />
-                  <span className="hidden sm:inline">Financial</span>
+                  <span className="hidden sm:inline">Fee Structure</span>
                 </TabsTrigger>
               </TabsList>
             </div>
@@ -405,7 +408,7 @@ export function DoctorProfile() {
                 {activeTab === "professional" && "Professional Details"}
                 {activeTab === "kyc" && "KYC Verification"}
                 {activeTab === "clinic" && "Clinic & Services"}
-                {activeTab === "financial" && "Financial Details"}
+                {activeTab === "financial" && "Fee Structure"}
               </span>
               <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
                 <SheetTrigger asChild>
@@ -428,8 +431,10 @@ export function DoctorProfile() {
                 <AddressDetailsSection />
               </TabsContent>
 
-              <TabsContent value="professional" className="mt-0">
+              <TabsContent value="professional" className="mt-0 space-y-4 sm:space-y-6">
                 <ProfessionalDetailsSection />
+                {/* Professional Memberships Section */}
+                <MembershipsSection />
               </TabsContent>
 
               <TabsContent value="kyc" className="mt-0">
@@ -437,13 +442,14 @@ export function DoctorProfile() {
               </TabsContent>
 
               <TabsContent value="clinic" className="mt-0 space-y-4 sm:space-y-6">
-                <ClinicAssociationSection />
                 <ServicesOfferedSection />
               </TabsContent>
 
               <TabsContent value="financial" className="mt-0 space-y-4 sm:space-y-6">
+                {/* Fee Structure & Policies Section */}
                 <FeeStructureSection />
-                <MembershipsSection />
+                
+                {/* Bank Details Section */}
                 <BankDetailsSection />
               </TabsContent>
             </div>

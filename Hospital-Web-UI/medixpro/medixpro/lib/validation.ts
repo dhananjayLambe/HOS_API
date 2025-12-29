@@ -132,3 +132,8 @@ export function validatePincode(pincode: string): boolean {
   const pincodeRegex = /^[1-9][0-9]{5}$/
   return pincodeRegex.test(pincode)
 }
+
+export function validateUPI(upi: string): boolean {
+  const upiRegex = /^[\w.-]+@[\w.-]+$/
+  return upiRegex.test(upi)
+}

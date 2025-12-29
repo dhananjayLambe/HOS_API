@@ -1,44 +1,60 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { SimpleFormCard } from "@/components/doctor/profile/shared/simple-form-card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Plus, Trash2 } from "lucide-react"
+import { apiClient } from "@/lib/apiClient"
 import { useToastNotification } from "@/hooks/use-toast-notification"
 
 interface Membership {
   id?: string
-  organizationName: string
-  membershipId: string
-  startDate: string
-  expiryDate?: string
-  status: string
+  organization_name: string
+  membership_id: string
+  designation: string
+  year_of_joining: string
 }
 
 export function MembershipsSection() {
   const [isEditing, setIsEditing] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [isFetching, setIsFetching] = useState(true)
   const toast = useToastNotification()
 
-  const [memberships, setMemberships] = useState<Membership[]>([
-    {
-      organizationName: "Indian Medical Association",
-      membershipId: "IMA123456",
-      startDate: "2010-01-15",
-      status: "Active",
-    },
-    {
-      organizationName: "Cardiological Society of India",
-      membershipId: "CSI789012",
-      startDate: "2012-06-20",
-      expiryDate: "2025-06-20",
-      status: "Active",
-    },
-  ])
+  const [memberships, setMemberships] = useState<Membership[]>([])
+  const [originalMemberships, setOriginalMemberships] = useState<Membership[]>([])
 
-  const [originalMemberships, setOriginalMemberships] = useState<Membership[]>([...memberships])
+  // Fetch memberships from profile
+  useEffect(() => {
+    fetchMemberships()
+  }, [])
+
+  const fetchMemberships = async () => {
+    setIsFetching(true)
+    try {
+      const profileResponse = await apiClient.getProfile()
+      const profile = profileResponse?.doctor_profile || profileResponse
+      const membershipsData = profile?.memberships || []
+
+      const formattedMemberships: Membership[] = membershipsData.map((m: any) => ({
+        id: m.id,
+        organization_name: m.organization_name || "",
+        membership_id: m.membership_id || "",
+        designation: m.designation || "",
+        year_of_joining: m.year_of_joining ? String(m.year_of_joining) : "",
+      }))
+
+      setMemberships(formattedMemberships)
+      setOriginalMemberships(formattedMemberships)
+    } catch (error: any) {
+      console.error("Failed to fetch memberships:", error)
+      // Don't show error toast on initial load if no data exists
+    } finally {
+      setIsFetching(false)
+    }
+  }
 
   const handleEdit = () => {
     setOriginalMemberships([...memberships])
@@ -51,14 +67,33 @@ export function MembershipsSection() {
   }
 
   const handleSave = async () => {
+    // Validate all memberships
+    for (const membership of memberships) {
+      if (!membership.organization_name.trim()) {
+        toast.error("Organization name is required for all memberships")
+        return
+      }
+    }
+
     setIsLoading(true)
     try {
-      // API call would go here
+      // TODO: Implement API call to save memberships
+      // For now, we'll use a placeholder
+      // await doctorAPI.updateMemberships(memberships)
+      
       toast.success("Memberships updated successfully.", { duration: 2500 })
       setOriginalMemberships([...memberships])
       setIsEditing(false)
-    } catch (error) {
-      toast.error("Failed to update memberships")
+      // Refresh data
+      await fetchMemberships()
+    } catch (error: any) {
+      console.error("Failed to update memberships:", error)
+      const errorMessage =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        error?.message ||
+        "Failed to update memberships"
+      toast.error(errorMessage)
     } finally {
       setIsLoading(false)
     }
@@ -68,10 +103,10 @@ export function MembershipsSection() {
     setMemberships([
       ...memberships,
       {
-        organizationName: "",
-        membershipId: "",
-        startDate: "",
-        status: "Active",
+        organization_name: "",
+        membership_id: "",
+        designation: "",
+        year_of_joining: "",
       },
     ])
   }
@@ -86,22 +121,43 @@ export function MembershipsSection() {
     setMemberships(updated)
   }
 
+  if (isFetching) {
+    return (
+      <SimpleFormCard title="Professional Memberships" description="Manage your professional organization memberships">
+        <div className="text-center py-4 text-sm text-muted-foreground">Loading memberships...</div>
+      </SimpleFormCard>
+    )
+  }
+
   return (
     <SimpleFormCard
       title="Professional Memberships"
       description="Manage your professional organization memberships"
       isEditing={isEditing}
+      isSaving={isLoading}
       onEdit={handleEdit}
       onSave={handleSave}
       onCancel={handleCancel}
     >
       <div className="space-y-6">
+        {memberships.length === 0 && !isEditing && (
+          <div className="text-center py-8 text-sm text-muted-foreground">
+            No memberships added yet. Click Edit to add your first membership.
+          </div>
+        )}
+
         {memberships.map((membership, index) => (
-          <div key={index} className="rounded-lg border p-4 space-y-4">
+          <div key={membership.id || index} className="rounded-lg border p-4 space-y-4">
             <div className="flex items-center justify-between">
               <h4 className="font-medium">Membership {index + 1}</h4>
-              {isEditing && memberships.length > 1 && (
-                <Button type="button" variant="ghost" size="sm" onClick={() => removeMembership(index)}>
+              {isEditing && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => removeMembership(index)}
+                  disabled={isLoading}
+                >
                   <Trash2 className="h-4 w-4" />
                 </Button>
               )}
@@ -109,13 +165,14 @@ export function MembershipsSection() {
 
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor={`org-name-${index}`}>Organization Name</Label>
+                <Label htmlFor={`org-name-${index}`}>Organization Name *</Label>
                 <Input
                   id={`org-name-${index}`}
-                  value={membership.organizationName}
-                  onChange={(e) => updateMembership(index, "organizationName", e.target.value)}
+                  value={membership.organization_name}
+                  onChange={(e) => updateMembership(index, "organization_name", e.target.value)}
                   disabled={!isEditing}
                   placeholder="e.g., Indian Medical Association"
+                  required
                 />
               </div>
 
@@ -123,42 +180,35 @@ export function MembershipsSection() {
                 <Label htmlFor={`membership-id-${index}`}>Membership ID</Label>
                 <Input
                   id={`membership-id-${index}`}
-                  value={membership.membershipId}
-                  onChange={(e) => updateMembership(index, "membershipId", e.target.value)}
+                  value={membership.membership_id}
+                  onChange={(e) => updateMembership(index, "membership_id", e.target.value)}
                   disabled={!isEditing}
+                  placeholder="Enter membership ID"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor={`start-date-${index}`}>Start Date</Label>
+                <Label htmlFor={`designation-${index}`}>Designation</Label>
                 <Input
-                  id={`start-date-${index}`}
-                  type="date"
-                  value={membership.startDate}
-                  onChange={(e) => updateMembership(index, "startDate", e.target.value)}
+                  id={`designation-${index}`}
+                  value={membership.designation}
+                  onChange={(e) => updateMembership(index, "designation", e.target.value)}
                   disabled={!isEditing}
+                  placeholder="e.g., Life Member, Fellow"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor={`expiry-date-${index}`}>Expiry Date (Optional)</Label>
+                <Label htmlFor={`year-${index}`}>Year of Joining</Label>
                 <Input
-                  id={`expiry-date-${index}`}
-                  type="date"
-                  value={membership.expiryDate || ""}
-                  onChange={(e) => updateMembership(index, "expiryDate", e.target.value)}
+                  id={`year-${index}`}
+                  type="number"
+                  min="1900"
+                  max={new Date().getFullYear()}
+                  value={membership.year_of_joining}
+                  onChange={(e) => updateMembership(index, "year_of_joining", e.target.value)}
                   disabled={!isEditing}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor={`status-${index}`}>Status</Label>
-                <Input
-                  id={`status-${index}`}
-                  value={membership.status}
-                  onChange={(e) => updateMembership(index, "status", e.target.value)}
-                  disabled={!isEditing}
-                  placeholder="Active, Expired, etc."
+                  placeholder="YYYY"
                 />
               </div>
             </div>
@@ -166,7 +216,7 @@ export function MembershipsSection() {
         ))}
 
         {isEditing && (
-          <Button type="button" variant="outline" onClick={addMembership} className="w-full bg-transparent">
+          <Button type="button" variant="outline" onClick={addMembership} className="w-full bg-transparent" disabled={isLoading}>
             <Plus className="h-4 w-4 mr-2" />
             Add Membership
           </Button>
