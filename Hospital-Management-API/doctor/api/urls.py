@@ -19,6 +19,8 @@ from doctor.api.views import (
     DoctorLeaveCreateView,DoctorLeaveListView,DoctorLeaveUpdateView,DoctorLeaveDeleteView,
     DoctorOPDStatusViewSet,
     CheckUserStatusView,DoctorFullProfileAPIView,DoctorBankDetailsViewSet,
+    DoctorWorkingHoursView,DoctorAvailabilityPreviewView,DoctorSchedulingRulesViewSet,
+    DoctorOPDCheckInView,DoctorOPDCheckOutView,DoctorOPDStatusGetView,
 )
 
 app_name='doctor'
@@ -35,6 +37,7 @@ router.register(r'medical-license', RegistrationViewSet, basename='medical-licen
 router.register(r'doctor-fees', DoctorFeeStructureViewSet, basename='doctor-fees')
 router.register(r'follow-up-policies', FollowUpPolicyViewSet, basename='follow-up-policies')
 router.register(r'cancellation-policies', CancellationPolicyViewSet, basename='cancellation-policies')
+router.register(r'scheduling-rules', DoctorSchedulingRulesViewSet, basename='scheduling-rules')
 router.register(r'doctor-opd-status', DoctorOPDStatusViewSet)
 
 government_id_view = GovernmentIDViewSet.as_view({
@@ -106,6 +109,12 @@ urlpatterns = [
     path("doctor-leave-list/", DoctorLeaveListView.as_view(), name="doctor-leave-list"),
     path("doctor-leave-update/<uuid:pk>/", DoctorLeaveUpdateView.as_view(), name="doctor-leave-update"),
     path("doctor-leave-delete/<uuid:pk>/", DoctorLeaveDeleteView.as_view(), name="doctor-leave-delete"),
+    # Working Hours & Scheduling APIs
+    path("working-hours/", DoctorWorkingHoursView.as_view(), name="doctor-working-hours"),
+    path("availability-preview/", DoctorAvailabilityPreviewView.as_view(), name="doctor-availability-preview"),
+    path("opd-status/check-in/", DoctorOPDCheckInView.as_view(), name="doctor-opd-check-in"),
+    path("opd-status/check-out/", DoctorOPDCheckOutView.as_view(), name="doctor-opd-check-out"),
+    path("opd-status/", DoctorOPDStatusGetView.as_view(), name="doctor-opd-status-get"),
 ]
 #helpdesk uuid is user uuid used to approve the helpdesk user
 #token Refresh API - used by the front end for the if the token is expired after the one month time period it will refresh the token automatically no need to login again

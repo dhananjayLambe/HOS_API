@@ -446,16 +446,33 @@ class DoctorAvailability(models.Model):
             return []
 
         slots = []
-        current_time = datetime.combine(datetime.today(), datetime.strptime(start_time, "%H:%M:%S").time())
-        end_time = datetime.combine(datetime.today(), datetime.strptime(end_time, "%H:%M:%S").time())
+        # Handle both "HH:MM" and "HH:MM:SS" formats
+        try:
+            if len(start_time.split(":")) == 2:
+                start_time_obj = datetime.strptime(start_time, "%H:%M").time()
+            else:
+                start_time_obj = datetime.strptime(start_time, "%H:%M:%S").time()
+        except (ValueError, AttributeError):
+            return []
+        
+        try:
+            if len(end_time.split(":")) == 2:
+                end_time_obj = datetime.strptime(end_time, "%H:%M").time()
+            else:
+                end_time_obj = datetime.strptime(end_time, "%H:%M:%S").time()
+        except (ValueError, AttributeError):
+            return []
+        
+        current_time = datetime.combine(datetime.today(), start_time_obj)
+        end_time_dt = datetime.combine(datetime.today(), end_time_obj)
 
-        while current_time < end_time:
+        while current_time < end_time_dt:
             slot_start = current_time.time()
             current_time += timedelta(minutes=self.slot_duration + self.buffer_time)
             slot_end = current_time.time()
 
-            if current_time <= end_time:
-                slots.append({"start_time": slot_start.strftime("%H:%M:%S"), "end_time": slot_end.strftime("%H:%M:%S")})
+            if current_time <= end_time_dt:
+                slots.append({"start": slot_start.strftime("%H:%M"), "end": slot_end.strftime("%H:%M")})
         
         return slots
 
@@ -463,11 +480,45 @@ class DoctorAvailability(models.Model):
         """ Get all available slots for each working day """
         all_slots = {}
         for day_data in self.availability:
-            day = day_data["day"]
+            day = day_data.get("day")
+            if not day:
+                continue
+            
+            # Handle both old format (morning_start, morning_end) and new format (morning: {start, end})
+            morning_start = None
+            morning_end = None
+            evening_start = None
+            evening_end = None
+            night_start = None
+            night_end = None
+            
+            # Check for new nested format
+            if isinstance(day_data.get("morning"), dict):
+                morning_start = day_data["morning"].get("start")
+                morning_end = day_data["morning"].get("end")
+            else:
+                # Old format
+                morning_start = day_data.get("morning_start")
+                morning_end = day_data.get("morning_end")
+            
+            if isinstance(day_data.get("evening"), dict):
+                evening_start = day_data["evening"].get("start")
+                evening_end = day_data["evening"].get("end")
+            else:
+                evening_start = day_data.get("evening_start")
+                evening_end = day_data.get("evening_end")
+            
+            if isinstance(day_data.get("night"), dict):
+                night_start = day_data["night"].get("start")
+                night_end = day_data["night"].get("end")
+            else:
+                night_start = day_data.get("night_start")
+                night_end = day_data.get("night_end")
+            
             slots = {
-                "morning": self.generate_slots(day_data.get("morning_start"), day_data.get("morning_end")),
-                "evening": self.generate_slots(day_data.get("evening_start"), day_data.get("evening_end")),
-                "night": self.generate_slots(day_data.get("night_start"), day_data.get("night_end"))
+                "morning": self.generate_slots(morning_start, morning_end) if morning_start and morning_end else [],
+                "evening": self.generate_slots(evening_start, evening_end) if evening_start and evening_end else [],
+                "night": self.generate_slots(night_start, night_end) if night_start and night_end else []
             }
             all_slots[day] = slots
         return all_slots
@@ -539,6 +590,65 @@ class DoctorOPDStatus(models.Model):
     def __str__(self):
         status = "Available" if self.is_available else "Away"
         return f"Dr. {self.doctor.get_name} - {status}"
+
+class DoctorSchedulingRules(models.Model):
+    """
+    Controls appointment booking behavior for a doctor in a clinic
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    doctor = models.ForeignKey(
+        doctor,
+        on_delete=models.CASCADE,
+        related_name="scheduling_rules"
+    )
+    clinic = models.ForeignKey(
+        Clinic,
+        on_delete=models.CASCADE,
+        related_name="doctor_scheduling_rules"
+    )
+
+    # Booking Rules
+    allow_same_day_appointments = models.BooleanField(default=True)
+    allow_concurrent_appointments = models.BooleanField(default=False)
+    max_concurrent_appointments = models.PositiveIntegerField(
+        default=1,
+        help_text="Used only if concurrent appointments are enabled"
+    )
+
+    # Patient Approval Rules
+    require_approval_for_new_patients = models.BooleanField(default=False)
+    auto_confirm_appointments = models.BooleanField(default=True)
+
+    # Patient Actions
+    allow_patient_rescheduling = models.BooleanField(default=True)
+    reschedule_cutoff_hours = models.PositiveIntegerField(default=6)
+
+    allow_patient_cancellation = models.BooleanField(default=True)
+    cancellation_cutoff_hours = models.PositiveIntegerField(default=4)
+
+    # Booking Window
+    advance_booking_days = models.PositiveIntegerField(
+        default=14,
+        help_text="How many days in advance appointments can be booked"
+    )
+
+    # Emergency / Walk-in
+    allow_emergency_slots = models.BooleanField(default=True)
+    emergency_slots_per_day = models.PositiveIntegerField(default=2)
+
+    is_active = models.BooleanField(default=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ("doctor", "clinic")
+        ordering = ["-updated_at"]
+
+    def __str__(self):
+        return f"Scheduling Rules for {self.doctor.get_name()} @ {self.clinic.name}"
 
 class DoctorMembership(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

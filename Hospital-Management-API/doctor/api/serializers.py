@@ -13,7 +13,7 @@ from doctor.models import (
     DoctorService,DoctorSocialLink, Education, GovernmentID,
     Registration, Specialization, CustomSpecialization,
     doctor,KYCStatus,DoctorFeeStructure,FollowUpPolicy,DoctorAvailability,DoctorLeave,
-    DoctorOPDStatus,DoctorMembership,DoctorBankDetails,CancellationPolicy
+    DoctorOPDStatus,DoctorMembership,DoctorBankDetails,CancellationPolicy,DoctorSchedulingRules
 )
 from hospital_mgmt.models import Hospital
 from helpdesk.models import HelpdeskClinicUser
@@ -1179,20 +1179,98 @@ class CancellationPolicySerializer(serializers.ModelSerializer):
         
         return attrs
 
+class WorkingHoursDaySerializer(serializers.Serializer):
+    """Serializer for individual day availability"""
+    day = serializers.CharField(required=True)
+    is_working = serializers.BooleanField(default=True)
+    morning = serializers.DictField(required=False, allow_null=True)
+    evening = serializers.DictField(required=False, allow_null=True)
+    night = serializers.DictField(required=False, allow_null=True)
+    breaks = serializers.ListField(
+        child=serializers.DictField(),
+        required=False,
+        allow_empty=True,
+        default=list
+    )
+
+    def validate(self, data):
+        """Validate time slots and breaks"""
+        if not data.get('is_working'):
+            return data
+        
+        # Validate morning slot
+        morning = data.get('morning')
+        if morning:
+            start = morning.get('start')
+            end = morning.get('end')
+            if start and end:
+                if start >= end:
+                    raise serializers.ValidationError({
+                        'morning': 'Start time must be before end time'
+                    })
+        
+        # Validate evening slot
+        evening = data.get('evening')
+        if evening:
+            start = evening.get('start')
+            end = evening.get('end')
+            if start and end:
+                if start >= end:
+                    raise serializers.ValidationError({
+                        'evening': 'Start time must be before end time'
+                    })
+        
+        # Validate night slot
+        night = data.get('night')
+        if night:
+            start = night.get('start')
+            end = night.get('end')
+            if start and end:
+                if start >= end:
+                    raise serializers.ValidationError({
+                        'night': 'Start time must be before end time'
+                    })
+        
+        # Validate breaks
+        breaks = data.get('breaks', [])
+        for break_slot in breaks:
+            if 'start' not in break_slot or 'end' not in break_slot:
+                raise serializers.ValidationError({
+                    'breaks': 'Each break must have start and end time'
+                })
+            if break_slot['start'] >= break_slot['end']:
+                raise serializers.ValidationError({
+                    'breaks': 'Break start time must be before end time'
+                })
+        
+        return data
+
+
 class DoctorAvailabilitySerializer(serializers.ModelSerializer):
     slots = serializers.SerializerMethodField()
+    availability = serializers.ListField(
+        child=WorkingHoursDaySerializer(),
+        required=False
+    )
 
     class Meta:
         model = DoctorAvailability
-        fields = "__all__"
+        fields = [
+            "id", "doctor", "clinic", "availability", "slot_duration",
+            "buffer_time", "max_appointments_per_day", "emergency_slots",
+            "slots", "created_at", "updated_at"
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
 
     def get_slots(self, obj):
+        """Get generated slots for preview"""
+        if not obj.availability:
+            return {}
         return obj.get_all_slots()
     
     def validate(self, attrs):
-        # For PATCH requests, we may need instance values
+        """Validate availability data and prevent overlaps"""
         instance = self.instance
-
         doctor = attrs.get("doctor", getattr(instance, "doctor", None))
         clinic = attrs.get("clinic", getattr(instance, "clinic", None))
 
@@ -1201,25 +1279,137 @@ class DoctorAvailabilitySerializer(serializers.ModelSerializer):
             if instance:
                 existing = existing.exclude(id=instance.id)
             if existing.exists():
-                raise serializers.ValidationError("Doctor availability already exists for this clinic.")
+                raise serializers.ValidationError({
+                    "error": "Working hours already exist for this clinic. Use update instead."
+                })
 
         slot_duration = attrs.get("slot_duration", getattr(instance, "slot_duration", 0))
         buffer_time = attrs.get("buffer_time", getattr(instance, "buffer_time", 0))
         max_appointments = attrs.get("max_appointments_per_day", getattr(instance, "max_appointments_per_day", 0))
 
         if slot_duration <= 0:
-            raise serializers.ValidationError("Slot duration must be positive.")
+            raise serializers.ValidationError({
+                "slot_duration": "Slot duration must be a positive number."
+            })
         if buffer_time < 0:
-            raise serializers.ValidationError("Buffer time cannot be negative.")
+            raise serializers.ValidationError({
+                "buffer_time": "Buffer time cannot be negative."
+            })
         if max_appointments <= 0:
-            raise serializers.ValidationError("Max appointments per day must be positive.")
+            raise serializers.ValidationError({
+                "max_appointments_per_day": "Max appointments per day must be positive."
+            })
+
+        # Validate availability structure
+        availability = attrs.get("availability")
+        if availability:
+            days_seen = set()
+            for day_data in availability:
+                day = day_data.get("day")
+                if not day:
+                    raise serializers.ValidationError({
+                        "availability": "Each day entry must have a 'day' field."
+                    })
+                if day in days_seen:
+                    raise serializers.ValidationError({
+                        "availability": f"Duplicate day entry found: {day}"
+                    })
+                days_seen.add(day)
 
         return attrs
+
+    def to_representation(self, instance):
+        """Format availability data for response"""
+        representation = super().to_representation(instance)
+        # Ensure availability is properly formatted
+        if instance.availability:
+            representation['availability'] = instance.availability
+        return representation
+
+class DoctorSchedulingRulesSerializer(serializers.ModelSerializer):
+    """Serializer for doctor scheduling rules"""
+    
+    class Meta:
+        model = DoctorSchedulingRules
+        fields = [
+            "id", "doctor", "clinic",
+            "allow_same_day_appointments", "allow_concurrent_appointments",
+            "max_concurrent_appointments", "require_approval_for_new_patients",
+            "auto_confirm_appointments", "allow_patient_rescheduling",
+            "reschedule_cutoff_hours", "allow_patient_cancellation",
+            "cancellation_cutoff_hours", "advance_booking_days",
+            "allow_emergency_slots", "emergency_slots_per_day",
+            "is_active", "created_at", "updated_at"
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
+    
+    def validate(self, attrs):
+        """Validate scheduling rules"""
+        instance = self.instance
+        
+        # Get doctor and clinic from attrs or instance
+        doctor_obj = attrs.get("doctor", getattr(instance, "doctor", None))
+        clinic_obj = attrs.get("clinic", getattr(instance, "clinic", None))
+        
+        # Check for duplicate rules (only on create)
+        if instance is None and doctor_obj and clinic_obj:
+            if DoctorSchedulingRules.objects.filter(doctor=doctor_obj, clinic=clinic_obj).exists():
+                raise serializers.ValidationError({
+                    "non_field_errors": ["Scheduling rules already exist for this doctor and clinic."]
+                })
+        
+        # Validate concurrent appointments
+        allow_concurrent = attrs.get("allow_concurrent_appointments", 
+                                    getattr(instance, "allow_concurrent_appointments", False) if instance else False)
+        if allow_concurrent:
+            max_concurrent = attrs.get("max_concurrent_appointments", 
+                                      getattr(instance, "max_concurrent_appointments", 1) if instance else 1)
+            if max_concurrent < 1:
+                raise serializers.ValidationError({
+                    "max_concurrent_appointments": "Must be at least 1 when concurrent appointments are enabled."
+                })
+        
+        # Validate cutoff hours
+        reschedule_cutoff = attrs.get("reschedule_cutoff_hours",
+                                     getattr(instance, "reschedule_cutoff_hours", 6) if instance else 6)
+        if reschedule_cutoff < 0:
+            raise serializers.ValidationError({
+                "reschedule_cutoff_hours": "Cannot be negative."
+            })
+        
+        cancellation_cutoff = attrs.get("cancellation_cutoff_hours",
+                                     getattr(instance, "cancellation_cutoff_hours", 4) if instance else 4)
+        if cancellation_cutoff < 0:
+            raise serializers.ValidationError({
+                "cancellation_cutoff_hours": "Cannot be negative."
+            })
+        
+        # Validate advance booking days
+        advance_days = attrs.get("advance_booking_days",
+                                getattr(instance, "advance_booking_days", 14) if instance else 14)
+        if advance_days < 1:
+            raise serializers.ValidationError({
+                "advance_booking_days": "Must be at least 1 day."
+            })
+        
+        # Validate emergency slots
+        allow_emergency = attrs.get("allow_emergency_slots", 
+                                   getattr(instance, "allow_emergency_slots", True) if instance else True)
+        if allow_emergency:
+            emergency_slots = attrs.get("emergency_slots_per_day",
+                                      getattr(instance, "emergency_slots_per_day", 2) if instance else 2)
+            if emergency_slots < 0:
+                raise serializers.ValidationError({
+                    "emergency_slots_per_day": "Cannot be negative."
+                })
+        
+        return attrs
+
 
 class DoctorLeaveSerializer(serializers.ModelSerializer):
     class Meta:
         model = DoctorLeave
-        fields = ["id", "doctor", "clinic", "start_date", "end_date", "half_day", "leave_type", "reason"]
+        fields = ["id", "doctor", "clinic", "start_date", "end_date", "half_day", "leave_type", "reason", "approved"]
         read_only_fields = ["id"]
 
     def validate(self, attrs):
@@ -1239,18 +1429,21 @@ class DoctorLeaveSerializer(serializers.ModelSerializer):
         if start_date and start_date < date.today() - timedelta(days=30):
             raise serializers.ValidationError("Leave cannot be older than 30 days.")
 
-        # 3. Block overlapping leaves
+        # 3. Block overlapping leaves (but allow updating the same leave)
         overlapping = DoctorLeave.objects.filter(
             doctor=doctor,
             clinic=clinic,
             start_date__lte=end_date,
             end_date__gte=start_date,
         )
+        # If updating an existing leave, exclude it from the overlap check
         if self.instance:
             overlapping = overlapping.exclude(id=self.instance.id)
 
         if overlapping.exists():
-            raise serializers.ValidationError("Overlapping leave already exists for this doctor.")
+            raise serializers.ValidationError({
+                "non_field_errors": ["Overlapping leave already exists for this doctor. Please use a different date range."]
+            })
 
         return attrs
 

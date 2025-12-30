@@ -21,6 +21,7 @@ from rest_framework.generics import GenericAPIView
 # Third-party imports
 from rest_framework import generics, status, viewsets, permissions
 from rest_framework.exceptions import NotFound
+from rest_framework import serializers
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -33,12 +34,13 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from account.models import User
 from account.permissions import IsAdminUser, IsDoctor
 from helpdesk.models import HelpdeskClinicUser
+from clinic.models import Clinic
 from doctor.models import (
     doctor, DoctorAddress, Registration, GovernmentID, Education,
     Award, Certification, DoctorFeedback, DoctorService,
     DoctorSocialLink, Specialization, CustomSpecialization, KYCStatus,
     DoctorFeeStructure,FollowUpPolicy,DoctorAvailability,DoctorLeave,
-    DoctorOPDStatus,CancellationPolicy,DoctorBankDetails,
+    DoctorOPDStatus,CancellationPolicy,DoctorBankDetails,DoctorSchedulingRules,
 )
 from doctor.api.serializers import (
     DoctorRegistrationSerializer, DoctorProfileUpdateSerializer, DoctorSerializer,
@@ -54,7 +56,7 @@ from doctor.api.serializers import (
     DoctorSearchSerializer,DoctorFeeStructureSerializer,FollowUpPolicySerializer,
     DoctorAvailabilitySerializer,DoctorLeaveSerializer,DoctorOPDStatusSerializer,
     DoctorPhase1Serializer,DoctorFullProfileSerializer,CancellationPolicySerializer,
-    DoctorBankDetailsSerializer,
+    DoctorBankDetailsSerializer,DoctorSchedulingRulesSerializer,
 )
 from consultations.models import Consultation, PatientFeedback
 from appointments.models import Appointment
@@ -3080,6 +3082,75 @@ class DoctorLeaveCreateView(generics.CreateAPIView):
     permission_classes = [IsAuthenticated, IsDoctorOrHelpdesk]
     authentication_classes = [JWTAuthentication]
 
+    @transaction.atomic
+    def create(self, request, *args, **kwargs):
+        """Create leave with validation"""
+        try:
+            # If user is a doctor, ensure they can only create leaves for themselves
+            if hasattr(request.user, 'doctor'):
+                request.data['doctor'] = str(request.user.doctor.id)
+            
+            clinic_id = request.data.get('clinic')
+            if clinic_id and hasattr(request.user, 'doctor'):
+                # Verify doctor is linked to clinic
+                try:
+                    clinic = Clinic.objects.get(id=clinic_id)
+                    if clinic not in request.user.doctor.clinics.all():
+                        return Response({
+                            "status": "error",
+                            "message": "You are not associated with this clinic"
+                        }, status=status.HTTP_403_FORBIDDEN)
+                except Clinic.DoesNotExist:
+                    return Response({
+                        "status": "error",
+                        "message": "Clinic not found"
+                    }, status=status.HTTP_404_NOT_FOUND)
+            
+            serializer = self.get_serializer(data=request.data)
+            if not serializer.is_valid():
+                # Check for unique constraint error and provide better message
+                errors = serializer.errors
+                if 'non_field_errors' in errors:
+                    non_field_errors = errors['non_field_errors']
+                    if isinstance(non_field_errors, list):
+                        for error in non_field_errors:
+                            if 'unique' in str(error).lower():
+                                return Response({
+                                    "status": "error",
+                                    "message": "A leave for this date range already exists. Please use a different date range or update the existing leave.",
+                                    "errors": errors
+                                }, status=status.HTTP_400_BAD_REQUEST)
+                
+                return Response({
+                    "status": "error",
+                    "message": "Validation failed",
+                    "errors": errors
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Proceed with creation - let the serializer validation handle unique constraints
+            # The serializer will raise a ValidationError if a duplicate exists
+            self.perform_create(serializer)
+            
+            return Response({
+                "status": "success",
+                "message": "Leave created successfully",
+                "data": serializer.data
+            }, status=status.HTTP_201_CREATED)
+        except serializers.ValidationError as e:
+            logger.error(f"Validation error in DoctorLeaveCreateView: {str(e)}", exc_info=True)
+            return Response({
+                "status": "error",
+                "message": "Validation failed",
+                "errors": e.detail if hasattr(e, 'detail') else str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.error(f"Error in DoctorLeaveCreateView: {str(e)}", exc_info=True)
+            return Response({
+                "status": "error",
+                "message": "An error occurred while creating leave",
+                "detail": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 class DoctorLeaveListView(generics.ListAPIView):
     """GET /doctors/leaves/?doctor_id=<id>&date_filter=month - Fetch leave records"""
     serializer_class = DoctorLeaveSerializer
@@ -3112,11 +3183,113 @@ class DoctorLeaveUpdateView(generics.UpdateAPIView):
     permission_classes = [IsAuthenticated, IsDoctorOrHelpdesk]
     authentication_classes = [JWTAuthentication]
 
+    def get_queryset(self):
+        """Filter queryset to only allow doctors to update their own leaves"""
+        queryset = super().get_queryset()
+        # If user is a doctor, only show their own leaves
+        if hasattr(self.request.user, 'doctor'):
+            queryset = queryset.filter(doctor=self.request.user.doctor)
+        return queryset
+
+    def update(self, request, *args, **kwargs):
+        """Override update to handle validation errors better"""
+        try:
+            instance = self.get_object()
+            partial = kwargs.pop('partial', True)
+            
+            serializer = self.get_serializer(instance, data=request.data, partial=partial)
+            if not serializer.is_valid():
+                errors = serializer.errors
+                # Check for unique constraint error
+                if 'non_field_errors' in errors:
+                    non_field_errors = errors['non_field_errors']
+                    if isinstance(non_field_errors, list):
+                        for error in non_field_errors:
+                            if 'unique' in str(error).lower() or 'overlapping' in str(error).lower():
+                                return Response({
+                                    "status": "error",
+                                    "message": "A leave for this date range already exists. Please use a different date range.",
+                                    "errors": errors
+                                }, status=status.HTTP_400_BAD_REQUEST)
+                
+                return Response({
+                    "status": "error",
+                    "message": "Validation failed",
+                    "errors": errors
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            self.perform_update(serializer)
+            
+            return Response({
+                "status": "success",
+                "message": "Leave updated successfully",
+                "data": serializer.data
+            }, status=status.HTTP_200_OK)
+        except DoctorLeave.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "Leave not found"
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error updating leave: {str(e)}", exc_info=True)
+            return Response({
+                "status": "error",
+                "message": "An error occurred while updating leave",
+                "detail": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 class DoctorLeaveDeleteView(generics.DestroyAPIView):
     """DELETE /doctors/leaves/{leave_id}/ - Delete leave"""
     queryset = DoctorLeave.objects.all()
     permission_classes = [IsAuthenticated, IsDoctorOrHelpdesk]
     authentication_classes = [JWTAuthentication]
+
+    def get_queryset(self):
+        """Filter queryset to only allow doctors to delete their own leaves"""
+        queryset = super().get_queryset()
+        # If user is a doctor, only show their own leaves
+        if hasattr(self.request.user, 'doctor'):
+            queryset = queryset.filter(doctor=self.request.user.doctor)
+        return queryset
+
+    def destroy(self, request, *args, **kwargs):
+        """Override destroy to ensure proper deletion and logging"""
+        try:
+            instance = self.get_object()
+            leave_id = instance.id
+            doctor_name = instance.doctor.get_name if hasattr(instance.doctor, 'get_name') else str(instance.doctor)
+            clinic_name = instance.clinic.name if instance.clinic else "Unknown"
+            
+            # Perform the actual deletion (hard delete from database)
+            self.perform_destroy(instance)
+            
+            logger.info(f"Leave {leave_id} deleted by {request.user.username} for doctor {doctor_name} at clinic {clinic_name}")
+            
+            return Response(
+                {
+                    "status": "success",
+                    "message": "Leave deleted successfully"
+                },
+                status=status.HTTP_200_OK
+            )
+        except DoctorLeave.DoesNotExist:
+            return Response(
+                {
+                    "status": "error",
+                    "message": "Leave not found"
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            logger.error(f"Error deleting leave: {str(e)}", exc_info=True)
+            return Response(
+                {
+                    "status": "error",
+                    "message": "An error occurred while deleting leave",
+                    "detail": str(e)
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 class DoctorOPDStatusViewSet(viewsets.ModelViewSet):
     queryset = DoctorOPDStatus.objects.select_related('doctor', 'clinic').order_by('-updated_at')
@@ -3370,3 +3543,841 @@ class DoctorBankDetailsViewSet(viewsets.ViewSet):
             },
             status=status.HTTP_200_OK
         )
+
+
+# ============================================================================
+# DOCTOR WORKING HOURS & SCHEDULING APIs
+# ============================================================================
+
+class DoctorWorkingHoursView(APIView):
+    """
+    Create or Update working hours for a doctor in a clinic (UPSERT behavior)
+    POST /api/doctor/working-hours/
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctor]
+
+    @transaction.atomic
+    def post(self, request):
+        """Create or update working hours"""
+        try:
+            doctor_instance = request.user.doctor
+            clinic_id = request.data.get('clinic_id')
+            
+            if not clinic_id:
+                return Response({
+                    "status": "error",
+                    "message": "clinic_id is required"
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Verify doctor is linked to clinic
+            try:
+                clinic = Clinic.objects.get(id=clinic_id)
+            except Clinic.DoesNotExist:
+                return Response({
+                    "status": "error",
+                    "message": "Clinic not found"
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            if clinic not in doctor_instance.clinics.all():
+                return Response({
+                    "status": "error",
+                    "message": "You are not associated with this clinic"
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            # Check if working hours already exist
+            try:
+                availability = DoctorAvailability.objects.get(
+                    doctor=doctor_instance,
+                    clinic=clinic
+                )
+                # Update existing
+                serializer = DoctorAvailabilitySerializer(
+                    availability,
+                    data=request.data,
+                    partial=True,
+                    context={'request': request}
+                )
+                if serializer.is_valid():
+                    serializer.save()
+                    return Response({
+                        "status": "success",
+                        "message": "Working hours updated successfully",
+                        "data": serializer.data
+                    }, status=status.HTTP_200_OK)
+                return Response({
+                    "status": "error",
+                    "message": "Validation failed",
+                    "errors": serializer.errors
+                }, status=status.HTTP_400_BAD_REQUEST)
+            except DoctorAvailability.DoesNotExist:
+                # Create new
+                request.data['doctor'] = str(doctor_instance.id)
+                request.data['clinic'] = str(clinic_id)
+                serializer = DoctorAvailabilitySerializer(
+                    data=request.data,
+                    context={'request': request}
+                )
+                if serializer.is_valid():
+                    serializer.save()
+                    return Response({
+                        "status": "success",
+                        "message": "Working hours created successfully",
+                        "data": serializer.data
+                    }, status=status.HTTP_201_CREATED)
+                return Response({
+                    "status": "error",
+                    "message": "Validation failed",
+                    "errors": serializer.errors
+                }, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.error(f"Error in DoctorWorkingHoursView.post: {str(e)}", exc_info=True)
+            return Response({
+                "status": "error",
+                "message": "An error occurred while saving working hours",
+                "detail": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def get(self, request):
+        """Get working hours for a clinic"""
+        try:
+            doctor_instance = request.user.doctor
+            clinic_id = request.query_params.get('clinic_id')
+            
+            if not clinic_id:
+                return Response({
+                    "status": "error",
+                    "message": "clinic_id is required"
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            try:
+                clinic = Clinic.objects.get(id=clinic_id)
+            except Clinic.DoesNotExist:
+                return Response({
+                    "status": "error",
+                    "message": "Clinic not found"
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            if clinic not in doctor_instance.clinics.all():
+                return Response({
+                    "status": "error",
+                    "message": "You are not associated with this clinic"
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            try:
+                availability = DoctorAvailability.objects.get(
+                    doctor=doctor_instance,
+                    clinic=clinic
+                )
+                serializer = DoctorAvailabilitySerializer(availability)
+                return Response({
+                    "status": "success",
+                    "message": "Working hours retrieved successfully",
+                    "data": serializer.data
+                }, status=status.HTTP_200_OK)
+            except DoctorAvailability.DoesNotExist:
+                return Response({
+                    "status": "success",
+                    "message": "No working hours configured yet",
+                    "data": None
+                }, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.error(f"Error in DoctorWorkingHoursView.get: {str(e)}", exc_info=True)
+            return Response({
+                "status": "error",
+                "message": "An error occurred while fetching working hours",
+                "detail": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class DoctorAvailabilityPreviewView(APIView):
+    """
+    Preview generated slots based on working hours configuration
+    GET /api/doctor/availability-preview/?clinic_id=uuid
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctor]
+
+    def get(self, request):
+        """Preview generated slots"""
+        try:
+            doctor_instance = request.user.doctor
+            clinic_id = request.query_params.get('clinic_id')
+            
+            if not clinic_id:
+                return Response({
+                    "status": "error",
+                    "message": "clinic_id is required"
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            try:
+                clinic = Clinic.objects.get(id=clinic_id)
+            except Clinic.DoesNotExist:
+                return Response({
+                    "status": "error",
+                    "message": "Clinic not found"
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            if clinic not in doctor_instance.clinics.all():
+                return Response({
+                    "status": "error",
+                    "message": "You are not associated with this clinic"
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            try:
+                availability = DoctorAvailability.objects.get(
+                    doctor=doctor_instance,
+                    clinic=clinic
+                )
+                slots = availability.get_all_slots()
+                return Response({
+                    "status": "success",
+                    "message": "Slot preview generated successfully",
+                    "data": slots
+                }, status=status.HTTP_200_OK)
+            except DoctorAvailability.DoesNotExist:
+                return Response({
+                    "status": "error",
+                    "message": "Working hours not configured. Please set up working hours first."
+                }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error in DoctorAvailabilityPreviewView: {str(e)}", exc_info=True)
+            return Response({
+                "status": "error",
+                "message": "An error occurred while generating slot preview",
+                "detail": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class DoctorSchedulingRulesViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing doctor scheduling rules.
+    
+    Provides full CRUD operations for scheduling rules that control
+    appointment booking behavior for a doctor at a clinic.
+    
+    Endpoints:
+    - POST   /api/doctor/scheduling-rules/              - Create new rules
+    - GET    /api/doctor/scheduling-rules/               - List all rules (filtered by user)
+    - GET    /api/doctor/scheduling-rules/{id}/          - Retrieve specific rules
+    - PUT    /api/doctor/scheduling-rules/{id}/          - Full update
+    - PATCH  /api/doctor/scheduling-rules/{id}/          - Partial update
+    - DELETE /api/doctor/scheduling-rules/{id}/          - Delete rules
+    - GET    /api/doctor/scheduling-rules/by-doctor-clinic/?doctor_id=&clinic_id= - Get by doctor/clinic
+    - PATCH  /api/doctor/scheduling-rules/update/?doctor_id=&clinic_id= - Update by doctor/clinic
+    """
+    queryset = DoctorSchedulingRules.objects.select_related('doctor', 'clinic').all()
+    serializer_class = DoctorSchedulingRulesSerializer
+    permission_classes = [IsAuthenticated, IsDoctorOrHelpdesk]
+    authentication_classes = [JWTAuthentication]
+    pagination_class = StandardResultsSetPagination
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['doctor', 'clinic', 'is_active', 'allow_same_day_appointments', 
+                        'allow_concurrent_appointments', 'auto_confirm_appointments']
+    search_fields = ['doctor__user__first_name', 'doctor__user__last_name', 'clinic__name']
+    ordering_fields = ['created_at', 'updated_at', 'advance_booking_days']
+    ordering = ['-updated_at']
+
+    def get_queryset(self):
+        """Filter queryset based on user role"""
+        user = self.request.user
+        base_qs = DoctorSchedulingRules.objects.select_related('doctor', 'clinic').all()
+        
+        if hasattr(user, 'doctor'):
+            # Doctor can only see their own scheduling rules
+            return base_qs.filter(doctor=user.doctor)
+        elif hasattr(user, 'helpdesk'):
+            # Helpdesk can see scheduling rules for their clinics
+            return base_qs.filter(clinic__in=user.helpdesk.clinics.all())
+        
+        return base_qs.none()
+
+    @transaction.atomic
+    def create(self, request, *args, **kwargs):
+        """Create new scheduling rules"""
+        try:
+            user = request.user
+            data = request.data.copy()
+            
+            # Auto-set doctor from authenticated user if doctor
+            if hasattr(user, 'doctor'):
+                data['doctor'] = str(user.doctor.id)
+            elif 'doctor' not in data:
+                return Response({
+                    "status": "error",
+                    "message": "doctor field is required"
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Validate clinic_id
+            clinic_id = data.get('clinic_id') or data.get('clinic')
+            if not clinic_id:
+                return Response({
+                    "status": "error",
+                    "message": "clinic_id is required"
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Verify clinic exists
+            try:
+                clinic = Clinic.objects.get(id=clinic_id)
+            except Clinic.DoesNotExist:
+                return Response({
+                    "status": "error",
+                    "message": "Clinic not found"
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            # Verify doctor-clinic association
+            if hasattr(user, 'doctor'):
+                if clinic not in user.doctor.clinics.all():
+                    return Response({
+                        "status": "error",
+                        "message": "You are not associated with this clinic"
+                    }, status=status.HTTP_403_FORBIDDEN)
+            elif hasattr(user, 'helpdesk'):
+                if clinic not in user.helpdesk.clinics.all():
+                    return Response({
+                        "status": "error",
+                        "message": "You are not associated with this clinic"
+                    }, status=status.HTTP_403_FORBIDDEN)
+            
+            # Check for existing rules
+            doctor_id = data.get('doctor')
+            if DoctorSchedulingRules.objects.filter(doctor_id=doctor_id, clinic=clinic).exists():
+                return Response({
+                    "status": "error",
+                    "message": "Scheduling rules already exist for this doctor and clinic. Use update instead."
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            data['clinic'] = str(clinic_id)
+            if 'clinic_id' in data:
+                del data['clinic_id']
+            
+            serializer = self.get_serializer(data=data, context={'request': request})
+            if serializer.is_valid():
+                serializer.save()
+                return Response({
+                    "status": "success",
+                    "message": "Scheduling rules created successfully",
+                    "data": serializer.data
+                }, status=status.HTTP_201_CREATED)
+            
+            return Response({
+                "status": "error",
+                "message": "Validation failed",
+                "errors": serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        except Exception as e:
+            logger.error(f"Error creating scheduling rules: {str(e)}", exc_info=True)
+            return Response({
+                "status": "error",
+                "message": "An error occurred while creating scheduling rules",
+                "detail": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def list(self, request, *args, **kwargs):
+        """List scheduling rules with optional filtering"""
+        queryset = self.filter_queryset(self.get_queryset())
+        
+        # Optional: Filter by clinic_id query parameter
+        clinic_id = request.query_params.get('clinic_id')
+        if clinic_id:
+            queryset = queryset.filter(clinic_id=clinic_id)
+        
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({
+            "status": "success",
+            "message": "Scheduling rules retrieved successfully",
+            "data": serializer.data
+        }, status=status.HTTP_200_OK)
+
+    def retrieve(self, request, *args, **kwargs):
+        """Retrieve a specific scheduling rule"""
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return Response({
+            "status": "success",
+            "message": "Scheduling rules retrieved successfully",
+            "data": serializer.data
+        }, status=status.HTTP_200_OK)
+
+    @transaction.atomic
+    def update(self, request, *args, **kwargs):
+        """Full update of scheduling rules"""
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        
+        # Ensure doctor and clinic cannot be changed
+        data = request.data.copy()
+        if 'doctor' in data:
+            del data['doctor']
+        if 'clinic' in data:
+            del data['clinic']
+        if 'clinic_id' in data:
+            del data['clinic_id']
+        
+        serializer = self.get_serializer(instance, data=data, partial=partial, context={'request': request})
+        if serializer.is_valid():
+            serializer.save()
+            return Response({
+                "status": "success",
+                "message": "Scheduling rules updated successfully",
+                "data": serializer.data
+            }, status=status.HTTP_200_OK)
+        
+        return Response({
+            "status": "error",
+            "message": "Validation failed",
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    @transaction.atomic
+    def partial_update(self, request, *args, **kwargs):
+        """Partial update of scheduling rules"""
+        kwargs['partial'] = True
+        return self.update(request, *args, **kwargs)
+
+    @transaction.atomic
+    def destroy(self, request, *args, **kwargs):
+        """Delete scheduling rules (only if no active appointments)"""
+        instance = self.get_object()
+        
+        # Check if there are any active appointments
+        # Note: You may want to import Appointment model and check
+        # For now, we'll allow deletion but you can add this check:
+        # from appointments.models import Appointment
+        # active_appointments = Appointment.objects.filter(
+        #     doctor=instance.doctor,
+        #     clinic=instance.clinic,
+        #     status__in=['scheduled', 'confirmed']
+        # ).exists()
+        # if active_appointments:
+        #     return Response({
+        #         "status": "error",
+        #         "message": "Cannot delete scheduling rules with active appointments"
+        #     }, status=status.HTTP_409_CONFLICT)
+        
+        try:
+            self.perform_destroy(instance)
+            return Response({
+                "status": "success",
+                "message": "Scheduling rules deleted successfully"
+            }, status=status.HTTP_204_NO_CONTENT)
+        except Exception as e:
+            logger.error(f"Error deleting scheduling rules: {str(e)}", exc_info=True)
+            return Response({
+                "status": "error",
+                "message": "An error occurred while deleting scheduling rules",
+                "detail": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def perform_destroy(self, instance):
+        """Perform the actual deletion"""
+        instance.delete()
+
+    @action(detail=False, methods=['get'], url_path='by-doctor-clinic')
+    def retrieve_by_doctor_clinic(self, request):
+        """Retrieve scheduling rules by doctor_id and clinic_id"""
+        doctor_id = request.query_params.get('doctor_id')
+        clinic_id = request.query_params.get('clinic_id')
+        
+        if not doctor_id or not clinic_id:
+            return Response({
+                "status": "error",
+                "message": "Both doctor_id and clinic_id are required"
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Apply user-based filtering first
+        queryset = self.filter_queryset(self.get_queryset())
+        
+        try:
+            instance = queryset.get(doctor_id=doctor_id, clinic_id=clinic_id)
+            serializer = self.get_serializer(instance)
+            return Response({
+                "status": "success",
+                "message": "Scheduling rules retrieved successfully",
+                "data": serializer.data
+            }, status=status.HTTP_200_OK)
+        except DoctorSchedulingRules.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "Scheduling rules not found for the given doctor and clinic."
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error retrieving scheduling rules: {str(e)}")
+            return Response({
+                "status": "error",
+                "message": "An error occurred while retrieving the scheduling rules."
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['patch'], url_path='update')
+    @transaction.atomic
+    def update_by_doctor_clinic(self, request):
+        """Update scheduling rules by doctor_id and clinic_id (UPSERT behavior)"""
+        doctor_id = request.query_params.get('doctor_id')
+        clinic_id = request.query_params.get('clinic_id')
+        
+        if not doctor_id or not clinic_id:
+            return Response({
+                "status": "error",
+                "message": "Both doctor_id and clinic_id are required"
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Verify clinic exists
+        try:
+            clinic = Clinic.objects.get(id=clinic_id)
+        except Clinic.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "Clinic not found"
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        # Verify doctor exists
+        try:
+            doctor_instance = doctor.objects.get(id=doctor_id)
+        except doctor.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "Doctor not found"
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        # Check user permissions
+        user = request.user
+        if hasattr(user, 'doctor'):
+            if user.doctor != doctor_instance:
+                return Response({
+                    "status": "error",
+                    "message": "You can only update your own scheduling rules"
+                }, status=status.HTTP_403_FORBIDDEN)
+            if clinic not in doctor_instance.clinics.all():
+                return Response({
+                    "status": "error",
+                    "message": "You are not associated with this clinic"
+                }, status=status.HTTP_403_FORBIDDEN)
+        elif hasattr(user, 'helpdesk'):
+            if clinic not in user.helpdesk.clinics.all():
+                return Response({
+                    "status": "error",
+                    "message": "You are not associated with this clinic"
+                }, status=status.HTTP_403_FORBIDDEN)
+
+        # Get or create rules
+        instance, created = DoctorSchedulingRules.objects.get_or_create(
+            doctor=doctor_instance,
+            clinic=clinic,
+            defaults={
+                'allow_same_day_appointments': True,
+                'allow_concurrent_appointments': False,
+                'max_concurrent_appointments': 1,
+                'require_approval_for_new_patients': False,
+                'auto_confirm_appointments': True,
+                'allow_patient_rescheduling': True,
+                'reschedule_cutoff_hours': 6,
+                'allow_patient_cancellation': True,
+                'cancellation_cutoff_hours': 4,
+                'advance_booking_days': 14,
+                'allow_emergency_slots': True,
+                'emergency_slots_per_day': 2,
+                'is_active': True,
+            }
+        )
+
+        # Remove clinic_id from update data
+        update_data = request.data.copy()
+        if 'clinic_id' in update_data:
+            del update_data['clinic_id']
+        if 'doctor_id' in update_data:
+            del update_data['doctor_id']
+        if 'doctor' in update_data:
+            del update_data['doctor']
+        if 'clinic' in update_data:
+            del update_data['clinic']
+        
+        serializer = self.get_serializer(instance, data=update_data, partial=True, context={'request': request})
+        if not serializer.is_valid():
+            return Response({
+                "status": "error",
+                "message": "Validation failed",
+                "errors": serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        serializer.save()
+        
+        message = "Scheduling rules created successfully" if created else "Scheduling rules updated successfully"
+        return Response({
+            "status": "success",
+            "message": message,
+            "data": serializer.data
+        }, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
+
+class DoctorOPDCheckInView(APIView):
+    """
+    Check-in to OPD
+    POST /api/doctor/opd-status/check-in/
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctor]
+
+    @transaction.atomic
+    def post(self, request):
+        """Check-in to OPD"""
+        try:
+            doctor_instance = request.user.doctor
+            clinic_id = request.data.get('clinic_id')
+            
+            if not clinic_id:
+                return Response({
+                    "status": "error",
+                    "message": "clinic_id is required"
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            try:
+                clinic = Clinic.objects.get(id=clinic_id)
+            except Clinic.DoesNotExist:
+                return Response({
+                    "status": "error",
+                    "message": "Clinic not found"
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            if clinic not in doctor_instance.clinics.all():
+                return Response({
+                    "status": "error",
+                    "message": "You are not associated with this clinic"
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            # Check if doctor is on leave
+            today = date.today()
+            active_leave = DoctorLeave.objects.filter(
+                doctor=doctor_instance,
+                clinic=clinic,
+                start_date__lte=today,
+                end_date__gte=today,
+                approved=True
+            ).exists()
+            
+            if active_leave:
+                return Response({
+                    "status": "error",
+                    "message": "Cannot check-in while on approved leave"
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Get or create OPD status
+            opd_status, created = DoctorOPDStatus.objects.get_or_create(
+                doctor=doctor_instance,
+                clinic=clinic,
+                defaults={
+                    'is_available': True,
+                    'check_in_time': timezone.now(),
+                    'check_out_time': None
+                }
+            )
+            
+            if not created:
+                if opd_status.is_available:
+                    return Response({
+                        "status": "error",
+                        "message": "You are already checked in"
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                opd_status.is_available = True
+                opd_status.check_in_time = timezone.now()
+                opd_status.check_out_time = None
+                opd_status.save()
+            
+            serializer = DoctorOPDStatusSerializer(opd_status)
+            return Response({
+                "status": "success",
+                "message": "Checked in successfully",
+                "data": serializer.data
+            }, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.error(f"Error in DoctorOPDCheckInView: {str(e)}", exc_info=True)
+            return Response({
+                "status": "error",
+                "message": "An error occurred while checking in",
+                "detail": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class DoctorOPDCheckOutView(APIView):
+    """
+    Check-out from OPD
+    POST /api/doctor/opd-status/check-out/
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctor]
+
+    @transaction.atomic
+    def post(self, request):
+        """Check-out from OPD"""
+        try:
+            doctor_instance = request.user.doctor
+            clinic_id = request.data.get('clinic_id')
+            
+            if not clinic_id:
+                return Response({
+                    "status": "error",
+                    "message": "clinic_id is required"
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            try:
+                clinic = Clinic.objects.get(id=clinic_id)
+            except Clinic.DoesNotExist:
+                return Response({
+                    "status": "error",
+                    "message": "Clinic not found"
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            if clinic not in doctor_instance.clinics.all():
+                return Response({
+                    "status": "error",
+                    "message": "You are not associated with this clinic"
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            try:
+                opd_status = DoctorOPDStatus.objects.get(
+                    doctor=doctor_instance,
+                    clinic=clinic
+                )
+                
+                if not opd_status.is_available:
+                    return Response({
+                        "status": "error",
+                        "message": "You are not checked in"
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                
+                opd_status.is_available = False
+                opd_status.check_out_time = timezone.now()
+                opd_status.save()
+                
+                serializer = DoctorOPDStatusSerializer(opd_status)
+                return Response({
+                    "status": "success",
+                    "message": "Checked out successfully",
+                    "data": serializer.data
+                }, status=status.HTTP_200_OK)
+            except DoctorOPDStatus.DoesNotExist:
+                return Response({
+                    "status": "error",
+                    "message": "No active OPD session found"
+                }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error in DoctorOPDCheckOutView: {str(e)}", exc_info=True)
+            return Response({
+                "status": "error",
+                "message": "An error occurred while checking out",
+                "detail": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class DoctorOPDStatusGetView(APIView):
+    """
+    Get live OPD status
+    GET /api/doctor/opd-status/?clinic_id=uuid
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctorOrHelpdeskOrPatient]
+
+    def get(self, request):
+        """Get live OPD status"""
+        try:
+            clinic_id = request.query_params.get('clinic_id')
+            doctor_id = request.query_params.get('doctor_id')
+            
+            if not clinic_id:
+                return Response({
+                    "status": "error",
+                    "message": "clinic_id is required"
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            try:
+                clinic = Clinic.objects.get(id=clinic_id)
+            except Clinic.DoesNotExist:
+                return Response({
+                    "status": "error",
+                    "message": "Clinic not found"
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            # If doctor_id provided, get specific doctor's status
+            if doctor_id:
+                try:
+                    doctor_instance = doctor.objects.get(id=doctor_id)
+                    if clinic not in doctor_instance.clinics.all():
+                        return Response({
+                            "status": "error",
+                            "message": "Doctor is not associated with this clinic"
+                        }, status=status.HTTP_403_FORBIDDEN)
+                    
+                    try:
+                        opd_status = DoctorOPDStatus.objects.get(
+                            doctor=doctor_instance,
+                            clinic=clinic
+                        )
+                        serializer = DoctorOPDStatusSerializer(opd_status)
+                        return Response({
+                            "status": "success",
+                            "message": "OPD status retrieved successfully",
+                            "data": serializer.data
+                        }, status=status.HTTP_200_OK)
+                    except DoctorOPDStatus.DoesNotExist:
+                        return Response({
+                            "status": "success",
+                            "message": "No OPD status found",
+                            "data": {
+                                "is_available": False,
+                                "check_in_time": None,
+                                "check_out_time": None
+                            }
+                        }, status=status.HTTP_200_OK)
+                except doctor.DoesNotExist:
+                    return Response({
+                        "status": "error",
+                        "message": "Doctor not found"
+                    }, status=status.HTTP_404_NOT_FOUND)
+            else:
+                # If authenticated user is a doctor, get their own status
+                if hasattr(request.user, 'doctor'):
+                    doctor_instance = request.user.doctor
+                    if clinic not in doctor_instance.clinics.all():
+                        return Response({
+                            "status": "error",
+                            "message": "You are not associated with this clinic"
+                        }, status=status.HTTP_403_FORBIDDEN)
+                    
+                    try:
+                        opd_status = DoctorOPDStatus.objects.get(
+                            doctor=doctor_instance,
+                            clinic=clinic
+                        )
+                        serializer = DoctorOPDStatusSerializer(opd_status)
+                        return Response({
+                            "status": "success",
+                            "message": "OPD status retrieved successfully",
+                            "data": serializer.data
+                        }, status=status.HTTP_200_OK)
+                    except DoctorOPDStatus.DoesNotExist:
+                        return Response({
+                            "status": "success",
+                            "message": "No OPD status found",
+                            "data": {
+                                "is_available": False,
+                                "check_in_time": None,
+                                "check_out_time": None
+                            }
+                        }, status=status.HTTP_200_OK)
+                else:
+                    return Response({
+                        "status": "error",
+                        "message": "doctor_id is required for non-doctor users"
+                    }, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.error(f"Error in DoctorOPDStatusGetView: {str(e)}", exc_info=True)
+            return Response({
+                "status": "error",
+                "message": "An error occurred while fetching OPD status",
+                "detail": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
