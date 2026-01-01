@@ -55,6 +55,7 @@ INSTALLED_APPS = [
     'consultations.apps.ConsultationsConfig',
     'prescriptions.apps.PrescriptionsConfig',
     'diagnostic.apps.DiagnosticConfig',
+    'support.apps.SupportConfig',
     #rest_framework
     'rest_framework',
     'rest_framework.authtoken',

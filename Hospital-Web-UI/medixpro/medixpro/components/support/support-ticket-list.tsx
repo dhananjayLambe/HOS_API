@@ -1,11 +1,11 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Search, Filter, Eye, MessageSquare } from "lucide-react"
+import { Search, Filter, Eye, MessageSquare, Loader2, FileText } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import {
   Dialog,
@@ -16,10 +16,17 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
-import { useToast } from "@/components/ui/use-toast"
+import { useToastNotification } from "@/hooks/use-toast-notification"
+import { 
+  getSupportTickets, 
+  getSupportTicket, 
+  addTicketComment,
+  type SupportTicket,
+  type SupportTicketComment 
+} from "@/lib/supportApi"
 
-// Sample ticket data
-const tickets = [
+// Sample ticket data (fallback)
+const sampleTickets = [
   {
     id: "T-1001",
     subject: "Cannot access patient records",
@@ -128,47 +135,133 @@ const tickets = [
 ]
 
 export function SupportTicketList() {
-  const { toast } = useToast()
+  const toast = useToastNotification()
   const [searchQuery, setSearchQuery] = useState("")
-  const [selectedTicket, setSelectedTicket] = useState<(typeof tickets)[0] | null>(null)
+  const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null)
   const [replyText, setReplyText] = useState("")
+  const [tickets, setTickets] = useState<SupportTicket[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [isLoadingDetail, setIsLoadingDetail] = useState(false)
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false)
+
+  // Fetch tickets from API
+  useEffect(() => {
+    fetchTickets()
+  }, [])
+
+  const fetchTickets = async () => {
+    try {
+      setIsLoading(true)
+      const response = await getSupportTickets({
+        page: 1,
+        page_size: 50,
+      })
+      
+      if (response.status === "success" && response.data?.tickets) {
+        setTickets(response.data.tickets)
+      } else {
+        throw new Error(response.message || "Failed to fetch tickets")
+      }
+    } catch (error: any) {
+      console.error("Error fetching tickets:", error)
+      const errorMessage = error.response?.data?.error || 
+                          error.response?.data?.message ||
+                          error.message ||
+                          "Failed to load support tickets. Please try again later."
+      toast.error(errorMessage)
+      setTickets([])
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleViewTicket = async (ticketId: string) => {
+    try {
+      setIsLoadingDetail(true)
+      const response = await getSupportTicket(ticketId)
+      
+      if (response.status === "success" && response.data) {
+        setSelectedTicket(response.data)
+      } else {
+        throw new Error(response.message || "Failed to fetch ticket details")
+      }
+    } catch (error: any) {
+      console.error("Error fetching ticket details:", error)
+      const errorMessage = error.response?.data?.error || 
+                          error.response?.data?.message ||
+                          error.message ||
+                          "Failed to load ticket details. Please try again."
+      toast.error(errorMessage)
+    } finally {
+      setIsLoadingDetail(false)
+    }
+  }
 
   const filteredTickets = tickets.filter(
     (ticket) =>
       ticket.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      ticket.id.toLowerCase().includes(searchQuery.toLowerCase()),
+      ticket.ticket_number.toLowerCase().includes(searchQuery.toLowerCase()),
   )
 
-  const handleReply = () => {
-    if (!replyText.trim()) return
+  const handleReply = async () => {
+    if (!replyText.trim() || !selectedTicket) return
 
-    toast({
-      title: "Reply sent",
-      description: "Your reply has been sent to the support team.",
-    })
-
-    setReplyText("")
-    setSelectedTicket(null)
+    try {
+      setIsSubmittingComment(true)
+      const response = await addTicketComment(selectedTicket.id, replyText.trim())
+      
+      if (response.status === "success") {
+        toast.success("Your reply has been sent to the support team.")
+        
+        // Refresh ticket details to show the new comment
+        await handleViewTicket(selectedTicket.id)
+        setReplyText("")
+      } else {
+        throw new Error(response.message || "Failed to send reply")
+      }
+    } catch (error: any) {
+      console.error("Error sending reply:", error)
+      const errorMessage = error.response?.data?.error ||
+                          error.response?.data?.message ||
+                          error.response?.data?.data?.message ||
+                          error.message ||
+                          "Failed to send reply. Please try again."
+      toast.error(errorMessage)
+    } finally {
+      setIsSubmittingComment(false)
+    }
   }
 
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "open":
         return (
-          <Badge variant="outline" className="bg-blue-100 text-blue-800 hover:bg-blue-100 border-blue-200">
+          <Badge variant="outline" className="bg-blue-100 text-blue-800 hover:bg-blue-100 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300">
             Open
           </Badge>
         )
-      case "in-progress":
+      case "in_progress":
         return (
-          <Badge variant="outline" className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100 border-yellow-200">
+          <Badge variant="outline" className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-300">
             In Progress
+          </Badge>
+        )
+      case "waiting_for_user":
+        return (
+          <Badge variant="outline" className="bg-orange-100 text-orange-800 hover:bg-orange-100 border-orange-200 dark:bg-orange-900/30 dark:text-orange-300">
+            Waiting for User
           </Badge>
         )
       case "resolved":
         return (
-          <Badge variant="outline" className="bg-green-100 text-green-800 hover:bg-green-100 border-green-200">
+          <Badge variant="outline" className="bg-green-100 text-green-800 hover:bg-green-100 border-green-200 dark:bg-green-900/30 dark:text-green-300">
             Resolved
+          </Badge>
+        )
+      case "closed":
+        return (
+          <Badge variant="outline" className="bg-gray-100 text-gray-800 hover:bg-gray-100 border-gray-200 dark:bg-gray-900/30 dark:text-gray-300">
+            Closed
           </Badge>
         )
       default:
@@ -180,26 +273,26 @@ export function SupportTicketList() {
     switch (priority) {
       case "low":
         return (
-          <Badge variant="outline" className="bg-gray-100 text-gray-800 hover:bg-gray-100 border-gray-200">
+          <Badge variant="outline" className="bg-gray-100 text-gray-800 hover:bg-gray-100 border-gray-200 dark:bg-gray-900/30 dark:text-gray-300">
             Low
           </Badge>
         )
       case "medium":
         return (
-          <Badge variant="outline" className="bg-blue-100 text-blue-800 hover:bg-blue-100 border-blue-200">
+          <Badge variant="outline" className="bg-blue-100 text-blue-800 hover:bg-blue-100 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300">
             Medium
           </Badge>
         )
       case "high":
         return (
-          <Badge variant="outline" className="bg-orange-100 text-orange-800 hover:bg-orange-100 border-orange-200">
+          <Badge variant="outline" className="bg-orange-100 text-orange-800 hover:bg-orange-100 border-orange-200 dark:bg-orange-900/30 dark:text-orange-300">
             High
           </Badge>
         )
-      case "urgent":
+      case "critical":
         return (
-          <Badge variant="outline" className="bg-red-100 text-red-800 hover:bg-red-100 border-red-200">
-            Urgent
+          <Badge variant="outline" className="bg-red-100 text-red-800 hover:bg-red-100 border-red-200 dark:bg-red-900/30 dark:text-red-300">
+            Critical
           </Badge>
         )
       default:
@@ -243,7 +336,12 @@ export function SupportTicketList() {
             </Button>
           </div>
 
-          {filteredTickets.length > 0 ? (
+          {isLoading ? (
+            <div className="flex items-center justify-center py-10">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              <span className="ml-2 text-muted-foreground">Loading tickets...</span>
+            </div>
+          ) : filteredTickets.length > 0 ? (
             <div className="rounded-md border">
               <Table className="whitespace-nowrap">
                 <TableHeader>
@@ -259,14 +357,18 @@ export function SupportTicketList() {
                 <TableBody>
                   {filteredTickets.map((ticket) => (
                     <TableRow key={ticket.id}>
-                      <TableCell className="font-medium">{ticket.id}</TableCell>
-                      <TableCell className="hidden md:table-cell">{formatDate(ticket.created)}</TableCell>
+                      <TableCell className="font-medium">{ticket.ticket_number}</TableCell>
+                      <TableCell className="hidden md:table-cell">{formatDate(ticket.created_at)}</TableCell>
                       <TableCell>{ticket.subject}</TableCell>
                       <TableCell className="hidden md:table-cell">{getPriorityBadge(ticket.priority)}</TableCell>
                       <TableCell>{getStatusBadge(ticket.status)}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
-                          <Button variant="ghost" size="icon" onClick={() => setSelectedTicket(ticket)}>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            onClick={() => handleViewTicket(ticket.id)}
+                          >
                             <Eye className="h-4 w-4" />
                             <span className="sr-only">View ticket</span>
                           </Button>
@@ -274,7 +376,7 @@ export function SupportTicketList() {
                             variant="ghost"
                             size="icon"
                             onClick={() => {
-                              setSelectedTicket(ticket)
+                              handleViewTicket(ticket.id)
                               setReplyText("")
                             }}
                           >
@@ -299,72 +401,129 @@ export function SupportTicketList() {
       {/* Ticket Details Dialog */}
       <Dialog open={selectedTicket !== null} onOpenChange={(open) => !open && setSelectedTicket(null)}>
         <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              Ticket {selectedTicket?.id} - {selectedTicket?.subject}
-            </DialogTitle>
-            <DialogDescription>Created on {selectedTicket && formatDate(selectedTicket.created)}</DialogDescription>
-          </DialogHeader>
+          {isLoadingDetail ? (
+            <div className="flex items-center justify-center py-10">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              <span className="ml-2 text-muted-foreground">Loading ticket details...</span>
+            </div>
+          ) : selectedTicket ? (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  Ticket {selectedTicket.ticket_number} - {selectedTicket.subject}
+                </DialogTitle>
+                <DialogDescription>Created on {formatDate(selectedTicket.created_at)}</DialogDescription>
+              </DialogHeader>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
-            <div>
-              <p className="text-sm font-medium">Status</p>
-              <div>{selectedTicket && getStatusBadge(selectedTicket.status)}</div>
-            </div>
-            <div>
-              <p className="text-sm font-medium">Priority</p>
-              <p>{selectedTicket && getPriorityBadge(selectedTicket.priority)}</p>
-            </div>
-            <div>
-              <p className="text-sm font-medium">Category</p>
-              <p className="capitalize">{selectedTicket?.category}</p>
-            </div>
-            <div>
-              <p className="text-sm font-medium">Last Updated</p>
-              <p>{selectedTicket && formatDate(selectedTicket.updated)}</p>
-            </div>
-          </div>
-
-          <div className="border-t pt-4">
-            <p className="text-sm font-medium mb-2">Description</p>
-            <p className="text-sm">{selectedTicket?.description}</p>
-          </div>
-
-          {selectedTicket?.responses && selectedTicket.responses.length > 0 && (
-            <div className="border-t pt-4">
-              <p className="text-sm font-medium mb-2">Responses</p>
-              <div className="space-y-4">
-                {selectedTicket.responses.map((response) => (
-                  <div key={response.id} className="bg-muted p-3 rounded-md">
-                    <div className="flex justify-between mb-1">
-                      <p className="text-sm font-medium">{response.from}</p>
-                      <p className="text-xs text-muted-foreground">{formatDate(response.timestamp)}</p>
-                    </div>
-                    <p className="text-sm">{response.message}</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
+                <div>
+                  <p className="text-sm font-medium">Status</p>
+                  <div className="mt-1">{getStatusBadge(selectedTicket.status)}</div>
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Priority</p>
+                  <div className="mt-1">{getPriorityBadge(selectedTicket.priority)}</div>
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Category</p>
+                  <p className="capitalize mt-1">{selectedTicket.category}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Last Updated</p>
+                  <p className="mt-1">{formatDate(selectedTicket.updated_at)}</p>
+                </div>
+                {selectedTicket.created_by_name && (
+                  <div>
+                    <p className="text-sm font-medium">Created By</p>
+                    <p className="mt-1">{selectedTicket.created_by_name}</p>
                   </div>
-                ))}
+                )}
+                {selectedTicket.assigned_to_name && (
+                  <div>
+                    <p className="text-sm font-medium">Assigned To</p>
+                    <p className="mt-1">{selectedTicket.assigned_to_name}</p>
+                  </div>
+                )}
               </div>
-            </div>
-          )}
 
-          <div className="border-t pt-4">
-            <p className="text-sm font-medium mb-2">Reply</p>
-            <Textarea
-              placeholder="Type your reply here..."
-              value={replyText}
-              onChange={(e) => setReplyText(e.target.value)}
-              rows={4}
-            />
-          </div>
+              <div className="border-t pt-4">
+                <p className="text-sm font-medium mb-2">Description</p>
+                <p className="text-sm whitespace-pre-wrap">{selectedTicket.description}</p>
+              </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSelectedTicket(null)}>
-              Close
-            </Button>
-            <Button onClick={handleReply} disabled={!replyText.trim()}>
-              Send Reply
-            </Button>
-          </DialogFooter>
+              {selectedTicket.attachments && selectedTicket.attachments.length > 0 && (
+                <div className="border-t pt-4">
+                  <p className="text-sm font-medium mb-2">Attachments ({selectedTicket.attachments.length})</p>
+                  <div className="space-y-2">
+                    {selectedTicket.attachments.map((attachment) => (
+                      <a
+                        key={attachment.id}
+                        href={attachment.file_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 p-2 bg-muted rounded-md hover:bg-muted/80 transition-colors"
+                      >
+                        <FileText className="h-4 w-4" />
+                        <span className="text-sm flex-1 truncate">{attachment.file_name}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {(attachment.file_size / 1024).toFixed(1)} KB
+                        </span>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {selectedTicket.comments && selectedTicket.comments.length > 0 && (
+                <div className="border-t pt-4">
+                  <p className="text-sm font-medium mb-2">Comments ({selectedTicket.comments.length})</p>
+                  <div className="space-y-4">
+                    {selectedTicket.comments.map((comment) => (
+                      <div key={comment.id} className="bg-muted p-3 rounded-md">
+                        <div className="flex justify-between mb-1">
+                          <p className="text-sm font-medium">{comment.created_by_name || "Unknown"}</p>
+                          <p className="text-xs text-muted-foreground">{formatDate(comment.created_at)}</p>
+                        </div>
+                        <p className="text-sm whitespace-pre-wrap">{comment.message}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="border-t pt-4">
+                <p className="text-sm font-medium mb-2">Add Comment</p>
+                <Textarea
+                  placeholder="Type your reply here..."
+                  value={replyText}
+                  onChange={(e) => setReplyText(e.target.value)}
+                  rows={4}
+                />
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => {
+                  setSelectedTicket(null)
+                  setReplyText("")
+                }}>
+                  Close
+                </Button>
+                <Button 
+                  onClick={handleReply} 
+                  disabled={!replyText.trim() || isSubmittingComment}
+                >
+                  {isSubmittingComment ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Sending...
+                    </>
+                  ) : (
+                    "Send Reply"
+                  )}
+                </Button>
+              </DialogFooter>
+            </>
+          ) : null}
         </DialogContent>
       </Dialog>
     </>
