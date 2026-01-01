@@ -1,6 +1,7 @@
 "use client"
 
 import type React from "react"
+import dynamic from "next/dynamic"
 
 import { useState } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -10,8 +11,6 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { SupportTicketList } from "@/components/support/support-ticket-list"
-import { SupportFAQ } from "@/components/support/support-faq"
 import { useToastNotification } from "@/hooks/use-toast-notification"
 import { HelpCircle, Ticket, FileText, MessageSquare, Upload, Send, Loader2, X, AlertCircle } from "lucide-react"
 import Image from "next/image"
@@ -19,6 +18,39 @@ import logo from "@/public/icon.png"
 import { createSupportTicket, uploadTicketAttachment } from "@/lib/supportApi"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+
+// Dynamically import heavy components for better performance
+const SupportTicketList = dynamic(() => import("@/components/support/support-ticket-list").then(mod => ({ default: mod.SupportTicketList })), {
+  loading: () => (
+    <Card>
+      <CardContent className="pt-6">
+        <div className="flex items-center justify-center py-12">
+          <div className="flex flex-col items-center gap-2">
+            <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+            <p className="text-sm text-muted-foreground">Loading tickets...</p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  ),
+  ssr: false,
+});
+
+const SupportFAQ = dynamic(() => import("@/components/support/support-faq").then(mod => ({ default: mod.SupportFAQ })), {
+  loading: () => (
+    <Card>
+      <CardContent className="pt-6">
+        <div className="flex items-center justify-center py-12">
+          <div className="flex flex-col items-center gap-2">
+            <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+            <p className="text-sm text-muted-foreground">Loading FAQ...</p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  ),
+  ssr: false,
+});
 
 export default function SupportPage() {
   const toast = useToastNotification()

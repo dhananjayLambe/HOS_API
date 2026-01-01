@@ -1,7 +1,6 @@
 "use client";
+import dynamic from "next/dynamic";
 import { CalendarDateRangePicker } from "@/components/date-range-picker";
-import { Overview } from "@/components/overview";
-import { RecentAppointments } from "@/components/recent-appointments";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,9 +9,22 @@ import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertCircle, Ban, Calendar, CheckCircle2, ChevronRight, Clock, DollarSign, Download, Filter, UserRound, Users } from "lucide-react";
-import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import { useEffect, useState } from "react";
+
+// Dynamically import heavy components for better performance
+const Overview = dynamic(() => import("@/components/overview").then(mod => ({ default: mod.Overview })), {
+  loading: () => <div className="h-[350px] flex items-center justify-center"><div className="h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" /></div>,
+  ssr: false,
+});
+
+const RecentAppointments = dynamic(() => import("@/components/recent-appointments").then(mod => ({ default: mod.RecentAppointments })), {
+  loading: () => <div className="h-[350px] flex items-center justify-center"><div className="h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" /></div>,
+  ssr: false,
+});
+
+// Import recharts components normally (they're already tree-shakeable)
+import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 const unread = [
   {
     icon: <AlertCircle className="h-4 w-4 text-red-500" />,
@@ -167,9 +179,11 @@ const revenueDepartmentsData = [
 export default function DashboardPage() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
     useEffect(() => {
     async function loadData() {
       try {
+        setIsLoading(true);
         const res = await fetchWithAuth("/api/doctor/dashboard/");
         if (!res.ok) {
           const data = await res.json();
@@ -180,10 +194,46 @@ export default function DashboardPage() {
         setData(data);
       } catch (err: any) {
         setError(err.message || "Something went wrong");
+      } finally {
+        setIsLoading(false);
       }
     }
     loadData();
   }, []);
+  
+  if (isLoading) {
+    return (
+      <div className="flex flex-col gap-5 overflow-x-hidden">
+        <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+          <div>
+            <h2 className="text-2xl lg:text-3xl font-bold tracking-tight mb-2">Dashboard</h2>
+            <p className="text-muted-foreground">Welcome back, Dr. Johnson! Here's what's happening today.</p>
+          </div>
+        </div>
+        <div className="grid gap-4 xl:gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {[1, 2, 3, 4].map((i) => (
+            <Card key={i} className="border bg-white dark:bg-background shadow-sm animate-pulse">
+              <CardHeader className="flex flex-col items-start gap-1">
+                <div className="h-6 w-6 bg-gray-200 dark:bg-gray-700 rounded" />
+                <div className="h-4 w-24 bg-gray-200 dark:bg-gray-700 rounded" />
+                <div className="h-3 w-32 bg-gray-200 dark:bg-gray-700 rounded" />
+              </CardHeader>
+              <CardContent className="flex flex-col gap-2 mt-2 !pt-0">
+                <div className="h-10 w-32 bg-gray-200 dark:bg-gray-700 rounded" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+        <div className="flex items-center justify-center py-12">
+          <div className="flex flex-col items-center gap-2">
+            <div className="h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+            <p className="text-sm text-muted-foreground">Loading dashboard data...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  
   return (
     <div className="flex flex-col gap-5 overflow-x-hidden">
       <div className="flex flex-col md:flex-row items-center justify-between gap-4">

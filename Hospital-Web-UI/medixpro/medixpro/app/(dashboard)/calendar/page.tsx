@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { format, addDays, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isSameDay, isSameMonth, addMonths, subMonths, addWeeks, subWeeks } from "date-fns";
 import { ChevronLeft, ChevronRight, Filter, Plus, List, Grid, Clock, Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -84,20 +84,19 @@ const initialEvents = [
 export default function CalendarPage() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [events, setEvents] = useState(initialEvents);
-  const [filteredEvents, setFilteredEvents] = useState(initialEvents);
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
   const [isAddEventOpen, setIsAddEventOpen] = useState(false);
   const [isEditEventOpen, setIsEditEventOpen] = useState(false);
   const [activeView, setActiveView] = useState("month");
   const [selectedCategories, setSelectedCategories] = useState<string[]>(eventCategories.map((cat) => cat.id));
 
-  // Filter events based on selected categories
-  useEffect(() => {
-    setFilteredEvents(events.filter((event) => selectedCategories.includes(event.categoryId)));
+  // Filter events based on selected categories - memoized for performance
+  const filteredEvents = useMemo(() => {
+    return events.filter((event) => selectedCategories.includes(event.categoryId));
   }, [events, selectedCategories]);
 
-  // Navigation functions
-  const navigatePrevious = () => {
+  // Navigation functions - memoized with useCallback
+  const navigatePrevious = useCallback(() => {
     if (activeView === "month") {
       setCurrentDate(subMonths(currentDate, 1));
     } else if (activeView === "week") {
@@ -105,9 +104,9 @@ export default function CalendarPage() {
     } else if (activeView === "day") {
       setCurrentDate(subDays(currentDate, 1));
     }
-  };
+  }, [activeView, currentDate]);
 
-  const navigateNext = () => {
+  const navigateNext = useCallback(() => {
     if (activeView === "month") {
       setCurrentDate(addMonths(currentDate, 1));
     } else if (activeView === "week") {
@@ -115,46 +114,50 @@ export default function CalendarPage() {
     } else if (activeView === "day") {
       setCurrentDate(addDays(currentDate, 1));
     }
-  };
+  }, [activeView, currentDate]);
 
-  const navigateToday = () => {
+  const navigateToday = useCallback(() => {
     setCurrentDate(new Date());
-  };
+  }, []);
 
-  // Event handlers
-  const handleAddEvent = (newEvent: any) => {
-    const eventWithId = { ...newEvent, id: (events.length + 1).toString() };
-    setEvents([...events, eventWithId]);
+  // Event handlers - memoized with useCallback
+  const handleAddEvent = useCallback((newEvent: any) => {
+    setEvents((prevEvents) => {
+      const eventWithId = { ...newEvent, id: (prevEvents.length + 1).toString() };
+      return [...prevEvents, eventWithId];
+    });
     setIsAddEventOpen(false);
-  };
+  }, []);
 
-  const handleEditEvent = (updatedEvent: any) => {
-    setEvents(events.map((event) => (event.id === updatedEvent.id ? updatedEvent : event)));
+  const handleEditEvent = useCallback((updatedEvent: any) => {
+    setEvents((prevEvents) => prevEvents.map((event) => (event.id === updatedEvent.id ? updatedEvent : event)));
     setIsEditEventOpen(false);
     setSelectedEvent(null);
-  };
+  }, []);
 
-  const handleDeleteEvent = (eventId: string) => {
-    setEvents(events.filter((event) => event.id !== eventId));
+  const handleDeleteEvent = useCallback((eventId: string) => {
+    setEvents((prevEvents) => prevEvents.filter((event) => event.id !== eventId));
     setIsEditEventOpen(false);
     setSelectedEvent(null);
-  };
+  }, []);
 
-  const handleEventClick = (event: any) => {
+  const handleEventClick = useCallback((event: any) => {
     setSelectedEvent(event);
     setIsEditEventOpen(true);
-  };
+  }, []);
 
-  const handleCategoryToggle = (categoryId: string) => {
-    if (selectedCategories.includes(categoryId)) {
-      setSelectedCategories(selectedCategories.filter((id) => id !== categoryId));
-    } else {
-      setSelectedCategories([...selectedCategories, categoryId]);
-    }
-  };
+  const handleCategoryToggle = useCallback((categoryId: string) => {
+    setSelectedCategories((prev) => {
+      if (prev.includes(categoryId)) {
+        return prev.filter((id) => id !== categoryId);
+      } else {
+        return [...prev, categoryId];
+      }
+    });
+  }, []);
 
-  // Helper functions for rendering calendar views
-  const renderMonthView = () => {
+  // Helper functions for rendering calendar views - memoized
+  const renderMonthView = useMemo(() => {
     const monthStart = startOfMonth(currentDate);
     const monthEnd = endOfMonth(currentDate);
     const startDate = startOfWeek(monthStart);
@@ -221,9 +224,9 @@ export default function CalendarPage() {
         {rows}
       </div>
     );
-  };
+  }, [currentDate, filteredEvents, handleEventClick]);
 
-  const renderWeekView = () => {
+  const renderWeekView = useMemo(() => {
     const weekStart = startOfWeek(currentDate);
     const weekEnd = endOfWeek(currentDate);
     const hours = Array.from({ length: 24 }, (_, i) => i);
@@ -273,9 +276,9 @@ export default function CalendarPage() {
         </div>
       </div>
     );
-  };
+  }, [currentDate, filteredEvents, handleEventClick]);
 
-  const renderDayView = () => {
+  const renderDayView = useMemo(() => {
     const hours = Array.from({ length: 24 }, (_, i) => i);
 
     return (
@@ -313,9 +316,9 @@ export default function CalendarPage() {
         </div>
       </div>
     );
-  };
+  }, [currentDate, filteredEvents, handleEventClick]);
 
-  const renderListView = () => {
+  const renderListView = useMemo(() => {
     // Group events by date
     const eventsByDate = filteredEvents.reduce((acc: any, event) => {
       const dateKey = format(event.start, "yyyy-MM-dd");
@@ -365,7 +368,7 @@ export default function CalendarPage() {
         )}
       </div>
     );
-  };
+  }, [filteredEvents, handleEventClick]);
 
   return (
     <div className="container mx-auto">
@@ -441,16 +444,16 @@ export default function CalendarPage() {
           </CardHeader>
           <CardContent>
             <TabsContent value="month" className="mt-0">
-              {renderMonthView()}
+              {renderMonthView}
             </TabsContent>
             <TabsContent value="week" className="mt-0">
-              {renderWeekView()}
+              {renderWeekView}
             </TabsContent>
             <TabsContent value="day" className="mt-0">
-              {renderDayView()}
+              {renderDayView}
             </TabsContent>
             <TabsContent value="list" className="mt-0">
-              {renderListView()}
+              {renderListView}
             </TabsContent>
           </CardContent>
         </Tabs>
