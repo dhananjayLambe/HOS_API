@@ -75,10 +75,10 @@ export function UserNav() {
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem>
-              <Link href="/chat" className="flex items-center gap-2">
+              {/* <Link href="/chat" className="flex items-center gap-2">
                 <MessageCircle className="mr-2 h-4 w-4" />
                 <span>Chat</span>
-              </Link>
+              </Link> */}
             </DropdownMenuItem>
             <DropdownMenuItem>
               <Link href="/support" className="flex items-center gap-2">

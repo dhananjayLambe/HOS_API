@@ -123,33 +123,33 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
         { title: "Medicine Templates", href: "/prescriptions/templates" },
       ],
     },
-    {
-      title: "Ambulance",
-      href: "/ambulance",
-      icon: Ambulance,
-      submenu: [
-        { title: "Ambulance Call List", href: "/ambulance/calls" },
-        { title: "Ambulance List", href: "/ambulance/list" },
-        { title: "Ambulance Details", href: "/ambulance/details" },
-      ],
-    },
+    // {
+    //   title: "Ambulance",
+    //   href: "/ambulance",
+    //   icon: Ambulance,
+    //   submenu: [
+    //     { title: "Ambulance Call List", href: "/ambulance/calls" },
+    //     { title: "Ambulance List", href: "/ambulance/list" },
+    //     { title: "Ambulance Details", href: "/ambulance/details" },
+    //   ],
+    // },
     {
       title: "Pharmacy",
       href: "/pharmacy/medicines",
       icon: Pill,
     },
-    {
-      title: "Blood Bank",
-      href: "/blood-bank",
-      icon: Droplet,
-      submenu: [
-        { title: "Blood Stock", href: "/blood-bank/stock" },
-        { title: "Blood Donor", href: "/blood-bank/donors" },
-        { title: "Blood Issued", href: "/blood-bank/issued" },
-        { title: "Add Blood Unit", href: "/blood-bank/add" },
-        { title: "Issue Blood", href: "/blood-bank/issue" },
-      ],
-    },
+    // {
+    //   title: "Blood Bank",
+    //   href: "/blood-bank",
+    //   icon: Droplet,
+    //   submenu: [
+    //     { title: "Blood Stock", href: "/blood-bank/stock" },
+    //     { title: "Blood Donor", href: "/blood-bank/donors" },
+    //     { title: "Blood Issued", href: "/blood-bank/issued" },
+    //     { title: "Add Blood Unit", href: "/blood-bank/add" },
+    //     { title: "Issue Blood", href: "/blood-bank/issue" },
+    //   ],
+    // },
     {
       title: "Billing",
       href: "/billing",
@@ -161,27 +161,27 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
         { title: "Insurance Claims", href: "/billing/insurance" },
       ],
     },
-    {
-      title: "Departments",
-      href: "/departments",
-      icon: Building2,
-      submenu: [
-        { title: "Department List", href: "/departments" },
-        { title: "Add Department", href: "/departments/add" },
-        { title: "Services Offered", href: "/departments/services" },
-      ],
-    },
-    {
-      title: "Inventory",
-      href: "/inventory",
-      icon: Package,
-      submenu: [
-        { title: "Inventory List", href: "/inventory" },
-        { title: "Add Item", href: "/inventory/add" },
-        { title: "Stock Alerts", href: "/inventory/alerts" },
-        { title: "Suppliers List", href: "/inventory/suppliers" },
-      ],
-    },
+    // {
+    //   title: "Departments",
+    //   href: "/departments",
+    //   icon: Building2,
+    //   submenu: [
+    //     { title: "Department List", href: "/departments" },
+    //     { title: "Add Department", href: "/departments/add" },
+    //     { title: "Services Offered", href: "/departments/services" },
+    //   ],
+    // },
+    // {
+    //   title: "Inventory",
+    //   href: "/inventory",
+    //   icon: Package,
+    //   submenu: [
+    //     { title: "Inventory List", href: "/inventory" },
+    //     { title: "Add Item", href: "/inventory/add" },
+    //     { title: "Stock Alerts", href: "/inventory/alerts" },
+    //     { title: "Suppliers List", href: "/inventory/suppliers" },
+    //   ],
+    // },
     {
       title: "Staff",
       href: "/staff",
@@ -202,17 +202,17 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
         { title: "Death Records", href: "/records/death" },
       ],
     },
-    {
-      title: "Room Allotment",
-      href: "/rooms",
-      icon: Bed,
-      submenu: [
-        { title: "Alloted Rooms", href: "/rooms/alloted" },
-        { title: "New Allotment", href: "/rooms/new" },
-        { title: "Rooms by Department", href: "/rooms/departments" },
-        { title: "Add New Room", href: "/rooms/add" },
-      ],
-    },
+    // {
+    //   title: "Room Allotment",
+    //   href: "/rooms",
+    //   icon: Bed,
+    //   submenu: [
+    //     { title: "Alloted Rooms", href: "/rooms/alloted" },
+    //     { title: "New Allotment", href: "/rooms/new" },
+    //     { title: "Rooms by Department", href: "/rooms/departments" },
+    //     { title: "Add New Room", href: "/rooms/add" },
+    //   ],
+    // },
     {
       title: "Reviews",
       href: "/reviews",
@@ -256,8 +256,8 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
       icon: ShieldCheck,
       submenu: [
         { title: "Login", href: "/auth/login" },
-        { title: "Register", href: "/auth/register" },
-        { title: "Forgot Password", href: "/auth/forgot-password" },
+        // { title: "Register", href: "/auth/register" },
+        // { title: "Forgot Password", href: "/auth/forgot-password" },
         { title: "Profile Settings", href: "/profile" },
       ],
     },
@@ -272,21 +272,21 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
       href: "/tasks",
       icon: CheckCircle2,
     },
-    {
-      title: "Contacts",
-      href: "/contact",
-      icon: UserRound,
-    },
-    {
-      title: "Email",
-      href: "/email",
-      icon: Mail,
-    },
-    {
-      title: "Chat",
-      href: "/chat",
-      icon: MessageCircle,
-    },
+    // {
+    //   title: "Contacts",
+    //   href: "/contact",
+    //   icon: UserRound,
+    // },
+    // {
+    //   title: "Email",
+    //   href: "/email",
+    //   icon: Mail,
+    // },
+    // {
+    //   title: "Chat",
+    //   href: "/chat",
+    //   icon: MessageCircle,
+    // },
     {
       title: "Support",
       href: "/support",

@@ -56,6 +56,7 @@ INSTALLED_APPS = [
     'prescriptions.apps.PrescriptionsConfig',
     'diagnostic.apps.DiagnosticConfig',
     'support.apps.SupportConfig',
+    'tasks.apps.TasksConfig',
     #rest_framework
     'rest_framework',
     'rest_framework.authtoken',

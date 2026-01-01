@@ -34,9 +34,10 @@ interface CreateTaskModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onCreateTask: (task: Task) => void
+  isLoading?: boolean
 }
 
-export function CreateTaskModal({ open, onOpenChange, onCreateTask }: CreateTaskModalProps) {
+export function CreateTaskModal({ open, onOpenChange, onCreateTask, isLoading = false }: CreateTaskModalProps) {
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
   const [status, setStatus] = useState<"todo" | "in-progress" | "completed">("todo")
@@ -143,10 +144,12 @@ export function CreateTaskModal({ open, onOpenChange, onCreateTask }: CreateTask
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isLoading}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit}>Create Task</Button>
+          <Button onClick={handleSubmit} disabled={isLoading || !title.trim()}>
+            {isLoading ? "Creating..." : "Create Task"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
