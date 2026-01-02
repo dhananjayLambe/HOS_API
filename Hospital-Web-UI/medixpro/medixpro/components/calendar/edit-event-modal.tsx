@@ -4,7 +4,7 @@ import type React from "react"
 
 import { useState, useEffect } from "react"
 import { format } from "date-fns"
-import { CalendarIcon, Clock, Trash2 } from "lucide-react"
+import { CalendarIcon, Clock, Trash2, Bell } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -29,6 +29,7 @@ interface EventCategory {
   id: string
   name: string
   color: string
+  editable?: boolean
 }
 
 interface EditEventModalProps {
@@ -48,30 +49,64 @@ export function EditEventModal({
   onDeleteEvent,
   categories,
 }: EditEventModalProps) {
-  const [title, setTitle] = useState(event.title)
-  const [description, setDescription] = useState(event.description || "")
-  const [location, setLocation] = useState(event.location || "")
-  const [categoryId, setCategoryId] = useState(event.categoryId)
-  const [date, setDate] = useState<Date | undefined>(event.start)
-  const [startTime, setStartTime] = useState(format(event.start, "HH:mm"))
-  const [endTime, setEndTime] = useState(format(event.end, "HH:mm"))
+  const [title, setTitle] = useState(event?.title || "")
+  const [description, setDescription] = useState(event?.description || "")
+  const [location, setLocation] = useState(event?.location || "")
+  const [categoryId, setCategoryId] = useState(event?.categoryId || "")
+  const [date, setDate] = useState<Date | undefined>(event?.start)
+  const [startTime, setStartTime] = useState(event?.start ? format(event.start, "HH:mm") : "09:00")
+  const [endTime, setEndTime] = useState(event?.end ? format(event.end, "HH:mm") : "10:00")
+  const [reminderTime, setReminderTime] = useState(event?.reminderTime || "none")
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [timeError, setTimeError] = useState("")
+
+  // Check if event is editable (not OPD appointment)
+  const isEditable = event?.categoryId !== "opd_appointment"
 
   // Update form when event changes
   useEffect(() => {
-    setTitle(event.title)
-    setDescription(event.description || "")
-    setLocation(event.location || "")
-    setCategoryId(event.categoryId)
-    setDate(event.start)
-    setStartTime(format(event.start, "HH:mm"))
-    setEndTime(format(event.end, "HH:mm"))
+    if (event) {
+      setTitle(event.title || "")
+      setDescription(event.description || "")
+      setLocation(event.location || "")
+      setCategoryId(event.categoryId || "")
+      setDate(event.start)
+      setStartTime(event.start ? format(event.start, "HH:mm") : "09:00")
+      setEndTime(event.end ? format(event.end, "HH:mm") : "10:00")
+      setReminderTime(event.reminderTime || "none")
+      setTimeError("")
+    }
   }, [event])
+
+  // Validate time
+  useEffect(() => {
+    if (startTime && endTime) {
+      const [startHour, startMinute] = startTime.split(":").map(Number)
+      const [endHour, endMinute] = endTime.split(":").map(Number)
+      
+      const startTotal = startHour * 60 + startMinute
+      const endTotal = endHour * 60 + endMinute
+      
+      if (endTotal <= startTotal) {
+        setTimeError("End time must be after start time")
+      } else {
+        setTimeError("")
+      }
+    }
+  }, [startTime, endTime])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
 
+    if (!isEditable) {
+      return
+    }
+
     if (!title || !date || !startTime || !endTime || !categoryId) {
+      return
+    }
+
+    if (timeError) {
       return
     }
 
@@ -87,13 +122,19 @@ export function EditEventModal({
 
     onUpdateEvent({
       ...event,
-      title,
+      title: categoryId === "time_block" && !title ? "Not Available" : title,
       description,
-      location,
+      location: categoryId === "time_block" ? "Blocked" : location,
       categoryId,
       start,
       end,
+      reminderTime: reminderTime && reminderTime !== "none" ? reminderTime : undefined,
     })
+  }
+
+  // Don't render if event is OPD appointment (should be handled by parent)
+  if (!isEditable) {
+    return null
   }
 
   return (
@@ -111,8 +152,9 @@ export function EditEventModal({
                   id="title"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Enter event title"
-                  required
+                  placeholder={categoryId === "time_block" ? "Not Available" : "Enter event title"}
+                  required={categoryId !== "time_block"}
+                  disabled={categoryId === "time_block"}
                 />
               </div>
 
@@ -182,6 +224,9 @@ export function EditEventModal({
                   </div>
                 </div>
               </div>
+              {timeError && (
+                <div className="text-sm text-red-500 dark:text-red-400">{timeError}</div>
+              )}
 
               <div className="grid gap-2">
                 <Label htmlFor="location">Location</Label>
@@ -194,19 +239,45 @@ export function EditEventModal({
               </div>
 
               <div className="grid gap-2">
-                <Label htmlFor="description">Description</Label>
+                <Label htmlFor="description">Description / Notes</Label>
                 <Textarea
                   id="description"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Enter event description"
+                  placeholder="Enter event description or notes"
                   rows={3}
                 />
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="reminderTime">Reminder Time (Optional)</Label>
+                <div className="flex items-center">
+                  <Bell className="mr-2 h-4 w-4 text-muted-foreground" />
+                  <Select value={reminderTime} onValueChange={setReminderTime}>
+                    <SelectTrigger id="reminderTime">
+                      <SelectValue placeholder="Select reminder time" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No reminder</SelectItem>
+                      <SelectItem value="5">5 minutes before</SelectItem>
+                      <SelectItem value="10">10 minutes before</SelectItem>
+                      <SelectItem value="15">15 minutes before</SelectItem>
+                      <SelectItem value="30">30 minutes before</SelectItem>
+                      <SelectItem value="60">1 hour before</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
 
             <DialogFooter className="flex justify-between items-center">
-              <Button type="button" variant="destructive" size="sm" onClick={() => setShowDeleteDialog(true)}>
+              <Button 
+                type="button" 
+                variant="destructive" 
+                size="sm" 
+                onClick={() => setShowDeleteDialog(true)}
+                disabled={categoryId === "time_block"}
+              >
                 <Trash2 className="h-4 w-4 mr-1" />
                 Delete
               </Button>
@@ -214,7 +285,9 @@ export function EditEventModal({
                 <Button type="button" variant="outline" onClick={onClose}>
                   Cancel
                 </Button>
-                <Button type="submit">Update Event</Button>
+                <Button type="submit" disabled={!!timeError}>
+                  Update Event
+                </Button>
               </div>
             </DialogFooter>
           </form>

@@ -183,10 +183,15 @@ export default function TasksPage() {
       })
       
       if (response.success) {
-        // Refresh tasks from API
-        const refreshResponse = await getTasks()
-        if (refreshResponse.success && refreshResponse.results) {
-          setTasks(refreshResponse.results)
+        // Update the task in the list if we got the updated task back
+        if (response.data) {
+          setTasks(tasks.map((t) => (t.id === updatedTask.id ? response.data! : t)))
+        } else {
+          // Fallback: refresh tasks from API if no data returned
+          const refreshResponse = await getTasks()
+          if (refreshResponse.success && refreshResponse.results) {
+            setTasks(refreshResponse.results)
+          }
         }
         toast.success("Task updated successfully!")
         setEditModalOpen(false)
@@ -238,15 +243,20 @@ export default function TasksPage() {
       const response = await patchTask(taskId, { status: newStatus })
       
       if (response.success) {
-        // Update local state optimistically
-        setTasks(
-          tasks.map((t) => {
-            if (t.id === taskId) {
-              return { ...t, status: newStatus }
-            }
-            return t
-          }),
-        )
+        // Update local state with the returned task data if available
+        if (response.data) {
+          setTasks(tasks.map((t) => (t.id === taskId ? response.data! : t)))
+        } else {
+          // Fallback: update optimistically
+          setTasks(
+            tasks.map((t) => {
+              if (t.id === taskId) {
+                return { ...t, status: newStatus }
+              }
+              return t
+            }),
+          )
+        }
         toast.success(`Task marked as ${newStatus === "completed" ? "completed" : "to do"}!`)
       } else {
         toast.error(response.message || "Failed to update task status")

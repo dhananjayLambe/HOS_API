@@ -18,6 +18,10 @@ from clinic.api.views import (
     ClinicProfileDetailUpdateAPIView,
     ClinicScheduleListCreateAPIView,
     ClinicAdminMyClinicAPIView,
+    # Clinic Holidays APIs
+    ClinicHolidayListCreateAPIView,
+    ClinicHolidayRetrieveUpdateDeleteAPIView,
+    ClinicHolidayDeactivateAPIView,
 )
 
 router = routers.DefaultRouter()
@@ -46,6 +50,11 @@ urlpatterns = [
     
     # Clinic Schedule APIs (Operating Hours) - POST and GET use same endpoint
     path('clinics/<uuid:clinic_id>/schedules/', ClinicScheduleListCreateAPIView.as_view(), name='clinic-schedule-list-create'),
+    
+    # Clinic Holidays APIs
+    path('clinics/<uuid:clinic_id>/holidays/', ClinicHolidayListCreateAPIView.as_view(), name='clinic-holiday-list-create'),
+    path('clinics/<uuid:clinic_id>/holidays/<uuid:holiday_id>/', ClinicHolidayRetrieveUpdateDeleteAPIView.as_view(), name='clinic-holiday-retrieve-update-delete'),
+    path('clinics/<uuid:clinic_id>/holidays/<uuid:holiday_id>/deactivate/', ClinicHolidayDeactivateAPIView.as_view(), name='clinic-holiday-deactivate'),
     
     # ========================================================================
     # Legacy/Other APIs (Keeping for backward compatibility)

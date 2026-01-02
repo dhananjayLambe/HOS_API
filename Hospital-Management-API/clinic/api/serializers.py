@@ -28,6 +28,7 @@ from clinic.models import (
     ClinicService,
     ClinicServiceList,
     ClinicSpecialization,
+    ClinicHoliday,
 )
 
 # Phone number validator
@@ -551,3 +552,105 @@ class ClinicListFrontendSerializer(serializers.ModelSerializer):
             state = address.state or ""
             return f"{city}, {state}".strip(", ")
         return "NA"
+
+
+class ClinicHolidaySerializer(serializers.ModelSerializer):
+    """
+    Serializer for ClinicHoliday model.
+    Handles validation for date ranges, partial-day holidays, and overlap checking.
+    """
+    created_at = serializers.SerializerMethodField()
+    updated_at = serializers.SerializerMethodField()
+    start_time = serializers.TimeField(format='%H:%M', input_formats=['%H:%M'], required=False, allow_null=True)
+    end_time = serializers.TimeField(format='%H:%M', input_formats=['%H:%M'], required=False, allow_null=True)
+
+    class Meta:
+        model = ClinicHoliday
+        fields = '__all__'
+        read_only_fields = ['id', 'created_at', 'updated_at', 'created_by']
+
+    def get_created_at(self, obj):
+        return timezone.localtime(obj.created_at).isoformat()
+
+    def get_updated_at(self, obj):
+        return timezone.localtime(obj.updated_at).isoformat()
+
+    def validate(self, data):
+        """
+        Validate holiday data:
+        1. End date must be >= start date
+        2. Partial-day holidays require start_time and end_time
+        3. End time must be after start time for partial days
+        4. Check for overlapping holidays
+        """
+        start_date = data.get('start_date')
+        end_date = data.get('end_date')
+        is_full_day = data.get('is_full_day', True)
+        start_time = data.get('start_time')
+        end_time = data.get('end_time')
+        clinic = data.get('clinic')
+
+        # Use instance values if updating
+        if self.instance:
+            start_date = start_date or self.instance.start_date
+            end_date = end_date or self.instance.end_date
+            is_full_day = is_full_day if 'is_full_day' in data else self.instance.is_full_day
+            start_time = start_time if 'start_time' in data else self.instance.start_time
+            end_time = end_time if 'end_time' in data else self.instance.end_time
+            clinic = clinic or self.instance.clinic
+
+        # Validate date range
+        if start_date and end_date:
+            if end_date < start_date:
+                raise serializers.ValidationError({
+                    'end_date': 'End date cannot be before start date.'
+                })
+
+        # Validate partial-day holiday requirements
+        if not is_full_day:
+            if not start_time or not end_time:
+                raise serializers.ValidationError({
+                    'non_field_errors': ['Start time and end time are required for partial-day holidays.']
+                })
+            if end_time <= start_time:
+                raise serializers.ValidationError({
+                    'non_field_errors': ['End time must be after start time.']
+                })
+        else:
+            # Full-day holidays should not have times
+            if start_time or end_time:
+                raise serializers.ValidationError({
+                    'non_field_errors': ['Start time and end time should be null for full-day holidays.']
+                })
+
+        # Check for overlapping holidays (only for active, approved holidays)
+        if clinic and start_date and end_date:
+            overlapping = ClinicHoliday.objects.filter(
+                clinic=clinic,
+                is_active=True,
+                is_approved=True,
+                start_date__lte=end_date,
+                end_date__gte=start_date
+            )
+            
+            # Exclude current instance if updating
+            if self.instance:
+                overlapping = overlapping.exclude(id=self.instance.id)
+            
+            if overlapping.exists():
+                overlapping_holiday = overlapping.first()
+                raise serializers.ValidationError({
+                    'non_field_errors': [
+                        f'Overlapping holiday exists: "{overlapping_holiday.title}" '
+                        f'({overlapping_holiday.start_date} to {overlapping_holiday.end_date}).'
+                    ]
+                })
+
+        return data
+
+    def create(self, validated_data):
+        """Create holiday and set created_by to current user"""
+        request = self.context.get('request')
+        if request and request.user:
+            validated_data['created_by'] = request.user
+        return super().create(validated_data)

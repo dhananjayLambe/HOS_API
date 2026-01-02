@@ -19,19 +19,23 @@ const mapTaskToBackend = (task: any) => {
   // Get current user ID from localStorage as default assigned_to
   const currentUserId = typeof window !== "undefined" ? localStorage.getItem("user_id") : null
   
-  // due_date is required in backend, default to today if not provided
+  // due_date is required in backend, default to now if not provided
   let dueDate = task.dueDate
   if (!dueDate) {
-    // Set default to today
+    // Set default to now
     dueDate = new Date()
   }
+  
+  // Convert to ISO string with datetime (not just date)
+  const dueDateObj = new Date(dueDate)
+  const dueDateISO = dueDateObj.toISOString()
   
   return {
     title: task.title,
     description: task.description || "",
     status: mapStatusToBackend(task.status),
     priority: task.priority,
-    due_date: new Date(dueDate).toISOString().split("T")[0],
+    due_date: dueDateISO, // Send full datetime ISO string
     // assigned_to must be a user ID (UUID string), not a name
     // If assignedTo is provided and looks like a UUID, use it; otherwise use current user
     assigned_to: task.assignedTo && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(task.assignedTo)
@@ -42,13 +46,24 @@ const mapTaskToBackend = (task: any) => {
 
 // Map backend Task to frontend format
 const mapTaskFromBackend = (task: any): Task => {
+  // Handle both date and datetime formats from backend
+  let dueDate: Date | null = null
+  if (task.due_date) {
+    // Backend may return date string or datetime string
+    dueDate = new Date(task.due_date)
+    // If it's just a date (no time), set to start of day
+    if (task.due_date && !task.due_date.includes('T') && !task.due_date.includes(' ')) {
+      dueDate.setHours(0, 0, 0, 0)
+    }
+  }
+  
   return {
     id: task.id,
     title: task.title,
     description: task.description || "",
     status: mapStatusFromBackend(task.status) as "todo" | "in-progress" | "completed",
     priority: task.priority as "low" | "medium" | "high",
-    dueDate: task.due_date ? new Date(task.due_date) : null,
+    dueDate: dueDate,
     createdAt: task.created_at ? new Date(task.created_at) : new Date(),
     assignedTo: task.assigned_to_name || task.assigned_to,
   }
@@ -236,9 +251,19 @@ export async function updateTask(
     // Axios wraps the response in .data
     const responseData = response.data || response
     
+    let task: Task | undefined
+    if (responseData.success && responseData.data) {
+      task = mapTaskFromBackend(responseData.data)
+    } else if (responseData.id) {
+      task = mapTaskFromBackend(responseData)
+    } else if (responseData.data && responseData.data.id) {
+      task = mapTaskFromBackend(responseData.data)
+    }
+    
     return {
       success: true,
       message: responseData.message || "Task updated successfully",
+      data: task,
     }
   } catch (error: any) {
     console.error("Error updating task:", error)
@@ -267,9 +292,19 @@ export async function patchTask(
     // Axios wraps the response in .data
     const responseData = response.data || response
     
+    let task: Task | undefined
+    if (responseData.success && responseData.data) {
+      task = mapTaskFromBackend(responseData.data)
+    } else if (responseData.id) {
+      task = mapTaskFromBackend(responseData)
+    } else if (responseData.data && responseData.data.id) {
+      task = mapTaskFromBackend(responseData.data)
+    }
+    
     return {
       success: true,
       message: responseData.message || "Task updated successfully",
+      data: task,
     }
   } catch (error: any) {
     console.error("Error patching task:", error)

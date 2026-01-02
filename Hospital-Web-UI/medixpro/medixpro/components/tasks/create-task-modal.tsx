@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { CalendarIcon } from "lucide-react"
+import { CalendarIcon, Clock } from "lucide-react"
 import { format } from "date-fns"
 
 import { Button } from "@/components/ui/button"
@@ -43,17 +43,26 @@ export function CreateTaskModal({ open, onOpenChange, onCreateTask, isLoading = 
   const [status, setStatus] = useState<"todo" | "in-progress" | "completed">("todo")
   const [priority, setPriority] = useState<"low" | "medium" | "high">("medium")
   const [dueDate, setDueDate] = useState<Date | null>(null)
+  const [dueTime, setDueTime] = useState("09:00") // Default to 9:00 AM
   const [assignedTo, setAssignedTo] = useState("")
 
   const handleSubmit = () => {
     if (!title.trim()) return
+
+    // Combine date and time into a single Date object
+    let combinedDueDate: Date | null = null
+    if (dueDate) {
+      combinedDueDate = new Date(dueDate)
+      const [hours, minutes] = dueTime.split(":").map(Number)
+      combinedDueDate.setHours(hours, minutes, 0, 0)
+    }
 
     onCreateTask({
       title,
       description,
       status,
       priority,
-      dueDate,
+      dueDate: combinedDueDate,
       assignedTo: assignedTo.trim() || undefined,
     })
 
@@ -63,6 +72,7 @@ export function CreateTaskModal({ open, onOpenChange, onCreateTask, isLoading = 
     setStatus("todo")
     setPriority("medium")
     setDueDate(null)
+    setDueTime("09:00")
     setAssignedTo("")
   }
 
@@ -116,22 +126,39 @@ export function CreateTaskModal({ open, onOpenChange, onCreateTask, isLoading = 
             </div>
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="dueDate">Due Date</Label>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  id="dueDate"
-                  variant="outline"
-                  className={cn("justify-start text-left font-normal", !dueDate && "text-muted-foreground")}
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {dueDate ? format(dueDate, "PPP") : "Select a date"}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0">
-                <Calendar mode="single" selected={dueDate || undefined} onSelect={(date) => setDueDate(date as unknown as Date)} initialFocus />
-              </PopoverContent>
-            </Popover>
+            <Label htmlFor="dueDate">Due Date & Time</Label>
+            <div className="grid grid-cols-2 gap-2">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    id="dueDate"
+                    variant="outline"
+                    className={cn("justify-start text-left font-normal", !dueDate && "text-muted-foreground")}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {dueDate ? format(dueDate, "PPP") : "Select date"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0">
+                  <Calendar mode="single" selected={dueDate || undefined} onSelect={(date) => setDueDate(date as unknown as Date)} initialFocus />
+                </PopoverContent>
+              </Popover>
+              <div className="relative">
+                <Input
+                  type="time"
+                  id="dueTime"
+                  value={dueTime}
+                  onChange={(e) => setDueTime(e.target.value)}
+                  className="pl-10"
+                />
+                <Clock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              </div>
+            </div>
+            {dueDate && (
+              <p className="text-xs text-muted-foreground">
+                Due: {format(dueDate, "PPP")} at {dueTime}
+              </p>
+            )}
           </div>
           <div className="grid gap-2">
             <Label htmlFor="assignedTo">Assigned To</Label>

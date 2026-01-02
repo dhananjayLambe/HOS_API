@@ -2,9 +2,9 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { format } from "date-fns"
-import { CalendarIcon, Clock } from "lucide-react"
+import { CalendarIcon, Clock, Bell } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -19,6 +19,7 @@ interface EventCategory {
   id: string
   name: string
   color: string
+  editable?: boolean
 }
 
 interface AddEventModalProps {
@@ -37,11 +38,49 @@ export function AddEventModal({ isOpen, onClose, onAddEvent, categories, selecte
   const [date, setDate] = useState<Date | undefined>(selectedDate)
   const [startTime, setStartTime] = useState("09:00")
   const [endTime, setEndTime] = useState("10:00")
+  const [reminderTime, setReminderTime] = useState("none")
+  const [timeError, setTimeError] = useState("")
+
+  // Reset form when modal opens/closes
+  useEffect(() => {
+    if (isOpen) {
+      setDate(selectedDate)
+      setTitle("")
+      setDescription("")
+      setLocation("")
+      setCategoryId(categories[0]?.id || "")
+      setStartTime("09:00")
+      setEndTime("10:00")
+      setReminderTime("none")
+      setTimeError("")
+    }
+  }, [isOpen, selectedDate, categories])
+
+  // Validate time
+  useEffect(() => {
+    if (startTime && endTime) {
+      const [startHour, startMinute] = startTime.split(":").map(Number)
+      const [endHour, endMinute] = endTime.split(":").map(Number)
+      
+      const startTotal = startHour * 60 + startMinute
+      const endTotal = endHour * 60 + endMinute
+      
+      if (endTotal <= startTotal) {
+        setTimeError("End time must be after start time")
+      } else {
+        setTimeError("")
+      }
+    }
+  }, [startTime, endTime])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
 
     if (!title || !date || !startTime || !endTime || !categoryId) {
+      return
+    }
+
+    if (timeError) {
       return
     }
 
@@ -55,13 +94,17 @@ export function AddEventModal({ isOpen, onClose, onAddEvent, categories, selecte
     const end = new Date(date)
     end.setHours(endHour, endMinute, 0, 0)
 
+    // For time blocks, set a default title if not provided
+    const eventTitle = categoryId === "time_block" && !title ? "Not Available" : title
+
     onAddEvent({
-      title,
+      title: eventTitle,
       description,
-      location,
+      location: categoryId === "time_block" ? "Blocked" : location,
       categoryId,
       start,
       end,
+      reminderTime: reminderTime && reminderTime !== "none" ? reminderTime : undefined,
     })
 
     // Reset form
@@ -72,7 +115,16 @@ export function AddEventModal({ isOpen, onClose, onAddEvent, categories, selecte
     setDate(selectedDate)
     setStartTime("09:00")
     setEndTime("10:00")
+    setReminderTime("")
+    setTimeError("")
   }
+
+  // Auto-fill title for time blocks
+  useEffect(() => {
+    if (categoryId === "time_block" && !title) {
+      setTitle("Not Available")
+    }
+  }, [categoryId, title])
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -88,8 +140,9 @@ export function AddEventModal({ isOpen, onClose, onAddEvent, categories, selecte
                 id="title"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="Enter event title"
-                required
+                placeholder={categoryId === "time_block" ? "Not Available" : "Enter event title"}
+                required={categoryId !== "time_block"}
+                disabled={categoryId === "time_block"}
               />
             </div>
 
@@ -159,6 +212,9 @@ export function AddEventModal({ isOpen, onClose, onAddEvent, categories, selecte
                 </div>
               </div>
             </div>
+            {timeError && (
+              <div className="text-sm text-red-500 dark:text-red-400">{timeError}</div>
+            )}
 
             <div className="grid gap-2">
               <Label htmlFor="location">Location</Label>
@@ -171,14 +227,34 @@ export function AddEventModal({ isOpen, onClose, onAddEvent, categories, selecte
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="description">Description</Label>
+              <Label htmlFor="description">Description / Notes</Label>
               <Textarea
                 id="description"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Enter event description"
+                placeholder="Enter event description or notes"
                 rows={3}
               />
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="reminderTime">Reminder Time (Optional)</Label>
+              <div className="flex items-center">
+                <Bell className="mr-2 h-4 w-4 text-muted-foreground" />
+                <Select value={reminderTime} onValueChange={setReminderTime}>
+                  <SelectTrigger id="reminderTime">
+                    <SelectValue placeholder="Select reminder time" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No reminder</SelectItem>
+                    <SelectItem value="5">5 minutes before</SelectItem>
+                    <SelectItem value="10">10 minutes before</SelectItem>
+                    <SelectItem value="15">15 minutes before</SelectItem>
+                    <SelectItem value="30">30 minutes before</SelectItem>
+                    <SelectItem value="60">1 hour before</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
 
@@ -186,7 +262,9 @@ export function AddEventModal({ isOpen, onClose, onAddEvent, categories, selecte
             <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="submit">Add Event</Button>
+            <Button type="submit" disabled={!!timeError}>
+              {categoryId === "time_block" ? "Block Time" : "Add Event"}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

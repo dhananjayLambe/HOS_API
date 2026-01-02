@@ -1,5 +1,6 @@
 from rest_framework import serializers
-from datetime import date
+from datetime import date, datetime
+from django.utils import timezone
 from tasks.models import Task
 
 
@@ -55,8 +56,14 @@ class TaskCreateSerializer(serializers.ModelSerializer):
         return value
 
     def validate_due_date(self, value):
-        """Validate that due_date is today or in the future."""
-        if value < date.today():
+        """Validate that due_date is now or in the future."""
+        if isinstance(value, date) and not isinstance(value, datetime):
+            # Convert date to datetime for comparison
+            value = datetime.combine(value, datetime.min.time())
+            value = timezone.make_aware(value) if timezone.is_naive(value) else value
+        
+        now = timezone.now()
+        if value < now:
             raise serializers.ValidationError("Due date cannot be in the past.")
         return value
 
@@ -114,9 +121,13 @@ class TaskUpdateSerializer(serializers.ModelSerializer):
         return value
 
     def validate_due_date(self, value):
-        """Validate that due_date is today or in the future."""
-        if value and value < date.today():
-            raise serializers.ValidationError("Due date cannot be in the past.")
+        """Validate due_date format. For updates, allow past dates for flexibility."""
+        if value:
+            # Just validate that it's a valid datetime, but allow past dates for updates
+            if isinstance(value, date) and not isinstance(value, datetime):
+                # Convert date to datetime for consistency
+                value = datetime.combine(value, datetime.min.time())
+                value = timezone.make_aware(value) if timezone.is_naive(value) else value
         return value
 
     def validate_status(self, value):

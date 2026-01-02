@@ -41,7 +41,7 @@ class Task(models.Model):
         default=PRIORITY_MEDIUM
     )
 
-    due_date = models.DateField(db_index=True)
+    due_date = models.DateTimeField(db_index=True)
 
     assigned_to = models.ForeignKey(
         User,

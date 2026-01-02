@@ -78,29 +78,28 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
   const sidebarItems: SidebarItem[] = [
     {
       title: "Dashboard",
-      href: "/",
+      href: "/doctor-dashboard",
       icon: LayoutDashboard,
       submenu: [
-        { title: "Admin Dashboard", href: "/" },
+        //{ title: "Admin Dashboard", href: "/" },
         { title: "Doctor Dashboard", href: "/doctor-dashboard" },
         { title: "Patient Dashboard", href: "/patient-dashboard" },
-      ],
-    },
-    {
-      title: "Doctors",
-      href: "/doctors",
-      icon: Users,
-      submenu: [
-        { title: "Doctors List", href: "/doctors" },
-        { title: "Add Doctor", href: "/doctors/add" },
-        { title: "Doctor Schedule", href: "/doctors/schedule" },
-        { title: "Specializations", href: "/doctors/specializations" },
       ],
     },
     {
       title: "Patients",
       href: "/patients",
       icon: UserRound,
+    },
+    {
+      title: "Prescriptions",
+      href: "/prescriptions",
+      icon: Pill,
+      submenu: [
+        { title: "All Prescriptions", href: "/prescriptions" },
+        { title: "Create Prescription", href: "/prescriptions/create" },
+        { title: "Medicine Templates", href: "/prescriptions/templates" },
+      ],
     },
     {
       title: "Appointments",
@@ -114,15 +113,29 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
       ],
     },
     {
-      title: "Prescriptions",
-      href: "/prescriptions",
-      icon: Pill,
-      submenu: [
-        { title: "All Prescriptions", href: "/prescriptions" },
-        { title: "Create Prescription", href: "/prescriptions/create" },
-        { title: "Medicine Templates", href: "/prescriptions/templates" },
-      ],
+      title: "Calendar",
+      href: "/calendar",
+      icon: Calendar1,
     },
+    {
+      title: "Tasks",
+      href: "/tasks",
+      icon: CheckCircle2,
+    },
+    // {
+    //   title: "Doctors",
+    //   href: "/doctors",
+    //   icon: Users,
+    //   submenu: [
+    //     { title: "Doctors List", href: "/doctors" },
+    //     { title: "Add Doctor", href: "/doctors/add" },
+    //     { title: "Doctor Schedule", href: "/doctors/schedule" },
+    //     { title: "Specializations", href: "/doctors/specializations" },
+    //   ],
+    // },
+
+
+
     // {
     //   title: "Ambulance",
     //   href: "/ambulance",
@@ -133,11 +146,11 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
     //     { title: "Ambulance Details", href: "/ambulance/details" },
     //   ],
     // },
-    {
-      title: "Pharmacy",
-      href: "/pharmacy/medicines",
-      icon: Pill,
-    },
+    // {
+    //   title: "Pharmacy",
+    //   href: "/pharmacy/medicines",
+    //   icon: Pill,
+    // },
     // {
     //   title: "Blood Bank",
     //   href: "/blood-bank",
@@ -182,17 +195,7 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
     //     { title: "Suppliers List", href: "/inventory/suppliers" },
     //   ],
     // },
-    {
-      title: "Staff",
-      href: "/staff",
-      icon: UserCog,
-      submenu: [
-        { title: "All Staff", href: "/staff" },
-        { title: "Add Staff", href: "/staff/add" },
-        { title: "Roles & Permissions", href: "/staff/roles" },
-        { title: "Attendance", href: "/staff/attendance" },
-      ],
-    },
+
     {
       title: "Records",
       href: "/records",
@@ -213,20 +216,11 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
     //     { title: "Add New Room", href: "/rooms/add" },
     //   ],
     // },
-    {
-      title: "Reviews",
-      href: "/reviews",
-      icon: Star,
-      submenu: [
-        { title: "Doctor Reviews", href: "/reviews/doctors" },
-        { title: "Patient Reviews", href: "/reviews/patients" },
-      ],
-    },
-    {
-      title: "Feedback",
-      href: "/feedback",
-      icon: MessageSquare,
-    },
+    // {
+    //   title: "Feedback",
+    //   href: "/feedback",
+    //   icon: MessageSquare,
+    // },
     {
       title: "Reports",
       href: "/reports",
@@ -239,19 +233,10 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
         { title: "Patient Visit Reports", href: "/reports/patients" },
       ],
     },
+
     {
-      title: "Settings",
-      href: "/settings",
-      icon: Settings,
-      submenu: [
-        { title: "General Settings", href: "/settings" },
-        { title: "Notifications", href: "/settings/notifications" },
-        { title: "Working Hours", href: "/settings/hours" },
-        { title: "Integrations", href: "/settings/integrations" },
-      ],
-    },
-    {
-      title: "Authentication",
+      //title: "Authentication",
+      title: "Profile",
       href: "/auth",
       icon: ShieldCheck,
       submenu: [
@@ -262,16 +247,8 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
       ],
     },
 
-    {
-      title: "Calendar",
-      href: "/calendar",
-      icon: Calendar1,
-    },
-    {
-      title: "Tasks",
-      href: "/tasks",
-      icon: CheckCircle2,
-    },
+
+
     // {
     //   title: "Contacts",
     //   href: "/contact",
@@ -288,15 +265,47 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
     //   icon: MessageCircle,
     // },
     {
+      title: "Settings",
+      href: "/settings",
+      icon: Settings,
+      submenu: [
+        { title: "General Settings", href: "/settings" },
+        { title: "Notifications", href: "/settings/notifications" },
+        { title: "Working Hours", href: "/settings/hours" },
+        { title: "Integrations", href: "/settings/integrations" },
+      ],
+    },
+    {
+      title: "Staff",
+      href: "/staff",
+      icon: UserCog,
+      submenu: [
+        { title: "All Staff", href: "/staff" },
+        { title: "Add Staff", href: "/staff/add" },
+        { title: "Roles & Permissions", href: "/staff/roles" },
+        { title: "Attendance", href: "/staff/attendance" },
+      ],
+    },
+    {
+      title: "Reviews",
+      href: "/reviews",
+      icon: Star,
+      submenu: [
+        //{ title: "Doctor Reviews", href: "/reviews/doctors" },
+        { title: "Patient Reviews", href: "/reviews/patients" },
+      ],
+    },
+    {
       title: "Support",
       href: "/support",
       icon: HelpCircle,
     },
-    {
-      title: "Widgets",
-      href: "/widgets",
-      icon: Grid,
-    },
+
+    // {
+    //   title: "Widgets",
+    //   href: "/widgets",
+    //   icon: Grid,
+    // },
   ];
 
   const toggleSubmenu = (title: string) => {

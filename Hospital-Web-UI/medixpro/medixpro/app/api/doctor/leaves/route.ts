@@ -2,6 +2,11 @@ import { type NextRequest, NextResponse } from "next/server"
 
 const DJANGO_API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
+/**
+ * GET /api/doctor/leaves
+ * Fetches list of doctor leaves
+ * Backend: GET /api/doctor/doctor-leave-list/
+ */
 export async function GET(request: NextRequest) {
   try {
     const token = request.headers.get("Authorization")
@@ -9,17 +14,21 @@ export async function GET(request: NextRequest) {
     const doctorId = searchParams.get("doctor_id")
     const clinicId = searchParams.get("clinic_id")
 
-    if (!doctorId || !clinicId) {
+    if (!doctorId) {
       return NextResponse.json(
-        { error: "doctor_id and clinic_id are required" },
+        { error: "doctor_id is required" },
         { status: 400 }
       )
     }
 
     const params = new URLSearchParams({
       doctor_id: doctorId,
-      clinic: clinicId,
     })
+    
+    // Add clinic filter only if provided
+    if (clinicId) {
+      params.append("clinic", clinicId)
+    }
 
     const response = await fetch(
       `${DJANGO_API_URL}/api/doctor/doctor-leave-list/?${params.toString()}`,
@@ -81,6 +90,11 @@ export async function GET(request: NextRequest) {
   }
 }
 
+/**
+ * POST /api/doctor/leaves
+ * Creates a new doctor leave
+ * Backend: POST /api/doctor/doctor-leave-create/
+ */
 export async function POST(request: NextRequest) {
   try {
     const token = request.headers.get("Authorization")

@@ -5,11 +5,11 @@ const DJANGO_API_URL = process.env.DJANGO_API_URL || process.env.NEXT_PUBLIC_API
 // GET - Retrieve task details
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id: taskId } = await params
     const authHeader = request.headers.get("authorization") || request.headers.get("Authorization")
-    const taskId = params.id
 
     const response = await fetch(`${DJANGO_API_URL}tasks/${taskId}/`, {
       method: "GET",
@@ -54,11 +54,11 @@ export async function GET(
 // PUT - Full update of task
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id: taskId } = await params
     const authHeader = request.headers.get("authorization") || request.headers.get("Authorization")
-    const taskId = params.id
     const body = await request.json()
 
     console.log("[Next.js API] PUT /api/tasks/[id] - Request body:", JSON.stringify(body, null, 2))
@@ -86,7 +86,20 @@ export async function PUT(
     if (!response.ok) {
       let errorMessage = data.message || data.detail || "Failed to update task"
       
-      if (data.errors && typeof data.errors === 'object') {
+      // Handle validation errors
+      if (data.data && typeof data.data === 'object') {
+        const validationErrors = Object.entries(data.data)
+          .map(([key, value]: [string, any]) => {
+            if (Array.isArray(value)) {
+              return `${key}: ${value.join(', ')}`
+            }
+            return `${key}: ${value}`
+          })
+          .join('; ')
+        if (validationErrors) {
+          errorMessage = validationErrors
+        }
+      } else if (data.errors && typeof data.errors === 'object') {
         const validationErrors = Object.entries(data.errors)
           .map(([key, value]: [string, any]) => {
             if (Array.isArray(value)) {
@@ -99,6 +112,8 @@ export async function PUT(
           errorMessage = validationErrors
         }
       }
+
+      console.log("[Next.js API] PUT error response:", JSON.stringify(data, null, 2))
 
       return NextResponse.json(
         {
@@ -126,11 +141,11 @@ export async function PUT(
 // PATCH - Partial update of task (status/priority)
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id: taskId } = await params
     const authHeader = request.headers.get("authorization") || request.headers.get("Authorization")
-    const taskId = params.id
     const body = await request.json()
 
     console.log("[Next.js API] PATCH /api/tasks/[id] - Request body:", JSON.stringify(body, null, 2))
@@ -198,11 +213,11 @@ export async function PATCH(
 // DELETE - Soft delete task
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id: taskId } = await params
     const authHeader = request.headers.get("authorization") || request.headers.get("Authorization")
-    const taskId = params.id
 
     const response = await fetch(`${DJANGO_API_URL}tasks/${taskId}/`, {
       method: "DELETE",

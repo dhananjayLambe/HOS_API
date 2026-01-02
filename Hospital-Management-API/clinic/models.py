@@ -3,6 +3,7 @@ from datetime import time
 from django.db import models
 from account.models import User
 from django.utils import timezone
+from django.core.exceptions import ValidationError
 
 
 STATUS_CHOICES = [
@@ -12,6 +13,7 @@ STATUS_CHOICES = [
 ]
 clinic_logo_upload_path = "clinic/logos/"
 clinic_cover_upload_path = "clinic/cover_photos/"
+
 class Clinic(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     # Basic Information
@@ -177,6 +179,66 @@ class ClinicSchedule(models.Model):
 
     class Meta:
         unique_together = ('clinic', 'day_of_week')
+
+
+class ClinicHoliday(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    clinic = models.ForeignKey(
+        "Clinic",
+        on_delete=models.CASCADE,
+        related_name="holidays"
+    )
+
+    # Holiday Type
+    is_full_day = models.BooleanField(default=True)
+
+    # Date Range
+    start_date = models.DateField()
+    end_date = models.DateField()
+
+    # Optional partial-day closure
+    start_time = models.TimeField(null=True, blank=True)
+    end_time = models.TimeField(null=True, blank=True)
+
+    # Reason
+    title = models.CharField(max_length=255)  # e.g. Diwali, Maintenance
+    description = models.TextField(blank=True, null=True)
+
+    # Approval & Visibility
+    is_active = models.BooleanField(default=True)
+    is_approved = models.BooleanField(default=True)
+
+    created_by = models.ForeignKey(
+        "account.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["start_date"]
+        indexes = [
+            models.Index(fields=["clinic", "start_date", "end_date"]),
+        ]
+
+    def clean(self):
+        if self.end_date < self.start_date:
+            raise ValidationError("End date cannot be before start date.")
+
+        if not self.is_full_day:
+            if not self.start_time or not self.end_time:
+                raise ValidationError(
+                    "Start time and end time are required for partial-day holidays."
+                )
+            if self.end_time <= self.start_time:
+                raise ValidationError("End time must be after start time.")
+
+    def __str__(self):
+        return f"{self.title} ({self.start_date} → {self.end_date})"
 
 class ClinicService(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

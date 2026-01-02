@@ -30,6 +30,7 @@ from clinic.api.serializers import (
     ClinicSpecializationSerializer,
     ClinicOnboardingSerializer,
     ClinicProfileSerializer,
+    ClinicHolidaySerializer,
 )
 
 from clinic.models import (
@@ -41,6 +42,7 @@ from clinic.models import (
     ClinicSchedule,
     ClinicSpecialization,
     ClinicAdminProfile,
+    ClinicHoliday,
 )
 from account.permissions import IsDoctor
 logger = logging.getLogger(__name__)
@@ -1212,4 +1214,327 @@ class ClinicAdminMyClinicAPIView(APIView):
             "success": True,
             "message": "Clinic information retrieved successfully",
             "data": response_data
+        }, status=status.HTTP_200_OK)
+
+
+# ============================================================================
+# Clinic Holidays API
+# ============================================================================
+
+def _check_clinic_access(request, clinic):
+    """
+    Helper function to check if user has access to the clinic.
+    Returns (has_access, error_response) tuple.
+    """
+    user = request.user
+    
+    # Superuser always has access
+    if user.is_superuser:
+        return True, None
+    
+    # Check if user is clinic admin of this clinic
+    if hasattr(user, 'clinic_admin_profile'):
+        if user.clinic_admin_profile.clinic == clinic:
+            return True, None
+    
+    # Check if user is doctor associated with this clinic
+    if hasattr(user, 'doctor'):
+        if clinic in user.doctor.clinics.all():
+            return True, None
+    
+    # Check if user is helpdesk with access to this clinic
+    if hasattr(user, 'helpdesk'):
+        if clinic in user.helpdesk.clinics.all():
+            return True, None
+    
+    return False, Response({
+        "status": "error",
+        "message": "You do not have permission to access this clinic."
+    }, status=status.HTTP_403_FORBIDDEN)
+
+
+class ClinicHolidayListCreateAPIView(APIView):
+    """
+    GET  /api/clinics/{clinic_id}/holidays/ - List holidays
+    POST /api/clinics/{clinic_id}/holidays/ - Create holiday
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def check_permissions(self, request):
+        """Check permissions based on HTTP method"""
+        if request.method == 'GET':
+            permission = IsDoctorOrHelpdeskOrClinicAdminOrSuperuser()
+        else:
+            permission = IsDoctorOrClinicAdminOrSuperuser()
+        
+        if not permission.has_permission(request, self):
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("You do not have permission to perform this action.")
+
+    def get(self, request, clinic_id):
+        """GET /api/clinics/{clinic_id}/holidays/"""
+        self.check_permissions(request)
+        
+        try:
+            clinic = Clinic.objects.get(id=clinic_id)
+        except Clinic.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "Clinic not found."
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        # Check clinic access
+        has_access, error_response = _check_clinic_access(request, clinic)
+        if not has_access:
+            return error_response
+
+        # Get query parameters for filtering
+        from_date = request.query_params.get('from')
+        to_date = request.query_params.get('to')
+        is_active_param = request.query_params.get('is_active')
+
+        # Build queryset
+        queryset = ClinicHoliday.objects.filter(clinic=clinic)
+
+        # Apply filters
+        if from_date:
+            queryset = queryset.filter(end_date__gte=from_date)
+        if to_date:
+            queryset = queryset.filter(start_date__lte=to_date)
+        if is_active_param is not None:
+            is_active = is_active_param.lower() == 'true'
+            queryset = queryset.filter(is_active=is_active)
+
+        # Order by start_date
+        queryset = queryset.order_by('start_date')
+
+        serializer = ClinicHolidaySerializer(queryset, many=True)
+        return Response({
+            "status": "success",
+            "data": serializer.data
+        }, status=status.HTTP_200_OK)
+
+    @transaction.atomic
+    def post(self, request, clinic_id):
+        """POST /api/clinics/{clinic_id}/holidays/"""
+        self.check_permissions(request)
+        
+        try:
+            clinic = Clinic.objects.get(id=clinic_id)
+        except Clinic.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "Clinic not found."
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        # Check clinic access
+        has_access, error_response = _check_clinic_access(request, clinic)
+        if not has_access:
+            return error_response
+
+        # Add clinic to request data
+        data = request.data.copy()
+        data['clinic'] = clinic.id
+
+        serializer = ClinicHolidaySerializer(data=data, context={'request': request})
+        if serializer.is_valid():
+            holiday = serializer.save()
+            return Response({
+                "status": "success",
+                "message": "Clinic holiday created successfully.",
+                "data": {
+                    "id": str(holiday.id),
+                    "title": holiday.title
+                }
+            }, status=status.HTTP_201_CREATED)
+        
+        return Response({
+            "status": "error",
+            "message": "Validation failed.",
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ClinicHolidayRetrieveUpdateDeleteAPIView(APIView):
+    """
+    GET  /api/clinics/{clinic_id}/holidays/{holiday_id}/ - Retrieve holiday
+    PUT  /api/clinics/{clinic_id}/holidays/{holiday_id}/ - Full update
+    PATCH /api/clinics/{clinic_id}/holidays/{holiday_id}/ - Partial update
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def check_permissions(self, request):
+        """Check permissions based on HTTP method"""
+        if request.method == 'GET':
+            permission = IsDoctorOrHelpdeskOrClinicAdminOrSuperuser()
+        else:
+            permission = IsDoctorOrClinicAdminOrSuperuser()
+        
+        if not permission.has_permission(request, self):
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("You do not have permission to perform this action.")
+
+    def get(self, request, clinic_id, holiday_id):
+        """GET /api/clinics/{clinic_id}/holidays/{holiday_id}/"""
+        self.check_permissions(request)
+        
+        try:
+            clinic = Clinic.objects.get(id=clinic_id)
+        except Clinic.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "Clinic not found."
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        # Check clinic access
+        has_access, error_response = _check_clinic_access(request, clinic)
+        if not has_access:
+            return error_response
+
+        try:
+            holiday = ClinicHoliday.objects.get(id=holiday_id, clinic=clinic)
+        except ClinicHoliday.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "Holiday not found."
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = ClinicHolidaySerializer(holiday)
+        return Response({
+            "status": "success",
+            "data": serializer.data
+        }, status=status.HTTP_200_OK)
+
+    @transaction.atomic
+    def put(self, request, clinic_id, holiday_id):
+        """PUT /api/clinics/{clinic_id}/holidays/{holiday_id}/"""
+        self.check_permissions(request)
+        
+        try:
+            clinic = Clinic.objects.get(id=clinic_id)
+        except Clinic.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "Clinic not found."
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        # Check clinic access
+        has_access, error_response = _check_clinic_access(request, clinic)
+        if not has_access:
+            return error_response
+
+        try:
+            holiday = ClinicHoliday.objects.get(id=holiday_id, clinic=clinic)
+        except ClinicHoliday.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "Holiday not found."
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        # Add clinic to request data to ensure it doesn't change
+        data = request.data.copy()
+        data['clinic'] = clinic.id
+
+        serializer = ClinicHolidaySerializer(holiday, data=data, context={'request': request})
+        if serializer.is_valid():
+            serializer.save()
+            return Response({
+                "status": "success",
+                "message": "Holiday updated successfully.",
+                "data": serializer.data
+            }, status=status.HTTP_200_OK)
+        
+        return Response({
+            "status": "error",
+            "message": "Validation failed.",
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    @transaction.atomic
+    def patch(self, request, clinic_id, holiday_id):
+        """PATCH /api/clinics/{clinic_id}/holidays/{holiday_id}/"""
+        self.check_permissions(request)
+        
+        try:
+            clinic = Clinic.objects.get(id=clinic_id)
+        except Clinic.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "Clinic not found."
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        # Check clinic access
+        has_access, error_response = _check_clinic_access(request, clinic)
+        if not has_access:
+            return error_response
+
+        try:
+            holiday = ClinicHoliday.objects.get(id=holiday_id, clinic=clinic)
+        except ClinicHoliday.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "Holiday not found."
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        # Add clinic to request data to ensure it doesn't change
+        data = request.data.copy()
+        data['clinic'] = clinic.id
+
+        serializer = ClinicHolidaySerializer(holiday, data=data, partial=True, context={'request': request})
+        if serializer.is_valid():
+            serializer.save()
+            return Response({
+                "status": "success",
+                "message": "Holiday updated successfully.",
+                "data": serializer.data
+            }, status=status.HTTP_200_OK)
+        
+        return Response({
+            "status": "error",
+            "message": "Validation failed.",
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ClinicHolidayDeactivateAPIView(APIView):
+    """
+    PATCH /api/clinics/{clinic_id}/holidays/{holiday_id}/deactivate/
+    Soft delete (deactivate) a holiday
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctorOrClinicAdminOrSuperuser]
+
+    @transaction.atomic
+    def patch(self, request, clinic_id, holiday_id):
+        """PATCH /api/clinics/{clinic_id}/holidays/{holiday_id}/deactivate/"""
+        try:
+            clinic = Clinic.objects.get(id=clinic_id)
+        except Clinic.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "Clinic not found."
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        # Check clinic access
+        has_access, error_response = _check_clinic_access(request, clinic)
+        if not has_access:
+            return error_response
+
+        try:
+            holiday = ClinicHoliday.objects.get(id=holiday_id, clinic=clinic)
+        except ClinicHoliday.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "Holiday not found."
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        # Deactivate the holiday
+        holiday.is_active = False
+        holiday.save()
+
+        return Response({
+            "status": "success",
+            "message": "Clinic holiday deactivated successfully."
         }, status=status.HTTP_200_OK)

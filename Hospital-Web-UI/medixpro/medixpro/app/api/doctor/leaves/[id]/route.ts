@@ -2,6 +2,11 @@ import { type NextRequest, NextResponse } from "next/server"
 
 const DJANGO_API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
+/**
+ * PATCH /api/doctor/leaves/[id]
+ * Updates an existing doctor leave
+ * Backend: PATCH /api/doctor/doctor-leave-update/<uuid:pk>/
+ */
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -18,6 +23,9 @@ export async function PATCH(
       )
     }
 
+    console.log(`[PATCH /api/doctor/leaves/${id}] Updating leave with data:`, body)
+    console.log(`[PATCH /api/doctor/leaves/${id}] Backend URL: ${DJANGO_API_URL}/api/doctor/doctor-leave-update/${id}/`)
+
     const response = await fetch(
       `${DJANGO_API_URL}/api/doctor/doctor-leave-update/${id}/`,
       {
@@ -31,17 +39,26 @@ export async function PATCH(
       }
     )
 
+    console.log(`[PATCH /api/doctor/leaves/${id}] Response status:`, response.status)
+    console.log(`[PATCH /api/doctor/leaves/${id}] Response ok:`, response.ok)
+
     let data
     try {
-      data = await response.json()
+      const responseText = await response.text()
+      console.log(`[PATCH /api/doctor/leaves/${id}] Response text:`, responseText)
+      data = responseText ? JSON.parse(responseText) : {}
     } catch (e) {
+      console.error(`[PATCH /api/doctor/leaves/${id}] Failed to parse response:`, e)
       return NextResponse.json(
         { error: "Invalid response from server", detail: response.statusText },
         { status: response.status }
       )
     }
 
+    console.log(`[PATCH /api/doctor/leaves/${id}] Parsed data:`, data)
+
     if (!response.ok) {
+      console.error(`[PATCH /api/doctor/leaves/${id}] Error response:`, data)
       return NextResponse.json(
         {
           error: data.message || data.detail || "Failed to update leave",
@@ -52,11 +69,13 @@ export async function PATCH(
       )
     }
 
+    // Backend returns: { status: "success", message: "...", data: {...} }
+    // We need to preserve this structure
     const nextRes = NextResponse.json(
       {
-        status: "success",
+        status: data.status || "success",
         message: data.message || "Leave updated successfully",
-        data: data.data,
+        data: data.data || data, // Handle both nested and flat responses
       },
       { status: response.status }
     )
@@ -80,6 +99,11 @@ export async function PATCH(
   }
 }
 
+/**
+ * DELETE /api/doctor/leaves/[id]
+ * Deletes a doctor leave
+ * Backend: DELETE /api/doctor/doctor-leave-delete/<uuid:pk>/
+ */
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -170,7 +194,7 @@ export async function DELETE(
       )
     }
 
-    return NextResponse.json(
+    const errorRes = NextResponse.json(
       {
         error: data.message || data.detail || "Failed to delete leave",
         status: "error",
@@ -184,11 +208,11 @@ export async function DELETE(
     if (setCookies) {
       const cookies = setCookies.split(/,(?=[^ ]*?=)/)
       cookies.forEach((cookie) => {
-        nextRes.headers.append("Set-Cookie", cookie)
+        errorRes.headers.append("Set-Cookie", cookie)
       })
     }
 
-    return nextRes
+    return errorRes
   } catch (error: any) {
     console.error("Leave delete error:", error)
     return NextResponse.json(

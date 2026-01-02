@@ -1,6 +1,8 @@
 import logging
 from datetime import date, datetime
 
+from django.utils import timezone
+from django.db.models import Case, When, Value, IntegerField
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -92,15 +94,20 @@ class TaskListView(APIView):
                 if priority_filter in valid_priorities:
                     queryset = queryset.filter(priority=priority_filter)
             
-            # Date filters
+            # Date/DateTime filters
             due_date = request.query_params.get('due_date')
             if due_date:
                 try:
-                    due_date_obj = datetime.strptime(due_date, '%Y-%m-%d').date()
-                    queryset = queryset.filter(due_date=due_date_obj)
-                except ValueError:
+                    # Try parsing as datetime first (ISO format)
+                    if 'T' in due_date or ' ' in due_date:
+                        due_date_obj = datetime.fromisoformat(due_date.replace('Z', '+00:00'))
+                    else:
+                        # Parse as date and convert to datetime at start of day
+                        due_date_obj = datetime.strptime(due_date, '%Y-%m-%d')
+                    queryset = queryset.filter(due_date__date=due_date_obj.date())
+                except (ValueError, AttributeError):
                     return format_error_response(
-                        "Invalid due_date format. Use YYYY-MM-DD.",
+                        "Invalid due_date format. Use YYYY-MM-DD or ISO datetime format.",
                         status_code=status.HTTP_400_BAD_REQUEST
                     )
             
@@ -110,26 +117,51 @@ class TaskListView(APIView):
             
             if start_date:
                 try:
-                    start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date()
+                    # Try parsing as datetime first (ISO format)
+                    if 'T' in start_date or ' ' in start_date:
+                        start_date_obj = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+                    else:
+                        # Parse as date and convert to datetime at start of day
+                        start_date_obj = datetime.strptime(start_date, '%Y-%m-%d')
                     queryset = queryset.filter(due_date__gte=start_date_obj)
-                except ValueError:
+                except (ValueError, AttributeError):
                     return format_error_response(
-                        "Invalid start_date format. Use YYYY-MM-DD.",
+                        "Invalid start_date format. Use YYYY-MM-DD or ISO datetime format.",
                         status_code=status.HTTP_400_BAD_REQUEST
                     )
             
             if end_date:
                 try:
-                    end_date_obj = datetime.strptime(end_date, '%Y-%m-%d').date()
+                    # Try parsing as datetime first (ISO format)
+                    if 'T' in end_date or ' ' in end_date:
+                        end_date_obj = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+                    else:
+                        # Parse as date and convert to datetime at end of day
+                        end_date_obj = datetime.strptime(end_date, '%Y-%m-%d')
+                        end_date_obj = end_date_obj.replace(hour=23, minute=59, second=59)
                     queryset = queryset.filter(due_date__lte=end_date_obj)
-                except ValueError:
+                except (ValueError, AttributeError):
                     return format_error_response(
-                        "Invalid end_date format. Use YYYY-MM-DD.",
+                        "Invalid end_date format. Use YYYY-MM-DD or ISO datetime format.",
                         status_code=status.HTTP_400_BAD_REQUEST
                     )
             
-            # Ordering
-            ordering = request.query_params.get('ordering', 'due_date,-priority')
+            # Ordering - prioritize today's tasks first, then by due_date and priority
+            today_start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            today_end = today_start.replace(hour=23, minute=59, second=59, microsecond=999999)
+            
+            # Custom ordering: today's tasks first (priority=0), then others (priority=1)
+            # Within each group, order by due_date ascending, then priority descending
+            queryset = queryset.annotate(
+                date_priority=Case(
+                    When(due_date__gte=today_start, due_date__lte=today_end, then=Value(0)),
+                    default=Value(1),
+                    output_field=IntegerField()
+                )
+            ).order_by('date_priority', 'due_date', '-priority')
+            
+            # Allow custom ordering if specified, but still prioritize today
+            ordering = request.query_params.get('ordering')
             if ordering:
                 order_fields = [field.strip() for field in ordering.split(',')]
                 # Validate ordering fields
@@ -137,7 +169,8 @@ class TaskListView(APIView):
                               'created_at', '-created_at', 'status', '-status']
                 order_fields = [f for f in order_fields if f in valid_fields]
                 if order_fields:
-                    queryset = queryset.order_by(*order_fields)
+                    # Still prioritize today, but apply custom ordering within groups
+                    queryset = queryset.order_by('date_priority', *order_fields)
             
             # Serialize results
             serializer = TaskSerializer(queryset, many=True, context={'request': request})
@@ -268,14 +301,18 @@ class TaskDetailView(APIView):
                     serializer.errors
                 )
             
-            serializer.save()
+            updated_task = serializer.save()
+            
+            # Serialize the updated task to return it
+            response_serializer = TaskSerializer(updated_task, context={'request': request})
             
             logger.info(
                 f"Task updated: {task.id} by {request.user.username}"
             )
             
             return format_success_response(
-                "Task updated successfully"
+                "Task updated successfully",
+                response_serializer.data
             )
             
         except NotFound as e:
@@ -318,7 +355,10 @@ class TaskDetailView(APIView):
                     serializer.errors
                 )
             
-            serializer.save()
+            updated_task = serializer.save()
+            
+            # Serialize the updated task to return it
+            response_serializer = TaskSerializer(updated_task, context={'request': request})
             
             # Determine message based on what was updated
             updated_fields = list(request.data.keys())
@@ -333,7 +373,7 @@ class TaskDetailView(APIView):
                 f"Task partially updated: {task.id} by {request.user.username}"
             )
             
-            return format_success_response(message)
+            return format_success_response(message, response_serializer.data)
             
         except NotFound as e:
             return format_error_response(
