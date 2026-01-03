@@ -244,18 +244,17 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
       ],
     },
 
-    {
-      //title: "Authentication",
-      title: "Profile",
-      href: "/auth",
-      icon: ShieldCheck,
-      submenu: [
-        { title: "Login", href: "/auth/login" },
-        // { title: "Register", href: "/auth/register" },
-        // { title: "Forgot Password", href: "/auth/forgot-password" },
-        { title: "Profile Settings", href: "/profile" },
-      ],
-    },
+    // {
+    //   //title: "Authentication",
+    //   title: "Authentication",
+    //   href: "/auth",
+    //   icon: ShieldCheck,
+    //   submenu: [
+    //     { title: "Login", href: "/auth/login" },
+    //     // { title: "Register", href: "/auth/register" },
+    //     // { title: "Forgot Password", href: "/auth/forgot-password" },
+    //   ],
+    // },
 
 
 
@@ -279,10 +278,12 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
       href: "/settings",
       icon: Settings,
       submenu: [
+        { title: "Profile Settings", href: "/profile" },
         { title: "General Settings", href: "/settings" },
-        { title: "Notifications", href: "/settings/notifications" },
+        // { title: "Notifications", href: "/settings/notifications" },
         { title: "Working Hours", href: "/settings/hours" },
-        { title: "Integrations", href: "/settings/integrations" },
+        // { title: "Integrations", href: "/settings/integrations" },
+        
       ],
     },
     {
@@ -296,14 +297,23 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
         { title: "Attendance", href: "/staff/attendance" },
       ],
     },
+    // {
+    //   title: "Reviews",
+    //   href: "/reviews",
+    //   icon: Star,
+    //   submenu: [
+    //     //{ title: "Doctor Reviews", href: "/reviews/doctors" },
+    //     { title: "Patient Reviews", href: "/reviews/patients" },
+    //   ],
+    // },
     {
-      title: "Reviews",
-      href: "/reviews",
+      title: "Patient Reviews",
+      href: "/reviews/patients",
       icon: Star,
-      submenu: [
-        //{ title: "Doctor Reviews", href: "/reviews/doctors" },
-        { title: "Patient Reviews", href: "/reviews/patients" },
-      ],
+      // submenu: [
+      //   //{ title: "Doctor Reviews", href: "/reviews/doctors" },
+      //   { title: "Patient Reviews", href: "/reviews/patients" },
+      // ],
     },
     {
       title: "Support",
