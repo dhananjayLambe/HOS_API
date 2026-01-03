@@ -76,16 +76,16 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
   const initials = getUserInitials();
 
   const sidebarItems: SidebarItem[] = [
-    {
-      title: "Dashboard",
-      href: "/doctor-dashboard",
-      icon: LayoutDashboard,
-      submenu: [
-        //{ title: "Admin Dashboard", href: "/" },
-        { title: "Doctor Dashboard", href: "/doctor-dashboard" },
-        { title: "Patient Dashboard", href: "/patient-dashboard" },
-      ],
-    },
+    // {
+    //   title: "Dashboard",
+    //   href: "/doctor-dashboard",
+    //   icon: LayoutDashboard,
+    //   submenu: [
+    //     //{ title: "Admin Dashboard", href: "/" },
+    //     { title: "Doctor Dashboard", href: "/doctor-dashboard" },
+    //     { title: "Patient Dashboard", href: "/patient-dashboard" },
+    //   ],
+    // },
     {
       title: "Patients",
       href: "/patients",
@@ -121,7 +121,27 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
         { title: "Medicine Templates", href: "/prescriptions/templates" },
       ],
     },
-
+    {
+      title: "Lab Tests Reports",
+      href: "/lab-tests-reports",
+      icon: FileText,
+      submenu: [
+        // { title: "All Lab Tests Reports", href: "/lab-tests-reports" },
+        // { title: "Create Lab Test Report", href: "/lab-tests-reports/create" },
+        // { title: "Lab Test Report Templates", href: "/lab-tests-reports/templates" },
+      ],
+    },
+    {
+      title: "Billing",
+      href: "/billing",
+      icon: Receipt,
+      submenu: [
+        { title: "Invoices List", href: "/billing" },
+        { title: "Create Invoice", href: "/billing/create" },
+        { title: "Payments History", href: "/billing/payments" },
+        { title: "Insurance Claims", href: "/billing/insurance" },
+      ],
+    },
     {
       title: "Calendar",
       href: "/calendar",
@@ -231,18 +251,7 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
     //   href: "/feedback",
     //   icon: MessageSquare,
     // },
-    {
-      title: "Reports",
-      href: "/reports",
-      icon: BarChart3,
-      submenu: [
-        { title: "Overview", href: "/reports" },
-        { title: "Appointment Reports", href: "/reports/appointments" },
-        { title: "Financial Reports", href: "/reports/financial" },
-        { title: "Inventory Reports", href: "/reports/inventory" },
-        { title: "Patient Visit Reports", href: "/reports/patients" },
-      ],
-    },
+ 
 
     // {
     //   //title: "Authentication",
@@ -286,17 +295,17 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
         
       ],
     },
-    {
-      title: "Staff",
-      href: "/staff",
-      icon: UserCog,
-      submenu: [
-        { title: "All Staff", href: "/staff" },
-        { title: "Add Staff", href: "/staff/add" },
-        { title: "Roles & Permissions", href: "/staff/roles" },
-        { title: "Attendance", href: "/staff/attendance" },
-      ],
-    },
+    // {
+    //   title: "Staff",
+    //   href: "/staff",
+    //   icon: UserCog,
+    //   submenu: [
+    //     { title: "All Staff", href: "/staff" },
+    //     { title: "Add Staff", href: "/staff/add" },
+    //     { title: "Roles & Permissions", href: "/staff/roles" },
+    //     { title: "Attendance", href: "/staff/attendance" },
+    //   ],
+    // },
     // {
     //   title: "Reviews",
     //   href: "/reviews",
@@ -306,6 +315,18 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
     //     { title: "Patient Reviews", href: "/reviews/patients" },
     //   ],
     // },
+    {
+      title: "Reports",
+      href: "/reports",
+      icon: BarChart3,
+      submenu: [
+        { title: "Overview", href: "/reports" },
+        { title: "Appointment Reports", href: "/reports/appointments" },
+        { title: "Financial Reports", href: "/reports/financial" },
+        //{ title: "Inventory Reports", href: "/reports/inventory" },
+        { title: "Patient Visit Reports", href: "/reports/patients" },
+      ],
+    },
     {
       title: "Patient Reviews",
       href: "/reviews/patients",

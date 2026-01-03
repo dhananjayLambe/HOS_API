@@ -2,7 +2,7 @@ import uuid
 from django.db import models
 from account.models import User
 from clinic.models import Clinic
-
+from django.core.exceptions import ValidationError
 # Choices for common fields
 GENDER_CHOICES = [('Male', 'Male'), ('Female', 'Female'), ('Other', 'Other')]
 BLOOD_GROUP_CHOICES = [
@@ -10,6 +10,11 @@ BLOOD_GROUP_CHOICES = [
     ('B+', 'B+'), ('B-', 'B-'),
     ('AB+', 'AB+'), ('AB-', 'AB-'),
     ('O+', 'O+'), ('O-', 'O-')
+]
+ONBOARDING_SOURCE = [
+    ("doctor", "Doctor"),
+    ("clinic", "Clinic Staff"),
+    ("self", "Self Registration"),
 ]
 
 # 2. PatientAccount: Represents the primary account holder (based on mobile number)
@@ -19,6 +24,14 @@ class PatientAccount(models.Model):
     clinics = models.ManyToManyField(Clinic, related_name='patients')
     alternate_mobile = models.CharField(max_length=15, blank=True, null=True)
     preferred_language = models.CharField(max_length=50, blank=True, null=True)  # Preferred communication language
+
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name="created_patients"
+    )
+    onboarding_source = models.CharField(
+        max_length=20, choices=ONBOARDING_SOURCE, default="self"
+    )
+
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -52,6 +65,12 @@ class PatientProfile(models.Model):
         return f"{self.first_name} ({self.relation})"
     def get_full_name(self):
         return f"{self.first_name} {self.last_name}"
+    def clean(self):
+        if self.relation == "self":
+            if PatientProfile.objects.filter(
+                account=self.account, relation="self"
+            ).exclude(id=self.id).exists():
+                raise ValidationError("Only one self profile allowed.")
 
 class PatientProfileDetails(models.Model):
     BLOOD_GROUP_CHOICES = [

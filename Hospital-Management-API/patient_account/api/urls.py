@@ -6,7 +6,9 @@ from patient_account.api.views import (
     CustomTokenRefreshView,LogoutView,get_patient_account,RegisterPatientView,AddPatientProfileView,
     GetPatientProfilesView,DeletePatientProfileView,GetProfileByNameView,
     GetPrimaryProfileView,PatientProfileDetailsViewSet,CheckPatientView,
-    SendOTPView,UpdatePatientProfileView,PatientProfileSearchView
+    SendOTPView,UpdatePatientProfileView,PatientProfileSearchView,
+    CheckMobileView,CreatePatientView,PatientProfilesByAccountView,
+    SelectPatientView,GetSelectedPatientView,ClearSelectedPatientView
     )
 app_name = 'patient_account'
 
@@ -32,6 +34,16 @@ urlpatterns = [
     path("get-primary-profile/", GetPrimaryProfileView.as_view(), name="get-primary-profile"),
     path("check-patient/", CheckPatientView.as_view(), name="check-patient"),
     path("search/", PatientProfileSearchView.as_view(), name="patient-search"),
+    
+    # Doctor EMR Patient Creation APIs
+    path("check-mobile/", CheckMobileView.as_view(), name="check-mobile"),
+    path("create/", CreatePatientView.as_view(), name="create-patient"),
+    path("<uuid:patient_account_id>/profiles/", PatientProfilesByAccountView.as_view(), name="patient-profiles-by-account"),
+    
+    # Patient Selection Management APIs (Doctor EMR)
+    path("select/", SelectPatientView.as_view(), name="select-patient"),
+    path("selected/", GetSelectedPatientView.as_view(), name="get-selected-patient"),
+    path("selected/clear/", ClearSelectedPatientView.as_view(), name="clear-selected-patient"),
 ]
 
 # Authentication Flow

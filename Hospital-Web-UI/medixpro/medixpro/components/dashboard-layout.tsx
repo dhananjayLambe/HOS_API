@@ -2,6 +2,7 @@
 "use client";
 import { Sidebar } from "@/components/sidebar";
 import { UserNav } from "@/components/user-nav";
+import { PatientSearchBar } from "@/components/patient/patient-search-bar";
 import { useMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { Menu } from "lucide-react";
@@ -36,12 +37,18 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen flex-col ">
-      <header className={cn("sticky top-0 z-40 border-b bg-background duration-300 xl:ml-64", !isSidebarOpen && "xl:ml-0")}>
-        <div className="flex h-16 items-center justify-between px-4 md:px-6">
-          <button onClick={() => setIsSidebarOpen(!isSidebarOpen)}>
-            <Menu />
+      <header className={cn("sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 duration-300 xl:ml-64 shadow-sm", !isSidebarOpen && "xl:ml-0")}>
+        <div className="flex h-16 items-center justify-between gap-4 px-4 md:px-6">
+          <button 
+            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            className="p-2 rounded-lg hover:bg-accent transition-colors shrink-0"
+          >
+            <Menu className="h-5 w-5" />
           </button>
-          <div className="ml-auto flex items-center space-x-4">
+          <div className="flex-1 flex justify-start min-w-0">
+            <PatientSearchBar />
+          </div>
+          <div className="ml-auto flex items-center space-x-4 shrink-0">
             <UserNav />
           </div>
         </div>

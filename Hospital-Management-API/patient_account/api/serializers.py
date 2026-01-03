@@ -1,7 +1,10 @@
 from rest_framework import serializers
 from account.models import User
 from datetime import datetime
+import logging
 from patient_account.models import PatientAccount, PatientProfile,PatientProfileDetails
+
+logger = logging.getLogger(__name__)
 
 class PatientLoginSerializer(serializers.Serializer):
     mobile = serializers.CharField(max_length=15)
@@ -90,3 +93,94 @@ class PatientInfoSerializer(serializers.ModelSerializer):
     class Meta:
         model = PatientProfile
         fields = ['id', 'first_name', 'last_name', 'gender', 'age', 'account']
+
+
+# Doctor EMR Patient Creation Serializers
+class CheckMobileSerializer(serializers.Serializer):
+    """Serializer for checking if patient exists by mobile number"""
+    mobile = serializers.CharField(max_length=15, required=True)
+    
+    def validate_mobile(self, value):
+        """Validate and normalize mobile number"""
+        # Remove spaces and special characters
+        mobile = ''.join(filter(str.isdigit, value))
+        
+        # Check length (assuming 10 digits for India)
+        if len(mobile) != 10:
+            raise serializers.ValidationError("Mobile number must be 10 digits")
+        
+        return mobile
+
+
+class CreatePatientSerializer(serializers.Serializer):
+    """Serializer for creating patient from doctor EMR"""
+    mobile = serializers.CharField(max_length=15, required=True)
+    first_name = serializers.CharField(max_length=255, required=True)
+    last_name = serializers.CharField(max_length=255, required=True)
+    gender = serializers.ChoiceField(choices=PatientProfile.GENDER_CHOICES, required=True)
+    date_of_birth = serializers.DateField(required=True)
+    
+    def validate_mobile(self, value):
+        """Validate and normalize mobile number"""
+        logger.debug(f"Validating mobile: {value} (type: {type(value)})")
+        # Remove spaces and special characters
+        mobile = ''.join(filter(str.isdigit, value))
+        logger.debug(f"Normalized mobile: {mobile} (length: {len(mobile)})")
+        if len(mobile) != 10:
+            logger.error(f"Mobile validation failed: length is {len(mobile)}, expected 10")
+            raise serializers.ValidationError("Mobile number must be 10 digits")
+        logger.debug(f"Mobile validation passed: {mobile}")
+        return mobile
+    
+    def validate(self, attrs):
+        """Additional validation"""
+        logger.debug(f"CreatePatientSerializer validate called with: {attrs}")
+        logger.debug(f"Gender choices available: {PatientProfile.GENDER_CHOICES}")
+        return attrs
+
+
+class AddFamilyMemberSerializer(serializers.ModelSerializer):
+    """Serializer for adding family member profile"""
+    class Meta:
+        model = PatientProfile
+        fields = ['first_name', 'last_name', 'relation', 'gender', 'date_of_birth']
+    
+    def validate_relation(self, value):
+        """Ensure 'self' relation cannot be added via this endpoint"""
+        if value == 'self':
+            raise serializers.ValidationError("Cannot add 'self' profile. Use create patient endpoint instead.")
+        return value
+
+
+class PatientProfileListSerializer(serializers.ModelSerializer):
+    """Serializer for listing patient profiles"""
+    profile_id = serializers.UUIDField(source='id', read_only=True)
+    full_name = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = PatientProfile
+        fields = ['profile_id', 'full_name', 'relation', 'gender', 'date_of_birth']
+    
+    def get_full_name(self, obj):
+        return f"{obj.first_name} {obj.last_name}".strip()
+
+
+class SelectPatientSerializer(serializers.Serializer):
+    """Serializer for selecting a patient"""
+    profile_id = serializers.UUIDField(required=False, allow_null=True)
+    patient_account_id = serializers.UUIDField(required=False, allow_null=True)
+    
+    def validate(self, attrs):
+        """Ensure at least one ID is provided"""
+        if not attrs.get('profile_id') and not attrs.get('patient_account_id'):
+            raise serializers.ValidationError("Either profile_id or patient_account_id must be provided.")
+        return attrs
+
+
+class SelectedPatientSerializer(serializers.Serializer):
+    """Serializer for selected patient response"""
+    profile_id = serializers.UUIDField(required=False, allow_null=True)
+    patient_account_id = serializers.UUIDField(required=False, allow_null=True)
+    profile_name = serializers.CharField(required=False, allow_null=True)
+    mobile = serializers.CharField(required=False, allow_null=True)
+    selected_at = serializers.DateTimeField(required=False, allow_null=True)
