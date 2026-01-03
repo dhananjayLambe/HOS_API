@@ -92,16 +92,6 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
       icon: UserRound,
     },
     {
-      title: "Prescriptions",
-      href: "/prescriptions",
-      icon: Pill,
-      submenu: [
-        { title: "All Prescriptions", href: "/prescriptions" },
-        { title: "Create Prescription", href: "/prescriptions/create" },
-        { title: "Medicine Templates", href: "/prescriptions/templates" },
-      ],
-    },
-    {
       title: "Appointments",
       href: "/appointments",
       icon: Calendar,
@@ -112,6 +102,26 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
         { title: "Appointment Requests", href: "/appointments/requests" },
       ],
     },
+    {
+      title: "Consultations",
+      href: "/Consultations",
+      icon: Pill,
+      submenu: [
+        { title: "Pre-Consultation", href: "/prescriptions/create" },
+        { title: "Start-Consultation", href: "/prescriptions/templates" },
+      ],
+    },
+    {
+      title: "Prescriptions",
+      href: "/prescriptions",
+      icon: Pill,
+      submenu: [
+        { title: "All Prescriptions", href: "/prescriptions" },
+        { title: "Create Prescription", href: "/prescriptions/create" },
+        { title: "Medicine Templates", href: "/prescriptions/templates" },
+      ],
+    },
+
     {
       title: "Calendar",
       href: "/calendar",
@@ -163,17 +173,17 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
     //     { title: "Issue Blood", href: "/blood-bank/issue" },
     //   ],
     // },
-    {
-      title: "Billing",
-      href: "/billing",
-      icon: Receipt,
-      submenu: [
-        { title: "Invoices List", href: "/billing" },
-        { title: "Create Invoice", href: "/billing/create" },
-        { title: "Payments History", href: "/billing/payments" },
-        { title: "Insurance Claims", href: "/billing/insurance" },
-      ],
-    },
+    // {
+    //   title: "Billing",
+    //   href: "/billing",
+    //   icon: Receipt,
+    //   submenu: [
+    //     { title: "Invoices List", href: "/billing" },
+    //     { title: "Create Invoice", href: "/billing/create" },
+    //     { title: "Payments History", href: "/billing/payments" },
+    //     { title: "Insurance Claims", href: "/billing/insurance" },
+    //   ],
+    // },
     // {
     //   title: "Departments",
     //   href: "/departments",
@@ -196,15 +206,15 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
     //   ],
     // },
 
-    {
-      title: "Records",
-      href: "/records",
-      icon: FileText,
-      submenu: [
-        { title: "Birth Records", href: "/records/birth" },
-        { title: "Death Records", href: "/records/death" },
-      ],
-    },
+    // {
+    //   title: "Records",
+    //   href: "/records",
+    //   icon: FileText,
+    //   submenu: [
+    //     { title: "Birth Records", href: "/records/birth" },
+    //     { title: "Death Records", href: "/records/death" },
+    //   ],
+    // },
     // {
     //   title: "Room Allotment",
     //   href: "/rooms",
