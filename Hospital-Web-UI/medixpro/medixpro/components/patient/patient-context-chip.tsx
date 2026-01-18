@@ -59,7 +59,7 @@ export function PatientContextChip() {
   const handleClearPatient = () => {
     const name = patientName;
     clearPatient();
-    toast.info(`Patient "${name}" unselected`);
+    toast.success(`Patient "${name}" unselected successfully`);
   };
 
   return (

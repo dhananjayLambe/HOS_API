@@ -87,6 +87,15 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
     //   ],
     // },
     {
+      title: "Consultations",
+      href: "/Consultations",
+      icon: Pill,
+      submenu: [
+        { title: "Pre-Consultation", href: "/prescriptions/create" },
+        { title: "Start-Consultation", href: "/prescriptions/templates" },
+      ],
+    },
+    {
       title: "Patients",
       href: "/patients",
       icon: UserRound,
@@ -102,15 +111,7 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
         { title: "Appointment Requests", href: "/appointments/requests" },
       ],
     },
-    {
-      title: "Consultations",
-      href: "/Consultations",
-      icon: Pill,
-      submenu: [
-        { title: "Pre-Consultation", href: "/prescriptions/create" },
-        { title: "Start-Consultation", href: "/prescriptions/templates" },
-      ],
-    },
+
     {
       title: "Prescriptions",
       href: "/prescriptions",
@@ -376,7 +377,7 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
   return (
     <aside className={sidebarClasses}>
       <div className="flex py-3 xl:py-3.5 items-center justify-between px-4">
-        <Link href="/" className="flex items-center space-x-2">
+        <Link href="/doctor-dashboard" className="flex items-center space-x-2">
           <Image src={logo} alt="Medixpro" width={36} height={36} />
           <span className="font-bold inline-block">MedixPro</span>
         </Link>
