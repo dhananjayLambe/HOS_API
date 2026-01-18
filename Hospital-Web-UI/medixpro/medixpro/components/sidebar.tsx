@@ -12,6 +12,7 @@ import type React from "react";
 import { useEffect, useState } from "react";
 import AnimateHeight from "react-animate-height";
 import { useAuth } from "@/lib/authContext";
+import { SmartQueue } from "@/components/smart-queue";
 interface SidebarProps {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
@@ -386,6 +387,17 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
           <span className="sr-only">Close sidebar</span>
         </Button>
       </div>
+
+      {/* Divider Line */}
+      <div className="border-b border-border/50 mx-4"></div>
+
+      {/* Smart Queue Section */}
+      <div className="pt-4">
+        <SmartQueue />
+      </div>
+
+      {/* Divider Line */}
+      <div className="border-b border-border/50 mx-4"></div>
 
       <div className="flex-1 py-2  border-t h-full overflow-y-auto">
         <nav className="space-y-1 px-2 ">
