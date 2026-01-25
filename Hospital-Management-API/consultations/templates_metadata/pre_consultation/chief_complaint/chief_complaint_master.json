@@ -1,0 +1,25 @@
+{
+    "items": {
+      "primary_complaint": {
+        "label": "Chief Complaint"
+      },
+      "associated_symptoms": {
+        "label": "Associated Symptoms"
+      },
+      "duration": {
+        "label": "Duration"
+      },
+      "severity": {
+        "label": "Severity"
+      },
+      "location": {
+        "label": "Location / Side"
+      },
+      "onset_progression": {
+        "label": "Onset & Progression"
+      },
+      "additional_notes": {
+        "label": "Additional Notes"
+      }
+    }
+  }

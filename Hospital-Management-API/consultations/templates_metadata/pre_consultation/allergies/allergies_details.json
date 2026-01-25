@@ -1,25 +1,94 @@
 {
-    "drug_allergy": {
-      "fields": [
-        { "key": "drug_name", "type": "text", "label": "Drug Name" },
-        {
-          "key": "reaction",
-          "type": "single_select",
-          "label": "Reaction",
-          "options": ["Rash", "Breathing difficulty", "Anaphylaxis"]
-        }
-      ]
-    },
-  
-    "food_allergy": {
-      "fields": [
-        { "key": "food_name", "type": "text", "label": "Food Name" },
-        {
-          "key": "reaction",
-          "type": "single_select",
-          "label": "Reaction",
-          "options": ["Vomiting", "Rash", "Breathing difficulty"]
-        }
-      ]
-    }
+  "allergy_type": {
+    "fields": [
+      {
+        "key": "type",
+        "type": "single_select",
+        "label": "Allergy Type",
+        "options": [
+          "Drug",
+          "Food",
+          "Environmental",
+          "Latex",
+          "Other"
+        ]
+      }
+    ]
+  },
+
+  "allergen": {
+    "fields": [
+      {
+        "key": "allergen_name",
+        "type": "text",
+        "label": "Allergen",
+        "placeholder": "e.g. Penicillin, Milk, Dust, Pollen"
+      }
+    ]
+  },
+
+  "reaction": {
+    "fields": [
+      {
+        "key": "reaction",
+        "type": "multi_select",
+        "label": "Reaction",
+        "options": [
+          "Rash",
+          "Itching",
+          "Swelling",
+          "Breathlessness",
+          "Wheezing",
+          "Vomiting",
+          "Diarrhea",
+          "Dizziness",
+          "Anaphylaxis",
+          "Other"
+        ],
+        "allow_custom": true
+      }
+    ]
+  },
+
+  "severity": {
+    "fields": [
+      {
+        "key": "severity",
+        "type": "single_select",
+        "label": "Severity",
+        "options": [
+          "Mild",
+          "Moderate",
+          "Severe"
+        ]
+      }
+    ]
+  },
+
+  "status": {
+    "fields": [
+      {
+        "key": "status",
+        "type": "single_select",
+        "label": "Status",
+        "options": [
+          "Active",
+          "Resolved",
+          "Unknown"
+        ]
+      }
+    ]
+  },
+
+  "additional_notes": {
+    "fields": [
+      {
+        "key": "notes",
+        "type": "text",
+        "label": "Additional Notes",
+        "multiline": true,
+        "placeholder": "Any additional allergy-related information"
+      }
+    ]
+  }
 }

@@ -1,0 +1,97 @@
+{
+  "chronic_conditions": {
+    "fields": [
+      {
+        "key": "conditions",
+        "type": "multi_select",
+        "label": "Chronic Conditions",
+        "options": [
+          "Diabetes",
+          "Hypertension",
+          "Thyroid Disorder",
+          "Asthma",
+          "Heart Disease",
+          "Kidney Disease",
+          "Liver Disease",
+          "PCOS",
+          "Epilepsy",
+          "Tuberculosis",
+          "Cancer",
+          "Other"
+        ],
+        "allow_custom": true
+      }
+    ]
+  },
+
+  "past_surgeries": {
+    "fields": [
+      {
+        "key": "surgery_details",
+        "type": "text",
+        "label": "Past Surgeries / Procedures",
+        "placeholder": "e.g. Appendectomy (2018), C-section (2021)",
+        "multiline": true
+      }
+    ]
+  },
+
+  "current_medications": {
+    "fields": [
+      {
+        "key": "medications",
+        "type": "text",
+        "label": "Current Medications",
+        "placeholder": "e.g. Metformin, Amlodipine",
+        "multiline": true
+      }
+    ]
+  },
+
+  "family_history": {
+    "fields": [
+      {
+        "key": "family_conditions",
+        "type": "multi_select",
+        "label": "Family History",
+        "options": [
+          "Diabetes",
+          "Hypertension",
+          "Heart Disease",
+          "Stroke",
+          "Cancer",
+          "Thyroid Disorder",
+          "Asthma",
+          "Kidney Disease",
+          "Genetic Disorder",
+          "None"
+        ],
+        "allow_custom": true
+      }
+    ]
+  },
+
+  "past_medical_events": {
+    "fields": [
+      {
+        "key": "events",
+        "type": "text",
+        "label": "Past Medical Events",
+        "placeholder": "e.g. COVID-19 infection, ICU admission, major illness",
+        "multiline": true
+      }
+    ]
+  },
+
+  "additional_notes": {
+    "fields": [
+      {
+        "key": "notes",
+        "type": "text",
+        "label": "Additional Notes",
+        "multiline": true,
+        "placeholder": "Any other relevant medical history details"
+      }
+    ]
+  }
+}

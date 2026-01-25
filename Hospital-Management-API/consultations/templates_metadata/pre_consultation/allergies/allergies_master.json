@@ -1,6 +1,22 @@
 {
-    "items": {
-      "drug_allergy": { "label": "Drug Allergy" },
-      "food_allergy": { "label": "Food Allergy" }
+  "items": {
+    "allergy_type": {
+      "label": "Allergy Type"
+    },
+    "allergen": {
+      "label": "Allergen"
+    },
+    "reaction": {
+      "label": "Reaction"
+    },
+    "severity": {
+      "label": "Severity"
+    },
+    "status": {
+      "label": "Current Status"
+    },
+    "additional_notes": {
+      "label": "Additional Notes"
     }
+  }
 }

@@ -1,7 +1,0 @@
-{
-    "items": {
-      "medical_history": { "label": "Medical History" },
-      "surgical_history": { "label": "Surgical History" },
-      "obstetric_history": { "label": "Obstetric History" }
-    }
-}

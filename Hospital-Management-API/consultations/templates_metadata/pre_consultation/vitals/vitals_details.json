@@ -1,27 +1,144 @@
 {
-    "height_weight": {
-      "fields": [
-        { "key": "height_cm", "type": "number", "label": "Height (cm)" },
-        { "key": "weight_kg", "type": "number", "label": "Weight (kg)" },
-        {
-          "key": "bmi",
-          "type": "calculated",
-          "label": "BMI",
-          "formula": "weight_kg / ((height_cm/100)^2)"
+  "height_weight": {
+    "fields": [
+      {
+        "key": "height",
+        "type": "number",
+        "label": "Height",
+        "unit": "cm",
+        "supported_units": ["cm", "ft_in"],
+        "canonical_unit": "cm",
+        "ui_config": {
+          "ft_in": {
+            "fields": ["feet", "inches"]
+          }
         }
-      ]
-    },
-  
-    "blood_pressure": {
-      "fields": [
-        { "key": "systolic", "type": "number", "label": "Systolic (mmHg)" },
-        { "key": "diastolic", "type": "number", "label": "Diastolic (mmHg)" }
-      ]
-    },
-  
-    "temperature": {
-      "fields": [
-        { "key": "value", "type": "number", "label": "Temperature (°F)" }
-      ]
-    }
+      },
+      {
+        "key": "weight",
+        "type": "number",
+        "label": "Weight",
+        "unit": "kg",
+        "supported_units": ["kg", "lb"],
+        "canonical_unit": "kg"
+      },
+      {
+        "key": "bmi",
+        "type": "calculated",
+        "label": "BMI",
+        "formula": "weight / ((height / 100) ^ 2)"
+      }
+    ]
+  },
+
+  "blood_pressure": {
+    "fields": [
+      {
+        "key": "systolic",
+        "type": "number",
+        "label": "Systolic",
+        "unit": "mmHg"
+      },
+      {
+        "key": "diastolic",
+        "type": "number",
+        "label": "Diastolic",
+        "unit": "mmHg"
+      }
+    ]
+  },
+
+  "temperature": {
+    "fields": [
+      {
+        "key": "temperature",
+        "type": "number",
+        "label": "Temperature",
+        "unit": "c",
+        "supported_units": ["c", "f"],
+        "canonical_unit": "c"
+      }
+    ]
+  },
+
+  "pulse": {
+    "fields": [
+      {
+        "key": "pulse_rate",
+        "type": "number",
+        "label": "Pulse",
+        "unit": "/min"
+      }
+    ]
+  },
+
+  "spo2": {
+    "fields": [
+      {
+        "key": "spo2_percent",
+        "type": "number",
+        "label": "SpO₂",
+        "unit": "%"
+      }
+    ]
+  },
+
+  "respiratory_rate": {
+    "fields": [
+      {
+        "key": "resp_rate",
+        "type": "number",
+        "label": "Respiratory Rate",
+        "unit": "/min"
+      }
+    ]
+  },
+
+  "waist_circumference": {
+    "fields": [
+      {
+        "key": "waist",
+        "type": "number",
+        "label": "Waist Circumference",
+        "unit": "cm",
+        "supported_units": ["cm", "inch"],
+        "canonical_unit": "cm"
+      }
+    ]
+  },
+
+  "pain_score": {
+    "fields": [
+      {
+        "key": "pain_score",
+        "type": "number",
+        "label": "Pain Score",
+        "range": [0, 10]
+      }
+    ]
+  },
+
+  "head_circumference": {
+    "fields": [
+      {
+        "key": "head",
+        "type": "number",
+        "label": "Head Circumference",
+        "unit": "cm",
+        "supported_units": ["cm", "inch"],
+        "canonical_unit": "cm"
+      }
+    ]
+  },
+  "additional_notes": {
+    "fields": [
+      {
+        "key": "notes",
+        "type": "text",
+        "label": "Additional Notes",
+        "multiline": true,
+        "placeholder": "Any other relevant details"
+      }
+    ]
   }
+}

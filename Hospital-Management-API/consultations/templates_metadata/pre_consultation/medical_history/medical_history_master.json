@@ -1,0 +1,22 @@
+{
+  "items": {
+    "chronic_conditions": {
+      "label": "Chronic Conditions"
+    },
+    "past_surgeries": {
+      "label": "Past Surgeries / Procedures"
+    },
+    "current_medications": {
+      "label": "Current Medications"
+    },
+    "family_history": {
+      "label": "Family History"
+    },
+    "past_medical_events": {
+      "label": "Past Medical Events"
+    },
+    "additional_notes": {
+      "label": "Additional Notes"
+    }
+  }
+}

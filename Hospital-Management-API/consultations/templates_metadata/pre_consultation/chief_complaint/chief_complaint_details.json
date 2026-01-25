@@ -1,0 +1,133 @@
+{
+    "primary_complaint": {
+      "fields": [
+        {
+          "key": "complaint_text",
+          "type": "text",
+          "label": "Chief Complaint",
+          "placeholder": "e.g. Lower abdominal pain, shortness of breath, knee pain",
+          "multiline": true
+        }
+      ]
+    },
+  
+    "associated_symptoms": {
+      "fields": [
+        {
+          "key": "symptoms",
+          "type": "multi_select",
+          "label": "Associated Symptoms",
+          "options": [
+            "Fever",
+            "Pain",
+            "Swelling",
+            "Breathlessness",
+            "Cough",
+            "Chest pain",
+            "Vomiting",
+            "Nausea",
+            "Diarrhea",
+            "Constipation",
+            "Fatigue",
+            "Weight loss",
+            "Weight gain",
+            "Dizziness",
+            "Headache",
+            "Bleeding",
+            "Burning micturition",
+            "Loss of appetite"
+          ],
+          "allow_custom": true
+        }
+      ]
+    },
+  
+    "duration": {
+      "fields": [
+        {
+          "key": "duration_value",
+          "type": "number",
+          "label": "Duration"
+        },
+        {
+          "key": "duration_unit",
+          "type": "single_select",
+          "label": "Unit",
+          "options": ["Hours", "Days", "Weeks", "Months", "Years"]
+        }
+      ]
+    },
+  
+    "severity": {
+      "fields": [
+        {
+          "key": "severity_level",
+          "type": "single_select",
+          "label": "Severity",
+          "options": ["Mild", "Moderate", "Severe"]
+        },
+        {
+          "key": "pain_score",
+          "type": "number",
+          "label": "Pain Score (0–10)",
+          "range": [0, 10]
+        }
+      ]
+    },
+  
+    "location": {
+      "fields": [
+        {
+          "key": "body_location",
+          "type": "single_select",
+          "label": "Location",
+          "options": [
+            "Head",
+            "Neck",
+            "Chest",
+            "Abdomen",
+            "Pelvis",
+            "Back",
+            "Upper limb",
+            "Lower limb",
+            "Generalized"
+          ]
+        },
+        {
+          "key": "side",
+          "type": "single_select",
+          "label": "Side",
+          "options": ["Left", "Right", "Bilateral", "Central"]
+        }
+      ]
+    },
+  
+    "onset_progression": {
+      "fields": [
+        {
+          "key": "onset",
+          "type": "single_select",
+          "label": "Onset",
+          "options": ["Sudden", "Gradual"]
+        },
+        {
+          "key": "progression",
+          "type": "single_select",
+          "label": "Progression",
+          "options": ["Improving", "Worsening", "Static", "Intermittent"]
+        }
+      ]
+    },
+  
+    "additional_notes": {
+      "fields": [
+        {
+          "key": "notes",
+          "type": "text",
+          "label": "Additional Notes",
+          "multiline": true,
+          "placeholder": "Any other relevant details"
+        }
+      ]
+    }
+  }

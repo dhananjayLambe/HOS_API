@@ -1,14 +1,183 @@
 {
-    "gynecology": {
-      "sections": ["vitals", "allergies", "history"]
+  "gynecology": {
+    "sections": ["vitals", "chief_complaint", "allergies", "history"],
+
+    "vitals": {
+      "required": ["height_weight", "temperature", "blood_pressure"],
+      "optional": ["pulse", "spo2", "pain_score", "additional_notes"],
+      "default_required": ["height_weight", "temperature", "blood_pressure"],
+      "default_optional": ["pulse"],
+      "notes": "BP mandatory due to pregnancy and hormonal risk screening"
     },
-    "physician": {
-      "sections": ["vitals", "history"]
+
+    "chief_complaint": {
+      "required": ["primary_complaint", "duration"],
+      "optional": [
+        "severity",
+        "location",
+        "onset_progression",
+        "associated_symptoms",
+        "additional_notes"
+      ],
+      "default_required": ["primary_complaint", "duration"],
+      "default_optional": ["severity", "additional_notes"],
+      "notes": "Pelvic pain, menstrual issues and pregnancy-related complaints common"
     },
-    "pediatrics": {
-      "sections": ["vitals", "history"]
+
+    "allergies": {
+      "required": ["allergy_type", "allergen"],
+      "optional": ["reaction", "severity", "status", "additional_notes"],
+      "default_required": ["allergy_type", "allergen"],
+      "default_optional": ["reaction", "additional_notes"],
+      "notes": "Drug and anesthesia-related allergies are clinically important"
     },
-    "diabetologist": {
-      "sections": ["vitals", "history"]
+
+    "medical_history": {
+      "required": ["chronic_conditions"],
+      "optional": [
+        "past_surgeries",
+        "current_medications",
+        "family_history",
+        "past_medical_events",
+        "additional_notes"
+      ],
+      "default_required": ["chronic_conditions"],
+      "default_optional": ["past_surgeries", "additional_notes"],
+      "notes": "PCOS, thyroid disorders and obstetric history are relevant"
     }
+  },
+
+  "physician": {
+    "sections": ["vitals", "chief_complaint", "allergies", "history"],
+
+    "vitals": {
+      "required": ["height_weight", "blood_pressure", "temperature"],
+      "optional": ["pulse", "spo2", "pain_score", "additional_notes"],
+      "default_required": ["height_weight", "blood_pressure", "temperature"],
+      "default_optional": ["pulse"],
+      "notes": "BP mandatory due to blood pressure monitoring"
+    },
+
+    "chief_complaint": {
+      "required": ["primary_complaint", "duration"],
+      "optional": [
+        "severity",
+        "associated_symptoms",
+        "onset_progression",
+        "additional_notes"
+      ],
+      "default_required": ["primary_complaint", "duration"],
+      "default_optional": ["associated_symptoms", "additional_notes"],
+      "notes": "Wide variety of complaints; structured symptoms help triage"
+    },
+
+    "allergies": {
+      "required": ["allergy_type", "allergen"],
+      "optional": ["reaction", "severity", "status", "additional_notes"],
+      "default_required": ["allergy_type", "allergen"],
+      "default_optional": ["reaction", "additional_notes"],
+      "notes": "Drug and food allergies commonly encountered"
+    },
+
+    "medical_history": {
+      "required": ["chronic_conditions"],
+      "optional": [
+        "past_surgeries",
+        "current_medications",
+        "family_history",
+        "past_medical_events",
+        "additional_notes"
+      ],
+      "default_required": ["chronic_conditions"],
+      "default_optional": ["current_medications", "additional_notes"],
+      "notes": "Chronic illnesses and long-term medications are critical"
+    }
+  },
+
+  "pediatrics": {
+    "sections": ["vitals", "chief_complaint", "allergies", "history"],
+
+    "vitals": {
+      "required": ["height_weight", "head_circumference", "temperature"],
+      "optional": ["pulse", "respiratory_rate", "spo2", "additional_notes"],
+      "default_required": ["height_weight", "head_circumference", "temperature"],
+      "default_optional": ["pulse"],
+      "notes": "Head circumference mandatory for growth monitoring"
+    },
+
+    "chief_complaint": {
+      "required": ["primary_complaint", "duration"],
+      "optional": [
+        "associated_symptoms",
+        "severity",
+        "onset_progression",
+        "additional_notes"
+      ],
+      "default_required": ["primary_complaint", "duration"],
+      "default_optional": ["associated_symptoms", "additional_notes"],
+      "notes": "Parents often add contextual details; notes are essential"
+    },
+
+    "allergies": {
+      "required": ["allergy_type", "allergen"],
+      "optional": ["reaction", "severity", "status", "additional_notes"],
+      "default_required": ["allergy_type", "allergen"],
+      "default_optional": ["reaction", "additional_notes"],
+      "notes": "Food and drug allergies are common in pediatric patients"
+    },
+
+    "medical_history": {
+      "required": ["family_history"],
+      "optional": [
+        "chronic_conditions",
+        "past_medical_events",
+        "past_surgeries",
+        "additional_notes"
+      ],
+      "default_required": ["family_history"],
+      "default_optional": ["past_medical_events", "additional_notes"],
+      "notes": "Family history and past illnesses are important in pediatrics"
+    }
+  },
+
+  "diabetologist": {
+    "sections": ["vitals", "chief_complaint", "allergies", "history"],
+
+    "vitals": {
+      "required": ["height_weight", "waist_circumference"],
+      "optional": ["blood_pressure", "pulse", "additional_notes"],
+      "default_required": ["height_weight", "waist_circumference"],
+      "default_optional": ["pulse"],
+      "notes": "Waist circumference mandatory for metabolic risk assessment"
+    },
+
+    "chief_complaint": {
+      "required": ["primary_complaint", "duration"],
+      "optional": ["associated_symptoms", "severity", "additional_notes"],
+      "default_required": ["primary_complaint", "duration"],
+      "default_optional": ["associated_symptoms", "additional_notes"],
+      "notes": "Fatigue, weight change and polyuria are common complaints"
+    },
+
+    "allergies": {
+      "required": ["allergy_type", "allergen"],
+      "optional": ["reaction", "severity", "status", "additional_notes"],
+      "default_required": ["allergy_type", "allergen"],
+      "default_optional": ["reaction", "additional_notes"],
+      "notes": "Drug allergies relevant for long-term medication management"
+    },
+
+    "medical_history": {
+      "required": ["chronic_conditions"],
+      "optional": [
+        "current_medications",
+        "family_history",
+        "past_medical_events",
+        "additional_notes"
+      ],
+      "default_required": ["chronic_conditions"],
+      "default_optional": ["current_medications", "additional_notes"],
+      "notes": "Diabetes duration, comorbidities and medications are critical"
+    }
+  }
 }

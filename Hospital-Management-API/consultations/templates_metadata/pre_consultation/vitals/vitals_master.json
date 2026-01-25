@@ -1,13 +1,14 @@
 {
-    "items": {
-      "height_weight": {
-        "label": "Height & Weight"
-      },
-      "blood_pressure": {
-        "label": "Blood Pressure"
-      },
-      "temperature": {
-        "label": "Temperature"
-      }
-    }
+  "items": {
+    "height_weight": { "label": "Height & Weight" },
+    "blood_pressure": { "label": "Blood Pressure" },
+    "pulse": { "label": "Pulse" },
+    "spo2": { "label": "SpO₂" },
+    "respiratory_rate": { "label": "Respiratory Rate" },
+    "temperature": { "label": "Temperature" },
+    "waist_circumference": { "label": "Waist Circumference" },
+    "pain_score": { "label": "Pain Score" },
+    "head_circumference": { "label": "Head Circumference" },
+    "additional_notes": { "label": "Additional Notes"}
+  }
 }
