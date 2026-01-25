@@ -18,7 +18,7 @@ interface PatientSearchResult extends Patient {
 }
 
 export function PatientSearch() {
-  const { selectedPatient, setSelectedPatient, isLocked } = usePatient();
+  const { selectedPatient, setSelectedPatient, isLocked, highlightSearch, clearSearchHighlight } = usePatient();
   const isMobile = useMobile();
   const [searchQuery, setSearchQuery] = useState("");
   const [results, setResults] = useState<PatientSearchResult[]>([]);
@@ -31,6 +31,16 @@ export function PatientSearch() {
   
   // Disable search when patient is selected
   const isSearchDisabled = !!selectedPatient;
+
+  // Handle search highlight - focus input when highlighted
+  useEffect(() => {
+    if (highlightSearch && inputRef.current && !isSearchDisabled) {
+      inputRef.current.focus();
+      setIsOpen(true);
+      // Scroll to search bar smoothly
+      inputRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [highlightSearch, isSearchDisabled]);
 
   // Debounced search - only if search is not disabled
   useEffect(() => {
@@ -80,6 +90,10 @@ export function PatientSearch() {
     setIsOpen(false);
     setSearchQuery("");
     setResults([]);
+    // Clear highlight when patient is selected
+    if (highlightSearch) {
+      clearSearchHighlight();
+    }
   };
 
   const handleAddPatient = () => {
@@ -321,6 +335,10 @@ export function PatientSearch() {
               onChange={(e) => {
                 const value = e.target.value;
                 setSearchQuery(value);
+                // Clear highlight when user starts typing
+                if (highlightSearch) {
+                  clearSearchHighlight();
+                }
                 // Open popover when user starts typing
                 if (value.trim().length > 0 && !isOpen) {
                   setIsOpen(true);
@@ -355,6 +373,7 @@ export function PatientSearch() {
                 "shadow-sm hover:shadow-md hover:border-purple-400 dark:hover:border-purple-600",
                 "transition-all duration-200",
                 "placeholder:text-muted-foreground/60",
+                highlightSearch && "border-purple-600 dark:border-purple-400 ring-4 ring-purple-500/30 dark:ring-purple-400/30 shadow-lg animate-pulse",
                 (isLocked || isSearchDisabled) && "cursor-not-allowed opacity-50"
               )}
             />

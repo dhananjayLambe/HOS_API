@@ -13,6 +13,10 @@ import { useEffect, useState } from "react";
 import AnimateHeight from "react-animate-height";
 import { useAuth } from "@/lib/authContext";
 import { SmartQueue } from "@/components/smart-queue";
+import { usePatient } from "@/lib/patientContext";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { useRouter } from "next/navigation";
+import { AlertCircle, Search } from "lucide-react";
 interface SidebarProps {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
@@ -30,6 +34,10 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
   const isMobile = useMobile();
   const [openSubmenu, setOpenSubmenu] = useState<string | null>(null);
   const { user, role } = useAuth();
+  const { selectedPatient, triggerSearchHighlight } = usePatient();
+  const router = useRouter();
+  const [showPatientAlert, setShowPatientAlert] = useState(false);
+  const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
 
   // Helper function to get user's full name
   const getUserFullName = () => {
@@ -89,11 +97,11 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
     // },
     {
       title: "Consultations",
-      href: "/Consultations",
+      href: "/consultations",
       icon: Pill,
       submenu: [
-        { title: "Pre-Consultation", href: "/prescriptions/create" },
-        { title: "Start-Consultation", href: "/prescriptions/templates" },
+        { title: "Pre-Consultation", href: "/consultations/pre-consultation" },
+        { title: "Start-Consultation", href: "/consultations/start-consultation" },
       ],
     },
     {
@@ -359,6 +367,20 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
     }
   };
 
+  // Handle consultation submenu item click with patient validation
+  const handleConsultationClick = (href: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!selectedPatient) {
+      setPendingNavigation(href);
+      setShowPatientAlert(true);
+    } else {
+      router.push(href);
+      if (isMobile) {
+        setIsOpen(false);
+      }
+    }
+  };
+
   const sidebarClasses = cn("!fixed h-full left-0 bottom-0 z-50 flex w-64 flex-col border-r bg-background transition-transform duration-300 ease-in-out", {
     "translate-x-0": isOpen,
     "-translate-x-full": !isOpen,
@@ -374,7 +396,17 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
     if (foundItem?.submenu) {
       setOpenSubmenu(foundItem.title);
     }
-  }, []);
+  }, [pathname]);
+
+  // Auto-expand Consultations when patient is selected
+  useEffect(() => {
+    if (selectedPatient) {
+      const consultationsItem = sidebarItems.find((item) => item.title === "Consultations");
+      if (consultationsItem && openSubmenu !== "Consultations") {
+        setOpenSubmenu("Consultations");
+      }
+    }
+  }, [selectedPatient, openSubmenu]);
   return (
     <aside className={sidebarClasses}>
       <div className="flex py-3 xl:py-3.5 items-center justify-between px-4">
@@ -436,11 +468,37 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
                   </button>
                   <AnimateHeight height={openSubmenu === item.title ? "auto" : 0}>
                     <div className="ml-4 space-y-1 pl-2 pt-1">
-                      {item.submenu.map((subItem) => (
-                        <Link key={subItem.title} href={subItem.href} className={cn("flex items-center rounded-md px-3 py-2 text-sm transition-colors", pathname === subItem.href ? "bg-primary/10 text-primary" : " hover:bg-muted hover:text-foreground")} onClick={() => isMobile && setIsOpen(false)}>
-                          {subItem.title}
-                        </Link>
-                      ))}
+                      {item.submenu.map((subItem) => {
+                        // Special handling for Consultations submenu items
+                        if (item.title === "Consultations") {
+                          return (
+                            <button
+                              key={subItem.title}
+                              onClick={(e) => handleConsultationClick(subItem.href, e)}
+                              className={cn(
+                                "flex w-full items-center rounded-md px-3 py-2 text-sm transition-colors text-left",
+                                pathname === subItem.href ? "bg-primary/10 text-primary" : "hover:bg-muted hover:text-foreground"
+                              )}
+                            >
+                              {subItem.title}
+                            </button>
+                          );
+                        }
+                        // Default Link behavior for other submenu items
+                        return (
+                          <Link
+                            key={subItem.title}
+                            href={subItem.href}
+                            className={cn(
+                              "flex items-center rounded-md px-3 py-2 text-sm transition-colors",
+                              pathname === subItem.href ? "bg-primary/10 text-primary" : "hover:bg-muted hover:text-foreground"
+                            )}
+                            onClick={() => isMobile && setIsOpen(false)}
+                          >
+                            {subItem.title}
+                          </Link>
+                        );
+                      })}
                     </div>
                   </AnimateHeight>
                 </>
@@ -466,6 +524,50 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
           </div>
         </div>
       </div>
+
+      {/* Patient Selection Alert Dialog */}
+      <AlertDialog open={showPatientAlert} onOpenChange={setShowPatientAlert}>
+        <AlertDialogContent className="sm:max-w-md">
+          <AlertDialogHeader>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/30">
+                <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              </div>
+              <AlertDialogTitle className="text-xl">Select Patient First</AlertDialogTitle>
+            </div>
+            <AlertDialogDescription className="text-base pt-2">
+              Please select a patient from the search bar at the top to continue.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="flex items-center gap-2 px-4 py-3 bg-purple-50 dark:bg-purple-950/30 rounded-lg border border-purple-200 dark:border-purple-800 mb-4">
+            <Search className="h-4 w-4 text-purple-600 dark:text-purple-400 shrink-0" />
+            <p className="text-sm text-purple-900 dark:text-purple-200">
+              Look for the <span className="font-semibold">"Select Patient"</span> search bar in the header
+            </p>
+          </div>
+          <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+            <AlertDialogCancel 
+              onClick={() => {
+                setPendingNavigation(null);
+                setShowPatientAlert(false);
+              }}
+              className="w-full sm:w-auto order-2 sm:order-1"
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={() => {
+                setShowPatientAlert(false);
+                setPendingNavigation(null);
+                triggerSearchHighlight();
+              }}
+              className="w-full sm:w-auto bg-purple-600 hover:bg-purple-700 text-white order-1 sm:order-2"
+            >
+              Show Search Bar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </aside>
   );
 }

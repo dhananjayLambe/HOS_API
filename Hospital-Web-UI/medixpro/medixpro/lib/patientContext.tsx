@@ -16,10 +16,13 @@ export interface Patient {
 interface PatientContextType {
   selectedPatient: Patient | null;
   isLocked: boolean;
+  highlightSearch: boolean;
   setSelectedPatient: (patient: Patient | null) => void;
   clearPatient: () => void;
   lockPatient: () => void;
   unlockPatient: () => void;
+  triggerSearchHighlight: () => void;
+  clearSearchHighlight: () => void;
 }
 
 const PatientContext = createContext<PatientContextType | undefined>(undefined);
@@ -27,6 +30,7 @@ const PatientContext = createContext<PatientContextType | undefined>(undefined);
 export function PatientProvider({ children }: { children: ReactNode }) {
   const [selectedPatient, setSelectedPatientState] = useState<Patient | null>(null);
   const [isLocked, setIsLocked] = useState(false);
+  const [highlightSearch, setHighlightSearch] = useState(false);
 
   const setSelectedPatient = useCallback((patient: Patient | null) => {
     if (!isLocked) {
@@ -55,6 +59,18 @@ export function PatientProvider({ children }: { children: ReactNode }) {
     setIsLocked(false);
   }, []);
 
+  const triggerSearchHighlight = useCallback(() => {
+    setHighlightSearch(true);
+    // Auto-clear highlight after animation
+    setTimeout(() => {
+      setHighlightSearch(false);
+    }, 3000);
+  }, []);
+
+  const clearSearchHighlight = useCallback(() => {
+    setHighlightSearch(false);
+  }, []);
+
   // Load from localStorage on mount
   React.useEffect(() => {
     const stored = localStorage.getItem("selected_patient");
@@ -73,10 +89,13 @@ export function PatientProvider({ children }: { children: ReactNode }) {
       value={{
         selectedPatient,
         isLocked,
+        highlightSearch,
         setSelectedPatient,
         clearPatient,
         lockPatient,
         unlockPatient,
+        triggerSearchHighlight,
+        clearSearchHighlight,
       }}
     >
       {children}
