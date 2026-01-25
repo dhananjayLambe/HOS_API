@@ -1,8 +1,0 @@
-{
-    "items": {
-      "fever": { "label": "Fever" },
-      "cold": { "label": "Cold" },
-      "spotting": { "label": "Spotting" },
-      "abdominal_pain": { "label": "Abdominal Pain" }
-    }
-  }
