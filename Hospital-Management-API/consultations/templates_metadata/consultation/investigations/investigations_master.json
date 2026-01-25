@@ -1,0 +1,9 @@
+{
+    "version": 1,
+    "items": {
+      "cbc": { "label": "Complete Blood Count" },
+      "hba1c": { "label": "HbA1c" },
+      "usg_pelvis": { "label": "USG Pelvis" }
+    }
+  }
+  

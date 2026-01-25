@@ -1,0 +1,25 @@
+{
+    "drug_allergy": {
+      "fields": [
+        { "key": "drug_name", "type": "text", "label": "Drug Name" },
+        {
+          "key": "reaction",
+          "type": "single_select",
+          "label": "Reaction",
+          "options": ["Rash", "Breathing difficulty", "Anaphylaxis"]
+        }
+      ]
+    },
+  
+    "food_allergy": {
+      "fields": [
+        { "key": "food_name", "type": "text", "label": "Food Name" },
+        {
+          "key": "reaction",
+          "type": "single_select",
+          "label": "Reaction",
+          "options": ["Vomiting", "Rash", "Breathing difficulty"]
+        }
+      ]
+    }
+}

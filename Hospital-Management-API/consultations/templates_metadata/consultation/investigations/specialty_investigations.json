@@ -1,0 +1,6 @@
+{
+    "gynecology": ["cbc", "usg_pelvis"],
+    "physician": ["cbc"],
+    "pediatrics": ["cbc"],
+    "diabetologist": ["hba1c"]
+  }

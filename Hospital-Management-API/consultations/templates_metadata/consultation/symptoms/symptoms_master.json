@@ -1,0 +1,8 @@
+{
+    "version": 1,
+    "items": {
+      "fever": { "label": "Fever" },
+      "cold": { "label": "Cold" },
+      "spotting": { "label": "Spotting" }
+    }
+  }

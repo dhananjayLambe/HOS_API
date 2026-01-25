@@ -1,0 +1,14 @@
+{
+    "gynecology": {
+      "sections": ["vitals", "symptoms", "allergies", "history"]
+    },
+    "physician": {
+      "sections": ["vitals", "symptoms", "history"]
+    },
+    "pediatrics": {
+      "sections": ["vitals", "symptoms", "history"]
+    },
+    "diabetologist": {
+      "sections": ["vitals", "symptoms", "history"]
+    }
+}

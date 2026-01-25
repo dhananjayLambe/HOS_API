@@ -14,7 +14,7 @@ from reportlab.lib.units import cm, inch
 from reportlab.platypus import (
     Paragraph,SimpleDocTemplate, Spacer, Table, TableStyle
 )
-from rest_framework import generics, permissions, status, views,viewsets
+from rest_framework import generics, permissions, status, views, viewsets
 from rest_framework.exceptions import NotFound
 from rest_framework.permissions import (
     AllowAny, IsAuthenticated
@@ -37,6 +37,8 @@ from django.views.decorators.csrf import csrf_exempt
 
 # Local App Imports
 from account.permissions import IsDoctor, IsDoctorOrHelpdeskOrOwnerOrAdmin
+from consultations.services.consultation_engine import ConsultationEngine
+from consultations.services.metadata_loader import MetadataLoader
 from consultations.models import (
     Advice, AdviceTemplate, Complaint,
     Consultation, Diagnosis, Vitals,PatientFeedback,
@@ -85,6 +87,72 @@ class StartConsultationAPIView(views.APIView):
                 "message": "Validation failed.",
                 "errors": serializer.errors
             }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class PreConsultationTemplateAPIView(APIView):
+    """
+    Returns pre-consultation template for the authenticated doctor,
+    resolving doctor identity from JWT and specialty from the doctor profile.
+    """
+
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctor]
+
+    def get(self, request):
+        user = request.user
+
+        # Resolve doctor profile from authenticated user
+        doctor_profile = getattr(user, "doctor", None)
+        if doctor_profile is None:
+            return Response(
+                {"detail": "Doctor profile not found for this user."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Map doctor specialization to metadata key
+        raw_specialty = (doctor_profile.primary_specialization or "").strip()
+        specialty_key = raw_specialty.lower()
+
+        try:
+            specialty_cfg = MetadataLoader.get("pre_consultation/specialty_config.json")
+        except FileNotFoundError:
+            logger.error("pre_consultation/specialty_config.json not found")
+            return Response(
+                {"error": "Pre-consult configuration missing on server."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        if specialty_key not in specialty_cfg:
+            return Response(
+                {"error": "Pre-consult template not configured for this specialty"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            template = ConsultationEngine.get_pre_consultation_template(specialty_key)
+            version_info = MetadataLoader.get("_version.json")
+            metadata_version = version_info.get("metadata_version")
+        except FileNotFoundError as e:
+            logger.error(f"Metadata file missing: {e}")
+            return Response(
+                {"error": "Pre-consultation metadata missing on server."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+        except Exception as e:
+            logger.exception("Failed to build pre-consultation template")
+            return Response(
+                {"error": "Failed to build pre-consultation template."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        return Response(
+            {
+                "specialty": specialty_key,
+                "metadata_version": metadata_version,
+                "template": template,
+            },
+            status=status.HTTP_200_OK,
+        )
 
 class VitalsAPIView(views.APIView):
     authentication_classes = [JWTAuthentication]

@@ -1,0 +1,13 @@
+{
+    "items": {
+      "height_weight": {
+        "label": "Height & Weight"
+      },
+      "blood_pressure": {
+        "label": "Blood Pressure"
+      },
+      "temperature": {
+        "label": "Temperature"
+      }
+    }
+}

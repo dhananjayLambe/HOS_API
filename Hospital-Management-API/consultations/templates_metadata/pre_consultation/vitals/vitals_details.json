@@ -1,0 +1,27 @@
+{
+    "height_weight": {
+      "fields": [
+        { "key": "height_cm", "type": "number", "label": "Height (cm)" },
+        { "key": "weight_kg", "type": "number", "label": "Weight (kg)" },
+        {
+          "key": "bmi",
+          "type": "calculated",
+          "label": "BMI",
+          "formula": "weight_kg / ((height_cm/100)^2)"
+        }
+      ]
+    },
+  
+    "blood_pressure": {
+      "fields": [
+        { "key": "systolic", "type": "number", "label": "Systolic (mmHg)" },
+        { "key": "diastolic", "type": "number", "label": "Diastolic (mmHg)" }
+      ]
+    },
+  
+    "temperature": {
+      "fields": [
+        { "key": "value", "type": "number", "label": "Temperature (°F)" }
+      ]
+    }
+  }

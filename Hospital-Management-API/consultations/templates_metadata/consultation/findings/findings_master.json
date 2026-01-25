@@ -1,0 +1,8 @@
+{
+    "version": 1,
+    "items": {
+      "pallor": { "label": "Pallor" },
+      "edema": { "label": "Edema" },
+      "abdominal_tenderness": { "label": "Abdominal Tenderness" }
+    }
+  }

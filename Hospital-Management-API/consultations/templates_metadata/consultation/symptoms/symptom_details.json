@@ -1,0 +1,19 @@
+{
+    "version": 1,
+  
+    "fever": {
+      "fields": [
+        { "key": "since_days", "type": "number", "label": "Since (days)" },
+        { "key": "severity", "type": "select", "options": ["Mild","Moderate","Severe"] },
+        { "key": "pattern", "type": "select", "options": ["Continuous","Intermittent"] }
+      ]
+    },
+  
+    "spotting": {
+      "fields": [
+        { "key": "duration_days", "type": "number", "label": "Duration (days)" },
+        { "key": "amount", "type": "select", "options": ["Mild","Moderate","Heavy"] },
+        { "key": "color", "type": "select", "options": ["Red","Brown","Pink"] }
+      ]
+    }
+  }

@@ -1,0 +1,48 @@
+{
+    "version": 1,
+  
+    "gynecology": {
+      "sections": [
+        "symptoms",
+        "findings",
+        "diagnosis",
+        "medicines",
+        "investigations",
+        "instructions",
+        "procedures"
+      ]
+    },
+  
+    "physician": {
+      "sections": [
+        "symptoms",
+        "findings",
+        "diagnosis",
+        "medicines",
+        "investigations",
+        "instructions"
+      ]
+    },
+  
+    "pediatrics": {
+      "sections": [
+        "symptoms",
+        "findings",
+        "diagnosis",
+        "medicines",
+        "investigations",
+        "instructions"
+      ]
+    },
+  
+    "diabetologist": {
+      "sections": [
+        "symptoms",
+        "findings",
+        "diagnosis",
+        "medicines",
+        "investigations",
+        "instructions"
+      ]
+    }
+  }

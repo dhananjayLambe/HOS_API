@@ -22,7 +22,6 @@ from django.conf.urls.static import static
 from rest_framework import permissions
 from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
-
 schema_view = get_schema_view(
     openapi.Info(
         title="DoctorPro EMR API",
@@ -53,7 +52,6 @@ urlpatterns = [
     path('api/support/', include('support.api.urls')),
     path('api/tasks/', include('tasks.api.urls')),
     path('api/calendar/', include('caleder_events.api.urls')),
-
     #Swagger API
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
     path('redoc/', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),

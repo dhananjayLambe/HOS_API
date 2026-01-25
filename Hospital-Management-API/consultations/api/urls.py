@@ -1,16 +1,26 @@
 from django.urls import path,include
 from rest_framework.routers import DefaultRouter
-from consultations.api.views import(
+from consultations.api.views import (
     StartConsultationAPIView,
     EndConsultationAPIView,
-    VitalsAPIView,AdviceTemplateListCreateAPIView, AdviceTemplateDetailAPIView,
-    ComplaintAPIView,DiagnosisAPIView,AdviceAPIView,ConsultationSummaryView,
-    GeneratePrescriptionPDFView,ConsultationHistoryAPIView,
-    GlobalConsultationSearchView,TagConsultationView,
-    PatientTimelineView,ListPrescriptionPDFsView,
-    PatientFeedbackViewSet,FollowUpAPIView,
-    test_pdf
-    )
+    VitalsAPIView,
+    AdviceTemplateListCreateAPIView,
+    AdviceTemplateDetailAPIView,
+    ComplaintAPIView,
+    DiagnosisAPIView,
+    AdviceAPIView,
+    ConsultationSummaryView,
+    GeneratePrescriptionPDFView,
+    ConsultationHistoryAPIView,
+    GlobalConsultationSearchView,
+    TagConsultationView,
+    PatientTimelineView,
+    ListPrescriptionPDFsView,
+    PatientFeedbackViewSet,
+    FollowUpAPIView,
+    PreConsultationTemplateAPIView,
+    test_pdf,
+)
 # urlpatterns = []
 router = DefaultRouter()
 router.register(r'feedbacks', PatientFeedbackViewSet, basename='feedback')
@@ -33,6 +43,7 @@ urlpatterns = [
     path('summary/<uuid:pk>/', ConsultationSummaryView.as_view(), name='consultation-summary'),
     path('test-pdf/',test_pdf, name='test-pdf'),
     path("generate-pdf/<uuid:consultation_id>/", GeneratePrescriptionPDFView.as_view(), name="generate-prescription-pdf"),
+    path('pre-consult/template/', PreConsultationTemplateAPIView.as_view(), name='pre-consult-template'),
     
     #Meduical Records management API
     path('history/', ConsultationHistoryAPIView.as_view(), name='consultation-history'),

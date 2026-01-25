@@ -1,0 +1,58 @@
+{
+	"info": {
+		"_postman_id": "pre-consultation-template-api",
+		"name": "Pre-Consultation Template API",
+		"description": "Postman collection for Pre-Consultation Template API endpoint",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Get Pre-Consultation Template",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{jwt_token}}",
+						"type": "text",
+						"description": "JWT authentication token"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/api/consultations/pre-consult/template/",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"consultations",
+						"pre-consult",
+						"template",
+						""
+					]
+				},
+				"description": "Returns pre-consultation template for the authenticated doctor based on their specialty.\n\n**Authentication:**\n- Requires JWT Bearer token\n- User must be authenticated and have Doctor role\n\n**Response:**\n- Returns template based on doctor's primary specialization\n- Includes specialty key, metadata version, and template structure\n\n**Possible Responses:**\n- 200 OK: Template retrieved successfully\n- 400 Bad Request: Doctor profile not found\n- 404 Not Found: Template not configured for this specialty\n- 500 Internal Server Error: Configuration or metadata missing"
+			},
+			"response": []
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8000",
+			"type": "string",
+			"description": "Base URL of the API server"
+		},
+		{
+			"key": "jwt_token",
+			"value": "",
+			"type": "string",
+			"description": "JWT authentication token (obtain from login endpoint)"
+		}
+	]
+}

@@ -1,0 +1,6 @@
+{
+    "gynecology": ["anemia"],
+    "physician": ["viral_fever", "anemia"],
+    "pediatrics": ["viral_fever"],
+    "diabetologist": ["diabetes_mellitus"]
+  }

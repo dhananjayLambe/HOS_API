@@ -1,0 +1,1784 @@
+{
+	"info": {
+		"_postman_id": "consultations-api-collection",
+		"name": "Consultations API",
+		"description": "Postman collection for Hospital Management System - Consultations API endpoints",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Pre-Consultation",
+			"item": [
+				{
+					"name": "Get Pre-Consultation Template",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/consultations/pre-consult/template/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"consultations",
+								"pre-consult",
+								"template",
+								""
+							]
+						},
+						"description": "Returns pre-consultation template for the authenticated doctor based on their specialty"
+					}
+				}
+			]
+		},
+		{
+			"name": "Consultation Management",
+			"item": [
+				{
+					"name": "Start Consultation",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"patient_profile_id\": \"{{patient_id}}\",\n    \"doctor_id\": \"{{doctor_id}}\",\n    \"reason\": \"Regular checkup\",\n    \"appointment_id\": null\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/consultations/start/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"consultations",
+								"start",
+								""
+							]
+						},
+						"description": "Start a new consultation for a patient"
+					}
+				},
+				{
+					"name": "End Consultation",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"closure_note\": \"Patient advised to follow up in 2 weeks\",\n    \"follow_up_date\": \"2026-02-08\",\n    \"confirm\": true\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/consultations/end/{{consultation_id}}/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"consultations",
+								"end",
+								"{{consultation_id}}",
+								""
+							]
+						},
+						"description": "End a consultation with optional closure note and follow-up date"
+					}
+				},
+				{
+					"name": "Get Consultation Summary",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/consultations/summary/{{consultation_id}}/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"consultations",
+								"summary",
+								"{{consultation_id}}",
+								""
+							]
+						},
+						"description": "Get complete consultation summary including vitals, complaints, diagnoses, prescriptions, and advice"
+					}
+				}
+			]
+		},
+		{
+			"name": "Vitals",
+			"item": [
+				{
+					"name": "Get Vitals",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/consultations/vitals/{{consultation_id}}/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"consultations",
+								"vitals",
+								"{{consultation_id}}",
+								""
+							]
+						},
+						"description": "Retrieve vitals for a consultation"
+					}
+				},
+				{
+					"name": "Create/Update Vitals",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"height_cm\": 175,\n    \"weight_kg\": 70,\n    \"pulse\": 72,\n    \"blood_pressure\": \"120/80\",\n    \"temperature_c\": 36.5\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/consultations/vitals/{{consultation_id}}/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"consultations",
+								"vitals",
+								"{{consultation_id}}",
+								""
+							]
+						},
+						"description": "Create or update vitals (idempotent operation)"
+					}
+				},
+				{
+					"name": "Update Vitals (Partial)",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"weight_kg\": 72,\n    \"blood_pressure\": \"125/82\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/consultations/vitals/{{consultation_id}}/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"consultations",
+								"vitals",
+								"{{consultation_id}}",
+								""
+							]
+						},
+						"description": "Partially update vitals"
+					}
+				},
+				{
+					"name": "Delete Vitals",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/consultations/vitals/{{consultation_id}}/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"consultations",
+								"vitals",
+								"{{consultation_id}}",
+								""
+							]
+						},
+						"description": "Delete vitals for a consultation"
+					}
+				}
+			]
+		},
+		{
+			"name": "Complaints",
+			"item": [
+				{
+					"name": "List Complaints",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/consultations/complaints/{{consultation_id}}/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"consultations",
+								"complaints",
+								"{{consultation_id}}",
+								""
+							]
+						},
+						"description": "Get all complaints for a consultation"
+					}
+				},
+				{
+					"name": "Get Complaint",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/consultations/complaints/{{consultation_id}}/{{complaint_id}}/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"consultations",
+								"complaints",
+								"{{consultation_id}}",
+								"{{complaint_id}}",
+								""
+							]
+						},
+						"description": "Get a specific complaint"
+					}
+				},
+				{
+					"name": "Create Complaint",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"complaint_text\": \"Headache for 3 days\",\n    \"duration\": \"3 days\",\n    \"severity\": \"moderate\",\n    \"is_general\": false,\n    \"doctor_note\": \"Patient reports persistent headache\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/consultations/complaints/{{consultation_id}}/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"consultations",
+								"complaints",
+								"{{consultation_id}}",
+								""
+							]
+						},
+						"description": "Add a new complaint to a consultation. Severity must be one of: mild, moderate, severe"
+					}
+				},
+				{
+					"name": "Update Complaint",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"severity\": \"severe\",\n    \"doctor_note\": \"Updated note\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/consultations/complaints/{{consultation_id}}/{{complaint_id}}/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"consultations",
+								"complaints",
+								"{{consultation_id}}",
+								"{{complaint_id}}",
+								""
+							]
+						},
+						"description": "Update a complaint"
+					}
+				},
+				{
+					"name": "Delete Complaint",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/consultations/complaints/{{consultation_id}}/{{complaint_id}}/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"consultations",
+								"complaints",
+								"{{consultation_id}}",
+								"{{complaint_id}}",
+								""
+							]
+						},
+						"description": "Delete a complaint"
+					}
+				}
+			]
+		},
+		{
+			"name": "Diagnosis",
+			"item": [
+				{
+					"name": "List Diagnoses",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/consultations/diagnosis/{{consultation_id}}/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"consultations",
+								"diagnosis",
+								"{{consultation_id}}",
+								""
+							]
+						},
+						"description": "Get all diagnoses for a consultation"
+					}
+				},
+				{
+					"name": "Get Diagnosis",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/consultations/diagnosis/{{consultation_id}}/{{diagnosis_id}}/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"consultations",
+								"diagnosis",
+								"{{consultation_id}}",
+								"{{diagnosis_id}}",
+								""
+							]
+						},
+						"description": "Get a specific diagnosis"
+					}
+				},
+				{
+					"name": "Create Diagnosis",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"code\": \"I10\",\n    \"description\": \"Essential hypertension\",\n    \"location\": \"systemic\",\n    \"diagnosis_type\": \"confirmed\",\n    \"is_general\": false,\n    \"doctor_note\": \"Patient has high blood pressure\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/consultations/diagnosis/{{consultation_id}}/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"consultations",
+								"diagnosis",
+								"{{consultation_id}}",
+								""
+							]
+						},
+						"description": "Create a diagnosis (idempotent - duplicate entries are rejected)"
+					}
+				},
+				{
+					"name": "Update Diagnosis",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"doctor_note\": \"Updated diagnosis note\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/consultations/diagnosis/{{consultation_id}}/{{diagnosis_id}}/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"consultations",
+								"diagnosis",
+								"{{consultation_id}}",
+								"{{diagnosis_id}}",
+								""
+							]
+						},
+						"description": "Partially update a diagnosis"
+					}
+				},
+				{
+					"name": "Delete Diagnosis",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/consultations/diagnosis/{{consultation_id}}/{{diagnosis_id}}/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"consultations",
+								"diagnosis",
+								"{{consultation_id}}",
+								"{{diagnosis_id}}",
+								""
+							]
+						},
+						"description": "Delete a diagnosis"
+					}
+				}
+			]
+		},
+		{
+			"name": "Advice",
+			"item": [
+				{
+					"name": "List Advice",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/consultations/advice/{{consultation_id}}/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"consultations",
+								"advice",
+								"{{consultation_id}}",
+								""
+							]
+						},
+						"description": "Get all advice records for a consultation"
+					}
+				},
+				{
+					"name": "Get Advice",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/consultations/advice/{{consultation_id}}/{{advice_id}}/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"consultations",
+								"advice",
+								"{{consultation_id}}",
+								"{{advice_id}}",
+								""
+							]
+						},
+						"description": "Get a specific advice record"
+					}
+				},
+				{
+					"name": "Create Advice (Custom)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"custom_advice\": \"Take rest and drink plenty of fluids\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/consultations/advice/{{consultation_id}}/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"consultations",
+								"advice",
+								"{{consultation_id}}",
+								""
+							]
+						},
+						"description": "Create advice with custom text"
+					}
+				},
+				{
+					"name": "Create Advice (Template)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"advice_templates\": [\"{{advice_template_id}}\"]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/consultations/advice/{{consultation_id}}/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"consultations",
+								"advice",
+								"{{consultation_id}}",
+								""
+							]
+						},
+						"description": "Create advice using template IDs"
+					}
+				},
+				{
+					"name": "Create Advice (Mixed)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"advice_templates\": [\"{{advice_template_id}}\"],\n    \"custom_advice\": \"Additional custom advice\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/consultations/advice/{{consultation_id}}/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"consultations",
+								"advice",
+								"{{consultation_id}}",
+								""
+							]
+						},
+						"description": "Create advice with both templates and custom text"
+					}
+				},
+				{
+					"name": "Update Advice",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"custom_advice\": \"Updated custom advice\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/consultations/advice/{{consultation_id}}/{{advice_id}}/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"consultations",
+								"advice",
+								"{{consultation_id}}",
+								"{{advice_id}}",
+								""
+							]
+						},
+						"description": "Update an advice record"
+					}
+				},
+				{
+					"name": "Delete Advice",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/consultations/advice/{{consultation_id}}/{{advice_id}}/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"consultations",
+								"advice",
+								"{{consultation_id}}",
+								"{{advice_id}}",
+								""
+							]
+						},
+						"description": "Delete an advice record"
+					}
+				}
+			]
+		},
+		{
+			"name": "Advice Templates",
+			"item": [
+				{
+					"name": "List Advice Templates",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/consultations/advice/templates/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"consultations",
+								"advice",
+								"templates",
+								""
+							]
+						},
+						"description": "Get all advice templates"
+					}
+				},
+				{
+					"name": "Create Advice Template",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"description\": \"Take medication as prescribed\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/consultations/advice/templates/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"consultations",
+								"advice",
+								"templates",
+								""
+							]
+						},
+						"description": "Create a new advice template"
+					}
+				},
+				{
+					"name": "Update Advice Template",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"description\": \"Updated template description\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/consultations/advice/templates/{{advice_template_id}}/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"consultations",
+								"advice",
+								"templates",
+								"{{advice_template_id}}",
+								""
+							]
+						},
+						"description": "Update an advice template"
+					}
+				},
+				{
+					"name": "Delete Advice Template",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/consultations/advice/templates/{{advice_template_id}}/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"consultations",
+								"advice",
+								"templates",
+								"{{advice_template_id}}",
+								""
+							]
+						},
+						"description": "Delete an advice template"
+					}
+				}
+			]
+		},
+		{
+			"name": "Follow-Up",
+			"item": [
+				{
+					"name": "Get Follow-Up Date",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/consultations/follow-up/{{consultation_id}}/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"consultations",
+								"follow-up",
+								"{{consultation_id}}",
+								""
+							]
+						},
+						"description": "Get follow-up date for a consultation"
+					}
+				},
+				{
+					"name": "Set Follow-Up Date",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"follow_up_date\": \"2026-02-08\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/consultations/follow-up/{{consultation_id}}/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"consultations",
+								"follow-up",
+								"{{consultation_id}}",
+								""
+							]
+						},
+						"description": "Set follow-up date for a consultation (format: YYYY-MM-DD)"
+					}
+				},
+				{
+					"name": "Remove Follow-Up Date",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/consultations/follow-up/{{consultation_id}}/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"consultations",
+								"follow-up",
+								"{{consultation_id}}",
+								""
+							]
+						},
+						"description": "Remove follow-up date for a consultation"
+					}
+				}
+			]
+		},
+		{
+			"name": "Prescription PDF",
+			"item": [
+				{
+					"name": "Generate Prescription PDF",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"consultation_id\": \"{{consultation_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/consultations/generate-pdf/{{consultation_id}}/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"consultations",
+								"generate-pdf",
+								"{{consultation_id}}",
+								""
+							]
+						},
+						"description": "Generate and store prescription PDF for a consultation"
+					}
+				},
+				{
+					"name": "List Patient PDFs",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/consultations/list-patient-pdfs/{{patient_id}}/?page=1",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"consultations",
+								"list-patient-pdfs",
+								"{{patient_id}}",
+								""
+							],
+							"query": [
+								{
+									"key": "page",
+									"value": "1",
+									"description": "Page number for pagination"
+								}
+							]
+						},
+						"description": "List all prescription PDFs for a patient (paginated)"
+					}
+				},
+				{
+					"name": "Test PDF",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/consultations/test-pdf/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"consultations",
+								"test-pdf",
+								""
+							]
+						},
+						"description": "Test PDF generation endpoint"
+					}
+				}
+			]
+		},
+		{
+			"name": "Consultation History & Search",
+			"item": [
+				{
+					"name": "Get Consultation History",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/consultations/history/?patient_id={{patient_id}}&doctor_id={{doctor_id}}&start_date=2026-01-01&end_date=2026-01-31&page=1&page_size=10",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"consultations",
+								"history",
+								""
+							],
+							"query": [
+								{
+									"key": "patient_id",
+									"value": "{{patient_id}}",
+									"description": "Filter by patient ID (UUID)",
+									"disabled": true
+								},
+								{
+									"key": "doctor_id",
+									"value": "{{doctor_id}}",
+									"description": "Filter by doctor ID (UUID)",
+									"disabled": true
+								},
+								{
+									"key": "start_date",
+									"value": "2026-01-01",
+									"description": "Start date filter (YYYY-MM-DD)",
+									"disabled": true
+								},
+								{
+									"key": "end_date",
+									"value": "2026-01-31",
+									"description": "End date filter (YYYY-MM-DD)",
+									"disabled": true
+								},
+								{
+									"key": "page",
+									"value": "1",
+									"description": "Page number"
+								},
+								{
+									"key": "page_size",
+									"value": "10",
+									"description": "Number of items per page"
+								}
+							]
+						},
+						"description": "Get consultation history with optional filters (patient_id, doctor_id, date range) and pagination"
+					}
+				},
+				{
+					"name": "Global Consultation Search",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/consultations/global-consultation-search/?query=headache&doctor_id={{doctor_id}}&date_from=2026-01-01&date_to=2026-01-31",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"consultations",
+								"global-consultation-search",
+								""
+							],
+							"query": [
+								{
+									"key": "query",
+									"value": "headache",
+									"description": "Search query (searches in complaints, diagnoses, prescriptions, patient names)",
+									"disabled": true
+								},
+								{
+									"key": "doctor_id",
+									"value": "{{doctor_id}}",
+									"description": "Filter by doctor ID (UUID)",
+									"disabled": true
+								},
+								{
+									"key": "date_from",
+									"value": "2026-01-01",
+									"description": "Start date filter (YYYY-MM-DD)",
+									"disabled": true
+								},
+								{
+									"key": "date_to",
+									"value": "2026-01-31",
+									"description": "End date filter (YYYY-MM-DD)",
+									"disabled": true
+								}
+							]
+						},
+						"description": "Global search across consultations (searches in complaints, diagnoses, prescriptions, patient names)"
+					}
+				},
+				{
+					"name": "Tag Consultation",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"tag\": \"urgent\",\n    \"is_important\": true\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/consultations/tag/{{consultation_id}}/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"consultations",
+								"tag",
+								"{{consultation_id}}",
+								""
+							]
+						},
+						"description": "Tag a consultation with a tag and optional importance flag"
+					}
+				},
+				{
+					"name": "Get Patient Timeline",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/consultations/patient-timeline/{{patient_id}}/?start_date=2026-01-01&end_date=2026-01-31",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"consultations",
+								"patient-timeline",
+								"{{patient_id}}",
+								""
+							],
+							"query": [
+								{
+									"key": "start_date",
+									"value": "2026-01-01",
+									"description": "Start date filter (YYYY-MM-DD)",
+									"disabled": true
+								},
+								{
+									"key": "end_date",
+									"value": "2026-01-31",
+									"description": "End date filter (YYYY-MM-DD)",
+									"disabled": true
+								}
+							]
+						},
+						"description": "Get patient timeline with all consultations"
+					}
+				}
+			]
+		},
+		{
+			"name": "Patient Feedback",
+			"item": [
+				{
+					"name": "List Feedbacks",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/consultations/feedbacks/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"consultations",
+								"feedbacks",
+								""
+							]
+						},
+						"description": "List all feedbacks (filtered by user if not superuser)"
+					}
+				},
+				{
+					"name": "Get Feedback",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/consultations/feedbacks/{{feedback_id}}/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"consultations",
+								"feedbacks",
+								"{{feedback_id}}",
+								""
+							]
+						},
+						"description": "Get a specific feedback"
+					}
+				},
+				{
+					"name": "Create Feedback",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"consultation\": \"{{consultation_id}}\",\n    \"rating\": 5,\n    \"comments\": \"Great service!\",\n    \"is_anonymous\": false\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/consultations/feedbacks/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"consultations",
+								"feedbacks",
+								""
+							]
+						},
+						"description": "Create a new patient feedback"
+					}
+				},
+				{
+					"name": "Update Feedback",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"rating\": 4,\n    \"comments\": \"Updated feedback\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/consultations/feedbacks/{{feedback_id}}/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"consultations",
+								"feedbacks",
+								"{{feedback_id}}",
+								""
+							]
+						},
+						"description": "Update a feedback"
+					}
+				},
+				{
+					"name": "Delete Feedback",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/consultations/feedbacks/{{feedback_id}}/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"consultations",
+								"feedbacks",
+								"{{feedback_id}}",
+								""
+							]
+						},
+						"description": "Delete a feedback"
+					}
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8000",
+			"type": "string"
+		},
+		{
+			"key": "jwt_token",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "consultation_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "patient_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "doctor_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "complaint_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "diagnosis_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "advice_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "advice_template_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "feedback_id",
+			"value": "",
+			"type": "string"
+		}
+	]
+}

@@ -1,0 +1,6 @@
+{
+    "items": {
+      "drug_allergy": { "label": "Drug Allergy" },
+      "food_allergy": { "label": "Food Allergy" }
+    }
+}

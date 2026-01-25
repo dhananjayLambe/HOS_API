@@ -933,6 +933,41 @@ class SpecializationViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return Specialization.objects.filter(doctor=self.request.user.doctor).order_by('-created_at')
 
+    def get_specialization_name(self, specialization_instance):
+        """
+        Helper method to get the specialization name string from a Specialization instance.
+        Returns the display name for predefined specializations or the custom specialization name.
+        """
+        if specialization_instance.specialization:
+            return specialization_instance.get_specialization_display()
+        elif specialization_instance.custom_specialization:
+            return specialization_instance.custom_specialization.name
+        return None
+
+    def update_doctor_primary_specialization(self, doctor_instance, specialization_instance):
+        """
+        Update the doctor's primary_specialization field based on the specialization instance.
+        If the specialization is marked as primary, update the doctor's field.
+        If not primary, check if there are other primary specializations, otherwise clear it.
+        """
+        if specialization_instance.is_primary:
+            # Get the specialization name and update doctor's primary_specialization
+            specialization_name = self.get_specialization_name(specialization_instance)
+            if specialization_name:
+                doctor_instance.primary_specialization = specialization_name
+                doctor_instance.save(update_fields=['primary_specialization'])
+        else:
+            # Check if there are other primary specializations
+            other_primary = Specialization.objects.filter(
+                doctor=doctor_instance,
+                is_primary=True
+            ).exclude(id=specialization_instance.id).first()
+            
+            if not other_primary:
+                # No other primary specialization exists, clear the doctor's primary_specialization
+                doctor_instance.primary_specialization = "General"
+                doctor_instance.save(update_fields=['primary_specialization'])
+
     def list(self, request, *args, **kwargs):
         """List all specializations for the authenticated doctor"""
         queryset = self.get_queryset()
@@ -1034,10 +1069,26 @@ class SpecializationViewSet(viewsets.ModelViewSet):
                 serializer = self.get_serializer(existing, data=request.data, partial=True, context={'request': request})
                 serializer.is_valid(raise_exception=True)
                 self.perform_update(serializer)
+                
+                # Refresh instance to get updated data
+                existing.refresh_from_db()
+                
+                # Handle primary specialization logic
+                is_primary = request.data.get('is_primary')
+                if is_primary is not None:
+                    if is_primary:
+                        # Set all other specializations to non-primary
+                        Specialization.objects.filter(
+                            doctor=doctor_instance
+                        ).exclude(id=existing.id).update(is_primary=False)
+                
+                # Update doctor's primary_specialization field
+                self.update_doctor_primary_specialization(doctor_instance, existing)
+                
                 return Response({
                     "status": "success",
                     "message": "Specialization updated successfully",
-                    "data": serializer.data
+                    "data": self.get_serializer(existing).data
                 }, status=status.HTTP_200_OK)
         else:
             return Response({
@@ -1048,11 +1099,23 @@ class SpecializationViewSet(viewsets.ModelViewSet):
         # Create new specialization
         serializer = self.get_serializer(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
-        self.perform_create(serializer)
+        instance = serializer.save()
+        
+        # Handle primary specialization logic
+        is_primary = request.data.get('is_primary', False)
+        if is_primary:
+            # Set all other specializations to non-primary
+            Specialization.objects.filter(
+                doctor=doctor_instance
+            ).exclude(id=instance.id).update(is_primary=False)
+        
+        # Update doctor's primary_specialization field
+        self.update_doctor_primary_specialization(doctor_instance, instance)
+        
         return Response({
             "status": "success",
             "message": "Specialization created successfully",
-            "data": serializer.data
+            "data": self.get_serializer(instance).data
         }, status=status.HTTP_201_CREATED)
 
     @transaction.atomic
@@ -1112,17 +1175,56 @@ class SpecializationViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(instance, data=request.data, partial=partial, context={'request': request})
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)
+        
+        # Refresh instance to get updated data
+        instance.refresh_from_db()
+        
+        # Handle primary specialization logic
+        is_primary = request.data.get('is_primary')
+        if is_primary is not None:
+            if is_primary:
+                # Set all other specializations to non-primary
+                Specialization.objects.filter(
+                    doctor=request.user.doctor
+                ).exclude(id=instance.id).update(is_primary=False)
+        
+        # Update doctor's primary_specialization field
+        self.update_doctor_primary_specialization(request.user.doctor, instance)
+        
         return Response({
             "status": "success",
             "message": "Specialization updated successfully",
-            "data": serializer.data
+            "data": self.get_serializer(instance).data
         }, status=status.HTTP_200_OK)
 
     @transaction.atomic
     def destroy(self, request, *args, **kwargs):
         """Delete a specialization"""
         instance = self.get_object()
+        doctor_instance = request.user.doctor
+        was_primary = instance.is_primary
+        
         self.perform_destroy(instance)
+        
+        # If the deleted specialization was primary, update doctor's primary_specialization
+        if was_primary:
+            # Check if there are other primary specializations
+            other_primary = Specialization.objects.filter(
+                doctor=doctor_instance,
+                is_primary=True
+            ).first()
+            
+            if other_primary:
+                # Update to the next primary specialization
+                specialization_name = self.get_specialization_name(other_primary)
+                if specialization_name:
+                    doctor_instance.primary_specialization = specialization_name
+                    doctor_instance.save(update_fields=['primary_specialization'])
+            else:
+                # No other primary specialization exists, reset to default
+                doctor_instance.primary_specialization = "General"
+                doctor_instance.save(update_fields=['primary_specialization'])
+        
         return Response({
             "status": "success",
             "message": "Specialization deleted successfully"

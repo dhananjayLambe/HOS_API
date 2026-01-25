@@ -1,0 +1,6 @@
+{
+    "gynecology": ["fever", "spotting"],
+    "physician": ["fever", "cold"],
+    "pediatrics": ["fever", "cold"],
+    "diabetologist": ["fever"]
+  }

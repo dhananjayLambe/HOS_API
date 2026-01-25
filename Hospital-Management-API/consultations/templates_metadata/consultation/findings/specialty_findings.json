@@ -1,0 +1,6 @@
+{
+    "gynecology": ["pallor", "abdominal_tenderness"],
+    "physician": ["pallor", "edema"],
+    "pediatrics": ["pallor"],
+    "diabetologist": ["edema"]
+  }

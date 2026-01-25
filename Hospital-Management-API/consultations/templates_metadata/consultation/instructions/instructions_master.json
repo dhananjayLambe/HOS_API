@@ -1,0 +1,8 @@
+{
+    "version": 1,
+    "items": {
+      "rest": { "label": "Take adequate rest" },
+      "hydration": { "label": "Maintain good hydration" },
+      "diet_control": { "label": "Follow dietary advice" }
+    }
+  }

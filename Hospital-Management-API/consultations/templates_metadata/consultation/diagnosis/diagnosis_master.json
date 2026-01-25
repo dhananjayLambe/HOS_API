@@ -1,0 +1,8 @@
+{
+    "version": 1,
+    "items": {
+      "viral_fever": { "label": "Viral Fever" },
+      "anemia": { "label": "Anemia" },
+      "diabetes_mellitus": { "label": "Diabetes Mellitus" }
+    }
+  }

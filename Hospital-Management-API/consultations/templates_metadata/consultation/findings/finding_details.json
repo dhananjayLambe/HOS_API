@@ -1,0 +1,10 @@
+{
+    "version": 1,
+  
+    "abdominal_tenderness": {
+      "fields": [
+        { "key": "location", "type": "select", "options": ["Upper","Lower","Diffuse"] },
+        { "key": "severity", "type": "select", "options": ["Mild","Moderate","Severe"] }
+      ]
+    }
+  }
