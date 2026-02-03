@@ -8,6 +8,8 @@ import { Separator } from "@/components/ui/separator";
 import { useToastNotification } from "@/hooks/use-toast-notification";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { validateField as validateFieldUnitAware } from "@/lib/validation/dynamic-validator";
+import { convertValue } from "@/lib/validation/unit-converter";
 
 interface DynamicSectionFormProps {
   sectionCode: string;
@@ -59,6 +61,9 @@ export function DynamicSectionForm({
   const sectionConfig = getSectionConfig(sectionCode);
   const defaultRequired = getDefaultRequiredFields(sectionCode);
   const defaultOptional = getDefaultOptionalFields(sectionCode);
+  
+  // Get specialty ranges for dynamic validation ranges
+  const specialtyRanges = template?.specialty_ranges;
 
   // Normalize initial data to flat structure: { [itemCode]: { [fieldKey]: value } }
   const [sectionData, setSectionData] = useState<Record<string, Record<string, any>>>({});
@@ -452,38 +457,59 @@ export function DynamicSectionForm({
   }, [allFieldIds]);
 
   
-  // Real-time validation helper
-  const validateField = useCallback((itemCode: string, field: any, value: any): string | undefined => {
-    const fieldKey = `${itemCode}.${field.key}`;
-    
-    // Required validation
-    if (field.required && (value === undefined || value === null || value === "")) {
-      return `${field.label} is required`;
-    }
-    
-    // Skip other validations if field is empty and not required
-    if ((value === undefined || value === null || value === "") && !field.required) {
-      return undefined;
-    }
-    
-    // Number validation
-    if (field.type === "number" && value !== null && value !== undefined && value !== "") {
-      const numValue = Number(value);
-      if (isNaN(numValue)) {
-        return `${field.label} must be a valid number`;
+  // Real-time validation helper (unit-aware for number fields with units)
+  const validateField = useCallback(
+    (itemCode: string, field: any, value: any, currentUnitOverride?: string): string | undefined => {
+      const fieldKeyFull = `${itemCode}.${field.key}`;
+      const currentUnit =
+        currentUnitOverride ?? fieldUnits[fieldKeyFull] ?? field.unit ?? field.canonical_unit ?? "";
+
+      // Required validation
+      if (field.required && (value === undefined || value === null || value === "")) {
+        return `${field.label} is required`;
       }
-      if (field.min !== undefined && numValue < field.min) {
-        return `${field.label} must be at least ${field.min}${field.unit ? ` ${field.unit}` : ""}`;
+
+      // Skip other validations if field is empty and not required
+      if ((value === undefined || value === null || value === "") && !field.required) {
+        return undefined;
       }
-      if (field.max !== undefined && numValue > field.max) {
-        return `${field.label} must be at most ${field.max}${field.unit ? ` ${field.unit}` : ""}`;
+
+      // Number validation with unit-aware min/max (for vitals and any field with units)
+      if (field.type === "number" && value !== null && value !== undefined && value !== "") {
+        const numValue = Number(value);
+        if (isNaN(numValue)) {
+          return `${field.label} must be a valid number`;
+        }
+        // Use unit-aware validator when field has canonical_unit or supported_units
+        if (field.canonical_unit || (field.supported_units && field.supported_units.length > 0)) {
+          // Lib expects value in display unit (currentUnit); we store in canonical – convert if needed
+          const canonicalUnit = field.canonical_unit || field.unit || "";
+          const valueInDisplayUnit =
+            currentUnit && canonicalUnit && currentUnit !== canonicalUnit
+              ? convertValue(numValue, canonicalUnit, currentUnit)
+              : numValue;
+          const err = validateFieldUnitAware(
+            field,
+            valueInDisplayUnit,
+            sectionData,
+            currentUnit || undefined,
+            specialtyRanges ?? undefined
+          );
+          return err ?? undefined;
+        }
+        // Fallback: simple min/max (no unit conversion)
+        if (field.min !== undefined && numValue < field.min) {
+          return `${field.label} must be at least ${field.min}${field.unit ? ` ${field.unit}` : ""}`;
+        }
+        if (field.max !== undefined && numValue > field.max) {
+          return `${field.label} must be at most ${field.max}${field.unit ? ` ${field.unit}` : ""}`;
+        }
+        if (field.range && (numValue < field.range[0] || numValue > field.range[1])) {
+          return `${field.label} must be between ${field.range[0]} and ${field.range[1]}${field.unit ? ` ${field.unit}` : ""}`;
+        }
       }
-      if (field.range && (numValue < field.range[0] || numValue > field.range[1])) {
-        return `${field.label} must be between ${field.range[0]} and ${field.range[1]}${field.unit ? ` ${field.unit}` : ""}`;
-      }
-    }
-    
-    // Text validation
+
+      // Text validation
     if (field.type === "text" && value !== null && value !== undefined && value !== "") {
       const textValue = String(value);
       if (field.minLength && textValue.length < field.minLength) {
@@ -512,9 +538,9 @@ export function DynamicSectionForm({
         return `At least one ${field.label} must be selected`;
       }
     }
-    
+
     return undefined;
-  }, []);
+  }, [fieldUnits, sectionData, specialtyRanges]);
 
   const handleFieldChange = useCallback((itemCode: string, fieldKey: string, value: any) => {
     setSectionData((prev) => ({
@@ -524,9 +550,9 @@ export function DynamicSectionForm({
         [fieldKey]: value,
       },
     }));
-    
-    // Real-time validation (vitals: never block or show hard errors)
-    if (section && sectionCode !== "vitals") {
+
+    // Real-time validation for all sections (including vitals) – unit-aware
+    if (section) {
       const item = section.items.find((i) => i.code === itemCode);
       const field = item?.fields.find((f) => f.key === fieldKey);
       if (field) {
@@ -541,17 +567,33 @@ export function DynamicSectionForm({
         });
       }
     }
-  }, [section, sectionCode, validateField]);
+  }, [section, validateField]);
+
+  // Re-validate a single field (e.g. when unit changes) and update errors
+  const revalidateFieldWithUnit = useCallback(
+    (itemCode: string, field: any, value: any, currentUnit: string) => {
+      const fieldKeyFull = `${itemCode}.${field.key}`;
+      setTouchedFields((prev) => new Set(prev).add(fieldKeyFull));
+      const error = validateField(itemCode, field, value, currentUnit);
+      setValidationErrors((prev) => {
+        if (error) return { ...prev, [fieldKeyFull]: error };
+        const next = { ...prev };
+        delete next[fieldKeyFull];
+        return next;
+      });
+    },
+    [validateField]
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Vitals: never block save; no hard validation (rule 10)
-    const isVitals = sectionCode === "vitals";
-    const errors: string[] = [];
-    const fieldErrors: Record<string, string> = {};
-    
-    if (section && !isVitals) {
+    try {
+      // Vitals: never block save; no hard validation (rule 10)
+      const isVitals = sectionCode === "vitals";
+      const errors: string[] = [];
+      const fieldErrors: Record<string, string> = {};
+      
+      if (section && !isVitals) {
       const defaultRequired = getDefaultRequiredFields(sectionCode);
       
       defaultRequired.forEach((itemCode) => {
@@ -580,52 +622,12 @@ export function DynamicSectionForm({
               }
               return;
             }
-            if (field.type === "number" && value !== null && value !== undefined && value !== "") {
-              const numValue = Number(value);
-              if (isNaN(numValue)) {
-                errors.push(`${field.label} must be a valid number`);
-                fieldErrors[fieldKey] = `${field.label} must be a valid number`;
-              } else {
-                if (field.min !== undefined && numValue < field.min) {
-                  errors.push(`${field.label} must be at least ${field.min}`);
-                  fieldErrors[fieldKey] = `${field.label} must be at least ${field.min}`;
-                }
-                if (field.max !== undefined && numValue > field.max) {
-                  errors.push(`${field.label} must be at most ${field.max}`);
-                  fieldErrors[fieldKey] = `${field.label} must be at most ${field.max}`;
-                }
-                if (field.range && (numValue < field.range[0] || numValue > field.range[1])) {
-                  errors.push(`${field.label} must be between ${field.range[0]} and ${field.range[1]}`);
-                  fieldErrors[fieldKey] = `${field.label} must be between ${field.range[0]} and ${field.range[1]}`;
-                }
-              }
-            }
-            if (field.type === "text" && value !== null && value !== undefined && value !== "") {
-              const textValue = String(value);
-              if (field.minLength && textValue.length < field.minLength) {
-                errors.push(`${field.label} must be at least ${field.minLength} characters`);
-                fieldErrors[fieldKey] = `${field.label} must be at least ${field.minLength} characters`;
-              }
-              if (field.maxLength && textValue.length > field.maxLength) {
-                errors.push(`${field.label} must be at most ${field.maxLength} characters`);
-                fieldErrors[fieldKey] = `${field.label} must be at most ${field.maxLength} characters`;
-              }
-              if (field.validation?.pattern && !new RegExp(field.validation.pattern).test(textValue)) {
-                const errorMsg = field.validation.message || `${field.label} format is invalid`;
-                errors.push(errorMsg);
-                fieldErrors[fieldKey] = errorMsg;
-              }
-            }
-            if (field.type === "single_select" && field.required && (!value || value === "")) {
-              errors.push(`${field.label} must be selected`);
-              fieldErrors[fieldKey] = `${field.label} must be selected`;
-            }
-            if (field.type === "multi_select" && field.required) {
-              const arrayValue = Array.isArray(value) ? value : [];
-              if (arrayValue.length === 0) {
-                errors.push(`At least one ${field.label} must be selected`);
-                fieldErrors[fieldKey] = `At least one ${field.label} must be selected`;
-              }
+            // Use unit-aware validateField for all fields (single source of truth)
+            const currentUnitForSubmit = fieldUnits[fieldKey];
+            const validationError = validateField(itemCode, field, value, currentUnitForSubmit);
+            if (validationError) {
+              errors.push(validationError);
+              fieldErrors[fieldKey] = validationError;
             }
           });
         }
@@ -667,11 +669,11 @@ export function DynamicSectionForm({
     // Transform normalized data back to expected format
     // The backend expects: { [itemCode]: { [fieldKey]: value } }
     const transformedData: any = {};
+    const safeSectionData = sectionData && typeof sectionData === "object" ? sectionData : {};
     
-    Object.keys(sectionData).forEach((itemCode) => {
-      const itemData = sectionData[itemCode];
-      if (Object.keys(itemData).length > 0) {
-        // Always nest by item code for consistency
+    Object.keys(safeSectionData).forEach((itemCode) => {
+      const itemData = safeSectionData[itemCode];
+      if (itemData && typeof itemData === "object" && Object.keys(itemData).length > 0) {
         transformedData[itemCode] = { ...itemData };
       }
     });
@@ -681,28 +683,36 @@ export function DynamicSectionForm({
     Object.keys(transformedData).forEach((key) => {
       const value = transformedData[key];
       if (value && typeof value === "object" && !Array.isArray(value)) {
-        const cleaned = Object.fromEntries(
-          Object.entries(value).filter(([_, v]) => v !== "" && v !== null && v !== undefined)
-        );
-        if (Object.keys(cleaned).length > 0) {
-          cleanedData[key] = cleaned;
+        try {
+          const cleaned = Object.fromEntries(
+            Object.entries(value).filter(([_, v]) => v !== "" && v !== null && v !== undefined)
+          );
+          if (Object.keys(cleaned).length > 0) {
+            cleanedData[key] = cleaned;
+          }
+        } catch {
+          cleanedData[key] = value;
         }
       } else if (value !== "" && value !== null && value !== undefined) {
         cleanedData[key] = value;
       }
     });
 
-    // Special handling for chief_complaint: ensure primary_complaint.complaint_text is preserved
-    if (sectionCode === "chief_complaint" && cleanedData.primary_complaint) {
-      // Ensure the structure is correct
-      if (!cleanedData.primary_complaint.complaint_text && cleanedData.primary_complaint.complaint) {
-        // Legacy format support
-        cleanedData.primary_complaint.complaint_text = cleanedData.primary_complaint.complaint;
-        delete cleanedData.primary_complaint.complaint;
+      // Special handling for chief_complaint: ensure primary_complaint.complaint_text is preserved
+      if (sectionCode === "chief_complaint" && cleanedData.primary_complaint) {
+        // Ensure the structure is correct
+        if (!cleanedData.primary_complaint.complaint_text && cleanedData.primary_complaint.complaint) {
+          // Legacy format support
+          cleanedData.primary_complaint.complaint_text = cleanedData.primary_complaint.complaint;
+          delete cleanedData.primary_complaint.complaint;
+        }
       }
-    }
 
-    onSave(cleanedData);
+      onSave(cleanedData);
+    } catch (err: any) {
+      const message = err?.message || err?.toString?.() || "Something went wrong while saving.";
+      toast.error(`Could not save: ${message}`);
+    }
   };
 
   if (!template) {
@@ -873,10 +883,13 @@ export function DynamicSectionForm({
           currentUnit={currentUnit}
           onUnitChange={(unit) => {
             setFieldUnits((prev) => ({ ...prev, [fieldKey]: unit }));
+            // Re-validate with new unit so error message and range check use display unit
+            revalidateFieldWithUnit(itemCode, field, itemData[field.key], unit);
           }}
           onKeyDown={(e) => handleKeyDown(e, field.key)}
           autoFocus={isFirst && firstFieldRef.current === null}
           sectionCode={sectionCode}
+          specialtyRanges={specialtyRanges}
         />
         {showError && (
           <p className="text-xs text-destructive mt-1 flex items-center gap-1">
@@ -886,7 +899,7 @@ export function DynamicSectionForm({
         )}
       </div>
     );
-  }, [validationErrors, touchedFields, fieldUnits, sectionData, handleFieldChange, handleKeyDown]);
+  }, [validationErrors, touchedFields, fieldUnits, sectionData, handleFieldChange, handleKeyDown, revalidateFieldWithUnit]);
 
   const renderItem = (item: any) => {
     const itemData = sectionData[item.code] || {};

@@ -1,0 +1,132 @@
+{
+  "height_weight": {
+    "fields": [
+      {
+        "key": "height",
+        "type": "number",
+        "label": "Height",
+        "unit": "ft",
+        "supported_units": ["ft","sscm"],
+        "canonical_unit": "ft",
+        "step": 0.1,
+        "min": 0.5,
+        "max": 8.0,
+        "range": [0.5, 8.0],
+        "ui_group": "body",
+        "tab_order": 10,
+        "validation": {
+          "required": false,
+          "min": 0.5,
+          "max": 8.0,
+          "pattern": null,
+          "custom_validator": null,
+          "error_messages": {
+            "required": "Height is required",
+            "min": "Height must be at least 0.5 ft",
+            "max": "Height cannot exceed 8.0 ft",
+            "invalid": "Please enter a valid height"
+          }
+        },
+        "ui_config": {
+          "ft_in": {
+            "fields": ["feet", "inches"]
+          }
+        }
+      },
+      {
+        "key": "weight",
+        "type": "number",
+        "label": "Weight",
+        "unit": "kg",
+        "supported_units": ["kg", "lb"],
+        "canonical_unit": "kg",
+        "ui_group": "body",
+        "tab_order": 20,
+        "validation": {
+          "required": false,
+          "min": 0.1,
+          "max": 500,
+          "error_messages": {
+            "required": "Weight is required",
+            "min": "Weight must be at least 0.1 kg",
+            "max": "Weight cannot exceed 500 kg",
+            "invalid": "Please enter a valid weight"
+          }
+        }
+      }
+    ]
+  },
+  "blood_pressure": {
+    "fields": [
+      {
+        "key": "systolic",
+        "type": "number",
+        "label": "Systolic",
+        "unit": "mmHg",
+        "ui_group": "bp",
+        "tab_order": 30,
+        "validation": {
+          "required": false,
+          "min": 50,
+          "max": 300,
+          "error_messages": {
+            "required": "Systolic BP is required",
+            "min": "Systolic BP must be at least 50 mmHg",
+            "max": "Systolic BP cannot exceed 300 mmHg",
+            "invalid": "Please enter a valid systolic BP"
+          }
+        }
+      },
+      {
+        "key": "diastolic",
+        "type": "number",
+        "label": "Diastolic",
+        "unit": "mmHg",
+        "ui_group": "bp",
+        "tab_order": 40,
+        "validation": {
+          "required": false,
+          "min": 30,
+          "max": 200,
+          "custom_validator": "diastolic_must_be_less_than_systolic",
+          "error_messages": {
+            "required": "Diastolic BP is required",
+            "min": "Diastolic BP must be at least 30 mmHg",
+            "max": "Diastolic BP cannot exceed 200 mmHg",
+            "custom": "Diastolic BP must be less than Systolic BP",
+            "invalid": "Please enter a valid diastolic BP"
+          }
+        }
+      }
+    ]
+  },
+  "temperature": {
+    "fields": [
+      {
+        "key": "temperature",
+        "type": "number",
+        "label": "Temperature",
+        "unit": "c",
+        "supported_units": ["c", "f"],
+        "canonical_unit": "c",
+        "step": 1,
+        "min": 30,
+        "max": 45,
+        "range": [30, 45],
+        "ui_group": "basic",
+        "tab_order": 50,
+        "validation": {
+          "required": false,
+          "min": 30,
+          "max": 45,
+          "error_messages": {
+            "required": "Temperature is required",
+            "min": "Temperature must be at least 30°C",
+            "max": "Temperature cannot exceed 45°C",
+            "invalid": "Please enter a valid temperature"
+          }
+        }
+      }
+    ]
+  }
+}

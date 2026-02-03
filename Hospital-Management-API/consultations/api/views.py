@@ -107,11 +107,12 @@ class PreConsultationTemplateAPIView(APIView):
     def get(self, request):
         user = request.user
 
-        # Always clear metadata cache so template JSON changes on disk
-        # are reflected immediately in the API response.
-        # This is acceptable because the files are small and this
-        # endpoint is called infrequently compared to normal DB traffic.
-        MetadataLoader.clear_cache()
+        # For development: Always clear cache to ensure template changes are reflected immediately
+        # MetadataLoader also checks file modification times, but clearing cache
+        # ensures immediate reload without waiting for mtime check
+        from django.conf import settings
+        if settings.DEBUG:
+            MetadataLoader.clear_cache()
 
         # Resolve doctor profile from authenticated user
         doctor_profile = getattr(user, "doctor", None)
@@ -166,6 +167,17 @@ class PreConsultationTemplateAPIView(APIView):
             # Include specialty_config in response for frontend visibility logic
             specialty_config_for_specialty = specialty_cfg.get(specialty_key, {})
             
+            # Load specialty-specific ranges for vitals (if available)
+            specialty_ranges = None
+            try:
+                ranges_data = MetadataLoader.get("pre_consultation/vitals/vitals_ranges.json")
+                specialty_ranges = ranges_data.get(specialty_key) or ranges_data.get("default")
+                logger.debug(f"Loaded specialty ranges for '{specialty_key}': {specialty_ranges is not None}")
+            except FileNotFoundError:
+                logger.debug("No vitals_ranges.json found, using field defaults")
+            except Exception as e:
+                logger.warning(f"Error loading specialty ranges: {e}")
+            
             # Log template sections for debugging
             template_sections = [s.get("section") for s in template.get("sections", [])]
             logger.info(f"Template returned {len(template_sections)} sections: {template_sections}")
@@ -188,6 +200,7 @@ class PreConsultationTemplateAPIView(APIView):
                 "metadata_version": metadata_version,
                 "template": template,
                 "specialty_config": specialty_config_for_specialty,
+                "specialty_ranges": specialty_ranges,  # Include specialty-specific validation ranges
             },
             status=status.HTTP_200_OK,
         )

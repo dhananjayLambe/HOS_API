@@ -26,8 +26,11 @@ interface DynamicSectionRendererProps {
 
 export const DynamicSectionRenderer = memo<DynamicSectionRendererProps>(
   ({ section, sectionData, onSectionDataChange, isMobile = false }) => {
-    const { getSectionConfig, getDefaultRequiredFields, getDefaultOptionalFields } =
+    const { template, getSectionConfig, getDefaultRequiredFields, getDefaultOptionalFields } =
       usePreConsultationTemplateStore();
+    
+    // Get specialty ranges for dynamic validation ranges
+    const specialtyRanges = template?.specialty_ranges;
 
     const sectionConfig = getSectionConfig(section.section);
     const defaultRequired = getDefaultRequiredFields(section.section);
@@ -79,6 +82,7 @@ export const DynamicSectionRenderer = memo<DynamicSectionRendererProps>(
                   onChange={(value) => handleFieldChange(item.code, field.key, value)}
                   sectionData={sectionData}
                   itemCode={item.code}
+                  specialtyRanges={specialtyRanges}
                 />
               ))}
             </CardContent>

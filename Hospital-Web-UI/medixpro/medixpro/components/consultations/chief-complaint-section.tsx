@@ -46,12 +46,53 @@ export function ChiefComplaintSection({ data, previousRecords = [], onUpdate, qu
   );
   const hasHistory = previousRecords && previousRecords.length > 0;
   
-  // Get complaint text for display
+  // Get complaint text for display (current data)
   const getComplaintText = () => {
     if (!data) return "";
-    if (data.complaint) return data.complaint; // Legacy format
-    if (data.primary_complaint?.complaint_text) return data.primary_complaint.complaint_text; // New format
+    if (typeof data.complaint === "string") return data.complaint; // Legacy format
+    if (data.primary_complaint?.complaint_text) return data.primary_complaint.complaint_text; // Template format
+    if (typeof data.primary_complaint === "object" && data.primary_complaint?.complaint_text) return data.primary_complaint.complaint_text;
     return "";
+  };
+
+  // Format duration for display: "1 Hours" → "1 hour", "2 Days" → "2 days"
+  const formatDurationDisplay = (value: number, unit: string): string => {
+    const u = (unit || "").trim().toLowerCase();
+    const singular: Record<string, string> = {
+      hours: "hour", hour: "hour", hrs: "hour", hr: "hour",
+      days: "day", day: "day",
+      weeks: "week", week: "week", wks: "week", wk: "week",
+      months: "month", month: "month", mos: "month", mo: "month",
+      years: "year", year: "year", yrs: "year", yr: "year",
+    };
+    const base = (singular[u] ?? u) || "unit";
+    const label = value === 1 ? base : base + (base.endsWith("s") ? "" : "s");
+    return `${value} ${label}`;
+  };
+
+  // Get display string from a record (current data or previous record). Shows actual complaint text + duration, like Vitals/History show actual data.
+  const getComplaintDisplayText = (record: any): string => {
+    if (record == null) return "—";
+    if (typeof record === "string") return record || "—";
+    if (typeof record.complaint === "string") return record.complaint;
+    const pc = record.primary_complaint;
+    let text =
+      (pc && typeof pc === "object" && pc.complaint_text != null)
+        ? String(pc.complaint_text).trim()
+        : (record.complaint_text != null ? String(record.complaint_text).trim() : "");
+    if (!text && record.additional_notes?.notes) text = String(record.additional_notes.notes).trim();
+    if (!text && typeof record.notes === "string") text = record.notes.trim();
+    let dur: string | null = null;
+    if (record.duration != null && typeof record.duration === "object" && record.duration.duration_value != null && record.duration.duration_unit) {
+      const val = Number(record.duration.duration_value);
+      const unit = record.duration.duration_unit;
+      dur = Number.isFinite(val) ? formatDurationDisplay(val, unit) : `${record.duration.duration_value} ${record.duration.duration_unit}`;
+    } else if (record.duration != null && typeof record.duration !== "object") {
+      dur = String(record.duration);
+    }
+    if (text) return dur ? `${text} (${dur})` : text;
+    if (dur) return dur;
+    return "—";
   };
 
   const handleDelete = () => {
@@ -144,7 +185,7 @@ export function ChiefComplaintSection({ data, previousRecords = [], onUpdate, qu
                   </span>
                 </div>
                 <p className="text-xs text-foreground mt-1 font-medium line-clamp-2">
-                  {previousRecords[0].complaint}
+                  {getComplaintDisplayText(previousRecords[0].complaint ?? previousRecords[0])}
                 </p>
               </div>
             )}
@@ -213,7 +254,7 @@ export function ChiefComplaintSection({ data, previousRecords = [], onUpdate, qu
                           </div>
                           <Separator />
                           <p className="text-sm text-foreground line-clamp-3">
-                            {record.complaint}
+                            {getComplaintDisplayText(record.complaint ?? record)}
                           </p>
                         </div>
                       ))}

@@ -84,6 +84,33 @@ export function HistorySection({ data, previousRecords = [], onUpdate }: History
     return templates[templateId] || null;
   };
 
+  // Flatten any record shape (e.g. dynamic template payload) into a short summary
+  const flattenRecordToSummary = (obj: any, skipKeys: Set<string>): string[] => {
+    if (obj == null || typeof obj !== "object") return [];
+    const parts: string[] = [];
+    const skip = skipKeys || new Set(["date", "consultation_id", "encounter_id"]);
+    for (const [key, val] of Object.entries(obj)) {
+      if (skip.has(key)) continue;
+      if (val == null) continue;
+      if (Array.isArray(val)) {
+        const str = val.every((v) => typeof v === "string" || typeof v === "number")
+          ? val.join(", ")
+          : val.map((v) => (typeof v === "object" && v !== null ? JSON.stringify(v) : String(v))).join(", ");
+        if (str) parts.push(str);
+      } else if (typeof val === "object" && val !== null && !(val instanceof Date)) {
+        const nested = flattenRecordToSummary(val, skip);
+        if (nested.length > 0) parts.push(nested.join(" • "));
+      } else if (typeof val === "string" && val.trim()) {
+        parts.push(val.trim());
+      } else if (typeof val === "number" && !Number.isNaN(val)) {
+        parts.push(String(val));
+      } else if (typeof val === "boolean" && val) {
+        parts.push(key.replace(/_/g, " "));
+      }
+    }
+    return parts;
+  };
+
   const getSummaryText = (historyData?: any) => {
     const dataToUse = historyData || data;
     if (!dataToUse || Object.keys(dataToUse).length === 0) return "No history recorded";
@@ -97,7 +124,9 @@ export function HistorySection({ data, previousRecords = [], onUpdate }: History
     if (dataToUse.obstetric_history) {
       parts.push(`G${dataToUse.obstetric_history.gravida}P${dataToUse.obstetric_history.para}`);
     }
-    return parts.length > 0 ? parts.join(" • ") : "History recorded";
+    if (parts.length > 0) return parts.join(" • ");
+    const flat = flattenRecordToSummary(dataToUse, new Set(["date", "consultation_id", "encounter_id"]));
+    return flat.length > 0 ? flat.join(" • ") : "History recorded";
   };
 
   const formatDate = (dateString: string) => {

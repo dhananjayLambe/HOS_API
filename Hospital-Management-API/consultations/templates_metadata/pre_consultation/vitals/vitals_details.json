@@ -5,15 +5,25 @@
         "key": "height",
         "type": "number",
         "label": "Height",
-        "unit": "ft",
-        "supported_units": ["ft","sscm"],
-        "canonical_unit": "ft",
+        "unit": "cm",
+        "supported_units": ["cm", "ft"],
+        "canonical_unit": "cm",
         "step": 0.1,
-        "min": 0.5,
-        "max": 8.0,
-        "range": [0.5, 8.0],
+        "min": 30,
+        "max": 250,
+        "range": [30, 250],
         "ui_group": "body",
         "tab_order": 10,
+        "validation": {
+          "required": false,
+          "min": 30,
+          "max": 250,
+          "error_messages": {
+            "min": "Height must be at least {min} {unit}",
+            "max": "Height cannot exceed {max} {unit}",
+            "invalid": "Please enter a valid height"
+          }
+        },
         "ui_config": {
           "ft_in": {
             "fields": ["feet", "inches"]
@@ -28,7 +38,17 @@
         "supported_units": ["kg", "lb"],
         "canonical_unit": "kg",
         "ui_group": "body",
-        "tab_order": 20
+        "tab_order": 20,
+        "validation": {
+          "required": false,
+          "min": 0.1,
+          "max": 500,
+          "error_messages": {
+            "min": "Weight must be at least 0.1 kg",
+            "max": "Weight cannot exceed 500 kg",
+            "invalid": "Please enter a valid weight"
+          }
+        }
       },
       {
         "key": "bmi",
@@ -48,7 +68,18 @@
         "label": "Systolic",
         "unit": "mmHg",
         "ui_group": "bp",
-        "tab_order": 30
+        "tab_order": 30,
+        "validation": {
+          "required": false,
+          "min": 50,
+          "max": 300,
+          "error_messages": {
+            "required": "Systolic BP is required",
+            "min": "Systolic BP must be at least 50 mmHg",
+            "max": "Systolic BP cannot exceed 300 mmHg",
+            "invalid": "Please enter a valid systolic BP"
+          }
+        }
       },
       {
         "key": "diastolic",
@@ -56,7 +87,20 @@
         "label": "Diastolic",
         "unit": "mmHg",
         "ui_group": "bp",
-        "tab_order": 40
+        "tab_order": 40,
+        "validation": {
+          "required": false,
+          "min": 30,
+          "max": 200,
+          "custom_validator": "diastolic_must_be_less_than_systolic",
+          "error_messages": {
+            "required": "Diastolic BP is required",
+            "min": "Diastolic BP must be at least 30 mmHg",
+            "max": "Diastolic BP cannot exceed 200 mmHg",
+            "custom": "Diastolic BP must be less than Systolic BP",
+            "invalid": "Please enter a valid diastolic BP"
+          }
+        }
       }
     ]
   },
@@ -70,12 +114,23 @@
         "unit": "c",
         "supported_units": ["c", "f"],
         "canonical_unit": "c",
-        "step": 1,
-        "min": 30,
-        "max": 45,
-        "range": [30, 45],
+        "step": 0.1,
+        "min": 32.2,
+        "max": 46.1,
+        "range": [32.2, 46.1],
         "ui_group": "basic",
-        "tab_order": 50
+        "tab_order": 50,
+        "validation": {
+          "required": false,
+          "min": 32.2,
+          "max": 46.1,
+          "error_messages": {
+            "required": "Temperature is required",
+            "min": "Temperature must be at least {min} {unit}",
+            "max": "Temperature cannot exceed {max} {unit}",
+            "invalid": "Please enter a valid temperature"
+          }
+        }
       }
     ]
   },
@@ -88,7 +143,17 @@
         "label": "Pulse",
         "unit": "/min",
         "ui_group": "basic",
-        "tab_order": 60
+        "tab_order": 60,
+        "validation": {
+          "required": false,
+          "min": 30,
+          "max": 220,
+          "error_messages": {
+            "min": "Pulse rate must be at least 30 bpm",
+            "max": "Pulse rate cannot exceed 220 bpm",
+            "invalid": "Please enter a valid pulse rate"
+          }
+        }
       }
     ]
   },
@@ -101,7 +166,17 @@
         "label": "SpO₂",
         "unit": "%",
         "ui_group": "basic",
-        "tab_order": 70
+        "tab_order": 70,
+        "validation": {
+          "required": false,
+          "min": 0,
+          "max": 100,
+          "error_messages": {
+            "min": "SpO₂ must be at least 0%",
+            "max": "SpO₂ cannot exceed 100%",
+            "invalid": "Please enter a valid SpO₂ value"
+          }
+        }
       }
     ]
   },
@@ -136,7 +211,17 @@
         "key": "pain_score",
         "type": "number",
         "label": "Pain Score",
-        "range": [0, 10]
+        "range": [0, 10],
+        "validation": {
+          "required": false,
+          "min": 0,
+          "max": 10,
+          "error_messages": {
+            "min": "Pain score must be at least 0",
+            "max": "Pain score cannot exceed 10",
+            "invalid": "Please enter a valid pain score (0-10)"
+          }
+        }
       }
     ]
   },

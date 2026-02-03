@@ -1,0 +1,159 @@
+{
+  "default": {
+    "height": {
+      "min": 30,
+      "max": 250,
+      "canonical_unit": "cm"
+    },
+    "weight": {
+      "min": 0.1,
+      "max": 500,
+      "canonical_unit": "kg"
+    },
+    "systolic": {
+      "min": 50,
+      "max": 300,
+      "canonical_unit": "mmHg"
+    },
+    "diastolic": {
+      "min": 30,
+      "max": 200,
+      "canonical_unit": "mmHg"
+    },
+    "temperature": {
+      "min": 32.2,
+      "max": 46.1,
+      "canonical_unit": "c"
+    },
+    "pulse_rate": {
+      "min": 30,
+      "max": 220,
+      "canonical_unit": "/min"
+    },
+    "spo2_percent": {
+      "min": 0,
+      "max": 100,
+      "canonical_unit": "%"
+    },
+    "resp_rate": {
+      "min": 8,
+      "max": 60,
+      "canonical_unit": "/min"
+    },
+    "pain_score": {
+      "min": 0,
+      "max": 10,
+      "canonical_unit": "none"
+    }
+  },
+  "pediatrics": {
+    "height": {
+      "min": 30,
+      "max": 200,
+      "canonical_unit": "cm",
+      "notes": "Pediatric height range (newborn to adolescent)"
+    },
+    "weight": {
+      "min": 0.5,
+      "max": 150,
+      "canonical_unit": "kg",
+      "notes": "Pediatric weight range"
+    },
+    "systolic": {
+      "min": 40,
+      "max": 180,
+      "canonical_unit": "mmHg",
+      "notes": "Pediatric BP ranges vary by age"
+    },
+    "diastolic": {
+      "min": 25,
+      "max": 120,
+      "canonical_unit": "mmHg"
+    },
+    "temperature": {
+      "min": 32.2,
+      "max": 42.0,
+      "canonical_unit": "c",
+      "notes": "Pediatric temperature range"
+    },
+    "pulse_rate": {
+      "min": 60,
+      "max": 200,
+      "canonical_unit": "/min",
+      "notes": "Pediatric heart rate is higher than adults"
+    },
+    "resp_rate": {
+      "min": 12,
+      "max": 60,
+      "canonical_unit": "/min",
+      "notes": "Pediatric respiratory rate varies by age"
+    },
+    "head_circumference": {
+      "min": 30,
+      "max": 60,
+      "canonical_unit": "cm",
+      "notes": "Pediatric head circumference (critical for growth monitoring)"
+    }
+  },
+  "gynecology": {
+    "height": {
+      "min": 120,
+      "max": 220,
+      "canonical_unit": "cm",
+      "notes": "Adult female height range"
+    },
+    "weight": {
+      "min": 30,
+      "max": 200,
+      "canonical_unit": "kg",
+      "notes": "Gynecology weight range (pregnancy considerations)"
+    },
+    "systolic": {
+      "min": 70,
+      "max": 200,
+      "canonical_unit": "mmHg",
+      "notes": "BP monitoring critical during pregnancy"
+    },
+    "diastolic": {
+      "min": 40,
+      "max": 130,
+      "canonical_unit": "mmHg"
+    },
+    "temperature": {
+      "min": 35.5,
+      "max": 40.0,
+      "canonical_unit": "c",
+      "notes": "Temperature monitoring for infections"
+    }
+  },
+  "diabetologist": {
+    "height": {
+      "min": 100,
+      "max": 250,
+      "canonical_unit": "cm"
+    },
+    "weight": {
+      "min": 10,
+      "max": 300,
+      "canonical_unit": "kg",
+      "notes": "Wider range for diabetic patients"
+    },
+    "systolic": {
+      "min": 60,
+      "max": 250,
+      "canonical_unit": "mmHg",
+      "notes": "Hypertension common in diabetes"
+    },
+    "diastolic": {
+      "min": 40,
+      "max": 150,
+      "canonical_unit": "mmHg"
+    },
+    "temperature": {
+      "min": 35.0,
+      "max": 42.0,
+      "canonical_unit": "c",
+      "notes": "Infection monitoring important in diabetes"
+    }
+  }
+}

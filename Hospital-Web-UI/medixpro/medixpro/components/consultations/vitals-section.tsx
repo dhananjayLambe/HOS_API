@@ -46,9 +46,14 @@ export function VitalsSection({ data, previousRecords = [], onUpdate, quickMode 
   };
 
   const handleSave = (formData: any) => {
-    onUpdate(formData);
-    setIsDialogOpen(false);
-    toast.success("Vitals recorded successfully!");
+    try {
+      onUpdate(formData ?? {});
+      setIsDialogOpen(false);
+      toast.success("Vitals recorded successfully!");
+    } catch (err: any) {
+      const message = err?.message || err?.toString?.() || "Failed to save vitals.";
+      toast.error(message);
+    }
   };
 
   const handleTemplateSelect = (templateId: string) => {
@@ -84,16 +89,25 @@ export function VitalsSection({ data, previousRecords = [], onUpdate, quickMode 
     if (!dataToUse || Object.keys(dataToUse).length === 0) return "No vitals recorded";
     const parts: string[] = [];
     if (dataToUse.blood_pressure) {
-      parts.push(`BP: ${dataToUse.blood_pressure.systolic}/${dataToUse.blood_pressure.diastolic}`);
+      const sys = dataToUse.blood_pressure.systolic;
+      const dia = dataToUse.blood_pressure.diastolic;
+      if (sys != null && dia != null) parts.push(`BP: ${sys}/${dia}`);
     }
     if (dataToUse.temperature) {
-      parts.push(`Temp: ${dataToUse.temperature.value}°F`);
+      const temp = dataToUse.temperature.temperature ?? dataToUse.temperature.value;
+      if (temp != null) parts.push(`Temp: ${temp}°C`);
     }
     if (dataToUse.height_weight) {
-      parts.push(`Ht: ${dataToUse.height_weight.height_cm}cm, Wt: ${dataToUse.height_weight.weight_kg}kg`);
-      if (dataToUse.height_weight.bmi) {
-        parts.push(`BMI: ${dataToUse.height_weight.bmi.toFixed(1)}`);
+      const ht = dataToUse.height_weight.height ?? dataToUse.height_weight.height_cm;
+      const wt = dataToUse.height_weight.weight ?? dataToUse.height_weight.weight_kg;
+      if (ht != null || wt != null) {
+        const segs: string[] = [];
+        if (ht != null) segs.push(`Ht: ${ht}cm`);
+        if (wt != null) segs.push(`Wt: ${wt}kg`);
+        parts.push(segs.join(", "));
       }
+      const bmi = dataToUse.height_weight.bmi;
+      if (bmi != null && typeof bmi === "number") parts.push(`BMI: ${bmi.toFixed(1)}`);
     }
     return parts.length > 0 ? parts.join(" • ") : "Vitals recorded";
   };

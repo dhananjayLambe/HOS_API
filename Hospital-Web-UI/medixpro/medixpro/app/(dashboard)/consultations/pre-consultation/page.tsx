@@ -519,11 +519,64 @@ export default function PreConsultationPage() {
     router.back();
   };
 
+  const sectionMap: Record<string, string> = {
+    vitals: "vitals",
+    chiefComplaint: "chief_complaint",
+    allergies: "allergies",
+    history: "medical_history",
+  };
+
+  // Persist a single section to the backend (creates encounter if needed). Call when user saves from modal.
+  const persistSectionToBackend = async (sectionKey: keyof typeof preConsultationData, data: any) => {
+    const sectionCode = sectionMap[sectionKey];
+    if (!sectionCode || !data || Object.keys(data).length === 0) return;
+    if (!selectedPatient?.id) {
+      toast.error("Select a patient first.");
+      return;
+    }
+    let encId = encounterId;
+    if (!encId) {
+      try {
+        const res = await backendAxiosClient.post(
+          "/consultations/pre-consult/encounter/create/",
+          { patient_profile_id: selectedPatient.id }
+        );
+        if (!res.data?.status || !res.data?.data?.encounter_id) {
+          toast.error("Failed to create encounter.");
+          return;
+        }
+        encId = res.data.data.encounter_id;
+        setEncounterId(encId);
+        router.replace(`/consultations/pre-consultation?encounter_id=${encId}`, { scroll: false });
+      } catch (err: any) {
+        const msg = err.response?.data?.message || err.response?.data?.error || err.message || "Failed to create encounter.";
+        toast.error(msg);
+        return;
+      }
+    }
+    try {
+      const response = await backendAxiosClient.post(
+        `/consultations/pre-consult/encounter/${encId}/section/${sectionCode}/`,
+        { data }
+      );
+      if (response.data?.status !== true) {
+        toast.error(response.data?.message || "Failed to save section.");
+        return;
+      }
+      toast.success("Saved to record.");
+    } catch (err: any) {
+      const msg = err.response?.data?.message || err.response?.data?.error || err.message || "Failed to save.";
+      toast.error(msg);
+    }
+  };
+
   const updateSectionData = (section: keyof typeof preConsultationData, data: any) => {
     setPreConsultationData((prev) => ({
       ...prev,
       [section]: data,
     }));
+    // Persist to backend so records appear in DB even when user only clicks "Save Vitals" (etc.)
+    persistSectionToBackend(section, data);
   };
 
   if (!selectedPatient) {

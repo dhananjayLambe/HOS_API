@@ -81,18 +81,53 @@ export function AllergiesSection({ data, previousRecords = [], onUpdate, quickMo
     return templates[templateId] || null;
   };
 
+  // Flatten any record shape (e.g. dynamic template payload) into a short summary
+  const flattenRecordToSummary = (obj: any, skipKeys: Set<string>): string[] => {
+    if (obj == null || typeof obj !== "object") return [];
+    const parts: string[] = [];
+    const skip = skipKeys || new Set(["date", "consultation_id", "encounter_id"]);
+    for (const [key, val] of Object.entries(obj)) {
+      if (skip.has(key)) continue;
+      if (val == null) continue;
+      if (Array.isArray(val)) {
+        const str = val.every((v) => typeof v === "string" || typeof v === "number")
+          ? val.join(", ")
+          : val.map((v) => (typeof v === "object" && v !== null ? JSON.stringify(v) : String(v))).join(", ");
+        if (str) parts.push(str);
+      } else if (typeof val === "object" && val !== null && !(val instanceof Date)) {
+        const nested = flattenRecordToSummary(val, skip);
+        if (nested.length > 0) parts.push(nested.join(" • "));
+      } else if (typeof val === "string" && val.trim()) {
+        parts.push(val.trim());
+      } else if (typeof val === "number" && !Number.isNaN(val)) {
+        parts.push(String(val));
+      } else if (typeof val === "boolean" && val) {
+        parts.push(key.replace(/_/g, " "));
+      }
+    }
+    return parts;
+  };
+
   const getSummaryText = (allergiesData?: any) => {
     const dataToUse = allergiesData || data;
     if (!dataToUse || Object.keys(dataToUse).length === 0) return "No allergies recorded";
     if (dataToUse.no_allergies) return "No known allergies";
     const parts: string[] = [];
     if (dataToUse.drug_allergy) {
-      parts.push(`Drug: ${dataToUse.drug_allergy.drug_name} (${dataToUse.drug_allergy.reaction})`);
+      const d = dataToUse.drug_allergy;
+      const name = d.drug_name ?? d.name ?? d.allergen;
+      const reaction = d.reaction ?? d.reaction_type;
+      if (name || reaction) parts.push(`Drug: ${name || "—"} (${reaction || "—"})`);
     }
     if (dataToUse.food_allergy) {
-      parts.push(`Food: ${dataToUse.food_allergy.food_name} (${dataToUse.food_allergy.reaction})`);
+      const f = dataToUse.food_allergy;
+      const name = f.food_name ?? f.name ?? f.allergen;
+      const reaction = f.reaction ?? f.reaction_type;
+      if (name || reaction) parts.push(`Food: ${name || "—"} (${reaction || "—"})`);
     }
-    return parts.length > 0 ? parts.join(" • ") : "Allergies recorded";
+    if (parts.length > 0) return parts.join(" • ");
+    const flat = flattenRecordToSummary(dataToUse, new Set(["date", "consultation_id", "encounter_id"]));
+    return flat.length > 0 ? flat.join(" • ") : "Allergies recorded";
   };
 
   const formatDate = (dateString: string) => {

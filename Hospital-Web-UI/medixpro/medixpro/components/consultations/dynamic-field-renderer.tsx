@@ -14,6 +14,8 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FieldConfig } from "@/store/preConsultationTemplateStore";
+import { convertValue, convertValidationRange, convertValueForValidation } from "@/lib/validation/unit-converter";
+import { resolveValidationRange } from "@/lib/validation/range-resolver";
 
 interface DynamicFieldRendererProps {
   field: FieldConfig;
@@ -27,6 +29,12 @@ interface DynamicFieldRendererProps {
   onKeyDown?: (e: React.KeyboardEvent) => void;
   autoFocus?: boolean;
   sectionCode?: string; // e.g. "vitals" for soft validation and sizing heuristics
+  specialtyRanges?: Record<string, {
+    min?: number;
+    max?: number;
+    canonical_unit?: string;
+    notes?: string;
+  }>; // Specialty-specific validation ranges
 }
 
 // Calculate field value based on formula
@@ -103,41 +111,13 @@ const calculateFieldValue = (
   }
 };
 
-// Unit conversion helpers
+// Unit conversion helpers - use centralized converter
 const convertUnit = (value: number, fromUnit: string, toUnit: string, field: FieldConfig): number => {
   if (!value || isNaN(value)) return value;
+  if (fromUnit === toUnit) return value;
   
-  // Height conversions
-  if (field.key === "height") {
-    if (fromUnit === "cm" && toUnit === "ft") {
-      return value / 30.48; // cm to feet
-    }
-    if (fromUnit === "ft" && toUnit === "cm") {
-      return value * 30.48; // feet to cm
-    }
-  }
-  
-  // Temperature conversions
-  if (field.key === "temperature") {
-    if (fromUnit === "c" && toUnit === "f") {
-      return (value * 9/5) + 32; // Celsius to Fahrenheit
-    }
-    if (fromUnit === "f" && toUnit === "c") {
-      return (value - 32) * 5/9; // Fahrenheit to Celsius
-    }
-  }
-  
-  // Weight conversions
-  if (field.key === "weight") {
-    if (fromUnit === "kg" && toUnit === "lb") {
-      return value * 2.20462; // kg to pounds
-    }
-    if (fromUnit === "lb" && toUnit === "kg") {
-      return value / 2.20462; // pounds to kg
-    }
-  }
-  
-  return value; // No conversion needed or unsupported
+  // Use centralized unit converter
+  return convertValue(value, fromUnit, toUnit);
 };
 
 // Heuristic: is this a BMI-style calculated field (formula uses height + weight)?
@@ -167,7 +147,7 @@ function areBmiInputsSane(sectionData: Record<string, any>, itemCode: string): b
 }
 
 export const DynamicFieldRenderer = memo<DynamicFieldRendererProps>(
-  ({ field, value, onChange, sectionData, itemCode, error, onUnitChange, currentUnit, onKeyDown, autoFocus, sectionCode }) => {
+  ({ field, value, onChange, sectionData, itemCode, error, onUnitChange, currentUnit, onKeyDown, autoFocus, sectionCode, specialtyRanges }) => {
     const isMobile = useMediaQuery("(max-width: 768px)");
     // Normalize options so backend can send either ["A","B"] or [{ value, label }]
     const normalizedOptions = useMemo(
@@ -252,11 +232,47 @@ export const DynamicFieldRenderer = memo<DynamicFieldRendererProps>(
 
     switch (field.type) {
       case "number":
-        const activeUnit = currentUnit || field.unit || "";
+        const activeUnit = currentUnit || field.unit || field.canonical_unit || "";
+        const canonicalUnit = field.canonical_unit || field.unit || "";
         const step = field.step ?? (activeUnit === "c" || activeUnit === "f" ? 1 : 0.01);
-        const min = field.min ?? field.range?.[0];
-        const max = field.max ?? field.range?.[1];
+        
+        // Use range resolver for dynamic specialty-specific ranges
+        const { displayMin, displayMax } = resolveValidationRange(field, specialtyRanges, activeUnit);
+        
+        const min = displayMin;
+        const max = displayMax;
+        
         const hasUnitSwitcher = field.supported_units && field.supported_units.length > 1;
+        
+        // Round to match step so browser never shows "nearest valid values" (HTML5 step validation)
+        const roundToStep = (num: number, stepVal: number): number => {
+          if (stepVal >= 1) return Math.round(num);
+          if (stepVal <= 0) return num;
+          const decimals = stepVal.toString().split(".")[1]?.length ?? 2;
+          const factor = Math.pow(10, decimals);
+          return Math.round(num * factor) / factor;
+        };
+        
+        // Convert stored value (canonical unit) to display unit for showing in input
+        const displayValue = useMemo(() => {
+          if (value === null || value === undefined || value === "") return "";
+          const numVal = typeof value === "number" ? value : parseFloat(value);
+          if (isNaN(numVal)) return "";
+          let out: number;
+          if (!hasUnitSwitcher || canonicalUnit === activeUnit) {
+            out = numVal;
+          } else {
+            const converted = convertValue(numVal, canonicalUnit, activeUnit);
+            if (activeUnit === "ft" || activeUnit === "lb") {
+              out = Math.round(converted * 10) / 10;
+            } else if (activeUnit === "f") {
+              out = Math.round(converted);
+            } else {
+              out = converted;
+            }
+          }
+          return roundToStep(out, step);
+        }, [value, canonicalUnit, activeUnit, hasUnitSwitcher, step]);
         // Sizing: small (~104px) for BP, Pulse, SpO₂; medium (~152px) for Height, Weight, Temp
         const rangeSpan = field.range?.[1] != null && field.range?.[0] != null ? field.range[1] - field.range[0] : null;
         const isSmallNumeric =
@@ -275,7 +291,7 @@ export const DynamicFieldRenderer = memo<DynamicFieldRendererProps>(
               <Input
                 id={field.key}
                 type="number"
-                value={value ?? ""}
+                value={displayValue}
                 onChange={(e) => {
                   const inputValue = e.target.value;
                   if (inputValue === "") {
@@ -284,17 +300,30 @@ export const DynamicFieldRenderer = memo<DynamicFieldRendererProps>(
                   }
                   const numValue = parseFloat(inputValue);
                   if (isNaN(numValue)) return;
+                  
+                  // Apply step rounding in display unit
                   const steppedValue = step === 1 ? Math.round(numValue) : Math.round(numValue / step) * step;
-                  let finalValue = steppedValue;
-                  if (min !== undefined && finalValue < min) finalValue = min;
-                  if (max !== undefined && finalValue > max) finalValue = max;
-                  onChange(finalValue);
+
+                  // IMPORTANT: Do NOT clamp user input to min/max.
+                  // We only use min/max for validation + hints, not for auto-correcting
+                  // (auto-clamping causes values to "jump" to max/min unexpectedly).
+
+                  // Convert from display unit to canonical unit before storing
+                  let valueToStore = steppedValue;
+                  if (hasUnitSwitcher && canonicalUnit && activeUnit && canonicalUnit !== activeUnit) {
+                    const converted = convertValueForValidation(steppedValue, activeUnit, canonicalUnit);
+                    if (typeof converted === "number" && !isNaN(converted)) {
+                      valueToStore = converted;
+                    }
+                  }
+                  
+                  onChange(valueToStore);
                 }}
                 onKeyDown={onKeyDown}
                 autoFocus={autoFocus}
                 min={min}
                 max={max}
-                step={step}
+                step={hasUnitSwitcher ? "any" : step}
                 placeholder={field.placeholder}
                 className={`${inputWidthClass} h-10 text-base focus:ring-2 focus:ring-offset-1 transition-all ${
                   error 
@@ -325,10 +354,9 @@ export const DynamicFieldRenderer = memo<DynamicFieldRendererProps>(
                             key={unit}
                             type="button"
                             onClick={() => {
-                              if (onUnitChange && value !== null && value !== undefined) {
-                                const convertedValue = convertUnit(value, activeUnit, unit, field);
-                                onChange(convertedValue);
-                              }
+                              // When switching units, the value is already in canonical unit
+                              // We just need to update the display unit - no conversion needed
+                              // The displayValue will automatically recalculate via useMemo
                               onUnitChange?.(unit);
                             }}
                             className={`px-3 py-1.5 text-xs font-medium rounded transition-all ${
@@ -361,10 +389,9 @@ export const DynamicFieldRenderer = memo<DynamicFieldRendererProps>(
                             key={unit}
                             type="button"
                             onClick={() => {
-                              if (onUnitChange && value !== null && value !== undefined) {
-                                const convertedValue = convertUnit(value, activeUnit, unit, field);
-                                onChange(convertedValue);
-                              }
+                              // When switching units, the value is already in canonical unit
+                              // We just need to update the display unit - no conversion needed
+                              // The displayValue will automatically recalculate via useMemo
                               onUnitChange?.(unit);
                             }}
                             className={`px-2 py-0.5 text-xs font-medium rounded transition-all ${
@@ -383,10 +410,12 @@ export const DynamicFieldRenderer = memo<DynamicFieldRendererProps>(
               )}
             </div>
             {min !== undefined && max !== undefined && !error && (
-              <p className="text-xs text-muted-foreground">Range: {min}–{max} {activeUnit}</p>
+              <p className="text-xs text-muted-foreground">
+                Range: {min?.toFixed(activeUnit === "ft" || activeUnit === "lb" ? 1 : 0)}–{max?.toFixed(activeUnit === "ft" || activeUnit === "lb" ? 1 : 0)} {activeUnit === "c" ? "°C" : activeUnit === "f" ? "°F" : activeUnit}
+              </p>
             )}
-            {sectionCode === "vitals" && value != null && value !== "" && (min !== undefined || max !== undefined) &&
-              ((min !== undefined && Number(value) < min) || (max !== undefined && Number(value) > max)) && (
+            {sectionCode === "vitals" && displayValue !== "" && displayValue !== null && displayValue !== undefined && (min !== undefined || max !== undefined) &&
+              ((min !== undefined && Number(displayValue) < min) || (max !== undefined && Number(displayValue) > max)) && (
                 <p className="text-xs text-amber-600 dark:text-amber-400">Unusual value</p>
               )}
           </div>

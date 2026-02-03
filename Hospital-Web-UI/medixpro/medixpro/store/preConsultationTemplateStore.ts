@@ -67,6 +67,12 @@ export interface PreConsultationTemplate {
     sections: Section[];
   };
   specialty_config: SpecialtyConfig;
+  specialty_ranges?: Record<string, {
+    min?: number;
+    max?: number;
+    canonical_unit?: string;
+    notes?: string;
+  }>; // Specialty-specific validation ranges
 }
 
 interface TemplateStore {
@@ -74,8 +80,9 @@ interface TemplateStore {
   isLoading: boolean;
   error: string | null;
   lastFetchedVersion: string | null;
-  fetchTemplate: () => Promise<void>;
+  fetchTemplate: (forceRefresh?: boolean) => Promise<void>;
   clearTemplate: () => void;
+  refreshTemplate: () => Promise<void>;
   getSectionConfig: (sectionCode: string) => SpecialtySectionConfig | null;
   isSectionEnabled: (sectionCode: string) => boolean;
   getDefaultRequiredFields: (sectionCode: string) => string[];
@@ -93,11 +100,11 @@ export const usePreConsultationTemplateStore = create<TemplateStore>()(
       error: null,
       lastFetchedVersion: null,
 
-      fetchTemplate: async () => {
+      fetchTemplate: async (forceRefresh: boolean = false) => {
         const state = get();
         
-        // Check if we have a cached version
-        if (typeof window !== "undefined") {
+        // Check if we have a cached version (skip if force refresh)
+        if (!forceRefresh && typeof window !== "undefined") {
           const cachedVersion = localStorage.getItem(VERSION_KEY);
           const cachedTemplate = localStorage.getItem(STORAGE_KEY);
           
@@ -120,8 +127,12 @@ export const usePreConsultationTemplateStore = create<TemplateStore>()(
         set({ isLoading: true, error: null });
 
         try {
+          // Add timestamp query param to bypass browser cache in development
+          const isDevelopment = process.env.NODE_ENV === 'development';
+          const cacheBuster = isDevelopment ? `?t=${Date.now()}` : '';
+          
           // Use backendAxiosClient for direct Django backend calls
-          const response = await backendAxiosClient.get("/consultations/pre-consult/template/");
+          const response = await backendAxiosClient.get(`/consultations/pre-consult/template/${cacheBuster}`);
 
           const templateData: PreConsultationTemplate = response.data;
 
@@ -129,7 +140,7 @@ export const usePreConsultationTemplateStore = create<TemplateStore>()(
           const currentVersion = get().lastFetchedVersion;
           const newVersion = templateData.metadata_version;
           
-          // Always update state with new template
+          // Always update state with new template (even if version same - for development)
           set({
             template: templateData,
             lastFetchedVersion: newVersion,
@@ -137,9 +148,11 @@ export const usePreConsultationTemplateStore = create<TemplateStore>()(
             error: null,
           });
 
-          // Only update cache if version changed or cache is missing
+          // In development, always update cache to reflect latest changes
+          // In production, only update if version changed
           if (typeof window !== "undefined") {
-            if (currentVersion !== newVersion || !localStorage.getItem(STORAGE_KEY)) {
+            const shouldUpdateCache = isDevelopment || currentVersion !== newVersion || !localStorage.getItem(STORAGE_KEY);
+            if (shouldUpdateCache) {
               localStorage.setItem(STORAGE_KEY, JSON.stringify(templateData));
               localStorage.setItem(VERSION_KEY, newVersion);
             }
@@ -179,6 +192,12 @@ export const usePreConsultationTemplateStore = create<TemplateStore>()(
           lastFetchedVersion: null,
           error: null,
         });
+      },
+
+      // Helper to force refresh template (clears cache and fetches fresh)
+      refreshTemplate: async () => {
+        get().clearTemplate();
+        await get().fetchTemplate(true);
       },
 
       getSectionConfig: (sectionCode: string) => {
