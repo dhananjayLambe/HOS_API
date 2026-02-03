@@ -13,7 +13,8 @@ import {
 } from "@/components/ui/collapsible";
 import { Separator } from "@/components/ui/separator";
 import { FileText, Plus, FileText as TemplateIcon, ChevronDown, ChevronUp, Clock, Trash2 } from "lucide-react";
-import { HistoryForm } from "./history-form";
+import { DynamicSectionForm } from "./dynamic-section-form";
+import { usePreConsultationTemplateStore } from "@/store/preConsultationTemplateStore";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useToastNotification } from "@/hooks/use-toast-notification";
 
@@ -25,6 +26,7 @@ interface HistorySectionProps {
 
 export function HistorySection({ data, previousRecords = [], onUpdate }: HistorySectionProps) {
   const toast = useToastNotification();
+  const { template } = usePreConsultationTemplateStore();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -287,10 +289,12 @@ export function HistorySection({ data, previousRecords = [], onUpdate }: History
               Record patient's medical, surgical, and obstetric history.
             </DialogDescription>
           </DialogHeader>
-          <HistoryForm
+          <DynamicSectionForm
+            sectionCode="medical_history"
             initialData={data}
             onSave={handleSave}
             onCancel={() => setIsDialogOpen(false)}
+            saveButtonText="Save History"
           />
         </DialogContent>
       </Dialog>

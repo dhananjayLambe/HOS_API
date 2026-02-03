@@ -47,13 +47,17 @@
         {
           "key": "duration_value",
           "type": "number",
-          "label": "Duration"
+          "label": "Duration",
+          "ui_group": "row",
+          "tab_order": 10
         },
         {
           "key": "duration_unit",
           "type": "single_select",
           "label": "Unit",
-          "options": ["Hours", "Days", "Weeks", "Months", "Years"]
+          "options": ["Hours", "Days", "Weeks", "Months", "Years"],
+          "ui_group": "row",
+          "tab_order": 20
         }
       ]
     },
@@ -64,13 +68,17 @@
           "key": "severity_level",
           "type": "single_select",
           "label": "Severity",
-          "options": ["Mild", "Moderate", "Severe"]
+          "options": ["Mild", "Moderate", "Severe"],
+          "ui_group": "row",
+          "tab_order": 10
         },
         {
           "key": "pain_score",
           "type": "number",
           "label": "Pain Score (0–10)",
-          "range": [0, 10]
+          "range": [0, 10],
+          "ui_group": "row",
+          "tab_order": 20
         }
       ]
     },
@@ -91,13 +99,17 @@
             "Upper limb",
             "Lower limb",
             "Generalized"
-          ]
+          ],
+          "ui_group": "row",
+          "tab_order": 10
         },
         {
           "key": "side",
           "type": "single_select",
           "label": "Side",
-          "options": ["Left", "Right", "Bilateral", "Central"]
+          "options": ["Left", "Right", "Bilateral", "Central"],
+          "ui_group": "row",
+          "tab_order": 20
         }
       ]
     },
@@ -108,13 +120,17 @@
           "key": "onset",
           "type": "single_select",
           "label": "Onset",
-          "options": ["Sudden", "Gradual"]
+          "options": ["Sudden", "Gradual"],
+          "ui_group": "row",
+          "tab_order": 10
         },
         {
           "key": "progression",
           "type": "single_select",
           "label": "Progression",
-          "options": ["Improving", "Worsening", "Static", "Intermittent"]
+          "options": ["Improving", "Worsening", "Static", "Intermittent"],
+          "ui_group": "row",
+          "tab_order": 20
         }
       ]
     },

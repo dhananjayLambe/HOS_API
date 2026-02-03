@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/collapsible";
 import { Separator } from "@/components/ui/separator";
 import { Activity, Plus, FileText, ChevronDown, ChevronUp, Clock, Trash2 } from "lucide-react";
-import { VitalsForm } from "./vitals-form";
+import { DynamicSectionForm } from "./dynamic-section-form";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useToastNotification } from "@/hooks/use-toast-notification";
 
@@ -287,10 +287,12 @@ export function VitalsSection({ data, previousRecords = [], onUpdate, quickMode 
               All fields are optional
             </DialogDescription>
           </DialogHeader>
-          <VitalsForm
+          <DynamicSectionForm
+            sectionCode="vitals"
             initialData={data}
             onSave={handleSave}
             onCancel={() => setIsDialogOpen(false)}
+            saveButtonText="Save Vitals"
           />
         </DialogContent>
       </Dialog>

@@ -39,9 +39,15 @@ from django.views.decorators.csrf import csrf_exempt
 from account.permissions import IsDoctor, IsDoctorOrHelpdeskOrOwnerOrAdmin
 from consultations.services.consultation_engine import ConsultationEngine
 from consultations.services.metadata_loader import MetadataLoader
+from consultations.services.preconsultation_service import PreConsultationService
+from consultations.services.preconsultation_section_service import PreConsultationSectionService
+from consultations.services.encounter_service import EncounterService
 from consultations.models import (
     Advice, AdviceTemplate, Complaint,
-    Consultation, Diagnosis, Vitals,PatientFeedback,
+    Consultation, Diagnosis, Vitals, PatientFeedback,
+    ClinicalEncounter, PreConsultation,
+    PreConsultationVitals, PreConsultationChiefComplaint, PreConsultationAllergies,
+    PreConsultationMedicalHistory,
 )
 from consultations.api.serializers import (
     AdviceSerializer, AdviceTemplateSerializer,
@@ -51,7 +57,7 @@ from consultations.api.serializers import (
     ConsultationTagSerializer,PatientTimelineSerializer,PatientFeedbackSerializer
 )
 from consultations.utils import render_pdf
-from patient_account.models import PatientProfile
+from patient_account.models import PatientProfile, PatientAccount
 from clinic.models import Clinic, ClinicAddress
 
 # Logger
@@ -101,6 +107,12 @@ class PreConsultationTemplateAPIView(APIView):
     def get(self, request):
         user = request.user
 
+        # Always clear metadata cache so template JSON changes on disk
+        # are reflected immediately in the API response.
+        # This is acceptable because the files are small and this
+        # endpoint is called infrequently compared to normal DB traffic.
+        MetadataLoader.clear_cache()
+
         # Resolve doctor profile from authenticated user
         doctor_profile = getattr(user, "doctor", None)
         if doctor_profile is None:
@@ -111,7 +123,10 @@ class PreConsultationTemplateAPIView(APIView):
 
         # Map doctor specialization to metadata key
         raw_specialty = (doctor_profile.primary_specialization or "").strip()
-        specialty_key = raw_specialty.lower()
+        specialty_key = raw_specialty.lower().strip()
+        
+        # Log for debugging
+        logger.info(f"Doctor specialty - Raw: '{raw_specialty}', Normalized: '{specialty_key}'")
 
         try:
             specialty_cfg = MetadataLoader.get("pre_consultation/specialty_config.json")
@@ -122,16 +137,38 @@ class PreConsultationTemplateAPIView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
+        # Log available specialties for debugging
+        available_specialties = list(specialty_cfg.keys())
+        logger.info(f"Available specialties in config: {available_specialties}")
+        
         if specialty_key not in specialty_cfg:
+            logger.warning(f"Specialty '{specialty_key}' not found in config. Available: {available_specialties}")
             return Response(
-                {"error": "Pre-consult template not configured for this specialty"},
+                {
+                    "error": f"Pre-consult template not configured for specialty '{specialty_key}'",
+                    "available_specialties": available_specialties,
+                    "requested_specialty": specialty_key,
+                    "raw_specialty": raw_specialty
+                },
                 status=status.HTTP_404_NOT_FOUND,
             )
+        
+        # Log the sections configured for this specialty
+        specialty_sections = specialty_cfg.get(specialty_key, {}).get("sections", [])
+        logger.info(f"Specialty '{specialty_key}' has {len(specialty_sections)} sections configured: {specialty_sections}")
 
         try:
+            logger.info(f"Fetching template for specialty: '{specialty_key}' (raw: '{raw_specialty}')")
             template = ConsultationEngine.get_pre_consultation_template(specialty_key)
             version_info = MetadataLoader.get("_version.json")
             metadata_version = version_info.get("metadata_version")
+            
+            # Include specialty_config in response for frontend visibility logic
+            specialty_config_for_specialty = specialty_cfg.get(specialty_key, {})
+            
+            # Log template sections for debugging
+            template_sections = [s.get("section") for s in template.get("sections", [])]
+            logger.info(f"Template returned {len(template_sections)} sections: {template_sections}")
         except FileNotFoundError as e:
             logger.error(f"Metadata file missing: {e}")
             return Response(
@@ -150,6 +187,7 @@ class PreConsultationTemplateAPIView(APIView):
                 "specialty": specialty_key,
                 "metadata_version": metadata_version,
                 "template": template,
+                "specialty_config": specialty_config_for_specialty,
             },
             status=status.HTTP_200_OK,
         )
@@ -1490,3 +1528,261 @@ class FollowUpAPIView(views.APIView):
             "status": True,
             "message": "Follow-up date removed successfully."
         }, status=status.HTTP_200_OK)
+
+
+# =====================================================
+# PRE-CONSULTATION SECTION APIs
+# =====================================================
+
+SECTION_MODEL_MAP = {
+    "vitals": PreConsultationVitals,
+    "chief_complaint": PreConsultationChiefComplaint,
+    "allergies": PreConsultationAllergies,
+    "medical_history": PreConsultationMedicalHistory,
+}
+
+
+class PreConsultationSectionAPIView(APIView):
+    """
+    Generic API for saving/retrieving pre-consultation sections.
+    Supports: vitals, chief_complaint, allergies, medical_history
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctor]
+
+    def get_encounter(self, encounter_id):
+        """Get encounter or raise 404"""
+        return get_object_or_404(ClinicalEncounter, id=encounter_id)
+
+    def get_preconsultation(self, encounter):
+        """Get or create pre-consultation for encounter"""
+        if hasattr(encounter, "pre_consultation"):
+            return encounter.pre_consultation
+        
+        # Get doctor specialty for template
+        doctor = encounter.doctor
+        if not doctor:
+            raise ValueError("Encounter must have a doctor to create pre-consultation")
+        
+        specialty_code = (doctor.primary_specialization or "").strip().lower()
+        if not specialty_code:
+            raise ValueError("Doctor must have a specialty")
+        
+        return PreConsultationService.create_preconsultation(
+            encounter=encounter,
+            specialty_code=specialty_code,
+            template_version="v1",
+            entry_mode="doctor",
+            created_by=self.request.user
+        )
+
+    def get(self, request, encounter_id, section_code):
+        """
+        Retrieve section data for a pre-consultation
+        Auto-creates pre-consultation if it doesn't exist
+        """
+        encounter = self.get_encounter(encounter_id)
+        
+        # Get or create pre-consultation (same logic as POST)
+        try:
+            preconsultation = encounter.pre_consultation
+        except PreConsultation.DoesNotExist:
+            # Auto-create pre-consultation if it doesn't exist
+            preconsultation = self.get_preconsultation(encounter)
+
+        if section_code not in SECTION_MODEL_MAP:
+            return Response({
+                "status": False,
+                "message": f"Invalid section code: {section_code}"
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        section_model = SECTION_MODEL_MAP[section_code]
+        
+        try:
+            section_obj = section_model.objects.get(pre_consultation=preconsultation)
+            return Response({
+                "status": True,
+                "message": f"{section_code} retrieved successfully.",
+                "data": section_obj.data
+            }, status=status.HTTP_200_OK)
+        except section_model.DoesNotExist:
+            return Response({
+                "status": True,
+                "message": f"{section_code} not found.",
+                "data": None
+            }, status=status.HTTP_200_OK)
+
+    @transaction.atomic
+    def post(self, request, encounter_id, section_code):
+        """
+        Save or update section data (idempotent)
+        """
+        encounter = self.get_encounter(encounter_id)
+        
+        if section_code not in SECTION_MODEL_MAP:
+            return Response({
+                "status": False,
+                "message": f"Invalid section code: {section_code}"
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            preconsultation = self.get_preconsultation(encounter)
+        except ValueError as e:
+            return Response({
+                "status": False,
+                "message": str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        section_model = SECTION_MODEL_MAP[section_code]
+        data = request.data.get("data", {})
+
+        try:
+            section_obj = PreConsultationSectionService.upsert_section(
+                section_model=section_model,
+                preconsultation=preconsultation,
+                data=data,
+                user=request.user,
+                schema_version="v1"
+            )
+
+            return Response({
+                "status": True,
+                "message": f"{section_code} saved successfully.",
+                "data": section_obj.data
+            }, status=status.HTTP_200_OK)
+
+        except ValidationError as e:
+            return Response({
+                "status": False,
+                "message": str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.exception(f"Error saving {section_code}")
+            return Response({
+                "status": False,
+                "message": f"Failed to save {section_code}.",
+                "error": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class PreConsultationPreviousRecordsAPIView(APIView):
+    """
+    Fetch previous pre-consultation records for a patient
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctor]
+
+    def get(self, request, patient_id):
+        """
+        Get all previous pre-consultation records for a patient
+        """
+        try:
+            patient_profile = get_object_or_404(PatientProfile, id=patient_id)
+            
+            # Get all encounters for this patient with pre-consultations
+            encounters = ClinicalEncounter.objects.filter(
+                patient_profile=patient_profile,
+                pre_consultation__isnull=False
+            ).select_related("pre_consultation").prefetch_related(
+                "pre_consultation__preconsultationvitals",
+                "pre_consultation__preconsultationchiefcomplaint",
+                "pre_consultation__preconsultationallergies",
+                "pre_consultation__preconsultationmedicalhistory"
+            ).order_by("-created_at")[:10]  # Last 10 records
+
+            records = []
+            for encounter in encounters:
+                preconsultation = encounter.pre_consultation
+                record = {
+                    "encounter_id": str(encounter.id),
+                    "consultation_pnr": encounter.consultation_pnr,
+                    "created_at": preconsultation.created_at.isoformat(),
+                    "completed_at": preconsultation.completed_at.isoformat() if preconsultation.completed_at else None,
+                    "sections": {}
+                }
+
+                # Get all section data
+                for section_code, section_model in SECTION_MODEL_MAP.items():
+                    try:
+                        section_obj = section_model.objects.get(pre_consultation=preconsultation)
+                        record["sections"][section_code] = section_obj.data
+                    except section_model.DoesNotExist:
+                        pass
+
+                records.append(record)
+
+            return Response({
+                "status": True,
+                "message": "Previous records retrieved successfully.",
+                "data": records
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.exception("Error fetching previous records")
+            return Response({
+                "status": False,
+                "message": "Failed to fetch previous records.",
+                "error": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class CreateEncounterAPIView(APIView):
+    """
+    Create a new Clinical Encounter for pre-consultation
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctor]
+
+    @transaction.atomic
+    def post(self, request):
+        """
+        Create a new encounter for the selected patient
+        """
+        try:
+            user = request.user
+            doctor_profile = getattr(user, "doctor", None)
+            if doctor_profile is None:
+                return Response({
+                    "status": False,
+                    "message": "Doctor profile not found for this user."
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            patient_profile_id = request.data.get("patient_profile_id")
+            if not patient_profile_id:
+                return Response({
+                    "status": False,
+                    "message": "patient_profile_id is required."
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            patient_profile = get_object_or_404(PatientProfile, id=patient_profile_id)
+            patient_account = patient_profile.account
+
+            # Create encounter
+            encounter = EncounterService.create_encounter(
+                patient_account=patient_account,
+                patient_profile=patient_profile,
+                doctor=doctor_profile,
+                encounter_type="walk_in",
+                entry_mode="doctor",
+                created_by=user
+            )
+
+            return Response({
+                "status": True,
+                "message": "Encounter created successfully.",
+                "data": {
+                    "encounter_id": str(encounter.id),
+                    "consultation_pnr": encounter.consultation_pnr,
+                    "prescription_pnr": encounter.prescription_pnr,
+                    "status": encounter.status,
+                    "created_at": encounter.created_at.isoformat()
+                }
+            }, status=status.HTTP_201_CREATED)
+
+        except Exception as e:
+            logger.exception("Error creating encounter")
+            return Response({
+                "status": False,
+                "message": "Failed to create encounter.",
+                "error": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

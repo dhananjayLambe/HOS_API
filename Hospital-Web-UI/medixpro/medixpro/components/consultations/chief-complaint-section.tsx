@@ -13,7 +13,8 @@ import {
 } from "@/components/ui/collapsible";
 import { Separator } from "@/components/ui/separator";
 import { FileText, Plus, FileText as TemplateIcon, ChevronDown, ChevronUp, Clock, Trash2 } from "lucide-react";
-import { ChiefComplaintForm } from "./chief-complaint-form";
+import { DynamicSectionForm } from "./dynamic-section-form";
+import { usePreConsultationTemplateStore } from "@/store/preConsultationTemplateStore";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useToastNotification } from "@/hooks/use-toast-notification";
 
@@ -26,6 +27,7 @@ interface ChiefComplaintSectionProps {
 
 export function ChiefComplaintSection({ data, previousRecords = [], onUpdate, quickMode = false }: ChiefComplaintSectionProps) {
   const toast = useToastNotification();
+  const { template } = usePreConsultationTemplateStore();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -36,8 +38,21 @@ export function ChiefComplaintSection({ data, previousRecords = [], onUpdate, qu
     { id: "digestive", name: "Digestive Issues" },
   ]);
 
-  const hasData = data && data.complaint;
+  // Check for data in both legacy format (data.complaint) and new format (data.primary_complaint.complaint_text)
+  const hasData = data && (
+    data.complaint || 
+    (data.primary_complaint && data.primary_complaint.complaint_text) ||
+    Object.keys(data).length > 0
+  );
   const hasHistory = previousRecords && previousRecords.length > 0;
+  
+  // Get complaint text for display
+  const getComplaintText = () => {
+    if (!data) return "";
+    if (data.complaint) return data.complaint; // Legacy format
+    if (data.primary_complaint?.complaint_text) return data.primary_complaint.complaint_text; // New format
+    return "";
+  };
 
   const handleDelete = () => {
     onUpdate(null);
@@ -151,7 +166,7 @@ export function ChiefComplaintSection({ data, previousRecords = [], onUpdate, qu
                   </Button>
                 </div>
                 <p className="text-sm text-foreground line-clamp-3">
-                  {data.complaint}
+                  {getComplaintText()}
                 </p>
                 <Badge variant="outline" className="text-xs mt-2">
                   Recorded
@@ -233,10 +248,12 @@ export function ChiefComplaintSection({ data, previousRecords = [], onUpdate, qu
               Record the primary reason for the patient's visit.
             </DialogDescription>
           </DialogHeader>
-          <ChiefComplaintForm
+          <DynamicSectionForm
+            sectionCode="chief_complaint"
             initialData={data}
             onSave={handleSave}
             onCancel={() => setIsDialogOpen(false)}
+            saveButtonText="Save Complaint"
           />
         </DialogContent>
       </Dialog>

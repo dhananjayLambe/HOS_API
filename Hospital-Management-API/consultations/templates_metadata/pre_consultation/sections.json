@@ -1,6 +1,7 @@
 {
     "sections": [
       "vitals",
+      "chief_complaint",
       "allergies",
       "medical_history"
     ]

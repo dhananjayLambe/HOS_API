@@ -19,6 +19,9 @@ from consultations.api.views import (
     PatientFeedbackViewSet,
     FollowUpAPIView,
     PreConsultationTemplateAPIView,
+    PreConsultationSectionAPIView,
+    PreConsultationPreviousRecordsAPIView,
+    CreateEncounterAPIView,
     test_pdf,
 )
 # urlpatterns = []
@@ -44,6 +47,9 @@ urlpatterns = [
     path('test-pdf/',test_pdf, name='test-pdf'),
     path("generate-pdf/<uuid:consultation_id>/", GeneratePrescriptionPDFView.as_view(), name="generate-prescription-pdf"),
     path('pre-consult/template/', PreConsultationTemplateAPIView.as_view(), name='pre-consult-template'),
+    path('pre-consult/encounter/create/', CreateEncounterAPIView.as_view(), name='pre-consult-create-encounter'),
+    path('pre-consult/encounter/<uuid:encounter_id>/section/<str:section_code>/', PreConsultationSectionAPIView.as_view(), name='pre-consult-section'),
+    path('pre-consult/patient/<uuid:patient_id>/previous-records/', PreConsultationPreviousRecordsAPIView.as_view(), name='pre-consult-previous-records'),
     
     #Meduical Records management API
     path('history/', ConsultationHistoryAPIView.as_view(), name='consultation-history'),

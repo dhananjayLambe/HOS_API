@@ -1,10 +1,10 @@
 {
   "gynecology": {
-    "sections": ["vitals", "chief_complaint", "allergies", "history"],
+    "sections": ["vitals", "chief_complaint", "allergies", "medical_history"],
 
     "vitals": {
-      "required": ["height_weight", "temperature", "blood_pressure"],
-      "optional": ["pulse", "spo2", "pain_score", "additional_notes"],
+      "required": ["height_weight", "temperature", "blood_pressure","additional_notes"],
+      "optional": ["pulse", "spo2", "pain_score"],
       "default_required": ["height_weight", "temperature", "blood_pressure"],
       "default_optional": ["pulse"],
       "notes": "BP mandatory due to pregnancy and hormonal risk screening"
@@ -48,7 +48,7 @@
   },
 
   "physician": {
-    "sections": ["vitals", "chief_complaint", "allergies", "history"],
+    "sections": ["vitals", "chief_complaint", "allergies", "medical_history"],
 
     "vitals": {
       "required": ["height_weight", "blood_pressure", "temperature"],
@@ -95,7 +95,7 @@
   },
 
   "pediatrics": {
-    "sections": ["vitals", "chief_complaint", "allergies", "history"],
+    "sections": ["vitals", "chief_complaint", "allergies", "medical_history"],
 
     "vitals": {
       "required": ["height_weight", "head_circumference", "temperature"],
@@ -141,7 +141,7 @@
   },
 
   "diabetologist": {
-    "sections": ["vitals", "chief_complaint", "allergies", "history"],
+    "sections": ["vitals", "chief_complaint", "allergies", "medical_history"],
 
     "vitals": {
       "required": ["height_weight", "waist_circumference"],

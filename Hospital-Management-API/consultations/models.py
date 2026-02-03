@@ -8,6 +8,364 @@ from utils.static_data_service import StaticDataService
 from account.models import User
 from appointments.models import Appointment
 
+# =====================================================
+# 🔢 DAILY COUNTER (PNR BACKBONE)
+# =====================================================
+
+class EncounterDailyCounter(models.Model):
+    """
+    Maintains a per-day counter for PNR generation.
+    Counter resets every day and starts from 1000.
+    """
+    date = models.DateField(unique=True)
+    counter = models.PositiveIntegerField(default=1000)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Encounter Daily Counter"
+        verbose_name_plural = "Encounter Daily Counters"
+
+    def __str__(self):
+        return f"{self.date} → {self.counter}"
+
+# =====================================================
+# 🔑 ROOT MODEL — CLINICAL ENCOUNTER (SOURCE OF TRUTH)
+# =====================================================
+class ClinicalEncounter(models.Model):
+    """
+    One row = one OPD / clinical visit.
+    Single source of truth for PNRs and visit lifecycle.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    # 🔑 GLOBAL IDENTIFIERS (OPS-FRIENDLY)
+    consultation_pnr = models.CharField(
+        max_length=15, unique=True, db_index=True,
+        help_text="Format: YYMMDD-XXXX (daily counter)"
+    )
+    prescription_pnr = models.CharField(
+        max_length=15, unique=True, db_index=True,
+        help_text="Format: YYMMDD-XXXX (daily counter)"
+    )
+
+    # 👤 ACTORS
+    doctor = models.ForeignKey(
+        doctor, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="encounters"
+    )
+    patient_account = models.ForeignKey(
+        PatientAccount, on_delete=models.CASCADE,
+        related_name="encounters"
+    )
+    patient_profile = models.ForeignKey(
+        PatientProfile, on_delete=models.CASCADE,
+        related_name="encounters"
+    )
+
+    appointment = models.ForeignKey(
+        Appointment, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="encounters"
+    )
+
+    # 🏥 CONTEXT
+    encounter_type = models.CharField(
+        max_length=20,
+        choices=[
+            ("appointment", "Appointment"),
+            ("walk_in", "Walk In"),
+            ("emergency", "Emergency"),
+            ("follow_up", "Follow Up"),
+        ],
+        default="walk_in"
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=[
+            ("created", "Created"),
+            ("pre_consultation", "Pre Consultation"),
+            ("in_consultation", "In Consultation"),
+            ("completed", "Completed"),
+            ("cancelled", "Cancelled"),
+            ("no_show", "No Show"),
+        ],
+        default="created"
+    )
+
+    entry_mode = models.CharField(
+        max_length=20,
+        choices=[
+            ("helpdesk", "Helpdesk"),
+            ("doctor", "Doctor"),
+            ("patient", "Patient"),
+            ("system", "System"),
+        ],
+        default="helpdesk"
+    )
+
+    # 🔐 AUDIT & LIFECYCLE
+    is_active = models.BooleanField(default=True)
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="encounters_created"
+    )
+    updated_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="encounters_updated"
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        #ordering = ["-created_at"]
+        verbose_name = "Clinical Encounter"
+        verbose_name_plural = "Clinical Encounters"
+
+    def __str__(self):
+        return f"Encounter {self.consultation_pnr}"
+
+class PreConsultation(models.Model):
+    """
+    Represents pre-consultation data collected before doctor consultation.
+    Optional, template-driven, auditable, and lockable.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    # 🔗 VISIT CONTEXT
+    encounter = models.OneToOneField(
+        ClinicalEncounter,
+        on_delete=models.CASCADE,
+        related_name="pre_consultation"
+    )
+
+    # 🧠 TEMPLATE CONTEXT (VERY IMPORTANT)
+    specialty_code = models.CharField(
+        max_length=50,
+        help_text="Specialty code used to resolve templates (e.g. gynecology, physician)"
+    )
+
+    template_version = models.CharField(
+        max_length=20,
+        default="v1",
+        help_text="Template version used at time of data entry"
+    )
+
+    # 📊 COMPLETION STATE
+    completed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Set when pre-consultation is marked complete"
+    )
+
+    # 🔒 LOCKING & FINALITY
+    is_locked = models.BooleanField(
+        default=False,
+        help_text="Locked once consultation starts"
+    )
+
+    locked_at = models.DateTimeField(
+        null=True,
+        blank=True
+    )
+
+    lock_reason = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text="Reason for locking (e.g. Consultation started)"
+    )
+
+    # 🧭 ENTRY METADATA
+    entry_mode = models.CharField(
+        max_length=20,
+        choices=[
+            ("helpdesk", "Helpdesk"),
+            ("doctor", "Doctor"),
+            ("patient", "Patient"),
+            ("system", "System"),
+        ],
+        default="helpdesk"
+    )
+
+    # 👤 AUDIT
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="preconsultations_created"
+    )
+
+    updated_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="preconsultations_updated"
+    )
+
+    # 🔁 LIFECYCLE
+    is_active = models.BooleanField(default=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    # ======================
+    # DOMAIN METHODS
+    # ======================
+
+    def lock(self, reason="Consultation started"):
+        self.is_locked = True
+        self.locked_at = timezone.now()
+        self.lock_reason = reason
+        self.save(update_fields=["is_locked", "locked_at", "lock_reason"])
+
+    def mark_completed(self):
+        self.completed_at = timezone.now()
+        self.save(update_fields=["completed_at"])
+
+    class Meta:
+        verbose_name = "Pre Consultation"
+        verbose_name_plural = "Pre Consultations"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"PreConsultation | {self.encounter.consultation_pnr}"
+
+# =====================================================
+# 🧩 PRE-CONSULTATION SECTIONS (JSONB, TEMPLATE-DRIVEN)
+# =====================================================
+class BasePreConsultationSection(models.Model):
+    """
+    Abstract base for all pre-consultation sections.
+    Handles audit, lifecycle, and JSON storage.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    pre_consultation = models.OneToOneField(
+        PreConsultation,
+        on_delete=models.CASCADE
+    )
+
+    # 🧠 SECTION METADATA
+    section_code = models.CharField(
+        max_length=50,
+        help_text="Section identifier (e.g. vitals, chief_complaint)"
+    )
+
+    schema_version = models.CharField(
+        max_length=20,
+        default="v1",
+        help_text="Schema version of this section"
+    )
+
+    # 📦 DATA
+    data = models.JSONField(
+        help_text="Template-driven JSON data for this section"
+    )
+
+    # 🔁 LIFECYCLE
+    is_active = models.BooleanField(default=True)
+
+    # 👤 AUDIT
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="%(class)s_created"
+    )
+    updated_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="%(class)s_updated"
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        abstract = True
+
+class PreConsultationVitals(BasePreConsultationSection):
+    class Meta:
+        verbose_name = "PreConsultation Vitals"
+        verbose_name_plural = "PreConsultation Vitals"
+
+    def save(self, *args, **kwargs):
+        self.section_code = "vitals"
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"Vitals | {self.pre_consultation.encounter.consultation_pnr}"
+
+class PreConsultationChiefComplaint(BasePreConsultationSection):
+    class Meta:
+        verbose_name = "PreConsultation Chief Complaint"
+        verbose_name_plural = "PreConsultation Chief Complaints"
+
+    def save(self, *args, **kwargs):
+        self.section_code = "chief_complaint"
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"Chief Complaint | {self.pre_consultation.encounter.consultation_pnr}"
+
+class PreConsultationAllergies(BasePreConsultationSection):
+    class Meta:
+        verbose_name = "PreConsultation Allergies"
+        verbose_name_plural = "PreConsultation Allergies"
+
+    def save(self, *args, **kwargs):
+        self.section_code = "allergies"
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"Allergies | {self.pre_consultation.encounter.consultation_pnr}"
+
+class PreConsultationMedicalHistory(BasePreConsultationSection):
+    class Meta:
+        verbose_name = "PreConsultation Medical History"
+        verbose_name_plural = "PreConsultation Medical Histories"
+
+    def save(self, *args, **kwargs):
+        self.section_code = "medical_history"
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"Medical History | {self.pre_consultation.encounter.consultation_pnr}"
+
+# =====================================================
+# 🩺 CONSULTATION (MANDATORY)
+# =====================================================
+
+# class Consultation(models.Model):
+#     """
+#     Always exists unless encounter is cancelled/no-show.
+#     """
+
+#     encounter = models.OneToOneField(
+#         ClinicalEncounter,
+#         on_delete=models.CASCADE,
+#         related_name="consultation"
+#     )
+
+#     closure_note = models.TextField(blank=True, null=True)
+#     follow_up_date = models.DateField(blank=True, null=True)
+
+#     is_finalized = models.BooleanField(default=False)
+
+#     started_at = models.DateTimeField(auto_now_add=True)
+#     ended_at = models.DateTimeField(null=True, blank=True)
+
+#     def __str__(self):
+#         return f"Consultation {self.encounter.consultation_pnr}"
+
+
+
+# =====================================================
+#  OLD CONSULTATION MODEL (TO BE REMOVED) Need to be removed after all data is migrated to the new model
+# =====================================================
 
 class Consultation(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

@@ -5,9 +5,15 @@
         "key": "height",
         "type": "number",
         "label": "Height",
-        "unit": "cm",
-        "supported_units": ["cm", "ft_in"],
-        "canonical_unit": "cm",
+        "unit": "ft",
+        "supported_units": ["ft","sscm"],
+        "canonical_unit": "ft",
+        "step": 0.1,
+        "min": 0.5,
+        "max": 8.0,
+        "range": [0.5, 8.0],
+        "ui_group": "body",
+        "tab_order": 10,
         "ui_config": {
           "ft_in": {
             "fields": ["feet", "inches"]
@@ -20,13 +26,16 @@
         "label": "Weight",
         "unit": "kg",
         "supported_units": ["kg", "lb"],
-        "canonical_unit": "kg"
+        "canonical_unit": "kg",
+        "ui_group": "body",
+        "tab_order": 20
       },
       {
         "key": "bmi",
         "type": "calculated",
         "label": "BMI",
-        "formula": "weight / ((height / 100) ^ 2)"
+        "formula": "weight / ((height / 100) ^ 2)",
+        "ui_group": "body"
       }
     ]
   },
@@ -37,13 +46,17 @@
         "key": "systolic",
         "type": "number",
         "label": "Systolic",
-        "unit": "mmHg"
+        "unit": "mmHg",
+        "ui_group": "bp",
+        "tab_order": 30
       },
       {
         "key": "diastolic",
         "type": "number",
         "label": "Diastolic",
-        "unit": "mmHg"
+        "unit": "mmHg",
+        "ui_group": "bp",
+        "tab_order": 40
       }
     ]
   },
@@ -56,7 +69,13 @@
         "label": "Temperature",
         "unit": "c",
         "supported_units": ["c", "f"],
-        "canonical_unit": "c"
+        "canonical_unit": "c",
+        "step": 1,
+        "min": 30,
+        "max": 45,
+        "range": [30, 45],
+        "ui_group": "basic",
+        "tab_order": 50
       }
     ]
   },
@@ -67,7 +86,9 @@
         "key": "pulse_rate",
         "type": "number",
         "label": "Pulse",
-        "unit": "/min"
+        "unit": "/min",
+        "ui_group": "basic",
+        "tab_order": 60
       }
     ]
   },
@@ -78,7 +99,9 @@
         "key": "spo2_percent",
         "type": "number",
         "label": "SpO₂",
-        "unit": "%"
+        "unit": "%",
+        "ui_group": "basic",
+        "tab_order": 70
       }
     ]
   },

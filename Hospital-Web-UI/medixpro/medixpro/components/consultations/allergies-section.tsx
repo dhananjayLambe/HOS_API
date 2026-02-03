@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/collapsible";
 import { Separator } from "@/components/ui/separator";
 import { AlertCircle, Plus, FileText, ChevronDown, ChevronUp, Clock, Trash2 } from "lucide-react";
-import { AllergiesForm } from "./allergies-form";
+import { DynamicSectionForm } from "./dynamic-section-form";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useToastNotification } from "@/hooks/use-toast-notification";
 
@@ -285,10 +285,12 @@ export function AllergiesSection({ data, previousRecords = [], onUpdate, quickMo
               Record patient allergies and adverse reactions.
             </DialogDescription>
           </DialogHeader>
-          <AllergiesForm
+          <DynamicSectionForm
+            sectionCode="allergies"
             initialData={data}
             onSave={handleSave}
             onCancel={() => setIsDialogOpen(false)}
+            saveButtonText="Save Allergies"
           />
         </DialogContent>
       </Dialog>

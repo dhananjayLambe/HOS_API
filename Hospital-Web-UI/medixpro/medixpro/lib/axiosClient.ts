@@ -163,6 +163,89 @@ axiosClient.interceptors.response.use(
   }
 );
 
+// Create a separate axios instance for direct Django backend calls
+const backendAxiosClient: AxiosInstance = axios.create({
+  baseURL: BACKEND_URL.replace(/\/+$/, ""), // Remove trailing slashes
+  headers: {
+    "Content-Type": "application/json",
+  },
+});
+
+// Request interceptor: Auto-attach JWT token for backend calls
+backendAxiosClient.interceptors.request.use(
+  (config: InternalAxiosRequestConfig) => {
+    const accessToken = localStorage.getItem(ACCESS_TOKEN_KEY);
+    if (accessToken && config.headers) {
+      config.headers.Authorization = `Bearer ${accessToken}`;
+    }
+    // Log the full URL for debugging
+    if (config.url) {
+      const fullUrl = `${config.baseURL || ""}${config.url}`;
+      console.log(`[backendAxiosClient] ${config.method?.toUpperCase()} ${fullUrl}`);
+    }
+    return config;
+  },
+  (error: AxiosError) => {
+    return Promise.reject(error);
+  }
+);
+
+// Response interceptor: Handle errors
+backendAxiosClient.interceptors.response.use(
+  (response) => response,
+  async (error: AxiosError) => {
+    // Log error details for debugging (skip 404s for section endpoints - they're expected for new encounters)
+    if (error.config) {
+      const fullUrl = `${error.config.baseURL || ""}${error.config.url || ""}`;
+      const isSectionEndpoint = fullUrl.includes("/section/");
+      const is404 = error.response?.status === 404;
+      
+      // Only log non-404 errors, or 404s that aren't section endpoints
+      if (!is404 || !isSectionEndpoint) {
+        console.error(`[backendAxiosClient] Error ${error.response?.status || "Network"} on ${error.config.method?.toUpperCase()} ${fullUrl}`);
+        if (error.response?.data && Object.keys(error.response.data).length > 0) {
+          console.error("[backendAxiosClient] Error response:", error.response.data);
+        }
+      }
+    }
+    
+    // Handle 401 - token refresh (same logic as axiosClient)
+    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      // Try to refresh token using the main axiosClient
+      const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
+      if (refreshToken) {
+        try {
+          const refreshAxios = axios.create({ baseURL: '' });
+          const response = await refreshAxios.post("/api/refresh-token", {
+            refresh_token: refreshToken,
+          });
+          const { tokens } = response.data;
+          const newAccessToken = tokens?.access || response.data.access;
+          if (newAccessToken) {
+            localStorage.setItem(ACCESS_TOKEN_KEY, newAccessToken);
+            if (originalRequest.headers) {
+              originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
+            }
+            originalRequest._retry = true;
+            return backendAxiosClient(originalRequest);
+          }
+        } catch (refreshError) {
+          // Refresh failed, redirect to login
+          if (typeof window !== "undefined" && !window.location.pathname.startsWith("/auth/login")) {
+            localStorage.removeItem(ACCESS_TOKEN_KEY);
+            localStorage.removeItem(REFRESH_TOKEN_KEY);
+            localStorage.removeItem(ROLE_KEY);
+            window.location.href = "/auth/login";
+          }
+        }
+      }
+    }
+    
+    return Promise.reject(error);
+  }
+);
+
 export default axiosClient;
-export { ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY, ROLE_KEY };
+export { backendAxiosClient, ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY, ROLE_KEY };
 

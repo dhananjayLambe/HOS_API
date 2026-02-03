@@ -1,5 +1,8 @@
 from typing import Dict, List, Any
+import logging
 from consultations.services.metadata_loader import MetadataLoader
+
+logger = logging.getLogger(__name__)
 
 
 class ConsultationEngine:
@@ -22,22 +25,19 @@ class ConsultationEngine:
             "pre_consultation/specialty_config.json"
         )
 
-        allowed_sections = specialty_cfg.get(
-            specialty,
-            {}
-        ).get("sections", [])
-
         response = {
             "sections": []
         }
 
         for section in sections_cfg["sections"]:
-            if section not in allowed_sections:
-                continue
+            try:
+                section_data = ConsultationEngine._load_section(section)
+                response["sections"].append(section_data)
+            except Exception as e:
+                logger.error(f"Failed to load section '{section}': {str(e)}", exc_info=True)
+                # Continue with other sections even if one fails
 
-            section_data = ConsultationEngine._load_section(section)
-            response["sections"].append(section_data)
-
+        logger.info(f"Returning {len(response['sections'])} sections: {[s['section'] for s in response['sections']]}")
         return response
 
     @staticmethod
@@ -50,10 +50,24 @@ class ConsultationEngine:
         master_path = f"pre_consultation/{section}/{section}_master.json"
         details_path = f"pre_consultation/{section}/{section}_details.json"
 
-        master = MetadataLoader.get(master_path)
-        details = MetadataLoader.get(details_path)
+        try:
+            master = MetadataLoader.get(master_path)
+            details = MetadataLoader.get(details_path)
+        except FileNotFoundError as e:
+            logger.error(f"Metadata file not found for section '{section}': {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Error loading metadata files for section '{section}': {e}")
+            raise
 
         items = []
+
+        if "items" not in master:
+            logger.warning(f"Section '{section}' master.json missing 'items' key")
+            return {
+                "section": section,
+                "items": []
+            }
 
         for code, meta in master["items"].items():
             item = {
@@ -63,6 +77,7 @@ class ConsultationEngine:
             }
             items.append(item)
 
+        logger.debug(f"Loaded {len(items)} items for section '{section}'")
         return {
             "section": section,
             "items": items
