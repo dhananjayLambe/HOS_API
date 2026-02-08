@@ -8,19 +8,32 @@ import { cn } from "@/lib/utils";
 import { Menu } from "lucide-react";
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
+
+const START_CONSULTATION_PATH = "/consultations/start-consultation";
 
 export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const isMobile = useMobile();
+  const pathname = usePathname();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const sidebarRef = useRef<HTMLDivElement>(null);
 
+  const isStartConsultation =
+    pathname === START_CONSULTATION_PATH ||
+    pathname === START_CONSULTATION_PATH + "/" ||
+    pathname.endsWith("/start-consultation");
+
   useEffect(() => {
+    if (isStartConsultation) {
+      setIsSidebarOpen(false);
+      return;
+    }
     if (!isMobile) {
       setIsSidebarOpen(true);
     } else {
       setIsSidebarOpen(false);
     }
-  }, [isMobile]);
+  }, [isMobile, isStartConsultation]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -36,9 +49,9 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <div className="flex min-h-screen flex-col ">
-      <header className={cn("sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 duration-300 xl:ml-64 shadow-sm", !isSidebarOpen && "xl:ml-0")}>
-        <div className="flex h-16 items-center justify-between gap-4 px-4 md:px-6">
+    <div className="flex min-h-screen min-h-[100dvh] flex-col gap-0 overflow-x-hidden w-full max-w-[100vw]">
+      <header className={cn("sticky top-0 z-40 shrink-0 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 duration-300 xl:ml-64 shadow-sm m-0 w-full min-w-0", !isSidebarOpen && "xl:ml-0")}>
+        <div className="flex h-14 sm:h-16 items-center justify-between gap-2 sm:gap-4 px-3 sm:px-4 md:px-6 min-w-0">
           <button 
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
             className="p-2 rounded-lg hover:bg-accent transition-colors shrink-0"
@@ -53,11 +66,20 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </header>
-      <div className="flex flex-1 items-start">
+      <div className={cn("flex flex-1 min-h-0 items-start w-full min-w-0 overflow-x-hidden", isStartConsultation && "min-h-0")}>
         <div ref={sidebarRef}>
-          <Sidebar isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
+          <Sidebar isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} alignBelowHeader={isStartConsultation} />
         </div>
-        <main className={cn("flex-1 overflow-auto duration-300 p-4 xl:p-6 xl:ml-64", !isSidebarOpen && "xl:ml-0")}>{children}</main>
+        <main
+          className={cn(
+            "flex-1 duration-300 xl:ml-64 min-h-0 min-w-0 w-full max-w-full overflow-x-hidden",
+            !isSidebarOpen && "xl:ml-0",
+            isStartConsultation ? "flex flex-col min-h-0 !pt-0 !mt-0 !-mt-px px-0 pb-0 sm:px-2 md:px-4 xl:px-6 xl:pb-6 overflow-hidden" : "overflow-auto p-3 sm:p-4 xl:p-6"
+          )}
+          style={isStartConsultation ? { paddingTop: 0, marginTop: -1, minHeight: 0 } : undefined}
+        >
+          {children}
+        </main>
       </div>
     </div>
   );

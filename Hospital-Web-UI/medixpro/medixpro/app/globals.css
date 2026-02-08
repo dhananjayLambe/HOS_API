@@ -15,7 +15,15 @@ html, body {
   color: white !important;
 }
 
+/* Safe area insets for notched devices (phones, tablets) */
 @layer utilities {
+  .pb-safe {
+    padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+  }
+  .min-h-screen-safe {
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
   .text-balance {
     text-wrap: balance;
   }

@@ -3,11 +3,28 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { usePatient } from "@/lib/patientContext";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
-import { ArrowLeft, User, Calendar, Phone, FileText, Stethoscope, ClipboardList, AlertCircle, Search } from "lucide-react";
-import Link from "next/link";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { AlertCircle, Search } from "lucide-react";
+import { ConsultationActionBar } from "@/components/consultations/consultation-action-bar";
+import { ConsultationRightMenu } from "@/components/consultations/consultation-right-menu";
+import { SymptomDetailPanel } from "@/components/consultations/symptom-detail-panel";
+import {
+  SymptomsSection,
+  FindingsSection,
+  DiagnosisSection,
+  MedicinesSection,
+  InvestigationsSection,
+  InstructionsSection,
+  ProceduresSection,
+} from "@/components/consultations/sections";
 
 export default function StartConsultationPage() {
   const { selectedPatient, triggerSearchHighlight } = usePatient();
@@ -43,11 +60,12 @@ export default function StartConsultationPage() {
           <div className="flex items-center gap-2 px-4 py-3 bg-purple-50 dark:bg-purple-950/30 rounded-lg border border-purple-200 dark:border-purple-800 mb-4">
             <Search className="h-4 w-4 text-purple-600 dark:text-purple-400 shrink-0" />
             <p className="text-sm text-purple-900 dark:text-purple-200">
-              Look for the <span className="font-semibold">"Select Patient"</span> search bar in the header
+              Look for the <span className="font-semibold">"Select Patient"</span> search bar in the
+              header
             </p>
           </div>
           <AlertDialogFooter className="flex-col sm:flex-row gap-2">
-            <AlertDialogAction 
+            <AlertDialogAction
               onClick={() => {
                 setShowAlert(false);
                 triggerSearchHighlight();
@@ -57,7 +75,7 @@ export default function StartConsultationPage() {
             >
               Show Search Bar
             </AlertDialogAction>
-            <AlertDialogAction 
+            <AlertDialogAction
               onClick={handleAlertClose}
               className="w-full sm:w-auto order-2"
             >
@@ -69,163 +87,49 @@ export default function StartConsultationPage() {
     );
   }
 
+  const ACTION_BAR_HEIGHT = 56; // h-14 in action bar
+  const HEADER_HEIGHT = 64;
+  const STICKY_TOP_PANELS = ACTION_BAR_HEIGHT + 12; // 68px below action bar
+  const PANEL_MAX_HEIGHT = `calc(100vh - ${HEADER_HEIGHT + ACTION_BAR_HEIGHT}px)`; // 120px offset
+
   return (
-    <div className="flex flex-col gap-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Link href="/doctor-dashboard">
-            <Button variant="ghost" size="icon">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </Link>
-          <div>
-            <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">Start Consultation</h1>
-            <p className="text-muted-foreground">Begin consultation with selected patient</p>
+    <div className="flex min-h-0 flex-1 flex-col mt-0 pt-0 overflow-x-hidden min-w-0 w-full max-w-full">
+      <ConsultationActionBar />
+      <div className="mx-auto w-full max-w-[1600px] min-w-0 flex-1 min-h-0 overflow-x-hidden px-3 sm:px-4 md:px-5 lg:px-6 pt-3 sm:pt-4 pb-6 pb-safe sm:pb-8 flex flex-col overflow-y-auto lg:overflow-y-hidden">
+        {/* Mobile/tablet: single column. Laptop (lg+): 3 columns. */}
+        <div
+          className="grid w-full max-w-full min-w-0 gap-3 sm:gap-4 md:gap-5 grid-cols-1 lg:grid-cols-[minmax(0,18%)_1fr_minmax(0,28%)] grid-rows-[auto_auto_auto] lg:grid-rows-[1fr] flex-1 min-h-0"
+          style={{ width: "100%", minWidth: 0 }}
+        >
+          {/* Left panel — second on mobile (order-2), sticky on desktop */}
+          <div
+            className="min-w-0 overflow-y-auto pb-24 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden order-2 lg:order-none lg:sticky lg:max-h-[calc(100vh-120px)]"
+            style={{ top: STICKY_TOP_PANELS } as React.CSSProperties}
+          >
+            <ConsultationRightMenu />
+          </div>
+          {/* Center — first on mobile (order-1); scrolls with visible scrollbar on desktop */}
+          <div
+            className="min-w-0 min-h-0 overflow-y-auto lg:overflow-y-scroll lg:max-h-[calc(100vh-120px)] pr-2 sm:pr-4 [scrollbar-gutter:stable] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-gray-100 dark:[&::-webkit-scrollbar-track]:bg-gray-800 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 dark:[&::-webkit-scrollbar-thumb]:bg-gray-600 order-1 lg:order-none"
+          >
+            <div className="space-y-3 sm:space-y-4">
+              <SymptomsSection />
+              <FindingsSection />
+              <DiagnosisSection />
+              <MedicinesSection />
+              <InvestigationsSection />
+              <InstructionsSection />
+              <ProceduresSection />
+            </div>
+          </div>
+          {/* Right panel — scrollable with visible scrollbar so bottom options are reachable */}
+          <div
+            className="min-w-0 overflow-y-scroll order-3 lg:order-none lg:sticky lg:max-h-[calc(100vh-120px)] pr-2 [scrollbar-gutter:stable] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-gray-100 dark:[&::-webkit-scrollbar-track]:bg-gray-800 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 dark:[&::-webkit-scrollbar-thumb]:bg-gray-600"
+            style={{ top: STICKY_TOP_PANELS } as React.CSSProperties}
+          >
+            <SymptomDetailPanel />
           </div>
         </div>
-      </div>
-
-      {/* Patient Information Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <User className="h-5 w-5" />
-            Patient Information
-          </CardTitle>
-          <CardDescription>Selected patient details for consultation</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-muted-foreground">Full Name</p>
-              <p className="text-base font-semibold">{selectedPatient.full_name}</p>
-            </div>
-            {selectedPatient.mobile && (
-              <div className="space-y-1">
-                <p className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                  <Phone className="h-4 w-4" />
-                  Mobile
-                </p>
-                <p className="text-base font-semibold">{selectedPatient.mobile}</p>
-              </div>
-            )}
-            {selectedPatient.gender && (
-              <div className="space-y-1">
-                <p className="text-sm font-medium text-muted-foreground">Gender</p>
-                <p className="text-base font-semibold">{selectedPatient.gender}</p>
-              </div>
-            )}
-            {selectedPatient.date_of_birth && (
-              <div className="space-y-1">
-                <p className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                  <Calendar className="h-4 w-4" />
-                  Date of Birth
-                </p>
-                <p className="text-base font-semibold">
-                  {new Date(selectedPatient.date_of_birth).toLocaleDateString()}
-                </p>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Consultation Details Section */}
-      <div className="grid gap-6 md:grid-cols-2">
-        {/* Examination Card */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Stethoscope className="h-5 w-5" />
-              Physical Examination
-            </CardTitle>
-            <CardDescription>Record physical examination findings</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Physical examination section will be available here. You can record examination findings, observations, and clinical notes.
-              </p>
-              <Button variant="outline" className="w-full">
-                Start Examination
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Diagnosis Card */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <ClipboardList className="h-5 w-5" />
-              Diagnosis
-            </CardTitle>
-            <CardDescription>Record diagnosis and assessment</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Diagnosis section will be available here. You can add primary and secondary diagnoses, ICD codes, and assessment notes.
-              </p>
-              <Button variant="outline" className="w-full">
-                Add Diagnosis
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Treatment Plan Card */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5" />
-              Treatment Plan
-            </CardTitle>
-            <CardDescription>Record treatment and management plan</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Treatment plan section will be available here. You can add medications, procedures, follow-up instructions, and advice.
-              </p>
-              <Button variant="outline" className="w-full">
-                Add Treatment Plan
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Notes Card */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5" />
-              Clinical Notes
-            </CardTitle>
-            <CardDescription>Additional clinical notes and observations</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Clinical notes section will be available here. You can add additional notes, observations, and recommendations.
-              </p>
-              <Button variant="outline" className="w-full">
-                Add Notes
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Action Buttons */}
-      <div className="flex items-center justify-end gap-4">
-        <Button variant="outline" onClick={() => router.back()}>
-          Cancel
-        </Button>
-        <Button>
-          Save Consultation
-        </Button>
       </div>
     </div>
   );

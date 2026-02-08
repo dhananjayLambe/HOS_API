@@ -20,6 +20,8 @@ import { AlertCircle, Search } from "lucide-react";
 interface SidebarProps {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
+  /** When true, sidebar starts below header (64px) so its top aligns with sub-header/content */
+  alignBelowHeader?: boolean;
 }
 
 interface SidebarItem {
@@ -29,7 +31,7 @@ interface SidebarItem {
   submenu?: { title: string; href: string }[];
 }
 
-export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
+export function Sidebar({ isOpen, setIsOpen, alignBelowHeader }: SidebarProps) {
   const pathname = usePathname();
   const isMobile = useMobile();
   const [openSubmenu, setOpenSubmenu] = useState<string | null>(null);
@@ -136,7 +138,7 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
       href: "/lab-tests-reports",
       icon: FileText,
       submenu: [
-        // { title: "All Lab Tests Reports", href: "/lab-tests-reports" },
+        { title: "All Lab Tests Reports", href: "/lab-tests-reports" },
         // { title: "Create Lab Test Report", href: "/lab-tests-reports/create" },
         // { title: "Lab Test Report Templates", href: "/lab-tests-reports/templates" },
       ],
@@ -381,11 +383,14 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
     }
   };
 
-  const sidebarClasses = cn("!fixed h-full left-0 bottom-0 z-50 flex w-64 flex-col border-r bg-background transition-transform duration-300 ease-in-out", {
-    "translate-x-0": isOpen,
-    "-translate-x-full": !isOpen,
-    "translate-x-0 ": isOpen,
-  });
+  const sidebarClasses = cn(
+    "!fixed left-0 z-50 flex w-64 flex-col border-r bg-background transition-transform duration-300 ease-in-out",
+    alignBelowHeader ? "!top-16 !h-[calc(100vh-4rem)]" : "bottom-0 h-full",
+    {
+      "translate-x-0": isOpen,
+      "-translate-x-full": !isOpen,
+    }
+  );
   useEffect(() => {
     const foundItem = sidebarItems.find((item) => {
       if (item.submenu) {
@@ -398,18 +403,21 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
     }
   }, [pathname]);
 
-  // Auto-expand Consultations when patient is selected
+  // Auto-expand Consultations only when patient is first selected (don't override user opening other submenus)
   useEffect(() => {
     if (selectedPatient) {
       const consultationsItem = sidebarItems.find((item) => item.title === "Consultations");
-      if (consultationsItem && openSubmenu !== "Consultations") {
+      if (consultationsItem) {
         setOpenSubmenu("Consultations");
       }
     }
-  }, [selectedPatient, openSubmenu]);
+  }, [selectedPatient]);
   return (
-    <aside className={sidebarClasses}>
-      <div className="flex py-3 xl:py-3.5 items-center justify-between px-4">
+    <aside
+      className={sidebarClasses}
+      style={alignBelowHeader ? { top: 64, height: "calc(100vh - 64px)" } : undefined}
+    >
+      <div className={cn("flex items-center justify-between px-4", alignBelowHeader ? "py-2" : "py-3 xl:py-3.5")}>
         <Link href="/doctor-dashboard" className="flex items-center space-x-2">
           <Image src={logo} alt="Medixpro" width={36} height={36} />
           <span className="font-bold inline-block">MedixPro</span>
@@ -424,14 +432,14 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
       <div className="border-b border-border/50 mx-4"></div>
 
       {/* Smart Queue Section */}
-      <div className="pt-4">
+      <div className="pt-2">
         <SmartQueue />
       </div>
 
       {/* Divider Line */}
-      <div className="border-b border-border/50 mx-4"></div>
+      <div className="border-b border-border/50 mx-4 shrink-0"></div>
 
-      <div className="flex-1 py-2  border-t h-full overflow-y-auto">
+      <div className="flex-1 min-h-0 overflow-y-auto pt-1 pb-2">
         <nav className="space-y-1 px-2 ">
           {sidebarItems.map((item) => (
             <div key={item.title} className="space-y-1 custom-scrollbar">
