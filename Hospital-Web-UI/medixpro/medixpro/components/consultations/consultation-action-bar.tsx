@@ -97,7 +97,7 @@ export function ConsultationActionBar() {
                 </DropdownMenu>
               </div>
             )}
-            <Button variant="outline" size="sm" className="gap-1.5 rounded-lg">
+            <Button size="sm" className="gap-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 border-0">
               <Eye className="h-4 w-4" />
               Preview Rx
             </Button>
@@ -124,14 +124,13 @@ export function ConsultationActionBar() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button size="sm" className="gap-1.5 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 min-h-[44px] touch-manipulation md:min-h-0">
+          <Button size="sm" className="gap-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 min-h-[44px] touch-manipulation md:min-h-0 border-0">
             <CheckCircle className="h-4 w-4" />
             Complete
           </Button>
           <Button
-            variant="destructive"
             size="sm"
-            className="gap-1.5 rounded-lg min-h-[44px] touch-manipulation md:min-h-0"
+            className="gap-1.5 rounded-lg bg-red-600 text-white hover:bg-red-700 min-h-[44px] touch-manipulation md:min-h-0 border-0"
             onClick={() => setShowCancelConfirm(true)}
           >
             <X className="h-4 w-4" />
