@@ -1,7 +1,7 @@
 "use client";
 
 import { type ReactNode, useState } from "react";
-import { ChevronDown, Minus, Plus } from "lucide-react";
+import { AlertTriangle, ChevronDown, Minus, Plus } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,6 +17,8 @@ export interface ConsultationSectionCardProps {
   defaultOpen?: boolean;
   headerRight?: ReactNode;
   className?: string;
+  /** When ≥1, show "⚠️ N incomplete" in header. */
+  incompleteCount?: number;
 }
 
 export function ConsultationSectionCard({
@@ -26,6 +28,7 @@ export function ConsultationSectionCard({
   defaultOpen = false,
   headerRight,
   className,
+  incompleteCount = 0,
 }: ConsultationSectionCardProps) {
   const [open, setOpen] = useState(defaultOpen);
 
@@ -37,7 +40,7 @@ export function ConsultationSectionCard({
           className
         )}
       >
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 p-0 pb-3">
+        <CardHeader className="sticky top-0 z-10 flex flex-row items-center justify-between space-y-0 rounded-t-2xl bg-card p-0 pb-3">
           <button
             type="button"
             className="flex flex-1 items-center gap-2 text-left outline-none hover:opacity-80 cursor-pointer min-h-[44px] -mx-1 px-1 rounded-lg touch-manipulation active:opacity-90"
@@ -49,6 +52,12 @@ export function ConsultationSectionCard({
               {icon}
             </span>
             <span className="font-semibold">{title}</span>
+            {incompleteCount > 0 && (
+              <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400 text-xs font-normal">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                {incompleteCount} incomplete
+              </span>
+            )}
             <ChevronDown
               className={cn(
                 "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",

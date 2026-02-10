@@ -68,3 +68,52 @@ export const DEFAULT_CONSULTATION_STATE: ConsultationState = {
   prescriptionNotes: "",
   doctorNotes: "",
 };
+
+// ─── Reusable consultation section pattern (backend-agnostic) ─────────────────
+
+export type ConsultationSectionType =
+  | "symptoms"
+  | "findings"
+  | "diagnosis"
+  | "medicines"
+  | "investigations"
+  | "instructions";
+
+/** Detail fields common to all section items (right-side panel). */
+export interface SectionItemDetail {
+  notes?: string;
+  duration?: string; // e.g. "1 Day", "2 Weeks"
+  severity?: "mild" | "moderate" | "severe";
+  /** Multi-select attribute chips (section-specific). */
+  attributes?: string[];
+  /** User-added tags. */
+  customTags?: string[];
+}
+
+/** Single item in any section (symptom, finding, diagnosis, etc.). */
+export interface ConsultationSectionItem {
+  id: string;
+  label: string;
+  isCustom?: boolean;
+  detail?: SectionItemDetail;
+  /** Optional category for add form (e.g. dropdown). */
+  category?: string;
+  description?: string;
+}
+
+/** Config for one section: static options + attribute chips for detail panel. */
+export interface ConsultationSectionConfig {
+  type: ConsultationSectionType;
+  /** Singular label for "Add <label>" e.g. "Symptom", "Diagnosis". */
+  itemLabel: string;
+  /** Search placeholder e.g. "Search symptoms". */
+  searchPlaceholder: string;
+  /** Optional chip shown to the left of search (e.g. "Past symptoms"). */
+  searchLeftChip?: string;
+  /** Hardcoded options: { id, label }. */
+  staticOptions: { id: string; label: string }[];
+  /** Duration dropdown options (hours / days / weeks). */
+  durationOptions: string[];
+  /** Attribute chips for detail panel (section-specific). */
+  attributeOptions: string[];
+}

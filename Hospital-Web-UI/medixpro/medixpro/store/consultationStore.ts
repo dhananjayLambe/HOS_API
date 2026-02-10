@@ -7,6 +7,9 @@ import type {
   ConsultationMedicine,
   SymptomDetail,
   ConsultationVitals,
+  ConsultationSectionType,
+  ConsultationSectionItem,
+  SectionItemDetail,
 } from "@/lib/consultation-types";
 import { DEFAULT_CONSULTATION_STATE } from "@/lib/consultation-types";
 
@@ -15,9 +18,18 @@ type DraftStatus = {
   message: string | null;
 };
 
+/** Selected item for right-side detail panel (any section). */
+export type SelectedDetailPayload = {
+  section: ConsultationSectionType;
+  itemId: string;
+} | null;
+
 type ConsultationStore = ConsultationState & {
   draftStatus: DraftStatus;
   selectedSymptomId: string | null;
+  /** Reusable section pattern: items per section (local, backend-agnostic). */
+  sectionItems: Record<ConsultationSectionType, ConsultationSectionItem[]>;
+  selectedDetail: SelectedDetailPayload;
   setSymptoms: (symptoms: ConsultationSymptom[]) => void;
   addSymptom: (symptom: ConsultationSymptom) => void;
   removeSymptom: (id: string) => void;
@@ -38,12 +50,42 @@ type ConsultationStore = ConsultationState & {
   setPrescriptionNotes: (value: string) => void;
   setDoctorNotes: (value: string) => void;
   reset: () => void;
+  // Section items (reusable pattern)
+  getSectionItems: (section: ConsultationSectionType) => ConsultationSectionItem[];
+  addSectionItem: (section: ConsultationSectionType, item: ConsultationSectionItem) => void;
+  removeSectionItem: (section: ConsultationSectionType, id: string) => void;
+  updateSectionItemDetail: (
+    section: ConsultationSectionType,
+    id: string,
+    detail: Partial<SectionItemDetail>
+  ) => void;
+  setSelectedDetail: (payload: SelectedDetailPayload) => void;
 };
+
+const SECTION_TYPES: ConsultationSectionType[] = [
+  "symptoms",
+  "findings",
+  "diagnosis",
+  "medicines",
+  "investigations",
+  "instructions",
+];
+
+const emptySectionItems = () =>
+  SECTION_TYPES.reduce(
+    (acc, t) => {
+      acc[t] = [];
+      return acc;
+    },
+    {} as Record<ConsultationSectionType, ConsultationSectionItem[]>
+  );
 
 export const useConsultationStore = create<ConsultationStore>((set, get) => ({
   ...DEFAULT_CONSULTATION_STATE,
   draftStatus: { savedAt: null, message: null },
   selectedSymptomId: null,
+  sectionItems: emptySectionItems(),
+  selectedDetail: null,
 
   setSymptoms: (symptoms) => set({ symptoms }),
   addSymptom: (symptom) =>
@@ -91,10 +133,50 @@ export const useConsultationStore = create<ConsultationStore>((set, get) => ({
     set((s) => ({ vitals: { ...s.vitals, ...patch } })),
   setPrescriptionNotes: (prescriptionNotes) => set({ prescriptionNotes }),
   setDoctorNotes: (doctorNotes) => set({ doctorNotes }),
+
+  getSectionItems: (section) => get().sectionItems[section] ?? [],
+  addSectionItem: (section, item) =>
+    set((s) => {
+      const current = s.sectionItems[section] ?? [];
+      if (current.some((i) => i.id === item.id)) return s;
+      return {
+        sectionItems: {
+          ...s.sectionItems,
+          [section]: [...current, item],
+        },
+      };
+    }),
+  removeSectionItem: (section, id) =>
+    set((s) => {
+      const next = (s.sectionItems[section] ?? []).filter((i) => i.id !== id);
+      const selectedDetail =
+        s.selectedDetail?.section === section && s.selectedDetail?.itemId === id
+          ? null
+          : s.selectedDetail;
+      return {
+        sectionItems: { ...s.sectionItems, [section]: next },
+        selectedDetail,
+      };
+    }),
+  updateSectionItemDetail: (section, id, detail) =>
+    set((s) => ({
+      sectionItems: {
+        ...s.sectionItems,
+        [section]: (s.sectionItems[section] ?? []).map((i) =>
+          i.id === id
+            ? { ...i, detail: { ...(i.detail ?? {}), ...detail } }
+            : i
+        ),
+      },
+    })),
+  setSelectedDetail: (payload) => set({ selectedDetail: payload }),
+
   reset: () =>
     set({
       ...DEFAULT_CONSULTATION_STATE,
       draftStatus: { savedAt: null, message: null },
       selectedSymptomId: null,
+      sectionItems: emptySectionItems(),
+      selectedDetail: null,
     }),
 }));
