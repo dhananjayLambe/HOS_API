@@ -1,0 +1,99 @@
+{
+    "version": 1,
+    "meta": {
+      "description": "Maps consultation instructions to specialties. Only relevant instruction keys from instructions_master.json should be listed here.",
+      "rules": {
+        "non_blocking": true,
+        "multi_select_allowed": true,
+        "free_text_always_allowed": true,
+        "followup_not_included": true
+      }
+    },
+  
+    "physician": [
+      "adequate_rest",
+      "maintain_hydration",
+      "avoid_self_medication",
+      "complete_full_course",
+      "avoid_spicy_food",
+      "increase_fiber_intake",
+      "monitor_blood_pressure",
+      "monitor_blood_sugar",
+      "return_if_fever_persists",
+      "avoid_heavy_exertion"
+    ],
+  
+    "gynecology": [
+      "adequate_rest",
+      "maintain_hydration",
+      "return_if_bleeding_increases",
+      "avoid_heavy_exertion",
+      "bed_rest",
+      "iron_with_vitamin_c",
+      "avoid_lifting_weights"
+    ],
+  
+    "pediatrics": [
+      "maintain_hydration",
+      "adequate_rest",
+      "return_if_fever_persists",
+      "complete_full_course",
+      "avoid_self_medication"
+    ],
+  
+    "diabetologist": [
+      "low_sugar_diet",
+      "weight_reduction_advice",
+      "monitor_blood_sugar",
+      "daily_weight_monitoring",
+      "foot_care_advice",
+      "maintain_hydration"
+    ],
+  
+    "endocrinologist": [
+      "low_sugar_diet",
+      "weight_reduction_advice",
+      "thyroid_medication_empty_stomach",
+      "monitor_blood_sugar",
+      "daily_weight_monitoring"
+    ],
+  
+    "cardiologist": [
+      "low_salt_diet",
+      "monitor_blood_pressure",
+      "avoid_heavy_exertion",
+      "visit_er_if_chest_pain",
+      "fluid_intake_restriction",
+      "weight_reduction_advice"
+    ],
+  
+    "orthopedic": [
+      "avoid_heavy_exertion",
+      "avoid_lifting_weights",
+      "bed_rest",
+      "weight_reduction_advice",
+      "adequate_rest"
+    ],
+  
+    "gastroenterologist": [
+      "avoid_spicy_food",
+      "increase_fiber_intake",
+      "maintain_hydration",
+      "adequate_rest"
+    ],
+  
+    "nephrologist": [
+      "fluid_intake_restriction",
+      "low_salt_diet",
+      "monitor_blood_pressure",
+      "daily_weight_monitoring"
+    ],
+  
+    "pulmonologist": [
+      "inhaler_technique_review",
+      "avoid_heavy_exertion",
+      "return_if_breathlessness",
+      "adequate_rest",
+      "maintain_hydration"
+    ]
+  }

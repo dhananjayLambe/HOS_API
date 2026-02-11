@@ -1,8 +1,53 @@
-{
+  {
     "version": 1,
     "items": {
       "fever": { "label": "Fever" },
-      "cold": { "label": "Cold" },
-      "spotting": { "label": "Spotting" }
+      "pain": { "label": "General Pain" },
+      "weakness_fatigue": { "label": "Weakness / Fatigue" },
+      "loss_of_appetite": { "label": "Loss of Appetite" },
+      "weight_loss": { "label": "Weight Loss" },
+      "weight_gain": { "label": "Weight Gain" },
+      "sleeplessness": { "label": "Sleeplessness (Insomnia)" },
+  
+      "headache": { "label": "Headache" },
+      "dizziness": { "label": "Dizziness / Giddiness" },
+      
+      "cold": { "label": "Cold / Runny Nose" },
+      "cough": { "label": "Cough" },
+      "throat_pain": { "label": "Throat Pain" },
+      "breathlessness": { "label": "Breathlessness (SOB)" },
+      "chest_pain": { "label": "Chest Pain" },
+      "palpitations": { "label": "Palpitations" },
+  
+      "abdominal_pain": { "label": "Abdominal Pain" },
+      "vomiting": { "label": "Vomiting" },
+      "nausea": { "label": "Nausea" },
+      "loose_stools": { "label": "Loose Stools / Diarrhea" },
+      "constipation": { "label": "Constipation" },
+      "acidity_heartburn": { "label": "Heartburn / Acidity" },
+  
+      "spotting": { "label": "Spotting" },
+      "lower_abdominal_pain": { "label": "Lower Abdominal Pain" },
+      "irregular_menses": { "label": "Irregular Menses" },
+      "painful_menses": { "label": "Painful Menses" },
+      "vaginal_discharge": { "label": "Vaginal Discharge" },
+      "pregnancy_amenorrhea": { "label": "Missed Period (Pregnancy)" },
+  
+      "poor_feeding": { "label": "Poor Feeding" },
+      "crying_excessive": { "label": "Excessive Crying" },
+  
+      "polyuria": { "label": "Increased Urination" },
+      "polydipsia": { "label": "Increased Thirst" },
+      "burning_micturition": { "label": "Burning Urination" },
+      "decreased_urine": { "label": "Decreased Urine Output" },
+  
+      "joint_pain": { "label": "Joint Pain" },
+      "back_pain": { "label": "Back Pain" },
+      "neck_pain": { "label": "Neck Pain" },
+      "swelling_feet": { "label": "Swelling (Edema)" },
+      "restricted_movement": { "label": "Restricted Movement" },
+  
+      "skin_rash": { "label": "Skin Rash" },
+      "itching": { "label": "Itching" }
     }
   }

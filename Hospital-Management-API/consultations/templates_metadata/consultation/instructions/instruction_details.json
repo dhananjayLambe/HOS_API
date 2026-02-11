@@ -1,0 +1,203 @@
+{
+    "version": 1,
+    "meta": {
+      "rules": {
+        "no_hard_required": true,
+        "importance_over_required": true,
+        "free_text_allowed": true,
+        "monitoring_inputs_optional": true,
+        "no_followup_logic_here": true
+      },
+      "notes": "Instruction details are optional structured inputs for selected templates. Instructions must never block consultation completion."
+    },
+  
+    "monitor_blood_pressure": {
+      "fields": [
+        {
+          "key": "frequency_per_day",
+          "label": "Times per day",
+          "type": "number",
+          "keyboard": "numeric",
+          "min": 1,
+          "max": 6,
+          "importance": "high"
+        },
+        {
+          "key": "target_range",
+          "label": "Target BP Range (Optional)",
+          "type": "text",
+          "placeholder": "e.g. <130/80"
+        }
+      ]
+    },
+  
+    "monitor_blood_sugar": {
+      "fields": [
+        {
+          "key": "frequency_per_week",
+          "label": "Times per week",
+          "type": "number",
+          "keyboard": "numeric",
+          "min": 1,
+          "max": 14,
+          "importance": "high"
+        },
+        {
+          "key": "fasting_target",
+          "label": "Fasting Target (Optional)",
+          "type": "text",
+          "placeholder": "e.g. 80–110 mg/dL"
+        },
+        {
+          "key": "postprandial_target",
+          "label": "Post-Meal Target (Optional)",
+          "type": "text",
+          "placeholder": "e.g. <140 mg/dL"
+        }
+      ]
+    },
+  
+    "daily_weight_monitoring": {
+      "fields": [
+        {
+          "key": "frequency",
+          "label": "Monitoring Frequency",
+          "type": "select",
+          "options": ["Daily", "Alternate Days", "Weekly"]
+        }
+      ]
+    },
+  
+    "fluid_intake_restriction": {
+      "fields": [
+        {
+          "key": "limit_per_day",
+          "label": "Fluid Limit per Day",
+          "type": "number",
+          "keyboard": "decimal",
+          "suffix": "liters"
+        }
+      ]
+    },
+  
+    "weight_reduction_advice": {
+      "fields": [
+        {
+          "key": "target_weight",
+          "label": "Target Weight (Optional)",
+          "type": "number",
+          "keyboard": "decimal",
+          "suffix": "kg"
+        },
+        {
+          "key": "timeframe_months",
+          "label": "Timeframe (Months)",
+          "type": "number",
+          "keyboard": "numeric"
+        }
+      ]
+    },
+  
+    "low_salt_diet": {
+      "fields": [
+        {
+          "key": "max_salt_intake",
+          "label": "Max Salt Intake (Optional)",
+          "type": "text",
+          "placeholder": "e.g. <5g per day"
+        }
+      ]
+    },
+  
+    "low_sugar_diet": {
+      "fields": [
+        {
+          "key": "calorie_limit",
+          "label": "Daily Calorie Target (Optional)",
+          "type": "number",
+          "keyboard": "numeric",
+          "suffix": "kcal"
+        }
+      ]
+    },
+  
+    "bed_rest": {
+      "fields": [
+        {
+          "key": "duration_days",
+          "label": "Duration",
+          "type": "number",
+          "keyboard": "numeric",
+          "suffix": "days"
+        }
+      ]
+    },
+  
+    "avoid_lifting_weights": {
+      "fields": [
+        {
+          "key": "duration_days",
+          "label": "Duration",
+          "type": "number",
+          "keyboard": "numeric",
+          "suffix": "days"
+        }
+      ]
+    },
+  
+    "return_if_fever_persists": {
+      "fields": [
+        {
+          "key": "threshold_days",
+          "label": "If persists beyond",
+          "type": "number",
+          "keyboard": "numeric",
+          "suffix": "days"
+        }
+      ]
+    },
+  
+    "visit_er_if_chest_pain": {
+      "fields": [
+        {
+          "key": "severity_level",
+          "label": "Trigger Condition (Optional)",
+          "type": "select",
+          "options": ["Mild", "Moderate", "Severe"]
+        }
+      ]
+    },
+  
+    "return_if_bleeding_increases": {
+      "fields": [
+        {
+          "key": "bleeding_threshold",
+          "label": "Trigger Condition (Optional)",
+          "type": "text",
+          "placeholder": "e.g. >1 pad/hour"
+        }
+      ]
+    },
+  
+    "foot_care_advice": {
+      "fields": [
+        {
+          "key": "daily_inspection",
+          "label": "Daily Foot Inspection",
+          "type": "radio",
+          "options": ["Yes", "No"]
+        }
+      ]
+    },
+  
+    "inhaler_technique_review": {
+      "fields": [
+        {
+          "key": "device_type",
+          "label": "Device Type",
+          "type": "select",
+          "options": ["MDI", "DPI", "Nebulizer"]
+        }
+      ]
+    }
+  }

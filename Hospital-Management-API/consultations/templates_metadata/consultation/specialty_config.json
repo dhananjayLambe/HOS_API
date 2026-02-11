@@ -1,48 +1,248 @@
 {
-    "version": 1,
-  
-    "gynecology": {
-      "sections": [
-        "symptoms",
-        "findings",
-        "diagnosis",
-        "medicines",
-        "investigations",
-        "instructions",
-        "procedures"
-      ]
+  "version": 1,
+
+  "gynecology": {
+    "sections": [
+      "symptoms",
+      "findings",
+      "diagnosis",
+      "medicines",
+      "investigations",
+      "instructions",
+      "procedures"
+    ],
+
+    "symptoms": {
+      "required": ["primary_symptom"],
+      "optional": ["associated_symptoms", "duration", "severity", "additional_notes"],
+      "default_required": ["primary_symptom"],
+      "default_optional": ["duration", "severity"],
+      "notes": "Menstrual, pelvic and pregnancy-related symptoms are common"
     },
-  
-    "physician": {
-      "sections": [
-        "symptoms",
-        "findings",
-        "diagnosis",
-        "medicines",
-        "investigations",
-        "instructions"
-      ]
+
+    "findings": {
+      "required": [],
+      "optional": ["abdominal_tenderness", "pallor", "edema", "local_exam_notes"],
+      "default_required": [],
+      "default_optional": ["pallor"],
+      "notes": "Clinical findings support diagnosis but are not mandatory in OPD"
     },
-  
-    "pediatrics": {
-      "sections": [
-        "symptoms",
-        "findings",
-        "diagnosis",
-        "medicines",
-        "investigations",
-        "instructions"
-      ]
+
+    "diagnosis": {
+      "required": ["provisional_diagnosis"],
+      "optional": ["confirmed_diagnosis", "differential_diagnosis", "additional_notes"],
+      "default_required": ["provisional_diagnosis"],
+      "default_optional": ["additional_notes"],
+      "notes": "Provisional diagnosis is sufficient for OPD; free text allowed"
     },
-  
-    "diabetologist": {
-      "sections": [
-        "symptoms",
-        "findings",
-        "diagnosis",
-        "medicines",
-        "investigations",
-        "instructions"
-      ]
+
+    "medicines": {
+      "required": [],
+      "optional": ["drug_name", "dosage", "frequency", "duration", "instructions"],
+      "default_required": [],
+      "default_optional": ["drug_name", "dosage", "frequency"],
+      "notes": "Pregnancy-safe prescriptions are common; keep flow flexible"
+    },
+
+    "investigations": {
+      "required": [],
+      "optional": ["lab_tests", "imaging", "priority", "notes"],
+      "default_required": [],
+      "default_optional": ["lab_tests"],
+      "notes": "CBC, USG and hormonal tests commonly advised"
+    },
+
+    "instructions": {
+      "required": [],
+      "optional": ["general_advice", "diet", "warning_signs", "follow_up"],
+      "default_required": [],
+      "default_optional": ["general_advice"],
+      "notes": "Patient education is important in gynecology"
+    },
+
+    "procedures": {
+      "required": [],
+      "optional": ["procedure_name", "notes"],
+      "default_required": [],
+      "default_optional": [],
+      "notes": "OPD-level procedures like Pap smear only"
+    }
+  },
+
+  "physician": {
+    "sections": [
+      "symptoms",
+      "findings",
+      "diagnosis",
+      "medicines",
+      "investigations",
+      "instructions"
+    ],
+
+    "symptoms": {
+      "required": ["primary_symptom"],
+      "optional": ["associated_symptoms", "duration", "severity", "onset_progression", "additional_notes"],
+      "default_required": ["primary_symptom"],
+      "default_optional": ["duration", "associated_symptoms"],
+      "notes": "Broad symptom spectrum; structured capture improves triage"
+    },
+
+    "findings": {
+      "required": [],
+      "optional": ["pallor", "edema", "dehydration", "additional_notes"],
+      "default_required": [],
+      "default_optional": ["pallor"],
+      "notes": "Physical findings aid diagnosis but should not block workflow"
+    },
+
+    "diagnosis": {
+      "required": ["provisional_diagnosis"],
+      "optional": ["confirmed_diagnosis", "additional_notes"],
+      "default_required": ["provisional_diagnosis"],
+      "default_optional": ["additional_notes"],
+      "notes": "Provisional diagnosis sufficient for most OPD visits"
+    },
+
+    "medicines": {
+      "required": [],
+      "optional": ["drug_name", "dosage", "frequency", "duration", "instructions"],
+      "default_required": [],
+      "default_optional": ["drug_name", "dosage", "frequency"],
+      "notes": "High OPD volume requires fast prescription flow"
+    },
+
+    "investigations": {
+      "required": [],
+      "optional": ["lab_tests", "imaging", "priority", "notes"],
+      "default_required": [],
+      "default_optional": ["lab_tests"],
+      "notes": "Diagnostics are a major revenue driver"
+    },
+
+    "instructions": {
+      "required": [],
+      "optional": ["general_advice", "warning_signs", "follow_up"],
+      "default_required": [],
+      "default_optional": ["general_advice"],
+      "notes": "Clear instructions reduce repeat OPD visits"
+    }
+  },
+
+  "pediatrics": {
+    "sections": [
+      "symptoms",
+      "findings",
+      "diagnosis",
+      "medicines",
+      "investigations",
+      "instructions"
+    ],
+
+    "symptoms": {
+      "required": ["primary_symptom"],
+      "optional": ["associated_symptoms", "duration", "severity", "feeding_issues", "additional_notes"],
+      "default_required": ["primary_symptom"],
+      "default_optional": ["associated_symptoms", "additional_notes"],
+      "notes": "Parents provide context; notes are valuable"
+    },
+
+    "findings": {
+      "required": [],
+      "optional": ["pallor", "dehydration", "respiratory_distress", "additional_notes"],
+      "default_required": [],
+      "default_optional": ["dehydration"],
+      "notes": "Key findings guide urgency"
+    },
+
+    "diagnosis": {
+      "required": ["provisional_diagnosis"],
+      "optional": ["additional_notes"],
+      "default_required": ["provisional_diagnosis"],
+      "default_optional": ["additional_notes"],
+      "notes": "Avoid over-structuring; allow quick assessment"
+    },
+
+    "medicines": {
+      "required": [],
+      "optional": ["drug_name", "dosage", "frequency", "duration", "instructions"],
+      "default_required": [],
+      "default_optional": ["drug_name", "dosage"],
+      "notes": "Weight-based dosing handled at RX layer"
+    },
+
+    "investigations": {
+      "required": [],
+      "optional": ["lab_tests", "notes"],
+      "default_required": [],
+      "default_optional": ["lab_tests"],
+      "notes": "Minimal investigations preferred in pediatrics"
+    },
+
+    "instructions": {
+      "required": [],
+      "optional": ["feeding_advice", "warning_signs", "follow_up"],
+      "default_required": [],
+      "default_optional": ["feeding_advice"],
+      "notes": "Parental guidance is critical"
+    }
+  },
+
+  "diabetologist": {
+    "sections": [
+      "symptoms",
+      "findings",
+      "diagnosis",
+      "medicines",
+      "investigations",
+      "instructions"
+    ],
+
+    "symptoms": {
+      "required": ["primary_symptom"],
+      "optional": ["polyuria", "polydipsia", "weight_change", "fatigue", "additional_notes"],
+      "default_required": ["primary_symptom"],
+      "default_optional": ["polyuria", "polydipsia"],
+      "notes": "Chronic symptoms tracking is important"
+    },
+
+    "findings": {
+      "required": [],
+      "optional": ["edema", "neuropathy_signs", "foot_exam_notes"],
+      "default_required": [],
+      "default_optional": ["foot_exam_notes"],
+      "notes": "Foot and neuropathy assessment is relevant"
+    },
+
+    "diagnosis": {
+      "required": ["provisional_diagnosis"],
+      "optional": ["additional_notes"],
+      "default_required": ["provisional_diagnosis"],
+      "default_optional": ["additional_notes"],
+      "notes": "Diagnosis usually known; focus on control status"
+    },
+
+    "medicines": {
+      "required": [],
+      "optional": ["drug_name", "dosage", "frequency", "duration", "instructions"],
+      "default_required": [],
+      "default_optional": ["drug_name", "dosage", "frequency"],
+      "notes": "Long-term medication management"
+    },
+
+    "investigations": {
+      "required": [],
+      "optional": ["hba1c", "lipid_profile", "renal_tests", "notes"],
+      "default_required": [],
+      "default_optional": ["hba1c"],
+      "notes": "Regular monitoring investigations are critical"
+    },
+
+    "instructions": {
+      "required": [],
+      "optional": ["diet", "exercise", "foot_care", "follow_up"],
+      "default_required": [],
+      "default_optional": ["diet"],
+      "notes": "Lifestyle counselling is central to care"
     }
   }
+}

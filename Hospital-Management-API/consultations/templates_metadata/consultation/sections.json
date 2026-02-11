@@ -1,12 +1,13 @@
 {
-    "version": 1,
-    "sections": [
-      "symptoms",
-      "findings",
-      "diagnosis",
-      "medicines",
-      "investigations",
-      "instructions",
-      "procedures"
-    ]
-  }
+  "version": 1,
+  "sections": [
+    "symptoms",
+    "findings",
+    "diagnosis",
+    "medicines",
+    "investigations",
+    "instructions",
+    "procedures"
+  ],
+  "notes": "Fixed consultation flow aligned with OPD workflow (Practo-like). Sections are optional unless enforced at specialty level."
+}

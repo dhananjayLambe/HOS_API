@@ -1,6 +1,140 @@
 {
-    "gynecology": ["anemia"],
-    "physician": ["viral_fever", "anemia"],
-    "pediatrics": ["viral_fever"],
-    "diabetologist": ["diabetes_mellitus"]
-  }
+  "version": 2,
+  "meta": {
+    "rules": {
+      "diagnosis_is_optional": true,
+      "provisional_default": true,
+      "multiple_diagnosis_supported": true,
+      "free_text_always_allowed": true,
+      "no_blocking_on_missing_diagnosis": true
+    },
+    "notes": "This file provides high-frequency OPD diagnoses only. It is intentionally non-exhaustive. Doctors can always add free-text diagnoses."
+  },
+
+  "physician": [
+    "viral_fever",
+    "upper_respiratory_infection",
+    "lower_respiratory_infection",
+    "acute_gastroenteritis",
+    "gastritis",
+    "gastroesophageal_reflux_disease",
+    "hypertension",
+    "diabetes_mellitus",
+    "anemia",
+    "urinary_tract_infection",
+    "vertigo",
+    "dehydration",
+    "low_back_pain",
+    "generalized_weakness",
+    "fever_under_evaluation"
+  ],
+
+  "gynecology": [
+    "dysfunctional_uterine_bleeding",
+    "polycystic_ovarian_syndrome",
+    "primary_infertility",
+    "secondary_infertility",
+    "pregnancy_confirmed",
+    "amenorrhea",
+    "threatened_abortion",
+    "pelvic_inflammatory_disease",
+    "vaginitis",
+    "urinary_tract_infection",
+    "iron_deficiency_anemia"
+  ],
+
+  "pediatrics": [
+    "viral_fever",
+    "upper_respiratory_infection",
+    "acute_gastroenteritis",
+    "bronchiolitis",
+    "pneumonia",
+    "nutritional_anemia",
+    "failure_to_thrive",
+    "febrile_seizure",
+    "acute_asthma_exacerbation",
+    "childhood_diarrhea"
+  ],
+
+  "diabetologist": [
+    "type_2_diabetes_mellitus",
+    "type_1_diabetes_mellitus",
+    "poor_glycemic_control",
+    "hypoglycemia",
+    "diabetic_neuropathy",
+    "diabetic_nephropathy",
+    "diabetic_foot",
+    "metabolic_syndrome",
+    "obesity_related_diabetes"
+  ],
+
+  "endocrinologist": [
+    "hypothyroidism",
+    "hyperthyroidism",
+    "subclinical_hypothyroidism",
+    "thyroid_nodule",
+    "thyroiditis",
+    "cushing_syndrome",
+    "addisons_disease",
+    "osteoporosis",
+    "metabolic_syndrome",
+    "hormonal_disorder_under_evaluation"
+  ],
+
+  "cardiologist": [
+    "hypertension",
+    "ischemic_heart_disease",
+    "acute_coronary_syndrome",
+    "heart_failure",
+    "arrhythmia",
+    "valvular_heart_disease",
+    "cardiomyopathy",
+    "chest_pain_under_evaluation",
+    "syncope_under_evaluation"
+  ],
+
+  "orthopedic": [
+    "osteoarthritis",
+    "rheumatoid_arthritis",
+    "low_back_pain",
+    "cervical_spondylosis",
+    "lumbar_spondylosis",
+    "soft_tissue_injury",
+    "fracture_suspected",
+    "sports_injury",
+    "joint_pain_under_evaluation"
+  ],
+
+  "gastroenterologist": [
+    "gastritis",
+    "gastroesophageal_reflux_disease",
+    "peptic_ulcer_disease",
+    "irritable_bowel_syndrome",
+    "inflammatory_bowel_disease",
+    "hepatitis",
+    "fatty_liver_disease",
+    "chronic_liver_disease",
+    "abdominal_pain_under_evaluation"
+  ],
+
+  "nephrologist": [
+    "chronic_kidney_disease",
+    "acute_kidney_injury",
+    "nephrotic_syndrome",
+    "urinary_tract_infection",
+    "hypertensive_nephropathy",
+    "diabetic_nephropathy",
+    "renal_failure_under_evaluation"
+  ],
+
+  "pulmonologist": [
+    "bronchial_asthma",
+    "chronic_obstructive_pulmonary_disease",
+    "pneumonia",
+    "pulmonary_tuberculosis",
+    "interstitial_lung_disease",
+    "pleural_effusion",
+    "chronic_cough_under_evaluation",
+    "breathlessness_under_evaluation"
+  ]
+}

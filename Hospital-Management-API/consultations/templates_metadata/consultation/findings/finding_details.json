@@ -1,10 +1,350 @@
 {
-    "version": 1,
-  
-    "abdominal_tenderness": {
-      "fields": [
-        { "key": "location", "type": "select", "options": ["Upper","Lower","Diffuse"] },
-        { "key": "severity", "type": "select", "options": ["Mild","Moderate","Severe"] }
-      ]
-    }
+  "version": 1,
+  "meta": {
+    "rules": {
+      "no_hard_required": true,
+      "importance_over_required": true,
+      "structured_dependencies": false,
+      "free_text_allowed": true
+    },
+    "notes": "Clinical findings are objective observations. They must never block consultation flow. Details are optional and minimal."
+  },
+
+  "pallor": {
+    "fields": [
+      {
+        "key": "severity",
+        "label": "Severity",
+        "type": "select",
+        "options": ["Mild", "Moderate", "Severe"]
+      },
+      {
+        "key": "notes",
+        "label": "Notes",
+        "type": "text"
+      }
+    ]
+  },
+
+  "edema": {
+    "fields": [
+      {
+        "key": "site",
+        "label": "Site",
+        "type": "select",
+        "options": ["Feet", "Ankles", "Generalized"]
+      },
+      {
+        "key": "pitting",
+        "label": "Pitting?",
+        "type": "radio",
+        "options": ["Yes", "No"]
+      }
+    ]
+  },
+
+  "pedal_edema": {
+    "fields": [
+      {
+        "key": "severity",
+        "label": "Severity",
+        "type": "select",
+        "options": ["Mild", "Moderate", "Severe"]
+      }
+    ]
+  },
+
+  "dehydration": {
+    "fields": [
+      {
+        "key": "severity",
+        "label": "Severity",
+        "type": "select",
+        "options": ["Mild", "Moderate", "Severe"]
+      }
+    ]
+  },
+
+  "icterus": {
+    "fields": [
+      {
+        "key": "present",
+        "label": "Icterus Present?",
+        "type": "radio",
+        "options": ["Yes", "No"]
+      }
+    ]
+  },
+
+  "cyanosis": {
+    "fields": [
+      {
+        "key": "present",
+        "label": "Cyanosis Present?",
+        "type": "radio",
+        "options": ["Yes", "No"]
+      }
+    ]
+  },
+
+  "lymphadenopathy": {
+    "fields": [
+      {
+        "key": "region",
+        "label": "Region",
+        "type": "select",
+        "options": ["Cervical", "Axillary", "Inguinal", "Generalized"],
+        "is_multi": true
+      }
+    ]
+  },
+
+  "pharyngeal_congestion": {
+    "fields": [
+      {
+        "key": "present",
+        "label": "Congestion Present?",
+        "type": "radio",
+        "options": ["Yes", "No"]
+      }
+    ]
+  },
+
+  "tonsillar_enlargement": {
+    "fields": [
+      {
+        "key": "grade",
+        "label": "Grade",
+        "type": "select",
+        "options": ["Grade I", "Grade II", "Grade III", "Grade IV"]
+      }
+    ]
+  },
+
+  "respiratory_distress": {
+    "fields": [
+      {
+        "key": "severity",
+        "label": "Severity",
+        "type": "select",
+        "options": ["Mild", "Moderate", "Severe"]
+      }
+    ]
+  },
+
+  "wheeze": {
+    "fields": [
+      {
+        "key": "side",
+        "label": "Side",
+        "type": "select",
+        "options": ["Bilateral", "Right", "Left"]
+      }
+    ]
+  },
+
+  "crepitations": {
+    "fields": [
+      {
+        "key": "location",
+        "label": "Location",
+        "type": "select",
+        "options": ["Basal", "Diffuse"]
+      }
+    ]
+  },
+
+  "decreased_air_entry": {
+    "fields": [
+      {
+        "key": "side",
+        "label": "Side",
+        "type": "select",
+        "options": ["Bilateral", "Right", "Left"]
+      }
+    ]
+  },
+
+  "clubbing": {
+    "fields": [
+      {
+        "key": "grade",
+        "label": "Grade",
+        "type": "select",
+        "options": ["Grade I", "Grade II", "Grade III"]
+      }
+    ]
+  },
+
+  "abdominal_tenderness": {
+    "fields": [
+      {
+        "key": "location",
+        "label": "Location",
+        "type": "select",
+        "options": ["Upper", "Lower", "Generalized"]
+      },
+      {
+        "key": "severity",
+        "label": "Severity",
+        "type": "select",
+        "options": ["Mild", "Moderate", "Severe"]
+      }
+    ]
+  },
+
+  "abdominal_distension": {
+    "fields": [
+      {
+        "key": "present",
+        "label": "Distension Present?",
+        "type": "radio",
+        "options": ["Yes", "No"]
+      }
+    ]
+  },
+
+  "organomegaly": {
+    "fields": [
+      {
+        "key": "organ",
+        "label": "Organ Involved",
+        "type": "select",
+        "options": ["Liver", "Spleen", "Both"]
+      }
+    ]
+  },
+
+  "ascites": {
+    "fields": [
+      {
+        "key": "present",
+        "label": "Ascites Present?",
+        "type": "radio",
+        "options": ["Yes", "No"]
+      }
+    ]
+  },
+
+  "uterine_tenderness": {
+    "fields": [
+      {
+        "key": "present",
+        "label": "Tenderness Present?",
+        "type": "radio",
+        "options": ["Yes", "No"]
+      }
+    ]
+  },
+
+  "adnexal_tenderness": {
+    "fields": [
+      {
+        "key": "side",
+        "label": "Side",
+        "type": "select",
+        "options": ["Right", "Left", "Bilateral"]
+      }
+    ]
+  },
+
+  "vaginal_discharge_exam": {
+    "fields": [
+      {
+        "key": "character",
+        "label": "Character",
+        "type": "select",
+        "options": ["White", "Yellow", "Green", "Foul Smelling"]
+      }
+    ]
+  },
+
+  "neuropathy_signs": {
+    "fields": [
+      {
+        "key": "site",
+        "label": "Site",
+        "type": "select",
+        "options": ["Feet", "Hands", "Both"]
+      }
+    ]
+  },
+
+  "foot_ulcer": {
+    "fields": [
+      {
+        "key": "grade",
+        "label": "Ulcer Grade",
+        "type": "select",
+        "options": ["Superficial", "Deep", "Infected"]
+      }
+    ]
+  },
+
+  "joint_swelling": {
+    "fields": [
+      {
+        "key": "joint",
+        "label": "Joint",
+        "type": "select",
+        "options": ["Knee", "Shoulder", "Elbow", "Wrist", "Ankle"],
+        "is_multi": true
+      }
+    ]
+  },
+
+  "restricted_range_of_motion": {
+    "fields": [
+      {
+        "key": "severity",
+        "label": "Severity",
+        "type": "select",
+        "options": ["Mild", "Moderate", "Severe"]
+      }
+    ]
+  },
+
+  "heart_murmur": {
+    "fields": [
+      {
+        "key": "present",
+        "label": "Murmur Present?",
+        "type": "radio",
+        "options": ["Yes", "No"]
+      }
+    ]
+  },
+
+  "irregular_pulse": {
+    "fields": [
+      {
+        "key": "present",
+        "label": "Irregular Pulse?",
+        "type": "radio",
+        "options": ["Yes", "No"]
+      }
+    ]
+  },
+
+  "raised_jvp": {
+    "fields": [
+      {
+        "key": "present",
+        "label": "Raised JVP?",
+        "type": "radio",
+        "options": ["Yes", "No"]
+      }
+    ]
+  },
+
+  "growth_delay": {
+    "fields": [
+      {
+        "key": "present",
+        "label": "Growth Delay Present?",
+        "type": "radio",
+        "options": ["Yes", "No"]
+      }
+    ]
   }
+}

@@ -1,6 +1,55 @@
 {
-    "gynecology": ["fever", "spotting"],
-    "physician": ["fever", "cold"],
-    "pediatrics": ["fever", "cold"],
-    "diabetologist": ["fever"]
-  }
+  "version": 1,
+
+  "physician": [
+    "fever", "cold", "cough", "headache", "abdominal_pain", 
+    "vomiting", "weakness_fatigue", "loose_stools", "throat_pain", 
+    "acidity_heartburn", "back_pain", "dizziness"
+  ],
+
+  "gynecology": [
+    "irregular_menses", "painful_menses", "vaginal_discharge", 
+    "lower_abdominal_pain", "spotting", "pregnancy_amenorrhea", 
+    "back_pain", "nausea", "burning_micturition"
+  ],
+
+  "pediatrics": [
+    "fever", "cold", "cough", "vomiting", "loose_stools", 
+    "poor_feeding", "crying_excessive", "skin_rash", "abdominal_pain"
+  ],
+
+  "diabetologist": [
+    "polyuria", "polydipsia", "weight_loss", "weakness_fatigue", 
+    "dizziness", "burning_micturition", "swelling_feet"
+  ],
+
+  "endocrinologist": [
+    "weight_loss", "weight_gain", "weakness_fatigue", "hair_loss", 
+    "palpitations", "neck_pain"
+  ],
+
+  "cardiologist": [
+    "chest_pain", "breathlessness", "palpitations", "swelling_feet", 
+    "dizziness", "weakness_fatigue", "fever"
+  ],
+
+  "orthopedic": [
+    "joint_pain", "back_pain", "neck_pain", "swelling_feet", 
+    "restricted_movement", "weakness_fatigue"
+  ],
+
+  "gastroenterologist": [
+    "abdominal_pain", "acidity_heartburn", "vomiting", "nausea", 
+    "loose_stools", "constipation", "loss_of_appetite", "weight_loss"
+  ],
+
+  "nephrologist": [
+    "swelling_feet", "decreased_urine", "burning_micturition", 
+    "weakness_fatigue", "nausea", "high_blood_pressure"
+  ],
+
+  "pulmonologist": [
+    "cough", "breathlessness", "chest_pain", "fever", 
+    "throat_pain", "weight_loss", "weakness_fatigue"
+  ]
+}

@@ -1,6 +1,102 @@
 {
-    "gynecology": ["pallor", "abdominal_tenderness"],
-    "physician": ["pallor", "edema"],
-    "pediatrics": ["pallor"],
-    "diabetologist": ["edema"]
-  }
+  "version": 1,
+
+  "physician": [
+    "pallor",
+    "edema",
+    "dehydration",
+    "icterus",
+    "lymphadenopathy",
+    "pharyngeal_congestion",
+    "abdominal_tenderness",
+    "organomegaly",
+    "back_tenderness",
+    "neurological_deficit"
+  ],
+
+  "gynecology": [
+    "pallor",
+    "abdominal_tenderness",
+    "uterine_tenderness",
+    "adnexal_tenderness",
+    "vaginal_discharge_exam",
+    "cervical_motion_tenderness",
+    "back_tenderness",
+    "pedal_edema"
+  ],
+
+  "pediatrics": [
+    "pallor",
+    "dehydration",
+    "respiratory_distress",
+    "skin_rash_exam",
+    "abdominal_distension",
+    "tonsillar_enlargement",
+    "growth_delay"
+  ],
+
+  "diabetologist": [
+    "pedal_edema",
+    "dehydration",
+    "neuropathy_signs",
+    "foot_ulcer",
+    "foot_sensation_reduced",
+    "skin_infection",
+    "blood_pressure_high"
+  ],
+
+  "endocrinologist": [
+    "thyroid_enlargement",
+    "tremors",
+    "skin_dryness",
+    "weight_changes_observed",
+    "palmar_sweating",
+    "blood_pressure_high"
+  ],
+
+  "cardiologist": [
+    "pedal_edema",
+    "raised_jvp",
+    "heart_murmur",
+    "irregular_pulse",
+    "basal_crepitations",
+    "blood_pressure_high",
+    "cyanosis"
+  ],
+
+  "orthopedic": [
+    "joint_swelling",
+    "joint_tenderness",
+    "restricted_range_of_motion",
+    "muscle_wasting",
+    "spine_tenderness",
+    "gait_abnormality"
+  ],
+
+  "gastroenterologist": [
+    "abdominal_tenderness",
+    "abdominal_distension",
+    "organomegaly",
+    "ascites",
+    "icterus",
+    "bowel_sounds_abnormal"
+  ],
+
+  "nephrologist": [
+    "pedal_edema",
+    "pallor",
+    "blood_pressure_high",
+    "abdominal_mass",
+    "reduced_urine_output_exam",
+    "icterus"
+  ],
+
+  "pulmonologist": [
+    "respiratory_distress",
+    "wheeze",
+    "crepitations",
+    "decreased_air_entry",
+    "cyanosis",
+    "clubbing"
+  ]
+}

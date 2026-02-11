@@ -1,19 +1,261 @@
 {
-    "version": 1,
-  
-    "fever": {
-      "fields": [
-        { "key": "since_days", "type": "number", "label": "Since (days)" },
-        { "key": "severity", "type": "select", "options": ["Mild","Moderate","Severe"] },
-        { "key": "pattern", "type": "select", "options": ["Continuous","Intermittent"] }
-      ]
+  "version": 2,
+  "meta": {
+    "rules": {
+      "no_hard_required": true,
+      "importance_over_required": true,
+      "structured_dependencies": true,
+      "free_text_allowed": true
     },
-  
-    "spotting": {
-      "fields": [
-        { "key": "duration_days", "type": "number", "label": "Duration (days)" },
-        { "key": "amount", "type": "select", "options": ["Mild","Moderate","Heavy"] },
-        { "key": "color", "type": "select", "options": ["Red","Brown","Pink"] }
-      ]
-    }
+    "notes": "Consultation symptoms must never block doctor workflow. Importance is used for UI emphasis only."
+  },
+
+  "fever": {
+    "fields": [
+      {
+        "key": "since_days",
+        "label": "Duration",
+        "type": "number",
+        "keyboard": "numeric",
+        "placeholder": "e.g. 3",
+        "suffix": "days",
+        "required": false,
+        "importance": "high"
+      },
+      {
+        "key": "grade",
+        "label": "Grade",
+        "type": "select",
+        "options": ["Low Grade", "Moderate Grade", "High Grade"]
+      },
+      {
+        "key": "pattern",
+        "label": "Pattern",
+        "type": "select",
+        "options": ["Continuous", "Intermittent"]
+      },
+      {
+        "key": "associated_symptoms",
+        "label": "Associated With",
+        "type": "select",
+        "options": ["Chills", "Rigors", "Sweating", "Body Ache"],
+        "is_multi": true,
+        "placeholder": "Select symptoms"
+      }
+    ]
+  },
+
+  "headache": {
+    "fields": [
+      {
+        "key": "location",
+        "label": "Location",
+        "type": "select",
+        "options": [
+          "Frontal",
+          "One-sided (Migraine)",
+          "Back of Head",
+          "Generalized"
+        ],
+        "required": false,
+        "importance": "high"
+      },
+      {
+        "key": "pain_score",
+        "label": "Pain Score (1–10)",
+        "type": "number",
+        "keyboard": "numeric",
+        "min": 1,
+        "max": 10
+      },
+      {
+        "key": "triggers",
+        "label": "Triggers",
+        "type": "select",
+        "options": ["Light", "Noise", "Stress", "Hunger"],
+        "is_multi": true
+      }
+    ]
+  },
+
+  "cough": {
+    "fields": [
+      {
+        "key": "type",
+        "label": "Type",
+        "type": "select",
+        "options": ["Dry", "Productive (Wet)", "Barking"],
+        "default": "Dry"
+      },
+      {
+        "key": "sputum_color",
+        "label": "Sputum Color",
+        "type": "select",
+        "options": ["Clear", "Yellow/Green", "Blood Stained"],
+        "dependency": {
+          "field": "type",
+          "operator": "equals",
+          "value": "Productive (Wet)"
+        }
+      },
+      {
+        "key": "worse_at",
+        "label": "Worse At",
+        "type": "select",
+        "options": ["Night", "Early Morning", "On Exertion"],
+        "is_multi": true
+      }
+    ]
+  },
+
+  "abdominal_pain": {
+    "fields": [
+      {
+        "key": "site",
+        "label": "Site",
+        "type": "select",
+        "options": [
+          "Epigastric (Upper Center)",
+          "Right Lower",
+          "Left Lower",
+          "Generalized"
+        ],
+        "required": false,
+        "importance": "high"
+      },
+      {
+        "key": "radiation",
+        "label": "Radiates To",
+        "type": "select",
+        "options": ["Back", "Shoulder", "Groin"],
+        "is_multi": true
+      }
+    ]
+  },
+
+  "irregular_menses": {
+    "fields": [
+      {
+        "key": "lmp",
+        "label": "Last Menstrual Period (LMP)",
+        "type": "date",
+        "placeholder": "DD/MM/YYYY",
+        "required": false,
+        "importance": "high"
+      },
+      {
+        "key": "cycle_regularity",
+        "label": "Cycle Pattern",
+        "type": "select",
+        "options": ["Regular", "Irregular", "Amenorrheic"]
+      },
+      {
+        "key": "flow_clots",
+        "label": "Passing Clots?",
+        "type": "radio",
+        "options": ["Yes", "No"],
+        "default": "No"
+      }
+    ]
+  },
+
+  "weight_loss": {
+    "fields": [
+      {
+        "key": "amount",
+        "label": "Amount Lost",
+        "type": "number",
+        "keyboard": "decimal",
+        "suffix": "kg"
+      },
+      {
+        "key": "timeframe",
+        "label": "Over Period",
+        "type": "number",
+        "keyboard": "numeric",
+        "suffix": "months"
+      },
+      {
+        "key": "intentional",
+        "label": "Intentional?",
+        "type": "radio",
+        "options": [
+          "Yes (Diet / Exercise)",
+          "No (Unexplained)"
+        ],
+        "required": false,
+        "importance": "high"
+      }
+    ]
+  },
+
+  "joint_pain": {
+    "fields": [
+      {
+        "key": "affected_joints",
+        "label": "Joints Involved",
+        "type": "select",
+        "options": [
+          "Knee (Both)",
+          "Knee (Left)",
+          "Knee (Right)",
+          "Shoulder",
+          "Elbow",
+          "Wrist",
+          "Ankle"
+        ],
+        "is_multi": true,
+        "required": false,
+        "importance": "high"
+      },
+      {
+        "key": "morning_stiffness",
+        "label": "Morning Stiffness > 30 mins?",
+        "type": "radio",
+        "options": ["Yes", "No"]
+      }
+    ]
+  },
+
+  "weakness_fatigue": {
+    "fields": [
+      {
+        "key": "duration_days",
+        "label": "Duration",
+        "type": "number",
+        "keyboard": "numeric",
+        "suffix": "days"
+      },
+      {
+        "key": "progression",
+        "label": "Progression",
+        "type": "select",
+        "options": ["Sudden", "Gradual", "Fluctuating"]
+      }
+    ]
+  },
+
+  "polyuria": {
+    "fields": [
+      {
+        "key": "frequency_per_day",
+        "label": "Frequency per day",
+        "type": "number",
+        "keyboard": "numeric",
+        "importance": "high"
+      }
+    ]
+  },
+
+  "polydipsia": {
+    "fields": [
+      {
+        "key": "excessive_thirst",
+        "label": "Excessive Thirst?",
+        "type": "radio",
+        "options": ["Yes", "No"],
+        "importance": "high"
+      }
+    ]
   }
+}
