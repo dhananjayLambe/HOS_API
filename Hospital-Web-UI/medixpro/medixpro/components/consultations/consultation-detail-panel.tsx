@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { MoreHorizontal, Plus } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { FollowUpEditor } from "@/components/consultations/follow-up-editor";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -95,6 +96,10 @@ export function ConsultationDetailPanel() {
         </CardContent>
       </Card>
     );
+  }
+
+  if (section === "follow_up") {
+    return <FollowUpEditor />;
   }
 
   if (!item) {

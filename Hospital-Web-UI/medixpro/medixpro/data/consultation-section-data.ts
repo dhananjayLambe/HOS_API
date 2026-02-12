@@ -171,6 +171,14 @@ export const CONSULTATION_SECTION_CONFIGS: Record<string, ConsultationSectionCon
     durationOptions: [],
     attributeOptions: INSTRUCTION_ATTRIBUTES,
   },
+  follow_up: {
+    type: "follow_up",
+    itemLabel: "Follow-Up",
+    searchPlaceholder: "",
+    staticOptions: [],
+    durationOptions: [],
+    attributeOptions: [],
+  },
 };
 
 const DEFAULT_SECTION_CONFIG: ConsultationSectionConfig = {

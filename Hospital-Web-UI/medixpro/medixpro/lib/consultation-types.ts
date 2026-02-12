@@ -37,7 +37,15 @@ export interface ConsultationVitals {
   temperatureF?: string;
 }
 
+/** Follow-up revisit interval unit. */
+export type FollowUpUnit = "days" | "months";
+
+/** Workflow type: governs visible sections and validation. */
+export type ConsultationWorkflowType = "FULL" | "QUICK_RX" | "TEST_ONLY";
+
 export interface ConsultationState {
+  /** Workflow type: Full Consultation (default), Quick Prescription, or Test Only Visit. */
+  consultationType: ConsultationWorkflowType;
   symptoms: ConsultationSymptom[];
   findings: string;
   diagnosis: string;
@@ -45,6 +53,16 @@ export interface ConsultationState {
   investigations: string;
   instructions: string;
   procedures: string;
+  /** Follow-up: interval number (e.g. 7 for "7 Days"). */
+  follow_up_interval: number;
+  /** Follow-up: unit (days | months). */
+  follow_up_unit: FollowUpUnit;
+  /** Follow-up: next visit date (ISO date string). */
+  follow_up_date: string;
+  /** Follow-up: optional reason (max 255). */
+  follow_up_reason: string;
+  /** Follow-up: if symptoms persist, revisit earlier (for prescription print). */
+  follow_up_early_if_persist: boolean;
   /** Right menu: medical history (summary or list; backend-driven later). */
   medicalHistory: string;
   /** Right menu: vitals for this consultation. */
@@ -56,6 +74,7 @@ export interface ConsultationState {
 }
 
 export const DEFAULT_CONSULTATION_STATE: ConsultationState = {
+  consultationType: "FULL",
   symptoms: [],
   findings: "",
   diagnosis: "",
@@ -63,6 +82,11 @@ export const DEFAULT_CONSULTATION_STATE: ConsultationState = {
   investigations: "",
   instructions: "",
   procedures: "",
+  follow_up_interval: 0,
+  follow_up_unit: "days",
+  follow_up_date: "",
+  follow_up_reason: "",
+  follow_up_early_if_persist: false,
   medicalHistory: "",
   vitals: {},
   prescriptionNotes: "",
@@ -77,7 +101,8 @@ export type ConsultationSectionType =
   | "diagnosis"
   | "medicines"
   | "investigations"
-  | "instructions";
+  | "instructions"
+  | "follow_up";
 
 /** Detail fields common to all section items (right-side panel). */
 export interface SectionItemDetail {

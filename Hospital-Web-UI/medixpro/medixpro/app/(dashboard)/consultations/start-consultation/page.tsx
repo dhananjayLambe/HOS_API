@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { usePatient } from "@/lib/patientContext";
 import {
@@ -12,24 +12,40 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { AlertCircle, Search, Thermometer, Stethoscope, ClipboardList, Pill, FlaskConical, FileText, Clipboard } from "lucide-react";
+import { AlertCircle, Search, Thermometer, Stethoscope, ClipboardList, Pill, FlaskConical, FileText } from "lucide-react";
 import { ConsultationActionBar } from "@/components/consultations/consultation-action-bar";
 import { ConsultationRightMenu } from "@/components/consultations/consultation-right-menu";
 import { ConsultationDetailPanel } from "@/components/consultations/consultation-detail-panel";
 import { ConsultationSection } from "@/components/consultations/consultation-section";
 import { ConsultationErrorBoundary } from "@/components/consultations/consultation-error-boundary";
-import { ProceduresSection } from "@/components/consultations/sections";
+import { FollowUpSection, ProceduresSection } from "@/components/consultations/sections";
+import { useConsultationStore } from "@/store/consultationStore";
+import {
+  isLeftPanelVisible,
+  isSectionVisible,
+  isMedicinesSectionExpandedByDefault,
+  isInvestigationsSectionExpandedByDefault,
+} from "@/lib/consultation-workflow";
 
 export default function StartConsultationPage() {
   const { selectedPatient, triggerSearchHighlight } = usePatient();
   const router = useRouter();
   const [showAlert, setShowAlert] = useState(false);
 
+  const setConsultationType = useConsultationStore((s) => s.setConsultationType);
+
   useEffect(() => {
     if (!selectedPatient) {
       setShowAlert(true);
     }
   }, [selectedPatient]);
+
+  // Default to Full Consultation when opening the page or when switching patient
+  useEffect(() => {
+    if (selectedPatient) {
+      setConsultationType("FULL");
+    }
+  }, [selectedPatient?.id, setConsultationType]);
 
   const handleAlertClose = () => {
     setShowAlert(false);
@@ -81,77 +97,106 @@ export default function StartConsultationPage() {
     );
   }
 
+  const consultationType = useConsultationStore((s) => s.consultationType);
+  const showLeftPanel = useMemo(
+    () => isLeftPanelVisible(consultationType),
+    [consultationType]
+  );
+  const medicinesDefaultOpen = useMemo(
+    () => isMedicinesSectionExpandedByDefault(consultationType),
+    [consultationType]
+  );
+  const investigationsDefaultOpen = useMemo(
+    () => isInvestigationsSectionExpandedByDefault(consultationType),
+    [consultationType]
+  );
+
   const ACTION_BAR_HEIGHT = 56; // h-14 in action bar
   const HEADER_HEIGHT = 64;
   const STICKY_TOP_PANELS = ACTION_BAR_HEIGHT + 12; // 68px below action bar
-  const PANEL_MAX_HEIGHT = `calc(100vh - ${HEADER_HEIGHT + ACTION_BAR_HEIGHT}px)`; // 120px offset
+  const gridCols = showLeftPanel
+    ? "lg:grid-cols-[minmax(0,18%)_1fr_minmax(0,28%)]"
+    : "lg:grid-cols-[1fr_minmax(0,28%)]";
 
   return (
     <ConsultationErrorBoundary>
       <div className="flex min-h-0 flex-1 flex-col mt-0 pt-0 overflow-x-hidden min-w-0 w-full max-w-full">
         <ConsultationActionBar />
         <div className="mx-auto w-full max-w-[1600px] min-w-0 flex-1 min-h-0 overflow-x-hidden px-3 sm:px-4 md:px-5 lg:px-6 pt-3 sm:pt-4 pb-6 pb-safe sm:pb-8 flex flex-col overflow-y-auto lg:overflow-y-hidden">
-          {/* Mobile/tablet: single column. Laptop (lg+): 3 columns. */}
           <div
-            className="grid w-full max-w-full min-w-0 gap-3 sm:gap-4 md:gap-5 grid-cols-1 lg:grid-cols-[minmax(0,18%)_1fr_minmax(0,28%)] grid-rows-[auto_auto_auto] lg:grid-rows-[1fr] flex-1 min-h-0"
+            className={`grid w-full max-w-full min-w-0 gap-3 sm:gap-4 md:gap-5 grid-cols-1 ${gridCols} grid-rows-[auto_auto_auto] lg:grid-rows-[1fr] flex-1 min-h-0`}
             style={{ width: "100%", minWidth: 0 }}
           >
-          {/* Left panel — second on mobile (order-2), sticky on desktop */}
-          <div
-            className="min-w-0 overflow-y-auto pb-24 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden order-2 lg:order-none lg:sticky lg:max-h-[calc(100vh-120px)]"
-            style={{ top: STICKY_TOP_PANELS } as React.CSSProperties}
-          >
-            <ConsultationRightMenu />
-          </div>
-          {/* Center — first on mobile (order-1); scrolls with visible scrollbar on desktop */}
-          <div
-            className="min-w-0 min-h-0 overflow-y-auto lg:overflow-y-scroll lg:max-h-[calc(100vh-120px)] pr-2 sm:pr-4 [scrollbar-gutter:stable] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-gray-100 dark:[&::-webkit-scrollbar-track]:bg-gray-800 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 dark:[&::-webkit-scrollbar-thumb]:bg-gray-600 order-1 lg:order-none"
-          >
-            <div className="space-y-3 sm:space-y-4">
-              <ConsultationSection
-                type="symptoms"
-                title="Symptoms"
-                icon={<Thermometer className="text-muted-foreground" />}
-                defaultOpen
-              />
-              <ConsultationSection
-                type="findings"
-                title="Findings"
-                icon={<Stethoscope className="text-muted-foreground" />}
-              />
-              <ConsultationSection
-                type="diagnosis"
-                title="Diagnosis"
-                icon={<ClipboardList className="text-muted-foreground" />}
-              />
-              <ConsultationSection
-                type="medicines"
-                title="Medicines"
-                icon={<Pill className="text-muted-foreground" />}
-              />
-              <ConsultationSection
-                type="investigations"
-                title="Investigations"
-                icon={<FlaskConical className="text-muted-foreground" />}
-              />
-              <ConsultationSection
-                type="instructions"
-                title="Instructions"
-                icon={<FileText className="text-muted-foreground" />}
-              />
-              <ProceduresSection />
+            {showLeftPanel && (
+              <div
+                className="min-w-0 overflow-y-auto pb-24 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden order-2 lg:order-none lg:sticky lg:max-h-[calc(100vh-120px)]"
+                style={{ top: STICKY_TOP_PANELS } as React.CSSProperties}
+              >
+                <ConsultationRightMenu />
+              </div>
+            )}
+            <div
+              className="min-w-0 min-h-0 overflow-y-auto lg:overflow-y-scroll lg:max-h-[calc(100vh-120px)] pr-2 sm:pr-4 [scrollbar-gutter:stable] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-gray-100 dark:[&::-webkit-scrollbar-track]:bg-gray-800 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 dark:[&::-webkit-scrollbar-thumb]:bg-gray-600 order-1 lg:order-none"
+            >
+              <div className="space-y-3 sm:space-y-4">
+                {isSectionVisible(consultationType, "symptoms") && (
+                  <ConsultationSection
+                    type="symptoms"
+                    title="Symptoms"
+                    icon={<Thermometer className="text-muted-foreground" />}
+                    defaultOpen
+                  />
+                )}
+                {isSectionVisible(consultationType, "findings") && (
+                  <ConsultationSection
+                    type="findings"
+                    title="Findings"
+                    icon={<Stethoscope className="text-muted-foreground" />}
+                  />
+                )}
+                {isSectionVisible(consultationType, "diagnosis") && (
+                  <ConsultationSection
+                    type="diagnosis"
+                    title="Diagnosis"
+                    icon={<ClipboardList className="text-muted-foreground" />}
+                  />
+                )}
+                {isSectionVisible(consultationType, "medicines") && (
+                  <ConsultationSection
+                    type="medicines"
+                    title="Medicines"
+                    icon={<Pill className="text-muted-foreground" />}
+                    defaultOpen={medicinesDefaultOpen}
+                  />
+                )}
+                {isSectionVisible(consultationType, "investigations") && (
+                  <ConsultationSection
+                    type="investigations"
+                    title="Investigations"
+                    icon={<FlaskConical className="text-muted-foreground" />}
+                    defaultOpen={investigationsDefaultOpen}
+                  />
+                )}
+                {isSectionVisible(consultationType, "instructions") && (
+                  <ConsultationSection
+                    type="instructions"
+                    title="Instructions"
+                    icon={<FileText className="text-muted-foreground" />}
+                  />
+                )}
+                {isSectionVisible(consultationType, "follow_up") && <FollowUpSection />}
+                {isSectionVisible(consultationType, "procedure") && <ProceduresSection />}
+              </div>
             </div>
-          </div>
-          {/* Right panel — scrollable with visible scrollbar so bottom options are reachable */}
-          <div
-            className="min-w-0 overflow-y-scroll order-3 lg:order-none lg:sticky lg:max-h-[calc(100vh-120px)] pr-2 [scrollbar-gutter:stable] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-gray-100 dark:[&::-webkit-scrollbar-track]:bg-gray-800 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 dark:[&::-webkit-scrollbar-thumb]:bg-gray-600"
-            style={{ top: STICKY_TOP_PANELS } as React.CSSProperties}
-          >
-            <ConsultationDetailPanel />
+            <div
+              className="min-w-0 overflow-y-scroll order-3 lg:order-none lg:sticky lg:max-h-[calc(100vh-120px)] pr-2 [scrollbar-gutter:stable] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-gray-100 dark:[&::-webkit-scrollbar-track]:bg-gray-800 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 dark:[&::-webkit-scrollbar-thumb]:bg-gray-600"
+              style={{ top: STICKY_TOP_PANELS } as React.CSSProperties}
+            >
+              <ConsultationDetailPanel />
+            </div>
           </div>
         </div>
       </div>
-    </div>
     </ConsultationErrorBoundary>
   );
 }

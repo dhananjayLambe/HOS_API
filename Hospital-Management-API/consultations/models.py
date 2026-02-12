@@ -391,6 +391,18 @@ class Consultation(models.Model):
     )
     is_important = models.BooleanField(default=False, help_text="Mark consultation as important")
 
+    # Workflow type: full consultation, quick prescription, or test-only visit
+    consultation_type = models.CharField(
+        max_length=20,
+        choices=[
+            ("FULL", "Full Consultation"),
+            ("QUICK_RX", "Quick Prescription"),
+            ("TEST_ONLY", "Test Only Visit"),
+        ],
+        default="FULL",
+        help_text="Workflow type governing visible sections and validation",
+    )
+
     started_at = models.DateTimeField(auto_now_add=True)
     ended_at = models.DateTimeField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
