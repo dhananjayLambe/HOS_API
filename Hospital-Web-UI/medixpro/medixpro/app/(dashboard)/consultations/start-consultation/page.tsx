@@ -20,6 +20,7 @@ import { ConsultationSection } from "@/components/consultations/consultation-sec
 import { ConsultationErrorBoundary } from "@/components/consultations/consultation-error-boundary";
 import { FollowUpSection, ProceduresSection } from "@/components/consultations/sections";
 import { useConsultationStore } from "@/store/consultationStore";
+import { useShallow } from "zustand/react/shallow";
 import {
   isLeftPanelVisible,
   isSectionVisible,
@@ -31,8 +32,25 @@ export default function StartConsultationPage() {
   const { selectedPatient, triggerSearchHighlight } = usePatient();
   const router = useRouter();
   const [showAlert, setShowAlert] = useState(false);
+  const { consultationType, setConsultationType } = useConsultationStore(
+    useShallow((s) => ({
+      consultationType: s.consultationType,
+      setConsultationType: s.setConsultationType,
+    }))
+  );
 
-  const setConsultationType = useConsultationStore((s) => s.setConsultationType);
+  const showLeftPanel = useMemo(
+    () => isLeftPanelVisible(consultationType),
+    [consultationType]
+  );
+  const medicinesDefaultOpen = useMemo(
+    () => isMedicinesSectionExpandedByDefault(consultationType),
+    [consultationType]
+  );
+  const investigationsDefaultOpen = useMemo(
+    () => isInvestigationsSectionExpandedByDefault(consultationType),
+    [consultationType]
+  );
 
   useEffect(() => {
     if (!selectedPatient) {
@@ -96,20 +114,6 @@ export default function StartConsultationPage() {
       </AlertDialog>
     );
   }
-
-  const consultationType = useConsultationStore((s) => s.consultationType);
-  const showLeftPanel = useMemo(
-    () => isLeftPanelVisible(consultationType),
-    [consultationType]
-  );
-  const medicinesDefaultOpen = useMemo(
-    () => isMedicinesSectionExpandedByDefault(consultationType),
-    [consultationType]
-  );
-  const investigationsDefaultOpen = useMemo(
-    () => isInvestigationsSectionExpandedByDefault(consultationType),
-    [consultationType]
-  );
 
   const ACTION_BAR_HEIGHT = 56; // h-14 in action bar
   const HEADER_HEIGHT = 64;
