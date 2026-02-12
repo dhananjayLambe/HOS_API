@@ -41,29 +41,11 @@ function isFollowUpSet(store: ReturnType<typeof useConsultationStore.getState>):
   return !!(follow_up_date?.trim() || follow_up_interval > 0);
 }
 
-function hasFormData(store: ReturnType<typeof useConsultationStore.getState>): boolean {
-  const s = store;
-  return (
-    s.symptoms.length > 0 ||
-    (s.findings?.trim() ?? "") !== "" ||
-    (s.diagnosis?.trim() ?? "") !== "" ||
-    s.medicines.length > 0 ||
-    (s.investigations?.trim() ?? "") !== "" ||
-    (s.instructions?.trim() ?? "") !== "" ||
-    (s.procedures?.trim() ?? "") !== "" ||
-    (s.follow_up_date?.trim() ?? "") !== "" ||
-    s.follow_up_interval > 0 ||
-    (s.follow_up_reason?.trim() ?? "") !== ""
-  );
-}
-
 export function ConsultationActionBar() {
   const router = useRouter();
   const { draftStatus, setSelectedDetail, consultationType, setConsultationType } = useConsultationStore();
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [showFollowUpConfirm, setShowFollowUpConfirm] = useState(false);
-  const [showTypeChangeConfirm, setShowTypeChangeConfirm] = useState(false);
-  const [pendingType, setPendingType] = useState<ConsultationWorkflowType | null>(null);
 
   const formatDraftTime = (date: Date | null) => {
     if (!date) return null;
@@ -81,26 +63,9 @@ export function ConsultationActionBar() {
   };
 
   const handleTypeChange = (nextType: ConsultationWorkflowType) => {
-    if (nextType === consultationType) return;
-    if (hasFormData(useConsultationStore.getState())) {
-      setPendingType(nextType);
-      setShowTypeChangeConfirm(true);
-    } else {
+    if (nextType !== consultationType) {
       setConsultationType(nextType);
     }
-  };
-
-  const confirmTypeChange = () => {
-    if (pendingType != null) {
-      setConsultationType(pendingType);
-      setPendingType(null);
-      setShowTypeChangeConfirm(false);
-    }
-  };
-
-  const cancelTypeChange = () => {
-    setPendingType(null);
-    setShowTypeChangeConfirm(false);
   };
 
   return (
@@ -287,24 +252,6 @@ export function ConsultationActionBar() {
               className="bg-blue-600 hover:bg-blue-700"
             >
               Add Follow-Up
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <AlertDialog open={showTypeChangeConfirm} onOpenChange={(open) => !open && cancelTypeChange()}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Change consultation type?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Changing consultation type will hide some sections. Data in hidden sections is kept but
-              will not be shown. Do you want to continue?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={cancelTypeChange}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmTypeChange} className="bg-blue-600 hover:bg-blue-700">
-              Continue
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
