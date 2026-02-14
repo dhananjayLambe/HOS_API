@@ -74,6 +74,14 @@ def default_languages_spoken():
     return ["English"]
 class doctor(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    public_id = models.CharField(
+        max_length=20,
+        unique=True,
+        db_index=True,
+        editable=False,
+        null=True,
+        blank=True
+    )
     #Personal Information
     user=models.OneToOneField(User,on_delete=models.CASCADE, related_name='doctor')
     secondary_mobile_number = models.CharField(max_length=15, default="NA") #unique=True,
@@ -132,6 +140,15 @@ class doctor(models.Model):
         return self.user.id
     def __str__(self):
         return "{}".format(self.user.first_name)
+    def save(self, *args, **kwargs):
+        from account.services.business_id_service import BusinessIDService
+        if self.pk:
+            old = doctor.objects.filter(pk=self.pk).first()
+            if old and old.public_id and old.public_id != self.public_id:
+                raise ValidationError("Doctor ID cannot be modified.")
+        if not self.public_id:
+            self.public_id = BusinessIDService.generate_id("DOC", 4)
+        super().save(*args, **kwargs)
 
 class DoctorAddress(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

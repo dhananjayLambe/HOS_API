@@ -16,6 +16,14 @@ clinic_cover_upload_path = "clinic/cover_photos/"
 
 class Clinic(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    code = models.CharField(
+        max_length=20,
+        unique=True,
+        db_index=True,
+        editable=False,
+        null=True,   # temporary for migration
+        blank=True
+    )
     # Basic Information
     name = models.CharField(max_length=255,default='NA') #unique=True
     contact_number_primary = models.CharField(max_length=15,default='NA')  # Mandatory
@@ -42,6 +50,16 @@ class Clinic(models.Model):
     updated_at = models.DateTimeField(auto_now=True)  # Mandatory
     def __str__(self):
         return self.name
+
+    def save(self, *args, **kwargs):
+        from account.services.business_id_service import BusinessIDService
+        if self.pk:
+            old = Clinic.objects.filter(pk=self.pk).first()
+            if old and old.code and old.code != self.code:
+                raise ValidationError("Clinic ID cannot be modified.")
+        if not self.code:
+            self.code = BusinessIDService.generate_id("CL", 5)
+        super().save(*args, **kwargs)
 
 class ClinicProfile(models.Model):
     clinic = models.OneToOneField(Clinic, on_delete=models.CASCADE)
