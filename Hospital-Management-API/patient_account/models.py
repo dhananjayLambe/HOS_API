@@ -51,6 +51,14 @@ class PatientProfile(models.Model):
     GENDER_CHOICES = [("male", "Male"), ("female", "Female"), ("other", "Other")]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    public_id = models.CharField(
+        max_length=20,
+        unique=True,
+        db_index=True,
+        editable=False,
+        null=True,
+        blank=True
+    )
     account = models.ForeignKey(PatientAccount, related_name='profiles', on_delete=models.CASCADE)
     first_name = models.CharField(max_length=255,default="")
     last_name = models.CharField(max_length=255,default="")
@@ -71,6 +79,15 @@ class PatientProfile(models.Model):
                 account=self.account, relation="self"
             ).exclude(id=self.id).exists():
                 raise ValidationError("Only one self profile allowed.")
+    def save(self, *args, **kwargs):
+        from account.services.business_id_service import BusinessIDService
+        if self.pk:
+            old = PatientProfile.objects.filter(pk=self.pk).first()
+            if old and old.public_id and old.public_id != self.public_id:
+                raise ValidationError("Patient ID cannot be modified.")
+        if not self.public_id:
+            self.public_id = BusinessIDService.generate_id("PAT", 6)
+        super().save(*args, **kwargs)
 
 class PatientProfileDetails(models.Model):
     BLOOD_GROUP_CHOICES = [
