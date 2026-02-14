@@ -2,6 +2,7 @@
 import io
 import logging
 import os
+import uuid
 from datetime import datetime
 
 # Third-Party Imports
@@ -28,8 +29,9 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from django.conf import settings
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db import transaction
+from django.db import IntegrityError
 from django.db.models import Q
-from django.http import JsonResponse
+from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.dateparse import parse_date
@@ -1690,8 +1692,28 @@ class PreConsultationPreviousRecordsAPIView(APIView):
         Get all previous pre-consultation records for a patient
         """
         try:
-            patient_profile = get_object_or_404(PatientProfile, id=patient_id)
-            
+            # Normalize patient_id to UUID (path converter may pass UUID or str)
+            try:
+                patient_uuid = uuid.UUID(str(patient_id)) if patient_id else None
+            except (ValueError, TypeError):
+                return Response({
+                    "status": False,
+                    "message": "Invalid patient ID format."
+                }, status=status.HTTP_400_BAD_REQUEST)
+            if not patient_uuid:
+                return Response({
+                    "status": False,
+                    "message": "Patient ID is required."
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            try:
+                patient_profile = PatientProfile.objects.get(id=patient_uuid)
+            except PatientProfile.DoesNotExist:
+                return Response({
+                    "status": False,
+                    "message": "Patient not found."
+                }, status=status.HTTP_404_NOT_FOUND)
+
             # Get all encounters for this patient with pre-consultations
             encounters = ClinicalEncounter.objects.filter(
                 patient_profile=patient_profile,
@@ -1730,13 +1752,19 @@ class PreConsultationPreviousRecordsAPIView(APIView):
                 "data": records
             }, status=status.HTTP_200_OK)
 
+        except Http404:
+            return Response({
+                "status": False,
+                "message": "Patient not found."
+            }, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             logger.exception("Error fetching previous records")
+            err_msg = str(e) if e else "Unknown error"
             return Response({
                 "status": False,
                 "message": "Failed to fetch previous records.",
-                "error": str(e)
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                "error": err_msg
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR, content_type="application/json")
 
 
 class CreateEncounterAPIView(APIView):
@@ -1767,7 +1795,23 @@ class CreateEncounterAPIView(APIView):
                     "message": "patient_profile_id is required."
                 }, status=status.HTTP_400_BAD_REQUEST)
 
-            patient_profile = get_object_or_404(PatientProfile, id=patient_profile_id)
+            # Validate UUID and resolve patient
+            try:
+                profile_uuid = uuid.UUID(str(patient_profile_id))
+            except (ValueError, TypeError):
+                return Response({
+                    "status": False,
+                    "message": "Invalid patient_profile_id format."
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            try:
+                patient_profile = PatientProfile.objects.get(id=profile_uuid)
+            except PatientProfile.DoesNotExist:
+                return Response({
+                    "status": False,
+                    "message": "Patient not found."
+                }, status=status.HTTP_404_NOT_FOUND)
+
             patient_account = patient_profile.account
 
             # Create encounter
@@ -1792,10 +1836,24 @@ class CreateEncounterAPIView(APIView):
                 }
             }, status=status.HTTP_201_CREATED)
 
-        except Exception as e:
-            logger.exception("Error creating encounter")
+        except IntegrityError as e:
+            logger.exception("IntegrityError creating encounter")
+            err_msg = str(e) if e else "Database constraint error"
             return Response({
                 "status": False,
                 "message": "Failed to create encounter.",
-                "error": str(e)
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                "error": err_msg
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR, content_type="application/json")
+        except Http404:
+            return Response({
+                "status": False,
+                "message": "Patient not found."
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.exception("Error creating encounter")
+            err_msg = str(e) if e else "Unknown error"
+            return Response({
+                "status": False,
+                "message": "Failed to create encounter.",
+                "error": err_msg
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR, content_type="application/json")

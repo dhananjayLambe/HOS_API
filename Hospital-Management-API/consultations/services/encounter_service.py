@@ -33,4 +33,5 @@ class EncounterService:
             created_by=created_by,
             updated_by=created_by,
             status="created",
+            consultation_type="FULL",
         )

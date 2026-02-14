@@ -93,6 +93,18 @@ class ClinicalEncounter(models.Model):
         default="created"
     )
 
+    # Workflow type (sync with Consultation.consultation_type; required if DB column exists)
+    consultation_type = models.CharField(
+        max_length=20,
+        choices=[
+            ("FULL", "Full Consultation"),
+            ("QUICK_RX", "Quick Prescription"),
+            ("TEST_ONLY", "Test Only Visit"),
+        ],
+        default="FULL",
+        help_text="Workflow type governing visible sections and validation",
+    )
+
     entry_mode = models.CharField(
         max_length=20,
         choices=[
