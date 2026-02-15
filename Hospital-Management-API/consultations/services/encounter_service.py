@@ -1,29 +1,29 @@
 from consultations.models import ClinicalEncounter
-from consultations.services.pnr_service import PNRService
 
 
 class EncounterService:
     """
     Single entry point for creating Clinical Encounters.
+    visit_pnr is generated in ClinicalEncounter.save() via VisitPNRService.
     """
 
     @staticmethod
     def create_encounter(
         *,
+        clinic,
         patient_account,
         patient_profile,
         doctor=None,
         appointment=None,
         encounter_type="walk_in",
         entry_mode="helpdesk",
-        created_by=None
+        created_by=None,
+        consultation_type="FULL",
     ):
-        consultation_pnr = PNRService.generate_pnr()
-        prescription_pnr = PNRService.generate_pnr()
-
+        if not clinic:
+            raise ValueError("clinic is required to create an encounter.")
         return ClinicalEncounter.objects.create(
-            consultation_pnr=consultation_pnr,
-            prescription_pnr=prescription_pnr,
+            clinic=clinic,
             patient_account=patient_account,
             patient_profile=patient_profile,
             doctor=doctor,
@@ -33,5 +33,5 @@ class EncounterService:
             created_by=created_by,
             updated_by=created_by,
             status="created",
-            consultation_type="FULL",
+            consultation_type=consultation_type,
         )

@@ -1,32 +1,57 @@
 import uuid
 import random
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
 from doctor.models import doctor
 from patient_account.models import PatientAccount, PatientProfile
 from utils.static_data_service import StaticDataService
 from account.models import User
 from appointments.models import Appointment
+from django.core.exceptions import ValidationError
+from django.contrib.postgres.indexes import GinIndex
 
+
+#250214-CL-00001-001 -> Consultation PNR <daily counter>-<CL>-<Clinic code>-<counter>
+#to be added to Prescription PNR to prescription model
+# prescription_pnr = models.CharField(
+#     max_length=15, unique=True, db_index=True,
+#     help_text="Format: YYMMDD-XXXX (daily counter)"
+# )
+#lifecycle of the encounter
+# Encounter created → status=created
+# PreConsultation locked → status=pre_consultation
+# Consultation created → status=in_consultation
+# Consultation finalized → status=completed
+# Consultation cancelled → status=cancelled
+# Consultation no show → status=no_show
 # =====================================================
 # 🔢 DAILY COUNTER (PNR BACKBONE)
 # =====================================================
 
 class EncounterDailyCounter(models.Model):
     """
-    Maintains a per-day counter for PNR generation.
-    Counter resets every day and starts from 1000.
+    Maintains per-clinic per-day visit counter.
+    Resets daily per clinic.
     """
-    date = models.DateField(unique=True)
-    counter = models.PositiveIntegerField(default=1000)
+    id = models.BigAutoField(primary_key=True, editable=False)
+    clinic = models.ForeignKey(
+        "clinic.Clinic",
+        on_delete=models.CASCADE,
+        related_name="daily_counters",
+    )
+    date = models.DateField()
+    counter = models.PositiveIntegerField(default=0)
     updated_at = models.DateTimeField(auto_now=True)
-
+    created_at = models.DateTimeField(auto_now_add=True)
     class Meta:
+        unique_together = ("clinic", "date")
         verbose_name = "Encounter Daily Counter"
         verbose_name_plural = "Encounter Daily Counters"
-
+        indexes = [
+            models.Index(fields=["clinic", "date"])
+        ]
     def __str__(self):
-        return f"{self.date} → {self.counter}"
+        return f"{self.clinic.code} - {self.date} → {self.counter}"
 
 # =====================================================
 # 🔑 ROOT MODEL — CLINICAL ENCOUNTER (SOURCE OF TRUTH)
@@ -40,19 +65,22 @@ class ClinicalEncounter(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
     # 🔑 GLOBAL IDENTIFIERS (OPS-FRIENDLY)
-    consultation_pnr = models.CharField(
-        max_length=15, unique=True, db_index=True,
-        help_text="Format: YYMMDD-XXXX (daily counter)"
+    visit_pnr = models.CharField(
+        max_length=30,
+        unique=True,
+        db_index=True,
+        editable=False,
+        help_text="Format: YYMMDD-CL-XXXXX-XXX",
     )
-    prescription_pnr = models.CharField(
-        max_length=15, unique=True, db_index=True,
-        help_text="Format: YYMMDD-XXXX (daily counter)"
-    )
-
     # 👤 ACTORS
     doctor = models.ForeignKey(
         doctor, on_delete=models.SET_NULL,
         null=True, blank=True, related_name="encounters"
+    )
+    clinic = models.ForeignKey(
+        "clinic.Clinic",
+        on_delete=models.CASCADE,
+        related_name="encounters",
     )
     patient_account = models.ForeignKey(
         PatientAccount, on_delete=models.CASCADE,
@@ -131,65 +159,70 @@ class ClinicalEncounter(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        #ordering = ["-created_at"]
+        ordering = ["-created_at"]
         verbose_name = "Clinical Encounter"
         verbose_name_plural = "Clinical Encounters"
 
     def __str__(self):
-        return f"Encounter {self.consultation_pnr}"
+        return f"Encounter {self.visit_pnr or '(no PNR)'}"
+    def save(self, *args, **kwargs):
+        # Only check existing row when updating (new instances have pk from default but no DB row yet)
+        if self.pk and not self._state.adding:
+            old = type(self).objects.only("visit_pnr", "clinic_id").get(pk=self.pk)
+            if old.visit_pnr and old.visit_pnr != self.visit_pnr:
+                raise ValidationError("Visit PNR cannot be modified.")
+            if old.clinic_id != self.clinic_id:
+                raise ValidationError("Clinic cannot be changed after encounter creation.")
+        if not self.visit_pnr:
+            if not self.clinic:
+                raise ValidationError("Clinic is required to generate Visit PNR.")
+            from consultations.services.visit_pnr_service import VisitPNRService
+            self.visit_pnr = VisitPNRService.generate_pnr(self.clinic)
+        super().save(*args, **kwargs)
 
 class PreConsultation(models.Model):
     """
     Represents pre-consultation data collected before doctor consultation.
     Optional, template-driven, auditable, and lockable.
     """
-
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-
     # 🔗 VISIT CONTEXT
     encounter = models.OneToOneField(
         ClinicalEncounter,
         on_delete=models.CASCADE,
         related_name="pre_consultation"
     )
-
     # 🧠 TEMPLATE CONTEXT (VERY IMPORTANT)
     specialty_code = models.CharField(
         max_length=50,
         help_text="Specialty code used to resolve templates (e.g. gynecology, physician)"
     )
-
     template_version = models.CharField(
         max_length=20,
         default="v1",
         help_text="Template version used at time of data entry"
     )
-
     # 📊 COMPLETION STATE
     completed_at = models.DateTimeField(
         null=True,
         blank=True,
         help_text="Set when pre-consultation is marked complete"
     )
-
     # 🔒 LOCKING & FINALITY
     is_locked = models.BooleanField(
         default=False,
         help_text="Locked once consultation starts"
     )
-
     locked_at = models.DateTimeField(
         null=True,
         blank=True
     )
-
     lock_reason = models.CharField(
         max_length=100,
         blank=True,
         null=True,
         help_text="Reason for locking (e.g. Consultation started)"
     )
-
     # 🧭 ENTRY METADATA
     entry_mode = models.CharField(
         max_length=20,
@@ -201,7 +234,6 @@ class PreConsultation(models.Model):
         ],
         default="helpdesk"
     )
-
     # 👤 AUDIT
     created_by = models.ForeignKey(
         User,
@@ -245,7 +277,7 @@ class PreConsultation(models.Model):
         ordering = ["-created_at"]
 
     def __str__(self):
-        return f"PreConsultation | {self.encounter.consultation_pnr}"
+        return f"PreConsultation | {self.encounter.visit_pnr}"
 
 # =====================================================
 # 🧩 PRE-CONSULTATION SECTIONS (JSONB, TEMPLATE-DRIVEN)
@@ -309,7 +341,7 @@ class PreConsultationVitals(BasePreConsultationSection):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"Vitals | {self.pre_consultation.encounter.consultation_pnr}"
+        return f"Vitals | {self.pre_consultation.encounter.visit_pnr}"
 
 class PreConsultationChiefComplaint(BasePreConsultationSection):
     class Meta:
@@ -321,7 +353,7 @@ class PreConsultationChiefComplaint(BasePreConsultationSection):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"Chief Complaint | {self.pre_consultation.encounter.consultation_pnr}"
+        return f"Chief Complaint | {self.pre_consultation.encounter.visit_pnr}"
 
 class PreConsultationAllergies(BasePreConsultationSection):
     class Meta:
@@ -333,7 +365,7 @@ class PreConsultationAllergies(BasePreConsultationSection):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"Allergies | {self.pre_consultation.encounter.consultation_pnr}"
+        return f"Allergies | {self.pre_consultation.encounter.visit_pnr}"
 
 class PreConsultationMedicalHistory(BasePreConsultationSection):
     class Meta:
@@ -345,35 +377,429 @@ class PreConsultationMedicalHistory(BasePreConsultationSection):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"Medical History | {self.pre_consultation.encounter.consultation_pnr}"
+        return f"Medical History | {self.pre_consultation.encounter.visit_pnr}"
+
 
 # =====================================================
-# 🩺 CONSULTATION (MANDATORY)
+# New Consultation Model Need to used after all data is migrated to the new model
 # =====================================================
 
 # class Consultation(models.Model):
 #     """
-#     Always exists unless encounter is cancelled/no-show.
+#     Represents the doctor interaction phase of an encounter.
+
+#     Rules:
+#     - One Consultation per ClinicalEncounter
+#     - Cannot exist if encounter is cancelled/no_show
+#     - Locks PreConsultation when started
+#     - Controls encounter lifecycle
+#     - Cannot be modified after finalization
 #     """
 
+#     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
 #     encounter = models.OneToOneField(
-#         ClinicalEncounter,
+#         "consultations.ClinicalEncounter",
 #         on_delete=models.CASCADE,
 #         related_name="consultation"
 #     )
 
+#     # 🩺 Clinical Summary
 #     closure_note = models.TextField(blank=True, null=True)
 #     follow_up_date = models.DateField(blank=True, null=True)
 
+#     # 🔒 State Control
 #     is_finalized = models.BooleanField(default=False)
 
+#     # ⏱ Lifecycle Tracking
 #     started_at = models.DateTimeField(auto_now_add=True)
 #     ended_at = models.DateTimeField(null=True, blank=True)
 
+#     created_at = models.DateTimeField(auto_now_add=True)
+#     updated_at = models.DateTimeField(auto_now=True)
+
+#     class Meta:
+#         verbose_name = "Consultation"
+#         verbose_name_plural = "Consultations"
+#         ordering = ["-started_at"]
+#         constraints = [
+#             models.CheckConstraint(
+#                 check=~models.Q(is_finalized=True, ended_at__isnull=True),
+#                 name="finalized_must_have_ended_at"
+#             )
+#         ]
+
 #     def __str__(self):
-#         return f"Consultation {self.encounter.consultation_pnr}"
+#         return f"Consultation | {self.encounter.visit_pnr}"
+
+#     # ======================================================
+#     # CORE SAVE LOGIC
+#     # ======================================================
+#     def save(self, *args, **kwargs):
+#         with transaction.atomic():
+
+#             is_new = self._state.adding
+
+#             # ==============================
+#             # UPDATE VALIDATION
+#             # ==============================
+#             if not is_new:
+#                 old = type(self).objects.only(
+#                     "is_finalized",
+#                     "encounter_id"
+#                 ).get(pk=self.pk)
+
+#                 # 🚫 Prevent encounter reassignment
+#                 if old.encounter_id != self.encounter_id:
+#                     raise ValidationError(
+#                         "Consultation cannot be reassigned to another encounter."
+#                     )
+
+#                 # 🚫 Prevent modification after finalize
+#                 if old.is_finalized:
+#                     raise ValidationError(
+#                         "Finalized consultation cannot be modified."
+#                     )
+
+#             # ==============================
+#             # CREATION VALIDATION
+#             # ==============================
+#             encounter = self.encounter
+
+#             if encounter.status in ["cancelled", "no_show"]:
+#                 raise ValidationError(
+#                     "Cannot create consultation for cancelled or no-show encounter."
+#                 )
+
+#             if not encounter.clinic:
+#                 raise ValidationError("Encounter must have a clinic.")
+
+#             if not encounter.patient_profile:
+#                 raise ValidationError("Encounter must have a patient profile.")
+
+#             if not encounter.doctor:
+#                 raise ValidationError("Encounter must have a doctor assigned.")
+
+#             super().save(*args, **kwargs)
+
+#             # ==============================
+#             # POST-SAVE LIFECYCLE
+#             # ==============================
+
+#             if is_new:
+#                 self._on_consultation_started()
+
+#             # Finalization transition detection
+#             if self.is_finalized:
+#                 self._finalize_consultation()
+
+#     # ======================================================
+#     # LIFECYCLE EVENTS
+#     # ======================================================
+
+#     def _on_consultation_started(self):
+#         """
+#         Runs only once when consultation is created.
+#         """
+
+#         encounter = self.encounter
+
+#         # Lock pre-consultation
+#         if hasattr(encounter, "pre_consultation"):
+#             encounter.pre_consultation.lock(
+#                 reason="Consultation started"
+#             )
+
+#         # Update encounter status
+#         encounter.status = "in_consultation"
+#         encounter.save(update_fields=["status"])
+
+#     def _finalize_consultation(self):
+#         """
+#         Finalizes consultation and updates encounter.
+#         """
+
+#         if not self.ended_at:
+#             self.ended_at = timezone.now()
+#             super().save(update_fields=["ended_at"])
+
+#         encounter = self.encounter
+
+#         if encounter.status != "completed":
+#             encounter.status = "completed"
+#             encounter.save(update_fields=["status"])
 
 
+# 1.	SymptomMaster → global catalog
+# 2.	ConsultationSymptom → structured symptom entry
+# 3.	SymptomExtensionData → controlled JSON expansion
+
+# class SymptomMaster(models.Model):
+#     """
+#     Global symptom catalog.
+#     Stable dictionary used across system.
+#     AI & analytics backbone.
+#     """
+
+#     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+#     code = models.CharField(
+#         max_length=50,
+#         unique=True,
+#         db_index=True,
+#         help_text="Stable internal code (e.g., CHEST_PAIN)"
+#     )
+
+#     display_name = models.CharField(
+#         max_length=255,
+#         db_index=True
+#     )
+
+#     specialty = models.CharField(
+#         max_length=100,
+#         db_index=True,
+#         help_text="Specialty mapping (e.g., cardiology)"
+#     )
+
+#     is_active = models.BooleanField(default=True)
+
+#     created_at = models.DateTimeField(auto_now_add=True)
+#     updated_at = models.DateTimeField(auto_now=True)
+
+
+#     class Meta:
+#         indexes = [
+#             models.Index(fields=["specialty"]),
+#             models.Index(fields=["display_name"]),
+#         ]
+#         verbose_name = "Symptom Master"
+#         verbose_name_plural = "Symptom Masters"
+
+#     def __str__(self):
+#         return self.display_name
+
+# class ConsultationSymptom(models.Model):
+#     """
+#     Structured symptom entry linked to a consultation.
+#     Immutable after consultation finalization.
+#     """
+
+#     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+#     consultation = models.ForeignKey(
+#         "consultations.Consultation",
+#         on_delete=models.CASCADE,
+#         related_name="symptoms",
+#         db_index=True
+#     )
+
+#     symptom = models.ForeignKey(
+#         SymptomMaster,
+#         on_delete=models.PROTECT,
+#         related_name="consultation_entries",
+#         db_index=True
+#     )
+
+#     # ==========================
+#     # Structured Core Fields
+#     # ==========================
+
+#     duration_value = models.PositiveIntegerField(
+#         null=True,
+#         blank=True
+#     )
+
+#     duration_unit = models.CharField(
+#         max_length=20,
+#         choices=[
+#             ("hours", "Hours"),
+#             ("days", "Days"),
+#             ("weeks", "Weeks"),
+#             ("months", "Months"),
+#             ("years", "Years"),
+#         ],
+#         null=True,
+#         blank=True,
+#         db_index=True
+#     )
+
+#     severity = models.CharField(
+#         max_length=20,
+#         choices=[
+#             ("mild", "Mild"),
+#             ("moderate", "Moderate"),
+#             ("severe", "Severe"),
+#         ],
+#         null=True,
+#         blank=True,
+#         db_index=True
+#     )
+
+#     onset = models.CharField(
+#         max_length=20,
+#         choices=[
+#             ("sudden", "Sudden"),
+#             ("gradual", "Gradual"),
+#         ],
+#         null=True,
+#         blank=True,
+#         db_index=True
+#     )
+
+#     is_primary = models.BooleanField(default=False, db_index=True)
+
+#     # ==========================
+#     # Controlled Extension JSON
+#     # ==========================
+
+#     extra_data = models.JSONField(
+#         null=True,
+#         blank=True,
+#         help_text="Specialty-specific controlled extension fields"
+#     )
+
+#     # ==========================
+#     # Lifecycle & Audit
+#     # ==========================
+
+#     is_active = models.BooleanField(default=True)
+
+#     created_by = models.ForeignKey(
+#         "account.User",
+#         on_delete=models.SET_NULL,
+#         null=True,
+#         blank=True
+#     )
+#     updated_by = models.ForeignKey(
+#         "account.User",
+#         on_delete=models.SET_NULL,
+#         null=True,
+#         blank=True
+#     )
+
+#     created_at = models.DateTimeField(auto_now_add=True)
+#     updated_at = models.DateTimeField(auto_now=True)
+
+#     # ==========================
+#     # Index Strategy
+#     # ==========================
+
+#     class Meta:
+#         indexes = [
+#             models.Index(fields=["consultation"]),
+#             models.Index(fields=["symptom"]),
+#             models.Index(fields=["severity"]),
+#             models.Index(fields=["onset"]),
+#             models.Index(fields=["is_primary"]),
+#             models.Index(fields=["duration_unit"]),
+#         ]
+
+#         constraints = [
+#             models.UniqueConstraint(
+#                 fields=["consultation", "symptom"],
+#                 name="unique_symptom_per_consultation"
+#             )
+#         ]
+
+#         verbose_name = "Consultation Symptom"
+#         verbose_name_plural = "Consultation Symptoms"
+
+#     def __str__(self):
+#         return f"{self.symptom.display_name} | {self.consultation.encounter.visit_pnr}"
+#     def save(self, *args, **kwargs):
+
+#         with transaction.atomic():
+
+#             # 🚫 Prevent edits after finalization
+#             if self.pk:
+#                 old = type(self).objects.select_related("consultation").get(pk=self.pk)
+
+#                 if old.consultation.is_finalized:
+#                     raise ValidationError(
+#                         "Cannot modify symptom after consultation is finalized."
+#                     )
+
+#             # 🚫 Prevent adding symptom to finalized consultation
+#             if self.consultation.is_finalized:
+#                 raise ValidationError(
+#                     "Cannot add symptom to finalized consultation."
+#                 )
+
+#             super().save(*args, **kwargs)
+
+# class SymptomExtensionData(models.Model):
+#     """
+#     Controlled JSON extension layer for ConsultationSymptom.
+#     Used for specialty-specific dynamic attributes.
+    
+#     Example:
+#     Chest Pain:
+#         - radiation
+#         - exertional_trigger
+#         - positional_relation
+
+#     Fever:
+#         - intermittent
+#         - chills
+#         - night_sweats
+#     """
+
+#     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+#     symptom_entry = models.OneToOneField(
+#         "consultations.ConsultationSymptom",
+#         on_delete=models.CASCADE,
+#         related_name="extension"
+#     )
+
+#     # ==========================
+#     # JSONB STORAGE
+#     # ==========================
+#     data = models.JSONField(
+#         help_text="Specialty-specific validated symptom metadata"
+#     )
+
+#     schema_version = models.CharField(
+#         max_length=20,
+#         default="v1",
+#         help_text="Schema version for AI consistency"
+#     )
+
+#     # ==========================
+#     # AUDIT
+#     # ==========================
+#     created_at = models.DateTimeField(auto_now_add=True)
+#     updated_at = models.DateTimeField(auto_now=True)
+
+#     # ==========================
+#     # INDEXING STRATEGY
+#     # ==========================
+#     class Meta:
+#         verbose_name = "Symptom Extension Data"
+#         verbose_name_plural = "Symptom Extension Data"
+
+#         indexes = [
+#             GinIndex(fields=["data"]),  # JSONB indexing for fast querying
+#         ]
+
+#     def __str__(self):
+#         return f"Extension | {self.symptom_entry.symptom.display_name}"
+
+#     # ==========================
+#     # LOCK PROTECTION
+#     # ==========================
+#     def save(self, *args, **kwargs):
+#         with transaction.atomic():
+
+#             consultation = self.symptom_entry.consultation
+
+#             # 🚫 Block modification after finalization
+#             if consultation.is_finalized:
+#                 raise ValidationError(
+#                     "Cannot modify symptom extension after consultation is finalized."
+#                 )
+
+#             super().save(*args, **kwargs)
 
 # =====================================================
 #  OLD CONSULTATION MODEL (TO BE REMOVED) Need to be removed after all data is migrated to the new model

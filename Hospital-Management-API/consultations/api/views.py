@@ -27,6 +27,7 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 
 # Django Imports
 from django.conf import settings
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db import transaction
 from django.db import IntegrityError
@@ -1730,7 +1731,7 @@ class PreConsultationPreviousRecordsAPIView(APIView):
                 preconsultation = encounter.pre_consultation
                 record = {
                     "encounter_id": str(encounter.id),
-                    "consultation_pnr": encounter.consultation_pnr,
+                    "visit_pnr": encounter.visit_pnr or "",
                     "created_at": preconsultation.created_at.isoformat(),
                     "completed_at": preconsultation.completed_at.isoformat() if preconsultation.completed_at else None,
                     "sections": {}
@@ -1814,8 +1815,43 @@ class CreateEncounterAPIView(APIView):
 
             patient_account = patient_profile.account
 
+            # Resolve clinic: from request or doctor's first clinic
+            clinic_id = request.data.get("clinic_id")
+            if clinic_id:
+                try:
+                    clinic = Clinic.objects.get(id=clinic_id)
+                    if not doctor_profile.clinics.filter(pk=clinic.pk).exists():
+                        return Response({
+                            "status": False,
+                            "message": "Doctor is not associated with this clinic."
+                        }, status=status.HTTP_400_BAD_REQUEST)
+                except (ValueError, TypeError):
+                    return Response({
+                        "status": False,
+                        "message": "Invalid clinic_id format."
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                except Clinic.DoesNotExist:
+                    return Response({
+                        "status": False,
+                        "message": "Clinic not found."
+                    }, status=status.HTTP_404_NOT_FOUND)
+            else:
+                clinic = doctor_profile.clinics.first()
+                if not clinic:
+                    return Response({
+                        "status": False,
+                        "message": "Doctor has no clinic. Provide clinic_id or associate doctor with a clinic."
+                    }, status=status.HTTP_400_BAD_REQUEST)
+
+            if not getattr(clinic, "code", None) or not str(clinic.code).strip():
+                return Response({
+                    "status": False,
+                    "message": "Clinic has no business code set. Please complete clinic setup (code is required for visit PNR)."
+                }, status=status.HTTP_400_BAD_REQUEST)
+
             # Create encounter
             encounter = EncounterService.create_encounter(
+                clinic=clinic,
                 patient_account=patient_account,
                 patient_profile=patient_profile,
                 doctor=doctor_profile,
@@ -1829,8 +1865,7 @@ class CreateEncounterAPIView(APIView):
                 "message": "Encounter created successfully.",
                 "data": {
                     "encounter_id": str(encounter.id),
-                    "consultation_pnr": encounter.consultation_pnr,
-                    "prescription_pnr": encounter.prescription_pnr,
+                    "visit_pnr": encounter.visit_pnr or "",
                     "status": encounter.status,
                     "created_at": encounter.created_at.isoformat()
                 }
@@ -1838,10 +1873,10 @@ class CreateEncounterAPIView(APIView):
 
         except IntegrityError as e:
             logger.exception("IntegrityError creating encounter")
-            err_msg = str(e) if e else "Database constraint error"
+            err_msg = (str(e) or "Database constraint error")[:500]
             return Response({
                 "status": False,
-                "message": "Failed to create encounter.",
+                "message": f"Failed to create encounter: {err_msg}",
                 "error": err_msg
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR, content_type="application/json")
         except Http404:
@@ -1849,11 +1884,25 @@ class CreateEncounterAPIView(APIView):
                 "status": False,
                 "message": "Patient not found."
             }, status=status.HTTP_404_NOT_FOUND)
-        except Exception as e:
-            logger.exception("Error creating encounter")
-            err_msg = str(e) if e else "Unknown error"
+        except ValueError as e:
             return Response({
                 "status": False,
-                "message": "Failed to create encounter.",
+                "message": str(e) or "Invalid request.",
+                "error": str(e) or "Invalid request."
+            }, status=status.HTTP_400_BAD_REQUEST, content_type="application/json")
+        except DjangoValidationError as e:
+            msgs = getattr(e, "messages", None)
+            err_msg = "; ".join(str(m) for m in msgs) if msgs else str(e)
+            return Response({
+                "status": False,
+                "message": err_msg or "Validation error.",
+                "error": err_msg or "Validation error."
+            }, status=status.HTTP_400_BAD_REQUEST, content_type="application/json")
+        except Exception as e:
+            logger.exception("Error creating encounter")
+            err_msg = (str(e) or "Unknown error")[:500]
+            return Response({
+                "status": False,
+                "message": f"Failed to create encounter: {err_msg}",
                 "error": err_msg
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR, content_type="application/json")
