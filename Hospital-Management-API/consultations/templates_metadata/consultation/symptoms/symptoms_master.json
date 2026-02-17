@@ -1,53 +1,207 @@
-  {
-    "version": 1,
+{
+    "version": 2,
+    "coding_system": "ICD10",
     "items": {
-      "fever": { "label": "Fever" },
-      "pain": { "label": "General Pain" },
-      "weakness_fatigue": { "label": "Weakness / Fatigue" },
-      "loss_of_appetite": { "label": "Loss of Appetite" },
-      "weight_loss": { "label": "Weight Loss" },
-      "weight_gain": { "label": "Weight Gain" },
-      "sleeplessness": { "label": "Sleeplessness (Insomnia)" },
   
-      "headache": { "label": "Headache" },
-      "dizziness": { "label": "Dizziness / Giddiness" },
-      
-      "cold": { "label": "Cold / Runny Nose" },
-      "cough": { "label": "Cough" },
-      "throat_pain": { "label": "Throat Pain" },
-      "breathlessness": { "label": "Breathlessness (SOB)" },
-      "chest_pain": { "label": "Chest Pain" },
-      "palpitations": { "label": "Palpitations" },
+      "fever": {
+        "display_name": "Fever",
+        "clinical_term": "Fever, unspecified",
+        "icd10_code": "R50",
+        "category": "symptom",
+        "synonyms": ["pyrexia", "high temperature"],
+        "search_keywords": ["fever", "temperature"],
+        "is_active": true
+      },
   
-      "abdominal_pain": { "label": "Abdominal Pain" },
-      "vomiting": { "label": "Vomiting" },
-      "nausea": { "label": "Nausea" },
-      "loose_stools": { "label": "Loose Stools / Diarrhea" },
-      "constipation": { "label": "Constipation" },
-      "acidity_heartburn": { "label": "Heartburn / Acidity" },
+      "pain": {
+        "display_name": "General Pain",
+        "clinical_term": "Pain, unspecified",
+        "icd10_code": "R52",
+        "category": "symptom",
+        "synonyms": ["body pain"],
+        "search_keywords": ["pain"],
+        "is_active": true
+      },
   
-      "spotting": { "label": "Spotting" },
-      "lower_abdominal_pain": { "label": "Lower Abdominal Pain" },
-      "irregular_menses": { "label": "Irregular Menses" },
-      "painful_menses": { "label": "Painful Menses" },
-      "vaginal_discharge": { "label": "Vaginal Discharge" },
-      "pregnancy_amenorrhea": { "label": "Missed Period (Pregnancy)" },
+      "weakness_fatigue": {
+        "display_name": "Weakness / Fatigue",
+        "clinical_term": "Malaise and fatigue",
+        "icd10_code": "R53",
+        "category": "symptom",
+        "synonyms": ["tiredness"],
+        "search_keywords": ["fatigue", "weakness"],
+        "is_active": true
+      },
   
-      "poor_feeding": { "label": "Poor Feeding" },
-      "crying_excessive": { "label": "Excessive Crying" },
+      "loss_of_appetite": {
+        "display_name": "Loss of Appetite",
+        "clinical_term": "Anorexia",
+        "icd10_code": "R63.0",
+        "category": "symptom",
+        "synonyms": ["poor appetite"],
+        "search_keywords": ["appetite loss"],
+        "is_active": true
+      },
   
-      "polyuria": { "label": "Increased Urination" },
-      "polydipsia": { "label": "Increased Thirst" },
-      "burning_micturition": { "label": "Burning Urination" },
-      "decreased_urine": { "label": "Decreased Urine Output" },
+      "weight_loss": {
+        "display_name": "Weight Loss",
+        "clinical_term": "Abnormal weight loss",
+        "icd10_code": "R63.4",
+        "category": "symptom",
+        "synonyms": [],
+        "search_keywords": ["weight loss"],
+        "is_active": true
+      },
   
-      "joint_pain": { "label": "Joint Pain" },
-      "back_pain": { "label": "Back Pain" },
-      "neck_pain": { "label": "Neck Pain" },
-      "swelling_feet": { "label": "Swelling (Edema)" },
-      "restricted_movement": { "label": "Restricted Movement" },
+      "weight_gain": {
+        "display_name": "Weight Gain",
+        "clinical_term": "Abnormal weight gain",
+        "icd10_code": "R63.5",
+        "category": "symptom",
+        "synonyms": [],
+        "search_keywords": ["weight gain"],
+        "is_active": true
+      },
   
-      "skin_rash": { "label": "Skin Rash" },
-      "itching": { "label": "Itching" }
+      "headache": {
+        "display_name": "Headache",
+        "clinical_term": "Headache",
+        "icd10_code": "R51",
+        "category": "symptom",
+        "synonyms": ["migraine"],
+        "search_keywords": ["head pain"],
+        "is_active": true
+      },
+  
+      "dizziness": {
+        "display_name": "Dizziness / Giddiness",
+        "clinical_term": "Dizziness and giddiness",
+        "icd10_code": "R42",
+        "category": "symptom",
+        "synonyms": ["vertigo"],
+        "search_keywords": ["dizziness"],
+        "is_active": true
+      },
+  
+      "cough": {
+        "display_name": "Cough",
+        "clinical_term": "Cough",
+        "icd10_code": "R05",
+        "category": "symptom",
+        "synonyms": [],
+        "search_keywords": ["cough"],
+        "is_active": true
+      },
+  
+      "cold": {
+        "display_name": "Cold / Runny Nose",
+        "clinical_term": "Acute nasopharyngitis",
+        "icd10_code": "J00",
+        "category": "symptom",
+        "synonyms": ["common cold"],
+        "search_keywords": ["cold"],
+        "is_active": true
+      },
+  
+      "breathlessness": {
+        "display_name": "Breathlessness (SOB)",
+        "clinical_term": "Dyspnea",
+        "icd10_code": "R06.0",
+        "category": "symptom",
+        "synonyms": ["shortness of breath"],
+        "search_keywords": ["sob"],
+        "is_active": true
+      },
+  
+      "chest_pain": {
+        "display_name": "Chest Pain",
+        "clinical_term": "Chest pain, unspecified",
+        "icd10_code": "R07.9",
+        "category": "symptom",
+        "synonyms": [],
+        "search_keywords": ["chest pain"],
+        "is_active": true
+      },
+  
+      "abdominal_pain": {
+        "display_name": "Abdominal Pain",
+        "clinical_term": "Abdominal pain, unspecified",
+        "icd10_code": "R10.9",
+        "category": "symptom",
+        "synonyms": ["stomach pain"],
+        "search_keywords": ["abd pain"],
+        "is_active": true
+      },
+  
+      "vomiting": {
+        "display_name": "Vomiting",
+        "clinical_term": "Vomiting",
+        "icd10_code": "R11",
+        "category": "symptom",
+        "synonyms": [],
+        "search_keywords": ["vomit"],
+        "is_active": true
+      },
+  
+      "nausea": {
+        "display_name": "Nausea",
+        "clinical_term": "Nausea",
+        "icd10_code": "R11.0",
+        "category": "symptom",
+        "synonyms": [],
+        "search_keywords": ["nausea"],
+        "is_active": true
+      },
+  
+      "joint_pain": {
+        "display_name": "Joint Pain",
+        "clinical_term": "Pain in joint",
+        "icd10_code": "M25.5",
+        "category": "symptom",
+        "synonyms": [],
+        "search_keywords": ["joint pain"],
+        "is_active": true
+      },
+  
+      "back_pain": {
+        "display_name": "Back Pain",
+        "clinical_term": "Low back pain",
+        "icd10_code": "M54.5",
+        "category": "symptom",
+        "synonyms": [],
+        "search_keywords": ["back pain"],
+        "is_active": true
+      },
+  
+      "skin_rash": {
+        "display_name": "Skin Rash",
+        "clinical_term": "Rash and other nonspecific skin eruption",
+        "icd10_code": "R21",
+        "category": "symptom",
+        "synonyms": [],
+        "search_keywords": ["rash"],
+        "is_active": true
+      },
+  
+      "polyuria": {
+        "display_name": "Increased Urination",
+        "clinical_term": "Polyuria",
+        "icd10_code": "R35.8",
+        "category": "symptom",
+        "synonyms": [],
+        "search_keywords": ["polyuria"],
+        "is_active": true
+      },
+  
+      "polydipsia": {
+        "display_name": "Increased Thirst",
+        "clinical_term": "Polydipsia",
+        "icd10_code": "R63.1",
+        "category": "symptom",
+        "synonyms": [],
+        "search_keywords": ["thirst"],
+        "is_active": true
+      }
+  
     }
   }

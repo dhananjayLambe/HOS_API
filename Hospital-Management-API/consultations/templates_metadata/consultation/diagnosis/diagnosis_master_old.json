@@ -1,0 +1,227 @@
+{
+  "version": 2,
+  "meta": {
+    "type": "clinical_diagnosis",
+    "scope": "consultation",
+    "description": "High-frequency OPD diagnoses with optional search synonyms. Non-exhaustive by design. Free-text diagnosis always supported.",
+    "design_principles": [
+      "diagnosis_is_provisional_by_default",
+      "multiple_diagnosis_allowed",
+      "no_blocking_on_missing_diagnosis",
+      "no_icd_enforcement_in_v1",
+      "synonyms_for_search_only"
+    ]
+  },
+
+  "items": {
+    "viral_fever": {
+      "label": "Viral Fever",
+      "category": "infectious_diseases",
+      "chronic": false,
+      "synonyms": ["viral", "vf", "fever viral"]
+    },
+
+    "upper_respiratory_infection": {
+      "label": "Upper Respiratory Tract Infection (URTI)",
+      "category": "respiratory",
+      "chronic": false,
+      "synonyms": ["urti", "cold", "common cold", "upper respiratory infection"]
+    },
+
+    "lower_respiratory_infection": {
+      "label": "Lower Respiratory Tract Infection (LRTI)",
+      "category": "respiratory",
+      "chronic": false,
+      "synonyms": ["lrti", "chest infection", "lower respiratory infection"]
+    },
+
+    "bronchial_asthma": {
+      "label": "Bronchial Asthma",
+      "category": "respiratory",
+      "chronic": true,
+      "synonyms": ["asthma", "bronchial asthma"]
+    },
+
+    "chronic_obstructive_pulmonary_disease": {
+      "label": "Chronic Obstructive Pulmonary Disease (COPD)",
+      "category": "respiratory",
+      "chronic": true,
+      "synonyms": ["copd", "chronic bronchitis", "emphysema"]
+    },
+
+    "pneumonia": {
+      "label": "Pneumonia",
+      "category": "respiratory",
+      "chronic": false,
+      "synonyms": ["lung infection", "pneumonia"]
+    },
+
+    "acute_gastroenteritis": {
+      "label": "Acute Gastroenteritis",
+      "category": "gastrointestinal",
+      "chronic": false,
+      "synonyms": ["age", "gastroenteritis", "loose motions", "diarrhea"]
+    },
+
+    "gastritis": {
+      "label": "Gastritis",
+      "category": "gastrointestinal",
+      "chronic": false,
+      "synonyms": ["gastritis", "gas problem", "stomach pain"]
+    },
+
+    "gastroesophageal_reflux_disease": {
+      "label": "Gastroesophageal Reflux Disease (GERD)",
+      "category": "gastrointestinal",
+      "chronic": true,
+      "synonyms": ["gerd", "acid reflux", "heartburn", "acidity"]
+    },
+
+    "peptic_ulcer_disease": {
+      "label": "Peptic Ulcer Disease",
+      "category": "gastrointestinal",
+      "chronic": true,
+      "synonyms": ["pud", "ulcer", "stomach ulcer"]
+    },
+
+    "irritable_bowel_syndrome": {
+      "label": "Irritable Bowel Syndrome (IBS)",
+      "category": "gastrointestinal",
+      "chronic": true,
+      "synonyms": ["ibs", "irritable bowel"]
+    },
+
+    "hypertension": {
+      "label": "Hypertension",
+      "category": "cardiovascular",
+      "chronic": true,
+      "synonyms": ["htn", "high bp", "bp", "blood pressure"]
+    },
+
+    "ischemic_heart_disease": {
+      "label": "Ischemic Heart Disease",
+      "category": "cardiovascular",
+      "chronic": true,
+      "synonyms": ["ihd", "coronary artery disease", "cad"]
+    },
+
+    "heart_failure": {
+      "label": "Heart Failure",
+      "category": "cardiovascular",
+      "chronic": true,
+      "synonyms": ["hf", "cardiac failure"]
+    },
+
+    "arrhythmia": {
+      "label": "Arrhythmia",
+      "category": "cardiovascular",
+      "chronic": true,
+      "synonyms": ["irregular heartbeat", "palpitations"]
+    },
+
+    "diabetes_mellitus": {
+      "label": "Diabetes Mellitus",
+      "category": "endocrine",
+      "chronic": true,
+      "synonyms": ["dm", "diabetes", "sugar"]
+    },
+
+    "type_1_diabetes_mellitus": {
+      "label": "Type 1 Diabetes Mellitus",
+      "category": "endocrine",
+      "chronic": true,
+      "synonyms": ["type 1 dm", "t1dm"]
+    },
+
+    "type_2_diabetes_mellitus": {
+      "label": "Type 2 Diabetes Mellitus",
+      "category": "endocrine",
+      "chronic": true,
+      "synonyms": ["type 2 dm", "t2dm", "adult onset diabetes"]
+    },
+
+    "hypothyroidism": {
+      "label": "Hypothyroidism",
+      "category": "endocrine",
+      "chronic": true,
+      "synonyms": ["hypothyroid", "low thyroid"]
+    },
+
+    "hyperthyroidism": {
+      "label": "Hyperthyroidism",
+      "category": "endocrine",
+      "chronic": true,
+      "synonyms": ["hyperthyroid", "high thyroid"]
+    },
+
+    "anemia": {
+      "label": "Anemia",
+      "category": "hematological",
+      "chronic": true,
+      "synonyms": ["anaemia", "low hb", "low hemoglobin"]
+    },
+
+    "urinary_tract_infection": {
+      "label": "Urinary Tract Infection (UTI)",
+      "category": "genitourinary",
+      "chronic": false,
+      "synonyms": ["uti", "urine infection", "burning micturition"]
+    },
+
+    "chronic_kidney_disease": {
+      "label": "Chronic Kidney Disease",
+      "category": "renal",
+      "chronic": true,
+      "synonyms": ["ckd", "kidney failure", "chronic renal disease"]
+    },
+
+    "acute_kidney_injury": {
+      "label": "Acute Kidney Injury",
+      "category": "renal",
+      "chronic": false,
+      "synonyms": ["aki", "acute renal failure"]
+    },
+
+    "osteoarthritis": {
+      "label": "Osteoarthritis",
+      "category": "musculoskeletal",
+      "chronic": true,
+      "synonyms": ["oa", "degenerative joint disease"]
+    },
+
+    "rheumatoid_arthritis": {
+      "label": "Rheumatoid Arthritis",
+      "category": "musculoskeletal",
+      "chronic": true,
+      "synonyms": ["ra", "rheumatoid"]
+    },
+
+    "low_back_pain": {
+      "label": "Low Back Pain",
+      "category": "musculoskeletal",
+      "chronic": false,
+      "synonyms": ["lbp", "back pain", "lower back pain"]
+    },
+
+    "generalized_weakness": {
+      "label": "Generalized Weakness",
+      "category": "general",
+      "chronic": false,
+      "synonyms": ["weakness", "fatigue", "tiredness"]
+    },
+
+    "fever_under_evaluation": {
+      "label": "Fever – Under Evaluation",
+      "category": "general",
+      "chronic": false,
+      "synonyms": ["fever eval", "pyrexia under evaluation"]
+    },
+
+    "chest_pain_under_evaluation": {
+      "label": "Chest Pain – Under Evaluation",
+      "category": "general",
+      "chronic": false,
+      "synonyms": ["chest pain eval", "cp under evaluation"]
+    }
+  }
+}

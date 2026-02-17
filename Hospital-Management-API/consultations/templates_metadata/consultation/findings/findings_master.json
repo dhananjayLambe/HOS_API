@@ -1,5 +1,7 @@
 {
-  "version": 1,
+  "version": 2,
+  "coding_system": "ICD10",
+
   "meta": {
     "type": "clinical_findings",
     "scope": "consultation",
@@ -13,262 +15,215 @@
   },
 
   "items": {
+
     "pallor": {
       "label": "Pallor",
+      "clinical_term": "Pallor",
+      "icd10_code": "R23.1",
       "category": "general_examination",
-      "severity_supported": true
+      "severity_supported": true,
+      "synonyms": ["pale appearance"],
+      "search_keywords": ["pallor"],
+      "is_active": true
     },
 
     "edema": {
       "label": "Edema",
+      "clinical_term": "Edema, unspecified",
+      "icd10_code": "R60.9",
       "category": "general_examination",
-      "severity_supported": true
+      "severity_supported": true,
+      "synonyms": ["swelling"],
+      "search_keywords": ["edema"],
+      "is_active": true
     },
 
     "pedal_edema": {
       "label": "Pedal Edema",
+      "clinical_term": "Localized edema",
+      "icd10_code": "R60.0",
       "category": "general_examination",
-      "severity_supported": true
+      "severity_supported": true,
+      "synonyms": [],
+      "search_keywords": ["pedal edema"],
+      "is_active": true
     },
 
     "dehydration": {
       "label": "Dehydration",
+      "clinical_term": "Volume depletion",
+      "icd10_code": "E86",
       "category": "general_examination",
-      "severity_supported": true
+      "severity_supported": true,
+      "synonyms": [],
+      "search_keywords": ["dehydration"],
+      "is_active": true
     },
 
     "icterus": {
       "label": "Icterus",
+      "clinical_term": "Jaundice, unspecified",
+      "icd10_code": "R17",
       "category": "general_examination",
-      "severity_supported": false
+      "severity_supported": false,
+      "synonyms": ["jaundice"],
+      "search_keywords": ["icterus"],
+      "is_active": true
     },
 
     "cyanosis": {
       "label": "Cyanosis",
+      "clinical_term": "Cyanosis",
+      "icd10_code": "R23.0",
       "category": "general_examination",
-      "severity_supported": false
+      "severity_supported": false,
+      "synonyms": [],
+      "search_keywords": ["cyanosis"],
+      "is_active": true
     },
 
     "lymphadenopathy": {
       "label": "Lymphadenopathy",
+      "clinical_term": "Enlarged lymph nodes",
+      "icd10_code": "R59.9",
       "category": "general_examination",
-      "severity_supported": true
+      "severity_supported": true,
+      "synonyms": [],
+      "search_keywords": ["lymph nodes"],
+      "is_active": true
     },
 
     "blood_pressure_high": {
       "label": "High Blood Pressure",
+      "clinical_term": "Elevated blood-pressure reading",
+      "icd10_code": "R03.0",
       "category": "vital_related",
-      "severity_supported": false
-    },
-
-    "pharyngeal_congestion": {
-      "label": "Pharyngeal Congestion",
-      "category": "ent_examination",
-      "severity_supported": false
-    },
-
-    "tonsillar_enlargement": {
-      "label": "Tonsillar Enlargement",
-      "category": "ent_examination",
-      "severity_supported": true
+      "severity_supported": false,
+      "synonyms": [],
+      "search_keywords": ["high bp"],
+      "is_active": true
     },
 
     "respiratory_distress": {
       "label": "Respiratory Distress",
+      "clinical_term": "Respiratory distress",
+      "icd10_code": "R06.03",
       "category": "respiratory_system",
-      "severity_supported": true
+      "severity_supported": true,
+      "synonyms": [],
+      "search_keywords": ["distress"],
+      "is_active": true
     },
 
     "wheeze": {
       "label": "Wheeze",
+      "clinical_term": "Wheezing",
+      "icd10_code": "R06.2",
       "category": "respiratory_system",
-      "severity_supported": false
+      "severity_supported": false,
+      "synonyms": [],
+      "search_keywords": ["wheeze"],
+      "is_active": true
     },
 
     "crepitations": {
       "label": "Crepitations",
+      "clinical_term": "Abnormal breath sounds",
+      "icd10_code": "R09.89",
       "category": "respiratory_system",
-      "severity_supported": false
-    },
-
-    "decreased_air_entry": {
-      "label": "Decreased Air Entry",
-      "category": "respiratory_system",
-      "severity_supported": false
-    },
-
-    "clubbing": {
-      "label": "Clubbing",
-      "category": "respiratory_system",
-      "severity_supported": false
+      "severity_supported": false,
+      "synonyms": ["crackles"],
+      "search_keywords": ["crepitation"],
+      "is_active": true
     },
 
     "abdominal_tenderness": {
       "label": "Abdominal Tenderness",
+      "clinical_term": "Abdominal tenderness",
+      "icd10_code": "R10.8",
       "category": "abdominal_examination",
-      "severity_supported": true
-    },
-
-    "abdominal_distension": {
-      "label": "Abdominal Distension",
-      "category": "abdominal_examination",
-      "severity_supported": false
-    },
-
-    "organomegaly": {
-      "label": "Organomegaly",
-      "category": "abdominal_examination",
-      "severity_supported": false
+      "severity_supported": true,
+      "synonyms": [],
+      "search_keywords": ["tenderness"],
+      "is_active": true
     },
 
     "ascites": {
       "label": "Ascites",
+      "clinical_term": "Ascites",
+      "icd10_code": "R18",
       "category": "abdominal_examination",
-      "severity_supported": false
-    },
-
-    "bowel_sounds_abnormal": {
-      "label": "Abnormal Bowel Sounds",
-      "category": "abdominal_examination",
-      "severity_supported": false
-    },
-
-    "uterine_tenderness": {
-      "label": "Uterine Tenderness",
-      "category": "gynecological_examination",
-      "severity_supported": true
-    },
-
-    "adnexal_tenderness": {
-      "label": "Adnexal Tenderness",
-      "category": "gynecological_examination",
-      "severity_supported": true
-    },
-
-    "vaginal_discharge_exam": {
-      "label": "Vaginal Discharge (On Examination)",
-      "category": "gynecological_examination",
-      "severity_supported": false
-    },
-
-    "cervical_motion_tenderness": {
-      "label": "Cervical Motion Tenderness",
-      "category": "gynecological_examination",
-      "severity_supported": false
-    },
-
-    "neuropathy_signs": {
-      "label": "Peripheral Neuropathy Signs",
-      "category": "neurological_examination",
-      "severity_supported": false
+      "severity_supported": false,
+      "synonyms": [],
+      "search_keywords": ["ascites"],
+      "is_active": true
     },
 
     "neurological_deficit": {
       "label": "Neurological Deficit",
+      "clinical_term": "Neurological deficit",
+      "icd10_code": "R29.8",
       "category": "neurological_examination",
-      "severity_supported": false
+      "severity_supported": false,
+      "synonyms": [],
+      "search_keywords": ["neuro deficit"],
+      "is_active": true
     },
 
     "foot_ulcer": {
       "label": "Foot Ulcer",
+      "clinical_term": "Non-pressure chronic ulcer",
+      "icd10_code": "L97",
       "category": "diabetes_specific",
-      "severity_supported": true
-    },
-
-    "foot_sensation_reduced": {
-      "label": "Reduced Foot Sensation",
-      "category": "diabetes_specific",
-      "severity_supported": false
-    },
-
-    "skin_infection": {
-      "label": "Skin Infection",
-      "category": "dermatological_examination",
-      "severity_supported": false
+      "severity_supported": true,
+      "synonyms": [],
+      "search_keywords": ["foot ulcer"],
+      "is_active": true
     },
 
     "joint_swelling": {
       "label": "Joint Swelling",
+      "clinical_term": "Joint swelling",
+      "icd10_code": "M25.4",
       "category": "musculoskeletal_examination",
-      "severity_supported": true
-    },
-
-    "joint_tenderness": {
-      "label": "Joint Tenderness",
-      "category": "musculoskeletal_examination",
-      "severity_supported": true
-    },
-
-    "restricted_range_of_motion": {
-      "label": "Restricted Range of Motion",
-      "category": "musculoskeletal_examination",
-      "severity_supported": false
-    },
-
-    "muscle_wasting": {
-      "label": "Muscle Wasting",
-      "category": "musculoskeletal_examination",
-      "severity_supported": false
-    },
-
-    "spine_tenderness": {
-      "label": "Spine Tenderness",
-      "category": "musculoskeletal_examination",
-      "severity_supported": true
-    },
-
-    "gait_abnormality": {
-      "label": "Abnormal Gait",
-      "category": "musculoskeletal_examination",
-      "severity_supported": false
+      "severity_supported": true,
+      "synonyms": [],
+      "search_keywords": ["joint swelling"],
+      "is_active": true
     },
 
     "heart_murmur": {
       "label": "Heart Murmur",
+      "clinical_term": "Cardiac murmur",
+      "icd10_code": "R01.1",
       "category": "cardiovascular_system",
-      "severity_supported": false
+      "severity_supported": false,
+      "synonyms": [],
+      "search_keywords": ["murmur"],
+      "is_active": true
     },
 
     "irregular_pulse": {
       "label": "Irregular Pulse",
+      "clinical_term": "Irregular heart beat",
+      "icd10_code": "R00.1",
       "category": "cardiovascular_system",
-      "severity_supported": false
-    },
-
-    "raised_jvp": {
-      "label": "Raised JVP",
-      "category": "cardiovascular_system",
-      "severity_supported": false
-    },
-
-    "basal_crepitations": {
-      "label": "Basal Crepitations",
-      "category": "cardiovascular_system",
-      "severity_supported": false
-    },
-
-    "abdominal_mass": {
-      "label": "Abdominal Mass",
-      "category": "abdominal_examination",
-      "severity_supported": false
-    },
-
-    "reduced_urine_output_exam": {
-      "label": "Reduced Urine Output (Clinical)",
-      "category": "renal_examination",
-      "severity_supported": false
+      "severity_supported": false,
+      "synonyms": [],
+      "search_keywords": ["irregular pulse"],
+      "is_active": true
     },
 
     "growth_delay": {
       "label": "Growth Delay",
+      "clinical_term": "Delayed growth",
+      "icd10_code": "R62.0",
       "category": "pediatric_examination",
-      "severity_supported": false
-    },
-
-    "skin_rash_exam": {
-      "label": "Skin Rash (On Examination)",
-      "category": "dermatological_examination",
-      "severity_supported": false
+      "severity_supported": false,
+      "synonyms": [],
+      "search_keywords": ["growth delay"],
+      "is_active": true
     }
+
   }
 }

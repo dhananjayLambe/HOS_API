@@ -1,0 +1,274 @@
+{
+  "version": 1,
+  "meta": {
+    "type": "clinical_findings",
+    "scope": "consultation",
+    "description": "Objective clinical examination findings recorded by doctor during OPD consultation",
+    "design_principles": [
+      "findings_are_observational",
+      "no_lab_values_here",
+      "no_mandatory_findings",
+      "checkbox_first_optional_details_later"
+    ]
+  },
+
+  "items": {
+    "pallor": {
+      "label": "Pallor",
+      "category": "general_examination",
+      "severity_supported": true
+    },
+
+    "edema": {
+      "label": "Edema",
+      "category": "general_examination",
+      "severity_supported": true
+    },
+
+    "pedal_edema": {
+      "label": "Pedal Edema",
+      "category": "general_examination",
+      "severity_supported": true
+    },
+
+    "dehydration": {
+      "label": "Dehydration",
+      "category": "general_examination",
+      "severity_supported": true
+    },
+
+    "icterus": {
+      "label": "Icterus",
+      "category": "general_examination",
+      "severity_supported": false
+    },
+
+    "cyanosis": {
+      "label": "Cyanosis",
+      "category": "general_examination",
+      "severity_supported": false
+    },
+
+    "lymphadenopathy": {
+      "label": "Lymphadenopathy",
+      "category": "general_examination",
+      "severity_supported": true
+    },
+
+    "blood_pressure_high": {
+      "label": "High Blood Pressure",
+      "category": "vital_related",
+      "severity_supported": false
+    },
+
+    "pharyngeal_congestion": {
+      "label": "Pharyngeal Congestion",
+      "category": "ent_examination",
+      "severity_supported": false
+    },
+
+    "tonsillar_enlargement": {
+      "label": "Tonsillar Enlargement",
+      "category": "ent_examination",
+      "severity_supported": true
+    },
+
+    "respiratory_distress": {
+      "label": "Respiratory Distress",
+      "category": "respiratory_system",
+      "severity_supported": true
+    },
+
+    "wheeze": {
+      "label": "Wheeze",
+      "category": "respiratory_system",
+      "severity_supported": false
+    },
+
+    "crepitations": {
+      "label": "Crepitations",
+      "category": "respiratory_system",
+      "severity_supported": false
+    },
+
+    "decreased_air_entry": {
+      "label": "Decreased Air Entry",
+      "category": "respiratory_system",
+      "severity_supported": false
+    },
+
+    "clubbing": {
+      "label": "Clubbing",
+      "category": "respiratory_system",
+      "severity_supported": false
+    },
+
+    "abdominal_tenderness": {
+      "label": "Abdominal Tenderness",
+      "category": "abdominal_examination",
+      "severity_supported": true
+    },
+
+    "abdominal_distension": {
+      "label": "Abdominal Distension",
+      "category": "abdominal_examination",
+      "severity_supported": false
+    },
+
+    "organomegaly": {
+      "label": "Organomegaly",
+      "category": "abdominal_examination",
+      "severity_supported": false
+    },
+
+    "ascites": {
+      "label": "Ascites",
+      "category": "abdominal_examination",
+      "severity_supported": false
+    },
+
+    "bowel_sounds_abnormal": {
+      "label": "Abnormal Bowel Sounds",
+      "category": "abdominal_examination",
+      "severity_supported": false
+    },
+
+    "uterine_tenderness": {
+      "label": "Uterine Tenderness",
+      "category": "gynecological_examination",
+      "severity_supported": true
+    },
+
+    "adnexal_tenderness": {
+      "label": "Adnexal Tenderness",
+      "category": "gynecological_examination",
+      "severity_supported": true
+    },
+
+    "vaginal_discharge_exam": {
+      "label": "Vaginal Discharge (On Examination)",
+      "category": "gynecological_examination",
+      "severity_supported": false
+    },
+
+    "cervical_motion_tenderness": {
+      "label": "Cervical Motion Tenderness",
+      "category": "gynecological_examination",
+      "severity_supported": false
+    },
+
+    "neuropathy_signs": {
+      "label": "Peripheral Neuropathy Signs",
+      "category": "neurological_examination",
+      "severity_supported": false
+    },
+
+    "neurological_deficit": {
+      "label": "Neurological Deficit",
+      "category": "neurological_examination",
+      "severity_supported": false
+    },
+
+    "foot_ulcer": {
+      "label": "Foot Ulcer",
+      "category": "diabetes_specific",
+      "severity_supported": true
+    },
+
+    "foot_sensation_reduced": {
+      "label": "Reduced Foot Sensation",
+      "category": "diabetes_specific",
+      "severity_supported": false
+    },
+
+    "skin_infection": {
+      "label": "Skin Infection",
+      "category": "dermatological_examination",
+      "severity_supported": false
+    },
+
+    "joint_swelling": {
+      "label": "Joint Swelling",
+      "category": "musculoskeletal_examination",
+      "severity_supported": true
+    },
+
+    "joint_tenderness": {
+      "label": "Joint Tenderness",
+      "category": "musculoskeletal_examination",
+      "severity_supported": true
+    },
+
+    "restricted_range_of_motion": {
+      "label": "Restricted Range of Motion",
+      "category": "musculoskeletal_examination",
+      "severity_supported": false
+    },
+
+    "muscle_wasting": {
+      "label": "Muscle Wasting",
+      "category": "musculoskeletal_examination",
+      "severity_supported": false
+    },
+
+    "spine_tenderness": {
+      "label": "Spine Tenderness",
+      "category": "musculoskeletal_examination",
+      "severity_supported": true
+    },
+
+    "gait_abnormality": {
+      "label": "Abnormal Gait",
+      "category": "musculoskeletal_examination",
+      "severity_supported": false
+    },
+
+    "heart_murmur": {
+      "label": "Heart Murmur",
+      "category": "cardiovascular_system",
+      "severity_supported": false
+    },
+
+    "irregular_pulse": {
+      "label": "Irregular Pulse",
+      "category": "cardiovascular_system",
+      "severity_supported": false
+    },
+
+    "raised_jvp": {
+      "label": "Raised JVP",
+      "category": "cardiovascular_system",
+      "severity_supported": false
+    },
+
+    "basal_crepitations": {
+      "label": "Basal Crepitations",
+      "category": "cardiovascular_system",
+      "severity_supported": false
+    },
+
+    "abdominal_mass": {
+      "label": "Abdominal Mass",
+      "category": "abdominal_examination",
+      "severity_supported": false
+    },
+
+    "reduced_urine_output_exam": {
+      "label": "Reduced Urine Output (Clinical)",
+      "category": "renal_examination",
+      "severity_supported": false
+    },
+
+    "growth_delay": {
+      "label": "Growth Delay",
+      "category": "pediatric_examination",
+      "severity_supported": false
+    },
+
+    "skin_rash_exam": {
+      "label": "Skin Rash (On Examination)",
+      "category": "dermatological_examination",
+      "severity_supported": false
+    }
+  }
+}

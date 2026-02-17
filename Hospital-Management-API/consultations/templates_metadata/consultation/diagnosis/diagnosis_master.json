@@ -1,227 +1,471 @@
 {
-  "version": 2,
+  "version": 3,
+  "coding_system": "ICD10",
+
   "meta": {
     "type": "clinical_diagnosis",
     "scope": "consultation",
-    "description": "High-frequency OPD diagnoses with optional search synonyms. Non-exhaustive by design. Free-text diagnosis always supported.",
+    "description": "High-frequency OPD diagnoses with ICD mapping. Free-text diagnosis supported.",
     "design_principles": [
       "diagnosis_is_provisional_by_default",
       "multiple_diagnosis_allowed",
       "no_blocking_on_missing_diagnosis",
-      "no_icd_enforcement_in_v1",
+      "icd_supported",
       "synonyms_for_search_only"
     ]
   },
 
   "items": {
+
     "viral_fever": {
       "label": "Viral Fever",
+      "clinical_term": "Viral infection, unspecified",
+      "icd10_code": "B34.9",
       "category": "infectious_diseases",
       "chronic": false,
-      "synonyms": ["viral", "vf", "fever viral"]
+      "diagnosis_type": "provisional",
+      "severity_supported": false,
+      "parent_code": null,
+      "is_primary_allowed": true,
+      "synonyms": ["viral", "vf"],
+      "search_keywords": ["viral fever"],
+      "is_active": true
     },
 
     "upper_respiratory_infection": {
       "label": "Upper Respiratory Tract Infection (URTI)",
+      "clinical_term": "Acute upper respiratory infection",
+      "icd10_code": "J06.9",
       "category": "respiratory",
       "chronic": false,
-      "synonyms": ["urti", "cold", "common cold", "upper respiratory infection"]
+      "diagnosis_type": "confirmed",
+      "severity_supported": false,
+      "parent_code": null,
+      "is_primary_allowed": true,
+      "synonyms": ["urti"],
+      "search_keywords": ["cold"],
+      "is_active": true
     },
 
     "lower_respiratory_infection": {
       "label": "Lower Respiratory Tract Infection (LRTI)",
+      "clinical_term": "Lower respiratory infection",
+      "icd10_code": "J22",
       "category": "respiratory",
       "chronic": false,
-      "synonyms": ["lrti", "chest infection", "lower respiratory infection"]
+      "diagnosis_type": "confirmed",
+      "severity_supported": false,
+      "parent_code": null,
+      "is_primary_allowed": true,
+      "synonyms": ["lrti"],
+      "search_keywords": ["chest infection"],
+      "is_active": true
     },
 
     "bronchial_asthma": {
       "label": "Bronchial Asthma",
+      "clinical_term": "Asthma",
+      "icd10_code": "J45.9",
       "category": "respiratory",
       "chronic": true,
-      "synonyms": ["asthma", "bronchial asthma"]
+      "diagnosis_type": "chronic_condition",
+      "severity_supported": true,
+      "parent_code": null,
+      "is_primary_allowed": true,
+      "synonyms": ["asthma"],
+      "search_keywords": ["asthma"],
+      "is_active": true
     },
 
     "chronic_obstructive_pulmonary_disease": {
-      "label": "Chronic Obstructive Pulmonary Disease (COPD)",
+      "label": "COPD",
+      "clinical_term": "Chronic obstructive pulmonary disease",
+      "icd10_code": "J44.9",
       "category": "respiratory",
       "chronic": true,
-      "synonyms": ["copd", "chronic bronchitis", "emphysema"]
+      "diagnosis_type": "chronic_condition",
+      "severity_supported": true,
+      "parent_code": null,
+      "is_primary_allowed": true,
+      "synonyms": ["copd"],
+      "search_keywords": ["emphysema"],
+      "is_active": true
     },
 
     "pneumonia": {
       "label": "Pneumonia",
+      "clinical_term": "Pneumonia, unspecified organism",
+      "icd10_code": "J18.9",
       "category": "respiratory",
       "chronic": false,
-      "synonyms": ["lung infection", "pneumonia"]
+      "diagnosis_type": "confirmed",
+      "severity_supported": true,
+      "parent_code": null,
+      "is_primary_allowed": true,
+      "synonyms": ["lung infection"],
+      "search_keywords": ["pneumonia"],
+      "is_active": true
     },
 
     "acute_gastroenteritis": {
       "label": "Acute Gastroenteritis",
+      "clinical_term": "Gastroenteritis",
+      "icd10_code": "A09",
       "category": "gastrointestinal",
       "chronic": false,
-      "synonyms": ["age", "gastroenteritis", "loose motions", "diarrhea"]
+      "diagnosis_type": "confirmed",
+      "severity_supported": false,
+      "parent_code": null,
+      "is_primary_allowed": true,
+      "synonyms": ["age"],
+      "search_keywords": ["diarrhea"],
+      "is_active": true
     },
 
     "gastritis": {
       "label": "Gastritis",
+      "clinical_term": "Gastritis",
+      "icd10_code": "K29.7",
       "category": "gastrointestinal",
       "chronic": false,
-      "synonyms": ["gastritis", "gas problem", "stomach pain"]
+      "diagnosis_type": "confirmed",
+      "severity_supported": false,
+      "parent_code": null,
+      "is_primary_allowed": true,
+      "synonyms": [],
+      "search_keywords": ["gastritis"],
+      "is_active": true
     },
 
     "gastroesophageal_reflux_disease": {
-      "label": "Gastroesophageal Reflux Disease (GERD)",
+      "label": "GERD",
+      "clinical_term": "GERD",
+      "icd10_code": "K21.9",
       "category": "gastrointestinal",
       "chronic": true,
-      "synonyms": ["gerd", "acid reflux", "heartburn", "acidity"]
+      "diagnosis_type": "chronic_condition",
+      "severity_supported": false,
+      "parent_code": null,
+      "is_primary_allowed": true,
+      "synonyms": [],
+      "search_keywords": ["acid reflux"],
+      "is_active": true
     },
 
     "peptic_ulcer_disease": {
       "label": "Peptic Ulcer Disease",
+      "clinical_term": "Peptic ulcer",
+      "icd10_code": "K27.9",
       "category": "gastrointestinal",
       "chronic": true,
-      "synonyms": ["pud", "ulcer", "stomach ulcer"]
+      "diagnosis_type": "confirmed",
+      "severity_supported": false,
+      "parent_code": null,
+      "is_primary_allowed": true,
+      "synonyms": ["pud"],
+      "search_keywords": ["ulcer"],
+      "is_active": true
     },
 
     "irritable_bowel_syndrome": {
-      "label": "Irritable Bowel Syndrome (IBS)",
+      "label": "IBS",
+      "clinical_term": "Irritable bowel syndrome",
+      "icd10_code": "K58.9",
       "category": "gastrointestinal",
       "chronic": true,
-      "synonyms": ["ibs", "irritable bowel"]
+      "diagnosis_type": "chronic_condition",
+      "severity_supported": false,
+      "parent_code": null,
+      "is_primary_allowed": true,
+      "synonyms": [],
+      "search_keywords": ["ibs"],
+      "is_active": true
     },
 
     "hypertension": {
       "label": "Hypertension",
+      "clinical_term": "Essential hypertension",
+      "icd10_code": "I10",
       "category": "cardiovascular",
       "chronic": true,
-      "synonyms": ["htn", "high bp", "bp", "blood pressure"]
+      "diagnosis_type": "chronic_condition",
+      "severity_supported": true,
+      "parent_code": null,
+      "is_primary_allowed": true,
+      "synonyms": ["htn"],
+      "search_keywords": ["bp"],
+      "is_active": true
     },
 
     "ischemic_heart_disease": {
       "label": "Ischemic Heart Disease",
+      "clinical_term": "Ischemic heart disease",
+      "icd10_code": "I25.9",
       "category": "cardiovascular",
       "chronic": true,
-      "synonyms": ["ihd", "coronary artery disease", "cad"]
+      "diagnosis_type": "chronic_condition",
+      "severity_supported": true,
+      "parent_code": null,
+      "is_primary_allowed": true,
+      "synonyms": ["ihd"],
+      "search_keywords": ["cad"],
+      "is_active": true
     },
 
     "heart_failure": {
       "label": "Heart Failure",
+      "clinical_term": "Heart failure",
+      "icd10_code": "I50.9",
       "category": "cardiovascular",
       "chronic": true,
-      "synonyms": ["hf", "cardiac failure"]
+      "diagnosis_type": "chronic_condition",
+      "severity_supported": true,
+      "parent_code": null,
+      "is_primary_allowed": true,
+      "synonyms": ["hf"],
+      "search_keywords": ["cardiac failure"],
+      "is_active": true
     },
 
     "arrhythmia": {
       "label": "Arrhythmia",
+      "clinical_term": "Cardiac arrhythmia",
+      "icd10_code": "I49.9",
       "category": "cardiovascular",
       "chronic": true,
-      "synonyms": ["irregular heartbeat", "palpitations"]
+      "diagnosis_type": "chronic_condition",
+      "severity_supported": false,
+      "parent_code": null,
+      "is_primary_allowed": true,
+      "synonyms": [],
+      "search_keywords": ["arrhythmia"],
+      "is_active": true
     },
 
     "diabetes_mellitus": {
       "label": "Diabetes Mellitus",
+      "clinical_term": "Diabetes mellitus",
+      "icd10_code": "E14.9",
       "category": "endocrine",
       "chronic": true,
-      "synonyms": ["dm", "diabetes", "sugar"]
+      "diagnosis_type": "chronic_condition",
+      "severity_supported": true,
+      "parent_code": null,
+      "is_primary_allowed": true,
+      "synonyms": ["dm"],
+      "search_keywords": ["diabetes"],
+      "is_active": true
     },
 
     "type_1_diabetes_mellitus": {
       "label": "Type 1 Diabetes Mellitus",
+      "clinical_term": "Type 1 diabetes mellitus",
+      "icd10_code": "E10.9",
       "category": "endocrine",
       "chronic": true,
-      "synonyms": ["type 1 dm", "t1dm"]
+      "diagnosis_type": "chronic_condition",
+      "severity_supported": true,
+      "parent_code": "diabetes_mellitus",
+      "is_primary_allowed": true,
+      "synonyms": [],
+      "search_keywords": ["t1dm"],
+      "is_active": true
     },
 
     "type_2_diabetes_mellitus": {
       "label": "Type 2 Diabetes Mellitus",
+      "clinical_term": "Type 2 diabetes mellitus",
+      "icd10_code": "E11.9",
       "category": "endocrine",
       "chronic": true,
-      "synonyms": ["type 2 dm", "t2dm", "adult onset diabetes"]
+      "diagnosis_type": "chronic_condition",
+      "severity_supported": true,
+      "parent_code": "diabetes_mellitus",
+      "is_primary_allowed": true,
+      "synonyms": [],
+      "search_keywords": ["t2dm"],
+      "is_active": true
     },
 
     "hypothyroidism": {
       "label": "Hypothyroidism",
+      "clinical_term": "Hypothyroidism",
+      "icd10_code": "E03.9",
       "category": "endocrine",
       "chronic": true,
-      "synonyms": ["hypothyroid", "low thyroid"]
+      "diagnosis_type": "chronic_condition",
+      "severity_supported": false,
+      "parent_code": null,
+      "is_primary_allowed": true,
+      "synonyms": [],
+      "search_keywords": ["low thyroid"],
+      "is_active": true
     },
 
     "hyperthyroidism": {
       "label": "Hyperthyroidism",
+      "clinical_term": "Hyperthyroidism",
+      "icd10_code": "E05.9",
       "category": "endocrine",
       "chronic": true,
-      "synonyms": ["hyperthyroid", "high thyroid"]
+      "diagnosis_type": "chronic_condition",
+      "severity_supported": false,
+      "parent_code": null,
+      "is_primary_allowed": true,
+      "synonyms": [],
+      "search_keywords": ["hyperthyroid"],
+      "is_active": true
     },
 
     "anemia": {
       "label": "Anemia",
+      "clinical_term": "Anemia",
+      "icd10_code": "D64.9",
       "category": "hematological",
       "chronic": true,
-      "synonyms": ["anaemia", "low hb", "low hemoglobin"]
+      "diagnosis_type": "confirmed",
+      "severity_supported": true,
+      "parent_code": null,
+      "is_primary_allowed": true,
+      "synonyms": [],
+      "search_keywords": ["low hb"],
+      "is_active": true
     },
 
     "urinary_tract_infection": {
-      "label": "Urinary Tract Infection (UTI)",
+      "label": "UTI",
+      "clinical_term": "Urinary tract infection",
+      "icd10_code": "N39.0",
       "category": "genitourinary",
       "chronic": false,
-      "synonyms": ["uti", "urine infection", "burning micturition"]
+      "diagnosis_type": "confirmed",
+      "severity_supported": false,
+      "parent_code": null,
+      "is_primary_allowed": true,
+      "synonyms": [],
+      "search_keywords": ["uti"],
+      "is_active": true
     },
 
     "chronic_kidney_disease": {
       "label": "Chronic Kidney Disease",
+      "clinical_term": "Chronic kidney disease",
+      "icd10_code": "N18.9",
       "category": "renal",
       "chronic": true,
-      "synonyms": ["ckd", "kidney failure", "chronic renal disease"]
+      "diagnosis_type": "chronic_condition",
+      "severity_supported": true,
+      "parent_code": null,
+      "is_primary_allowed": true,
+      "synonyms": ["ckd"],
+      "search_keywords": ["kidney disease"],
+      "is_active": true
     },
 
     "acute_kidney_injury": {
       "label": "Acute Kidney Injury",
+      "clinical_term": "Acute kidney failure",
+      "icd10_code": "N17.9",
       "category": "renal",
       "chronic": false,
-      "synonyms": ["aki", "acute renal failure"]
+      "diagnosis_type": "confirmed",
+      "severity_supported": true,
+      "parent_code": null,
+      "is_primary_allowed": true,
+      "synonyms": ["aki"],
+      "search_keywords": ["renal failure"],
+      "is_active": true
     },
 
     "osteoarthritis": {
       "label": "Osteoarthritis",
+      "clinical_term": "Osteoarthritis",
+      "icd10_code": "M19.9",
       "category": "musculoskeletal",
       "chronic": true,
-      "synonyms": ["oa", "degenerative joint disease"]
+      "diagnosis_type": "chronic_condition",
+      "severity_supported": true,
+      "parent_code": null,
+      "is_primary_allowed": true,
+      "synonyms": [],
+      "search_keywords": ["oa"],
+      "is_active": true
     },
 
     "rheumatoid_arthritis": {
       "label": "Rheumatoid Arthritis",
+      "clinical_term": "Rheumatoid arthritis",
+      "icd10_code": "M06.9",
       "category": "musculoskeletal",
       "chronic": true,
-      "synonyms": ["ra", "rheumatoid"]
+      "diagnosis_type": "chronic_condition",
+      "severity_supported": true,
+      "parent_code": null,
+      "is_primary_allowed": true,
+      "synonyms": [],
+      "search_keywords": ["ra"],
+      "is_active": true
     },
 
     "low_back_pain": {
       "label": "Low Back Pain",
+      "clinical_term": "Low back pain",
+      "icd10_code": "M54.5",
       "category": "musculoskeletal",
       "chronic": false,
-      "synonyms": ["lbp", "back pain", "lower back pain"]
+      "diagnosis_type": "symptom_based",
+      "severity_supported": false,
+      "parent_code": null,
+      "is_primary_allowed": true,
+      "synonyms": [],
+      "search_keywords": ["lbp"],
+      "is_active": true
     },
 
     "generalized_weakness": {
       "label": "Generalized Weakness",
+      "clinical_term": "Malaise and fatigue",
+      "icd10_code": "R53",
       "category": "general",
       "chronic": false,
-      "synonyms": ["weakness", "fatigue", "tiredness"]
+      "diagnosis_type": "symptom_based",
+      "severity_supported": false,
+      "parent_code": null,
+      "is_primary_allowed": true,
+      "synonyms": [],
+      "search_keywords": ["fatigue"],
+      "is_active": true
     },
 
     "fever_under_evaluation": {
       "label": "Fever – Under Evaluation",
+      "clinical_term": "Fever, unspecified",
+      "icd10_code": "R50.9",
       "category": "general",
       "chronic": false,
-      "synonyms": ["fever eval", "pyrexia under evaluation"]
+      "diagnosis_type": "provisional",
+      "severity_supported": false,
+      "parent_code": null,
+      "is_primary_allowed": true,
+      "synonyms": [],
+      "search_keywords": ["fever eval"],
+      "is_active": true
     },
 
     "chest_pain_under_evaluation": {
       "label": "Chest Pain – Under Evaluation",
+      "clinical_term": "Chest pain, unspecified",
+      "icd10_code": "R07.9",
       "category": "general",
       "chronic": false,
-      "synonyms": ["chest pain eval", "cp under evaluation"]
+      "diagnosis_type": "provisional",
+      "severity_supported": false,
+      "parent_code": null,
+      "is_primary_allowed": true,
+      "synonyms": [],
+      "search_keywords": ["chest pain eval"],
+      "is_active": true
     }
+
   }
 }

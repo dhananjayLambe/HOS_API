@@ -801,6 +801,428 @@ class PreConsultationMedicalHistory(BasePreConsultationSection):
 
 #             super().save(*args, **kwargs)
 
+
+# class FindingMaster(models.Model):
+#     """
+#     Immutable master dictionary of clinical findings.
+
+#     Seeded from metadata JSON.
+#     Should NEVER be edited manually in production.
+#     """
+#     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+#     code = models.CharField(
+#         max_length=100,
+#         unique=True,
+#         db_index=True
+#     )
+#     label = models.CharField(
+#         max_length=255
+#     )
+#     category = models.CharField(
+#         max_length=100,
+#         db_index=True
+#     )
+#     severity_supported = models.BooleanField(default=False)
+
+#     is_active = models.BooleanField(default=True, db_index=True)
+#     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="finding_masters_created")
+#     updated_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="finding_masters_updated")
+#     created_at = models.DateTimeField(auto_now_add=True)
+#     updated_at = models.DateTimeField(auto_now=True)
+#     constraints = [
+#         models.UniqueConstraint(
+#             fields=["code"],
+#             name="unique_finding_master_code"
+#         )
+#     ]
+#     class Meta:
+#         verbose_name = "Finding Master"
+#         verbose_name_plural = "Finding Master"
+#         ordering = ["category", "label"]
+
+#         indexes = [
+#             models.Index(fields=["category"]),
+#             models.Index(fields=["is_active"]),
+#         ]
+
+#     def __str__(self):
+#         return f"{self.code} | {self.label}"
+
+#     def save(self, *args, **kwargs):
+#         if self.pk:
+#             raise ValidationError(
+#                 "FindingMaster entries are immutable and cannot be modified."
+#             )
+#         super().save(*args, **kwargs)
+
+# class ConsultationFinding(models.Model):
+#     """
+#     Structured clinical finding captured during consultation.
+
+#     Production rules:
+#     - One finding per consultation per code
+#     - Cannot modify after consultation finalized
+#     - Cannot reassign consultation
+#     - Supports controlled JSON extension
+#     """
+
+#     SEVERITY_CHOICES = [
+#         ("mild", "Mild"),
+#         ("moderate", "Moderate"),
+#         ("severe", "Severe"),
+#     ]
+
+#     id = models.UUIDField(
+#         primary_key=True,
+#         default=uuid.uuid4,
+#         editable=False
+#     )
+
+#     consultation = models.ForeignKey(
+#         "consultations.Consultation",
+#         on_delete=models.CASCADE,
+#         related_name="findings",
+#         db_index=True
+#     )
+
+#     finding = models.ForeignKey(
+#         FindingMaster,
+#         on_delete=models.PROTECT,
+#         related_name="consultation_findings",
+#         db_index=True
+#     )
+
+#     severity = models.CharField(
+#         max_length=20,
+#         choices=SEVERITY_CHOICES,
+#         blank=True,
+#         null=True,
+#         db_index=True
+#     )
+
+#     note = models.TextField(
+#         blank=True,
+#         null=True
+#     )
+
+#     extension_data = models.JSONField(
+#         blank=True,
+#         null=True,
+#         help_text="Controlled JSON extension for dynamic UI fields"
+#     )
+
+#     is_active = models.BooleanField(
+#         default=True,
+#         db_index=True
+#     )
+#     updated_by = models.ForeignKey(User, 
+#         on_delete=models.SET_NULL, null=True, blank=True, 
+#         related_name="findings_updated")
+#     reated_by = models.ForeignKey(
+#         "auth.User",
+#         on_delete=models.SET_NULL,
+#         null=True,
+#         blank=True,
+#         related_name="findings_created"
+#     )
+
+#     created_at = models.DateTimeField(
+#         auto_now_add=True,
+#         db_index=True
+#     )
+
+#     updated_at = models.DateTimeField(
+#         auto_now=True
+#     )
+
+#     class Meta:
+#         verbose_name = "Consultation Finding"
+#         verbose_name_plural = "Consultation Findings"
+
+#         ordering = ["-created_at"]
+
+#         constraints = [
+#             models.UniqueConstraint(
+#                 fields=["consultation", "finding"],
+#                 name="unique_finding_per_consultation"
+#             ),
+#         ]
+
+#         indexes = [
+#             models.Index(fields=["consultation"]),
+#             models.Index(fields=["finding"]),
+#             models.Index(fields=["severity"]),
+#             models.Index(fields=["is_active"]),
+#             models.Index(fields=["created_at"]),
+#             models.Index(fields=["consultation", "finding"]),
+#             models.Index(fields=["finding", "severity"]),
+#             GinIndex(fields=["extension_data"]),
+#         ]
+
+#     def __str__(self):
+#         return f"{self.consultation.encounter.visit_pnr} | {self.finding.code}"
+
+#     # =====================================================
+#     # 🔒 VALIDATION + LOCKING LOGIC
+#     # =====================================================
+
+#     def clean(self):
+#         """
+#         Core validation layer.
+#         """
+
+#         # 🚫 Prevent inactive master use
+#         if not self.finding.is_active:
+#             raise ValidationError("This finding is inactive.")
+
+#         # 🚫 Severity validation
+#         if self.severity and not self.finding.severity_supported:
+#             raise ValidationError(
+#                 f"{self.finding.label} does not support severity."
+#             )
+
+#         # 🚫 Block if consultation finalized
+#         if self.consultation.is_finalized:
+#             raise ValidationError(
+#                 "Cannot modify findings after consultation is finalized."
+#             )
+
+#     def save(self, *args, **kwargs):
+#         with transaction.atomic():
+
+#             if self.pk:
+#                 old = type(self).objects.only(
+#                     "consultation_id",
+#                     "finding_id"
+#                 ).get(pk=self.pk)
+
+#                 # 🚫 Cannot change consultation
+#                 if old.consultation_id != self.consultation_id:
+#                     raise ValidationError(
+#                         "Cannot reassign finding to another consultation."
+#                     )
+
+#                 # 🚫 Cannot change finding code
+#                 if old.finding_id != self.finding_id:
+#                     raise ValidationError(
+#                         "Cannot change finding once created."
+#                     )
+
+#             self.full_clean()
+#             super().save(*args, **kwargs)
+
+#     # =====================================================
+#     # 🧨 SOFT DELETE (MEDICO-LEGAL SAFE)
+#     # =====================================================
+
+#     def deactivate(self):
+#         """
+#         Soft delete instead of hard delete.
+#         """
+#         if self.consultation.is_finalized:
+#             raise ValidationError(
+#                 "Cannot delete findings after consultation is finalized."
+#             )
+
+#         self.is_active = False
+#         self.save(update_fields=["is_active", "updated_at"])
+
+# class Diagnosis(models.Model):
+#     """
+#     Production-grade Diagnosis model.
+
+#     Design:
+#     - Multiple diagnoses per Consultation
+#     - Provisional by default
+#     - Free-text allowed
+#     - Template-driven but not blocked
+#     - Immutable after consultation finalization
+#     - AI-ready structure
+#     """
+#     # =====================================================
+#     # CORE IDENTIFIERS
+#     # =====================================================
+
+#     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+#     consultation = models.ForeignKey(
+#         "consultations.Consultation",
+#         on_delete=models.CASCADE,
+#         related_name="diagnoses",
+#         db_index=True,
+#     )
+
+#     # =====================================================
+#     # STRUCTURED DIAGNOSIS CORE
+#     # =====================================================
+
+#     code = models.CharField(
+#         max_length=100,
+#         db_index=True,
+#         help_text="Template key or ICD code (optional)."
+#     )
+
+#     label = models.CharField(
+#         max_length=255,
+#         db_index=True,
+#         help_text="Primary diagnosis label."
+#     )
+
+#     category = models.CharField(
+#         max_length=100,
+#         blank=True,
+#         null=True,
+#         db_index=True,
+#         help_text="Clinical category (e.g. respiratory, endocrine)."
+#     )
+
+#     # Confirmed / Provisional / Differential
+#     diagnosis_type = models.CharField(
+#         max_length=30,
+#         choices=[
+#             ("provisional", "Provisional"),
+#             ("confirmed", "Confirmed"),
+#             ("differential", "Differential"),
+#         ],
+#         default="provisional",
+#         db_index=True
+#     )
+
+#     # Chronic marker
+#     is_chronic = models.BooleanField(default=False, db_index=True)
+
+#     # =====================================================
+#     # OPTIONAL EXTENSION (Future-proof)
+#     # =====================================================
+
+#     extension_data = models.JSONField(
+#         blank=True,
+#         null=True,
+#         help_text="Controlled expansion for evolving templates."
+#     )
+
+#     # =====================================================
+#     # CLINICAL NOTES
+#     # =====================================================
+
+#     doctor_note = models.TextField(blank=True, null=True)
+
+#     # =====================================================
+#     # AI-READY FIELDS
+#     # =====================================================
+
+#     ai_confidence_score = models.DecimalField(
+#         max_digits=5,
+#         decimal_places=2,
+#         null=True,
+#         blank=True
+#     )
+
+#     ai_generated = models.BooleanField(default=False)
+
+#     # =====================================================
+#     # AUDIT
+#     # =====================================================
+
+#     created_by = models.ForeignKey(
+#         "account.User",
+#         on_delete=models.SET_NULL,
+#         null=True,
+#         blank=True,
+#         related_name="diagnoses_created"
+#     )
+
+#     updated_by = models.ForeignKey(
+#         "account.User",
+#         on_delete=models.SET_NULL,
+#         null=True,
+#         blank=True,
+#         related_name="diagnoses_updated"
+#     )
+
+#     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+#     updated_at = models.DateTimeField(auto_now=True)
+
+#     is_active = models.BooleanField(default=True, db_index=True)
+
+#     # =====================================================
+#     # META
+#     # =====================================================
+
+#     class Meta:
+#         verbose_name = "Diagnosis"
+#         verbose_name_plural = "Diagnoses"
+#         ordering = ["created_at"]
+
+#         indexes = [
+#             models.Index(fields=["consultation", "diagnosis_type"]),
+#             models.Index(fields=["consultation", "is_active"]),
+#             models.Index(fields=["label"]),
+#             models.Index(fields=["category"]),
+#             models.Index(fields=["created_at"]),
+#         ]
+
+#         constraints = [
+#             models.UniqueConstraint(
+#                 fields=["consultation", "label", "diagnosis_type"],
+#                 name="unique_diagnosis_per_consultation"
+#             )
+#         ]
+
+#     # =====================================================
+#     # VALIDATION
+#     # =====================================================
+
+#     def clean(self):
+
+#         if not self.label:
+#             raise ValidationError("Diagnosis label is required.")
+
+#         if self.ai_confidence_score:
+#             if not (0 <= self.ai_confidence_score <= 100):
+#                 raise ValidationError("AI confidence must be between 0 and 100.")
+
+#         if self.consultation and self.consultation.is_finalized:
+#             raise ValidationError(
+#                 "Cannot modify diagnosis after consultation is finalized."
+#             )
+
+#     # =====================================================
+#     # SAVE LOGIC
+#     # =====================================================
+
+#     def save(self, *args, **kwargs):
+#         with transaction.atomic():
+
+#             self.full_clean()
+
+#             if self.pk:
+#                 old = type(self).objects.only(
+#                     "consultation_id"
+#                 ).get(pk=self.pk)
+
+#                 if old.consultation_id != self.consultation_id:
+#                     raise ValidationError(
+#                         "Diagnosis cannot be reassigned to another consultation."
+#                     )
+
+#             super().save(*args, **kwargs)
+
+#     # =====================================================
+#     # SOFT DELETE
+#     # =====================================================
+
+#     def deactivate(self):
+#         if self.consultation.is_finalized:
+#             raise ValidationError(
+#                 "Cannot delete diagnosis after consultation is finalized."
+#             )
+#         self.is_active = False
+#         self.save(update_fields=["is_active"])
+
+#     def __str__(self):
+#         return f"{self.label} ({self.diagnosis_type})"
+
 # =====================================================
 #  OLD CONSULTATION MODEL (TO BE REMOVED) Need to be removed after all data is migrated to the new model
 # =====================================================

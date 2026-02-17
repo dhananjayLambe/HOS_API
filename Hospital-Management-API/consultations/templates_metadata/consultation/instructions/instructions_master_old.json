@@ -1,0 +1,184 @@
+{
+  "version": 1,
+  "meta": {
+    "type": "patient_instructions",
+    "scope": "consultation",
+    "description": "Reusable patient advice templates used during OPD consultation. Follow-up scheduling handled separately.",
+    "design_principles": [
+      "instructions_are_non_blocking",
+      "multi_select_allowed",
+      "free_text_allowed",
+      "monitoring_supported",
+      "no_followup_logic_here"
+    ]
+  },
+
+  "items": {
+
+
+    "adequate_rest": {
+      "label": "Take adequate rest",
+      "category": "general_advice",
+      "requires_input": false
+    },
+
+    "maintain_hydration": {
+      "label": "Maintain adequate hydration",
+      "category": "general_advice",
+      "requires_input": false
+    },
+
+    "avoid_self_medication": {
+      "label": "Avoid self-medication",
+      "category": "general_advice",
+      "requires_input": false
+    },
+
+    "complete_full_course": {
+      "label": "Complete full course of prescribed medicines",
+      "category": "general_advice",
+      "requires_input": false
+    },
+
+
+    "avoid_spicy_food": {
+      "label": "Avoid spicy and oily food",
+      "category": "diet_lifestyle",
+      "requires_input": false
+    },
+
+    "low_salt_diet": {
+      "label": "Follow low salt diet",
+      "category": "diet_lifestyle",
+      "requires_input": false
+    },
+
+    "low_sugar_diet": {
+      "label": "Follow diabetic diet (low sugar intake)",
+      "category": "diet_lifestyle",
+      "requires_input": false
+    },
+
+    "increase_fiber_intake": {
+      "label": "Increase dietary fiber intake",
+      "category": "diet_lifestyle",
+      "requires_input": false
+    },
+
+    "weight_reduction_advice": {
+      "label": "Advise weight reduction through diet and exercise",
+      "category": "diet_lifestyle",
+      "requires_input": false
+    },
+
+
+    "monitor_blood_pressure": {
+      "label": "Monitor blood pressure regularly",
+      "category": "monitoring",
+      "requires_input": true,
+      "input_fields": [
+        {
+          "key": "frequency_per_day",
+          "label": "Times per day",
+          "type": "number",
+          "keyboard": "numeric"
+        }
+      ]
+    },
+
+    "monitor_blood_sugar": {
+      "label": "Monitor blood sugar regularly",
+      "category": "monitoring",
+      "requires_input": true,
+      "input_fields": [
+        {
+          "key": "frequency_per_week",
+          "label": "Times per week",
+          "type": "number",
+          "keyboard": "numeric"
+        }
+      ]
+    },
+
+    "daily_weight_monitoring": {
+      "label": "Monitor weight regularly",
+      "category": "monitoring",
+      "requires_input": false
+    },
+
+    "fluid_intake_restriction": {
+      "label": "Restrict fluid intake as advised",
+      "category": "monitoring",
+      "requires_input": false
+    },
+
+
+    "return_if_fever_persists": {
+      "label": "Return if fever persists or worsens",
+      "category": "warning_signs",
+      "requires_input": false
+    },
+
+    "visit_er_if_chest_pain": {
+      "label": "Visit emergency room if chest pain worsens",
+      "category": "warning_signs",
+      "requires_input": false
+    },
+
+    "return_if_breathlessness": {
+      "label": "Return immediately if breathlessness increases",
+      "category": "warning_signs",
+      "requires_input": false
+    },
+
+    "return_if_bleeding_increases": {
+      "label": "Return immediately if bleeding increases",
+      "category": "warning_signs",
+      "requires_input": false
+    },
+
+
+    "avoid_heavy_exertion": {
+      "label": "Avoid heavy exertion",
+      "category": "activity_restriction",
+      "requires_input": false
+    },
+
+    "bed_rest": {
+      "label": "Strict bed rest advised",
+      "category": "activity_restriction",
+      "requires_input": false
+    },
+
+    "avoid_lifting_weights": {
+      "label": "Avoid lifting heavy weights",
+      "category": "activity_restriction",
+      "requires_input": false
+    },
+
+
+    "foot_care_advice": {
+      "label": "Maintain proper foot care",
+      "category": "disease_specific",
+      "requires_input": false
+    },
+
+    "inhaler_technique_review": {
+      "label": "Demonstrate correct inhaler technique",
+      "category": "disease_specific",
+      "requires_input": false
+    },
+
+    "thyroid_medication_empty_stomach": {
+      "label": "Take thyroid medication on empty stomach",
+      "category": "disease_specific",
+      "requires_input": false
+    },
+
+    "iron_with_vitamin_c": {
+      "label": "Take iron tablets with vitamin C for better absorption",
+      "category": "disease_specific",
+      "requires_input": false
+    }
+  }
+}
