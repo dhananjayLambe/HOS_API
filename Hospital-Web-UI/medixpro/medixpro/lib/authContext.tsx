@@ -148,18 +148,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = async () => {
+    const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
     try {
-      console.log("Logout clicked");
-      const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
-      
       if (refreshToken) {
-        // Call Next.js logout API to blacklist token
+        // Call Next.js API route /api/logout to blacklist token on backend (path relative to baseURL "/api")
         try {
-          await axiosClient.post("/logout", { 
-            refresh_token: refreshToken 
+          await axiosClient.post("logout", {
+            refresh_token: refreshToken,
           });
         } catch (err) {
-          // Ignore errors during logout
+          // Ignore errors during logout - still clear local state
           console.error("Logout API failed", err);
         }
       }

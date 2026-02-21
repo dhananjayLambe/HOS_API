@@ -50,18 +50,24 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen min-h-[100dvh] flex-col gap-0 overflow-x-hidden w-full max-w-[100vw]">
-      <header className={cn("sticky top-0 z-40 shrink-0 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 duration-300 xl:ml-64 shadow-sm m-0 w-full min-w-0", !isSidebarOpen && "xl:ml-0")}>
-        <div className="flex h-14 sm:h-16 items-center justify-between gap-2 sm:gap-4 px-3 sm:px-4 md:px-6 min-w-0">
+      <header
+        className={cn(
+          "sticky top-0 z-40 shrink-0 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 duration-300 shadow-sm m-0 min-w-0 w-full",
+          "xl:ml-64 xl:w-[calc(100vw-16rem)]",
+          !isSidebarOpen && "xl:ml-0 xl:w-full"
+        )}
+      >
+        <div className="grid grid-cols-[auto_minmax(0,1fr)_minmax(160px,auto)] h-14 sm:h-16 items-center gap-2 sm:gap-4 px-3 sm:px-4 md:px-6 min-w-0 w-full">
           <button 
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
             className="p-2 rounded-lg hover:bg-accent transition-colors shrink-0"
           >
             <Menu className="h-5 w-5" />
           </button>
-          <div className="flex-1 flex justify-start min-w-0">
+          <div className="min-w-0 overflow-x-auto flex items-center">
             <PatientSearchBar />
           </div>
-          <div className="ml-auto flex items-center space-x-4 shrink-0">
+          <div className="flex items-center justify-end gap-1 shrink-0 pl-2 min-w-[160px]">
             <UserNav />
           </div>
         </div>

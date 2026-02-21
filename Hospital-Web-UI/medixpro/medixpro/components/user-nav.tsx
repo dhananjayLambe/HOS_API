@@ -1,11 +1,10 @@
 "use client";
 
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { HelpCircle, LogOut, MessageCircle, Settings, User } from "lucide-react";
 import { NotificationDropdown } from "./notification-dropdown";
-import { ThemeToggle } from "./theme-toggle";
 import Link from "next/link";
 import { useAuth } from "@/lib/authContext" 
 
@@ -47,16 +46,19 @@ export function UserNav() {
   const initials = getUserInitials();
 
   return (
-    <div className="flex items-center gap-4">
-      <ThemeToggle />
+    <div className="flex items-center gap-2 sm:gap-3 flex-nowrap">
       <NotificationDropdown />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-            <Avatar className="h-8 w-8">
-              <AvatarImage src="/placeholder-user.jpg" alt={displayName} />
-              <AvatarFallback>{initials}</AvatarFallback>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="relative h-9 w-9 rounded-full p-0 shrink-0 min-w-9 min-h-9 border-2 border-purple-500/60 bg-purple-100 hover:bg-purple-200 dark:bg-purple-900/40 dark:hover:bg-purple-800/50 ring-offset-background focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2"
+          >
+            <Avatar className="h-8 w-8 ring-2 ring-background">
+              <AvatarFallback className="bg-purple-600 text-white dark:bg-purple-500 text-sm font-semibold">{initials}</AvatarFallback>
             </Avatar>
+            <span className="sr-only">Open user menu</span>
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent className="w-56" align="end" forceMount>
@@ -74,12 +76,12 @@ export function UserNav() {
                 <span>Profile</span>
               </Link>
             </DropdownMenuItem>
-            <DropdownMenuItem>
-              {/* <Link href="/chat" className="flex items-center gap-2">
+           {/* <DropdownMenuItem>
+              <Link href="/chat" className="flex items-center gap-2">
                 <MessageCircle className="mr-2 h-4 w-4" />
                 <span>Chat</span>
-              </Link> */}
-            </DropdownMenuItem>
+              </Link> 
+            </DropdownMenuItem> */}
             <DropdownMenuItem>
               <Link href="/support" className="flex items-center gap-2">
                 <HelpCircle className="mr-2 h-4 w-4" />
@@ -94,19 +96,10 @@ export function UserNav() {
             </DropdownMenuItem>
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
-          {/* <DropdownMenuItem>
-            <Link href="/api/logout" className="flex items-center gap-2">
-              <LogOut className="mr-2 h-4 w-4" />
-              <span>Log out</span>
-            </Link>
-          </DropdownMenuItem> */}
           <DropdownMenuItem
-              onClick={() => {
-                console.log("Logout clicked from UserNav");
-                logout();
-              }}
-              className="flex items-center gap-2 cursor-pointer"
-            >
+            onClick={() => logout()}
+            className="flex items-center gap-2 cursor-pointer"
+          >
               <LogOut className="mr-2 h-4 w-4" />
               <span>Log out</span>
           </DropdownMenuItem>
