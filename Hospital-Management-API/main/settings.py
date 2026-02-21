@@ -58,6 +58,7 @@ INSTALLED_APPS = [
     'support.apps.SupportConfig',
     'tasks.apps.TasksConfig',
     'caleder_events.apps.CalederEventsConfig',
+    'medicines.apps.MedicinesConfig',
     #rest_framework
     'rest_framework',
     'rest_framework.authtoken',

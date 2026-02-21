@@ -1223,6 +1223,313 @@ class PreConsultationMedicalHistory(BasePreConsultationSection):
 #     def __str__(self):
 #         return f"{self.label} ({self.diagnosis_type})"
 
+# class Prescription(models.Model):
+#     """
+#     Prescription header model.
+
+#     - One consultation can have multiple prescription versions.
+#     - Only one active prescription per consultation.
+#     - Immutable after finalization.
+#     - Controls PrescriptionLine lifecycle.
+#     """
+
+#     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+#     consultation = models.ForeignKey(
+#         "consultations.Consultation",
+#         on_delete=models.CASCADE,
+#         related_name="prescriptions",
+#         db_index=True
+#     )
+
+#     # Version control
+#     version_number = models.PositiveIntegerField(default=1)
+#     is_active = models.BooleanField(default=True, db_index=True)
+
+#     # Prescription identity
+#     prescription_pnr = models.CharField(
+#         max_length=30,
+#         unique=True,
+#         db_index=True,
+#         editable=False
+#     )
+
+#     # Status control
+#     is_finalized = models.BooleanField(default=False, db_index=True)
+#     finalized_at = models.DateTimeField(null=True, blank=True)
+
+#     # PDF
+#     pdf_file = models.FileField(
+#         upload_to="prescriptions/",
+#         null=True,
+#         blank=True,
+#         max_length=255
+#     )
+
+#     # Audit
+#     created_by = models.ForeignKey(
+#         "account.User",
+#         on_delete=models.SET_NULL,
+#         null=True,
+#         blank=True,
+#         related_name="prescriptions_created"
+#     )
+
+#     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+#     updated_at = models.DateTimeField(auto_now=True)
+
+#     class Meta:
+#         ordering = ["-created_at"]
+
+#         indexes = [
+#             models.Index(fields=["consultation"]),
+#             models.Index(fields=["consultation", "is_active"]),
+#             models.Index(fields=["prescription_pnr"]),
+#         ]
+
+#         constraints = [
+#             models.UniqueConstraint(
+#                 fields=["consultation"],
+#                 condition=models.Q(is_active=True),
+#                 name="unique_active_prescription_per_consultation"
+#             ),
+#             models.CheckConstraint(
+#                 check=~models.Q(is_finalized=True, finalized_at__isnull=True),
+#                 name="finalized_requires_timestamp"
+#             )
+#         ]
+
+#         verbose_name = "Prescription"
+#         verbose_name_plural = "Prescriptions"
+
+#     # =====================================
+#     # Validation
+#     # =====================================
+
+#     def clean(self):
+#         if self.consultation.is_finalized:
+#             raise ValidationError(
+#                 "Cannot create prescription after consultation finalized."
+#             )
+
+#     # =====================================
+#     # Save Logic
+#     # =====================================
+
+#     def save(self, *args, **kwargs):
+
+#         with transaction.atomic():
+
+#             is_new = self._state.adding
+
+#             if self.pk:
+#                 old = type(self).objects.only("consultation_id").get(pk=self.pk)
+#                 if old.consultation_id != self.consultation_id:
+#                     raise ValidationError(
+#                         "Cannot reassign prescription to another consultation."
+#                     )
+
+#             if is_new:
+#                 self._assign_version()
+#                 self._generate_pnr()
+
+#             self.full_clean()
+#             super().save(*args, **kwargs)
+
+#     # =====================================
+#     # Version Logic
+#     # =====================================
+
+#     def _assign_version(self):
+#         last_version = (
+#             Prescription.objects
+#             .filter(consultation=self.consultation)
+#             .order_by("-version_number")
+#             .first()
+#         )
+
+#         if last_version:
+#             self.version_number = last_version.version_number + 1
+#             last_version.is_active = False
+#             last_version.save(update_fields=["is_active"])
+#         else:
+#             self.version_number = 1
+
+#     # =====================================
+#     # PNR Generation
+#     # =====================================
+
+#     def _generate_pnr(self):
+#         encounter = self.consultation.encounter
+#         base = encounter.visit_pnr
+#         self.prescription_pnr = f"{base}-RX{self.version_number}"
+
+#     # =====================================
+#     # Finalization
+#     # =====================================
+
+#     def finalize(self):
+#         if self.is_finalized:
+#             return
+
+#         self.is_finalized = True
+#         self.finalized_at = timezone.now()
+#         self.save(update_fields=["is_finalized", "finalized_at"])
+
+#     def __str__(self):
+#         return f"{self.prescription_pnr} | v{self.version_number}"
+
+# class PrescriptionLine(models.Model):
+#     """
+#     Enterprise-grade structured prescription line.
+
+#     - Snapshot-based (medico-legal safe)
+#     - Immutable after prescription finalization
+#     - AI ready
+#     - Pharmacy ready
+#     """
+
+#     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+#     prescription = models.ForeignKey(
+#         "consultations.Prescription",
+#         on_delete=models.CASCADE,
+#         related_name="lines",
+#         db_index=True
+#     )
+
+#     drug = models.ForeignKey(
+#         "medicines.DrugMaster",
+#         on_delete=models.PROTECT,
+#         db_index=True
+#     )
+
+#     # Snapshot fields
+#     drug_name_snapshot = models.CharField(max_length=255)
+#     generic_name_snapshot = models.CharField(max_length=255, null=True, blank=True)
+#     strength_snapshot = models.CharField(max_length=100, null=True, blank=True)
+#     formulation_snapshot = models.CharField(max_length=100)
+
+#     # Dosage structure
+#     dose_value = models.DecimalField(max_digits=6, decimal_places=2)
+#     dose_unit = models.CharField(max_length=50)
+
+#     route = models.ForeignKey(
+#         "medicines.RouteMaster",
+#         on_delete=models.PROTECT,
+#         db_index=True
+#     )
+
+#     frequency = models.ForeignKey(
+#         "medicines.FrequencyMaster",
+#         on_delete=models.PROTECT,
+#         db_index=True
+#     )
+
+#     duration_value = models.PositiveIntegerField(null=True, blank=True)
+#     duration_unit = models.CharField(
+#         max_length=20,
+#         choices=[
+#             ("days", "Days"),
+#             ("weeks", "Weeks"),
+#             ("months", "Months"),
+#         ],
+#         null=True,
+#         blank=True,
+#         db_index=True
+#     )
+
+#     instructions = models.TextField(null=True, blank=True)
+
+#     is_prn = models.BooleanField(default=False, db_index=True)
+#     is_stat = models.BooleanField(default=False, db_index=True)
+
+#     # AI
+#     ai_suggested = models.BooleanField(default=False)
+#     ai_confidence = models.DecimalField(
+#         max_digits=5,
+#         decimal_places=2,
+#         null=True,
+#         blank=True
+#     )
+
+#     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+#     updated_at = models.DateTimeField(auto_now=True)
+
+#     class Meta:
+#         ordering = ["created_at"]
+
+#         indexes = [
+#             models.Index(fields=["prescription"]),
+#             models.Index(fields=["drug"]),
+#             models.Index(fields=["prescription", "drug"]),
+#         ]
+
+#         constraints = [
+#             models.UniqueConstraint(
+#                 fields=["prescription", "drug"],
+#                 name="unique_drug_per_prescription"
+#             )
+#         ]
+
+#         verbose_name = "Prescription Line"
+#         verbose_name_plural = "Prescription Lines"
+
+#     # =====================================
+#     # Validation
+#     # =====================================
+
+#     def clean(self):
+
+#         if self.dose_value <= 0:
+#             raise ValidationError("Dose must be positive.")
+
+#         if self.prescription.is_finalized:
+#             raise ValidationError(
+#                 "Cannot modify line after prescription finalized."
+#             )
+
+#         if self.ai_confidence:
+#             if not (0 <= self.ai_confidence <= 100):
+#                 raise ValidationError(
+#                     "AI confidence must be between 0 and 100."
+#                 )
+
+#     # =====================================
+#     # Save
+#     # =====================================
+
+#     def save(self, *args, **kwargs):
+
+#         with transaction.atomic():
+
+#             if self.pk:
+#                 old = type(self).objects.only("prescription_id").get(pk=self.pk)
+#                 if old.prescription_id != self.prescription_id:
+#                     raise ValidationError(
+#                         "Cannot reassign to another prescription."
+#                     )
+
+#             if self._state.adding:
+#                 self._create_snapshot()
+
+#             self.full_clean()
+#             super().save(*args, **kwargs)
+
+#     # =====================================
+#     # Snapshot
+#     # =====================================
+
+#     def _create_snapshot(self):
+#         self.drug_name_snapshot = self.drug.brand_name
+#         self.generic_name_snapshot = self.drug.generic_name
+#         self.strength_snapshot = self.drug.strength
+#         self.formulation_snapshot = self.drug.formulation.name
+
+#     def __str__(self):
+#         return f"{self.drug_name_snapshot} | {self.prescription.prescription_pnr}"
+
+#models for prescriptions  
 # =====================================================
 #  OLD CONSULTATION MODEL (TO BE REMOVED) Need to be removed after all data is migrated to the new model
 # =====================================================
