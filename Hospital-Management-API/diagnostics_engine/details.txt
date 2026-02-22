@@ -1,0 +1,14 @@
+phase 1 plan 
+Doctor recommends test
+        ↓
+Patient agrees
+        ↓
+Telecaller assigns lab
+        ↓
+LabOrder created
+        ↓
+Lab collects cash directly
+        ↓
+Lab shares commission weekly/monthly
+        ↓
+You track margin manually (initially)
