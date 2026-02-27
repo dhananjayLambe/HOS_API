@@ -46,6 +46,8 @@ export interface ConsultationSectionProps {
   title: string;
   icon: React.ReactNode;
   defaultOpen?: boolean;
+  /** Optional config override (used for dynamic sections like findings). */
+  configOverride?: ConsultationSectionConfig;
 }
 
 export function ConsultationSection({
@@ -53,8 +55,9 @@ export function ConsultationSection({
   title,
   icon,
   defaultOpen = false,
+  configOverride,
 }: ConsultationSectionProps) {
-  const config = getSectionConfig(type);
+  const config = configOverride ?? getSectionConfig(type);
   const {
     getSectionItems,
     addSectionItem,

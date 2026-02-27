@@ -15,10 +15,10 @@ import {
 import { AlertCircle, Search, Thermometer, Stethoscope, ClipboardList, Pill, FlaskConical, FileText } from "lucide-react";
 import { ConsultationActionBar } from "@/components/consultations/consultation-action-bar";
 import { ConsultationRightMenu } from "@/components/consultations/consultation-right-menu";
-import { SymptomDetailPanel } from "@/components/consultations/symptom-detail-panel";
+import { ConsultationDynamicDetailPanel } from "@/components/consultations/consultation-dynamic-detail-panel";
 import { ConsultationSection } from "@/components/consultations/consultation-section";
 import { ConsultationErrorBoundary } from "@/components/consultations/consultation-error-boundary";
-import { FollowUpSection, ProceduresSection, SymptomsSection } from "@/components/consultations/sections";
+import { FollowUpSection, ProceduresSection, SymptomsSection, FindingsSection, DiagnosisSection, InstructionsSection } from "@/components/consultations/sections";
 import { useConsultationStore } from "@/store/consultationStore";
 import { useShallow } from "zustand/react/shallow";
 import {
@@ -144,20 +144,8 @@ export default function StartConsultationPage() {
             >
               <div className="space-y-3 sm:space-y-4">
                 {isSectionVisible(consultationType, "symptoms") && <SymptomsSection />}
-                {isSectionVisible(consultationType, "findings") && (
-                  <ConsultationSection
-                    type="findings"
-                    title="Findings"
-                    icon={<Stethoscope className="text-muted-foreground" />}
-                  />
-                )}
-                {isSectionVisible(consultationType, "diagnosis") && (
-                  <ConsultationSection
-                    type="diagnosis"
-                    title="Diagnosis"
-                    icon={<ClipboardList className="text-muted-foreground" />}
-                  />
-                )}
+                {isSectionVisible(consultationType, "findings") && <FindingsSection />}
+                {isSectionVisible(consultationType, "diagnosis") && <DiagnosisSection />}
                 {isSectionVisible(consultationType, "medicines") && (
                   <ConsultationSection
                     type="medicines"
@@ -175,11 +163,7 @@ export default function StartConsultationPage() {
                   />
                 )}
                 {isSectionVisible(consultationType, "instructions") && (
-                  <ConsultationSection
-                    type="instructions"
-                    title="Instructions"
-                    icon={<FileText className="text-muted-foreground" />}
-                  />
+                  <InstructionsSection />
                 )}
                 {isSectionVisible(consultationType, "follow_up") && <FollowUpSection />}
                 {isSectionVisible(consultationType, "procedure") && <ProceduresSection />}
@@ -189,7 +173,7 @@ export default function StartConsultationPage() {
               className="min-w-0 overflow-y-scroll order-3 lg:order-none lg:sticky lg:max-h-[calc(100vh-120px)] pr-2 [scrollbar-gutter:stable] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-gray-100 dark:[&::-webkit-scrollbar-track]:bg-gray-800 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 dark:[&::-webkit-scrollbar-thumb]:bg-gray-600"
               style={{ top: STICKY_TOP_PANELS } as React.CSSProperties}
             >
-              <SymptomDetailPanel />
+              <ConsultationDynamicDetailPanel />
             </div>
           </div>
         </div>

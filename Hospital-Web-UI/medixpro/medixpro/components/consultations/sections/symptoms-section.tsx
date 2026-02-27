@@ -5,10 +5,16 @@ import { Thermometer, Plus, AlertTriangle, Search } from "lucide-react";
 import { ConsultationSectionCard } from "@/components/consultations/consultation-section-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ConsultationSearchAddDrawer } from "@/components/consultations/consultation-search-add-drawer";
+import { SYMPTOM_ATTRIBUTES } from "@/data/consultation-section-data";
 import { useConsultationStore } from "@/store/consultationStore";
 import type { SymptomsSectionSchema } from "@/lib/consultation-schema-types";
 import { cn } from "@/lib/utils";
-import type { SymptomDetail } from "@/lib/consultation-types";
+import type {
+  SymptomDetail,
+  ConsultationSectionConfig,
+  ConsultationSectionItem,
+} from "@/lib/consultation-types";
 
 function symptomId() {
   return `sym-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -26,6 +32,10 @@ export function SymptomsSection() {
   } = useConsultationStore();
   const [search, setSearch] = useState("");
   const inputId = useId();
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerInitialValue, setDrawerInitialValue] = useState<string | undefined>(
+    undefined
+  );
 
   // Load backend-driven schema for symptoms (Phase 1: physician only).
   useEffect(() => {
@@ -58,7 +68,18 @@ export function SymptomsSection() {
 
   const add = (name: string) => {
     const trimmed = name.trim();
-    if (!trimmed || symptoms.some((s) => s.name.toLowerCase() === trimmed.toLowerCase())) return;
+    if (!trimmed) return;
+
+    // If symptom already exists, just select it instead of doing nothing
+    const existing = symptoms.find(
+      (s) => s.name.toLowerCase() === trimmed.toLowerCase()
+    );
+    if (existing) {
+      setSelectedSymptomId(existing.id);
+      setSearch("");
+      return;
+    }
+
     const id = symptomId();
     addSymptom({ id, name: trimmed });
     // Auto-select newly added symptom, similar to other sections opening detail panel
@@ -93,6 +114,52 @@ export function SymptomsSection() {
     );
   }, [symptomsSchema, symptoms, search]);
 
+  const drawerConfig: ConsultationSectionConfig = useMemo(
+    () => ({
+      type: "symptoms",
+      itemLabel: "Symptom",
+      searchPlaceholder: "Search symptoms",
+      staticOptions:
+        symptomsSchema?.items.map((item) => ({
+          id: item.key,
+          label: item.display_name,
+        })) ?? [],
+      durationOptions: [],
+      // For Add Symptom, Category should default to "Symptom".
+      attributeOptions: ["Symptom"],
+    }),
+    [symptomsSchema]
+  );
+
+  const existingItems: ConsultationSectionItem[] = useMemo(
+    () =>
+      symptoms.map((s) => ({
+        id: s.id,
+        label: s.name,
+        isCustom: true,
+      })),
+    [symptoms]
+  );
+
+  const openDrawer = () => {
+    const trimmed = search.trim();
+    setDrawerInitialValue(trimmed || undefined);
+    setDrawerOpen(true);
+  };
+
+  const handleDrawerSelect = (item: ConsultationSectionItem) => {
+    add(item.label);
+  };
+
+  const handleDrawerAddNew = (
+    item: Omit<ConsultationSectionItem, "id">
+  ): ConsultationSectionItem => {
+    const id = symptomId();
+    addSymptom({ id, name: item.label });
+    setSelectedSymptomId(id);
+    return { ...item, id };
+  };
+
   return (
     <ConsultationSectionCard
       title="Symptoms"
@@ -112,12 +179,30 @@ export function SymptomsSection() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  if (search.trim()) {
-                    add(search);
-                  }
+                if (e.key !== "Enter") return;
+                e.preventDefault();
+                const trimmed = search.trim();
+                if (!trimmed) return;
+
+                // If symptom already exists → just select it
+                const existing = symptoms.find(
+                  (s) => s.name.toLowerCase() === trimmed.toLowerCase()
+                );
+                if (existing) {
+                  setSelectedSymptomId(existing.id);
+                  setSearch("");
+                  return;
                 }
+
+                // If exactly one suggested backend option → add/select it directly
+                if (filteredSuggestions.length === 1) {
+                  add(filteredSuggestions[0].display_name);
+                  return;
+                }
+
+                // Otherwise open the Add Symptom drawer prefilled with this value
+                setDrawerInitialValue(trimmed);
+                setDrawerOpen(true);
               }}
               className="h-10 rounded-lg border-border/60 bg-muted/40 pl-9 text-foreground placeholder:text-muted-foreground focus-visible:bg-background focus-visible:ring-2"
               aria-label="Search symptoms"
@@ -128,7 +213,7 @@ export function SymptomsSection() {
             variant="outline"
             size="sm"
             className="h-10 shrink-0 gap-1.5 rounded-lg"
-            onClick={() => add(search)}
+            onClick={openDrawer}
           >
             <Plus className="h-4 w-4" />
             Add New
@@ -220,6 +305,27 @@ export function SymptomsSection() {
           </div>
         )}
       </div>
+      <ConsultationSearchAddDrawer
+        open={drawerOpen}
+        onOpenChange={setDrawerOpen}
+        config={drawerConfig}
+        existingItems={existingItems}
+        onSelect={handleDrawerSelect}
+        onAddNew={handleDrawerAddNew}
+        onDuplicate={() => {
+          // If duplicate added via drawer, just select the existing symptom.
+          const trimmed = (drawerInitialValue ?? "").trim();
+          const existing = trimmed
+            ? symptoms.find(
+                (s) => s.name.toLowerCase() === trimmed.toLowerCase()
+              )
+            : undefined;
+          if (existing) {
+            setSelectedSymptomId(existing.id);
+          }
+        }}
+        initialValue={drawerInitialValue}
+      />
     </ConsultationSectionCard>
   );
 }

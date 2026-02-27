@@ -4,5 +4,6 @@ from .pre_consultation import *
 from .symptoms import *
 from .findings import *
 from .diagnosis import *
+from .instruction import *
 from .prescription import *
 from .recommendations import *

@@ -100,18 +100,19 @@ export function ConsultationSearchAddDrawer({
   useEffect(() => {
     if (open) {
       const prefill = (initialValue ?? "").trim();
+      const defaultCategory = config.attributeOptions[0] ?? "";
       if (prefill) {
         setSearch(prefill);
         setAddName(prefill);
         setShowAddForm(true);
-        setAddCategory("");
+        setAddCategory(defaultCategory);
         setAddDescription("");
         setTimeout(() => addNameInputRef.current?.focus(), 100);
       } else {
         setSearch("");
         setShowAddForm(false);
         setAddName("");
-        setAddCategory("");
+        setAddCategory(defaultCategory);
         setAddDescription("");
         setTimeout(() => searchInputRef.current?.focus(), 100);
       }
