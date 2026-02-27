@@ -1,124 +1,224 @@
 "use client";
 
-import { useState, useId } from "react";
-import { Thermometer, Plus } from "lucide-react";
+import { useState, useId, useEffect, useMemo } from "react";
+import { Thermometer, Plus, AlertTriangle, Search } from "lucide-react";
 import { ConsultationSectionCard } from "@/components/consultations/consultation-section-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useConsultationStore } from "@/store/consultationStore";
+import type { SymptomsSectionSchema } from "@/lib/consultation-schema-types";
 import { cn } from "@/lib/utils";
-
-const SUGGESTED_SYMPTOMS = [
-  "Cough",
-  "Cold",
-  "Vomiting",
-  "Stomach",
-  "Headache",
-  "Abdominal Pain",
-  "Running Nose",
-  "Loose stools",
-  "Loose Motion",
-  "Throat pain",
-];
+import type { SymptomDetail } from "@/lib/consultation-types";
 
 function symptomId() {
   return `sym-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 export function SymptomsSection() {
-  const { symptoms, addSymptom, removeSymptom, setSelectedSymptomId, selectedSymptomId } =
-    useConsultationStore();
-  const [customInput, setCustomInput] = useState("");
+  const {
+    symptoms,
+    addSymptom,
+    removeSymptom,
+    setSelectedSymptomId,
+    selectedSymptomId,
+    symptomsSchema,
+    setSymptomsSchema,
+  } = useConsultationStore();
+  const [search, setSearch] = useState("");
   const inputId = useId();
+
+  // Load backend-driven schema for symptoms (Phase 1: physician only).
+  useEffect(() => {
+    if (symptomsSchema) return;
+
+    const controller = new AbortController();
+
+    async function loadSchema() {
+      try {
+        const res = await fetch(
+          `/api/consultation/render-schema?specialty=physician&section=symptoms`,
+          { signal: controller.signal }
+        );
+        if (!res.ok) {
+          // Fail silently for now; UI falls back to manual add only.
+          return;
+        }
+        const data = (await res.json()) as SymptomsSectionSchema;
+        if (data.section === "symptoms" && Array.isArray(data.items)) {
+          setSymptomsSchema(data);
+        }
+      } catch {
+        // Ignore network errors; do not block consultation.
+      }
+    }
+
+    void loadSchema();
+    return () => controller.abort();
+  }, [symptomsSchema, setSymptomsSchema]);
 
   const add = (name: string) => {
     const trimmed = name.trim();
     if (!trimmed || symptoms.some((s) => s.name.toLowerCase() === trimmed.toLowerCase())) return;
-    addSymptom({ id: symptomId(), name: trimmed });
-    setCustomInput("");
+    const id = symptomId();
+    addSymptom({ id, name: trimmed });
+    // Auto-select newly added symptom, similar to other sections opening detail panel
+    setSelectedSymptomId(id);
+    setSearch("");
   };
+
+  const isSymptomIncomplete = (detail: SymptomDetail | undefined) => {
+    if (!detail) return true;
+    return Object.keys(detail).length === 0;
+  };
+
+  const incompleteCount = useMemo(
+    () => symptoms.filter((s) => isSymptomIncomplete(s.detail)).length,
+    [symptoms]
+  );
+
+  const filteredSuggestions = useMemo(() => {
+    if (!symptomsSchema) return [];
+    const q = search.trim().toLowerCase();
+    const base = symptomsSchema.items.filter(
+      (item) =>
+        !symptoms.some(
+          (s) => s.name.toLowerCase() === item.display_name.toLowerCase()
+        )
+    );
+    if (!q) return base;
+    return base.filter(
+      (item) =>
+        item.display_name.toLowerCase().includes(q) ||
+        item.key.toLowerCase().includes(q)
+    );
+  }, [symptomsSchema, symptoms, search]);
 
   return (
     <ConsultationSectionCard
       title="Symptoms"
       icon={<Thermometer className="text-muted-foreground" />}
       defaultOpen
+      incompleteCount={incompleteCount}
     >
       <div className="space-y-2">
-        <div className="flex flex-wrap gap-2">
-          {symptoms.map((s) => (
-            <span
-              key={s.id}
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
-                selectedSymptomId === s.id
-                  ? "bg-blue-600 text-white shadow-sm dark:bg-blue-600"
-                  : "border border-border bg-muted/50 text-foreground hover:bg-muted"
-              )}
-            >
-              <button
-                type="button"
-                onClick={() => setSelectedSymptomId(selectedSymptomId === s.id ? null : s.id)}
-                className="focus:outline-none"
-              >
-                {s.name}
-              </button>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  removeSymptom(s.id);
-                }}
-                className={cn(
-                  "ml-0.5 rounded-full p-0.5 hover:opacity-80",
-                  selectedSymptomId === s.id ? "hover:bg-blue-700 dark:hover:bg-blue-700" : "hover:bg-muted"
-                )}
-                aria-label={`Remove ${s.name}`}
-              >
-                ×
-              </button>
-            </span>
-          ))}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {SUGGESTED_SYMPTOMS.filter(
-            (name) => !symptoms.some((s) => s.name.toLowerCase() === name.toLowerCase())
-          ).map((name) => (
-            <button
-              key={name}
-              type="button"
-              onClick={() => add(name)}
-              className="rounded-full border border-muted-foreground/40 bg-muted/30 px-3 py-1.5 text-sm text-muted-foreground hover:border-muted-foreground/60 hover:bg-muted/50 hover:text-foreground"
-            >
-              {name}
-            </button>
-          ))}
-        </div>
-        <div className="flex gap-2">
-          <Input
-            id={inputId}
-            placeholder="Type and press Enter to add"
-            value={customInput}
-            onChange={(e) => setCustomInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                add(customInput);
-              }
-            }}
-            className="max-w-xs"
-          />
+        {/* Row 1: Search + Add New (match other sections) */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative flex-1 min-w-[180px]">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              id={inputId}
+              type="search"
+              placeholder="Search symptoms"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  if (search.trim()) {
+                    add(search);
+                  }
+                }
+              }}
+              className="h-10 rounded-lg border-border/60 bg-muted/40 pl-9 text-foreground placeholder:text-muted-foreground focus-visible:bg-background focus-visible:ring-2"
+              aria-label="Search symptoms"
+            />
+          </div>
           <Button
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => add(customInput)}
-            className="gap-1.5 rounded-lg"
+            className="h-10 shrink-0 gap-1.5 rounded-lg"
+            onClick={() => add(search)}
           >
             <Plus className="h-4 w-4" />
-            Add
+            Add New
           </Button>
         </div>
+
+        {/* Selected symptoms */}
+        {/* Selected symptoms: same chip style as other sections, with incomplete icon */}
+        {symptoms.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {symptoms.map((s) => {
+              const incomplete = isSymptomIncomplete(s.detail);
+              const selected = selectedSymptomId === s.id;
+              return (
+                <span
+                  key={s.id}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
+                    selected
+                      ? "bg-blue-600 text-white shadow-sm dark:bg-blue-600"
+                      : "border border-border bg-muted/50 text-foreground hover:bg-muted"
+                  )}
+                  title={
+                    incomplete ? "No details filled for this symptom yet" : undefined
+                  }
+                >
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSelectedSymptomId(selected ? null : s.id)
+                    }
+                    className="focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded"
+                  >
+                    {s.name}
+                  </button>
+                  {incomplete && (
+                    <span
+                      className={cn(
+                        "shrink-0",
+                        selected
+                          ? "text-amber-200 dark:text-amber-100"
+                          : "text-amber-700 dark:text-amber-600"
+                      )}
+                      aria-hidden
+                    >
+                      <AlertTriangle className="h-3.5 w-3.5" />
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeSymptom(s.id);
+                    }}
+                    className={cn(
+                      "ml-0.5 rounded-full p-0.5 hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      selected
+                        ? "hover:bg-blue-700 dark:hover:bg-blue-700"
+                        : "hover:bg-muted"
+                    )}
+                    aria-label={`Remove ${s.name}`}
+                  >
+                    ×
+                  </button>
+                </span>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Separator when both selected symptoms and suggestions/search exist */}
+        {symptoms.length > 0 && filteredSuggestions.length > 0 && (
+          <hr className="my-2 border-border" />
+        )}
+
+        {/* Suggested symptoms from backend schema */}
+        {symptomsSchema && filteredSuggestions.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {filteredSuggestions.map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => add(item.display_name)}
+                className="rounded-full border border-muted-foreground/40 bg-muted/30 px-3 py-1.5 text-sm text-muted-foreground hover:border-muted-foreground/60 hover:bg-muted/50 hover:text-foreground"
+              >
+                {item.display_name}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </ConsultationSectionCard>
   );

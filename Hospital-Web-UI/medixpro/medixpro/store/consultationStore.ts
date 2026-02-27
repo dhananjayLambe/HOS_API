@@ -12,6 +12,7 @@ import type {
   ConsultationSectionItem,
   SectionItemDetail,
 } from "@/lib/consultation-types";
+import type { SymptomsSectionSchema, SymptomItemSchema } from "@/lib/consultation-schema-types";
 import { DEFAULT_CONSULTATION_STATE } from "@/lib/consultation-types";
 
 type DraftStatus = {
@@ -30,6 +31,10 @@ type ConsultationStore = ConsultationState & {
   selectedSymptomId: string | null;
   /** Reusable section pattern: items per section (local, backend-agnostic). */
   sectionItems: Record<ConsultationSectionType, ConsultationSectionItem[]>;
+  /** Backend-driven schema for symptoms (per consultation session). */
+  symptomsSchema: SymptomsSectionSchema | null;
+  /** Quick lookup of schema item by key. */
+  symptomSchemaByKey: Record<string, SymptomItemSchema>;
   selectedDetail: SelectedDetailPayload;
   setSymptoms: (symptoms: ConsultationSymptom[]) => void;
   addSymptom: (symptom: ConsultationSymptom) => void;
@@ -58,6 +63,9 @@ type ConsultationStore = ConsultationState & {
   setPrescriptionNotes: (value: string) => void;
   setDoctorNotes: (value: string) => void;
   setConsultationType: (type: ConsultationWorkflowType) => void;
+  /** Schema setters */
+  setSymptomsSchema: (schema: SymptomsSectionSchema) => void;
+  getSymptomSchemaForLabel: (label: string) => SymptomItemSchema | undefined;
   reset: () => void;
   // Section items (reusable pattern)
   getSectionItems: (section: ConsultationSectionType) => ConsultationSectionItem[];
@@ -95,6 +103,8 @@ export const useConsultationStore = create<ConsultationStore>((set, get) => ({
   selectedSymptomId: null,
   sectionItems: emptySectionItems(),
   selectedDetail: null,
+  symptomsSchema: null,
+  symptomSchemaByKey: {},
 
   setSymptoms: (symptoms) => set({ symptoms }),
   addSymptom: (symptom) =>
@@ -152,6 +162,26 @@ export const useConsultationStore = create<ConsultationStore>((set, get) => ({
   setPrescriptionNotes: (prescriptionNotes) => set({ prescriptionNotes }),
   setDoctorNotes: (doctorNotes) => set({ doctorNotes }),
   setConsultationType: (consultationType) => set({ consultationType }),
+
+  setSymptomsSchema: (schema) =>
+    set(() => {
+      const byKey: Record<string, SymptomItemSchema> = {};
+      for (const item of schema.items) {
+        byKey[item.key] = item;
+      }
+      return { symptomsSchema: schema, symptomSchemaByKey: byKey };
+    }),
+
+  getSymptomSchemaForLabel: (label) => {
+    const { symptomsSchema } = get();
+    if (!symptomsSchema) return undefined;
+    const lower = label.trim().toLowerCase();
+    return symptomsSchema.items.find(
+      (item) =>
+        item.display_name.toLowerCase() === lower ||
+        item.key.toLowerCase() === lower
+    );
+  },
 
   getSectionItems: (section) => get().sectionItems[section] ?? [],
   addSectionItem: (section, item) =>

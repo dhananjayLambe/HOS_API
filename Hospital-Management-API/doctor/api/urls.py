@@ -10,7 +10,8 @@ from doctor.api.views import (
     RegistrationView,GovernmentIDViewSet,EducationViewSet,
     SpecializationViewSet,CustomSpecializationViewSet,
     DoctorServiceViewSet,AwardViewSet,CertificationViewSet,
-    DoctorDashboardSummaryView,RegistrationViewSet,
+    #DoctorDashboardSummaryView,
+    RegistrationViewSet,
     UploadDoctorPhotoView,DoctorProfileView,
     UploadRegistrationCertificateView,
     UploadEducationCertificateView,UploadGovernmentIDView,DoctorKYCStatusView,
@@ -90,7 +91,7 @@ urlpatterns = [
     path('government-id/', government_id_view, name='doctor-government-id'),
     path('bank-details/', bank_details_view, name='doctor-bank-details'),
     path('bank-details/<int:pk>/', bank_details_detail_view, name='doctor-bank-details-detail'),
-    path('dashboard/summary/', DoctorDashboardSummaryView.as_view(), name='doctor-dashboard-summary'),
+    #path('dashboard/summary/', DoctorDashboardSummaryView.as_view(), name='doctor-dashboard-summary'),
     path('upload-photo/', UploadDoctorPhotoView.as_view(), name='upload-doctor-photo'),
     path('me/', DoctorProfileView.as_view(), name='doctor-profile'),
     #KYC 

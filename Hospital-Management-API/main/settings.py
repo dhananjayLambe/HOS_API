@@ -41,7 +41,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    #Apps
+    # Apps
     'account.apps.AccountConfig',
     'doctor.apps.DoctorConfig',
     'patient.apps.PatientConfig',
@@ -52,21 +52,23 @@ INSTALLED_APPS = [
     'helpdesk.apps.HelpdeskConfig',
     'appointments.apps.AppointmentsConfig',
     'queue_management.apps.QueueManagementConfig',
-    'consultations.apps.ConsultationsConfig',
-    'prescriptions.apps.PrescriptionsConfig',
-    'diagnostic.apps.DiagnosticConfig',
+    'consultations_core.apps.ConsultationsCoreConfig',
+    'consultation_config.apps.ConsultationConfigConfig',
+    # 'consultations.apps.ConsultationsConfig',
+    # 'prescriptions.apps.PrescriptionsConfig',
+    # 'diagnostic.apps.DiagnosticConfig',
     'support.apps.SupportConfig',
     'tasks.apps.TasksConfig',
     'caleder_events.apps.CalederEventsConfig',
     'medicines.apps.MedicinesConfig',
-    #rest_framework
+    # rest_framework
     'rest_framework',
     'rest_framework.authtoken',
     'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist',
     'django.contrib.postgres',
     'django_celery_results',
-    'django_ratelimit', 
+    'django_ratelimit',
     'drf_yasg',
     'core',
     "corsheaders",
@@ -168,7 +170,7 @@ TEMPLATES = [
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'demo4_db',
+        'NAME': 'demo5_db',
         'USER': 'postgres',
         'PASSWORD': '123',
         'HOST': 'localhost',
@@ -230,13 +232,16 @@ cors = [
     "http://localhost:3000",
 ]
 # Caching with Redis
+# If Redis is temporarily unavailable, django-redis will ignore cache errors
+# so that normal request handling continues.
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
         "LOCATION": REDIS_URL,
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
-        }
+            "IGNORE_EXCEPTIONS": True,  # Don't raise if Redis is down
+        },
     }
 }
 

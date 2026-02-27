@@ -323,25 +323,54 @@ class CheckPatientView(APIView):
 
 
 class PatientProfileSearchView(ListAPIView):
+    """
+    Lightweight patient search by name or mobile.
+    Uses case-insensitive containment to avoid database-specific trigram requirements.
+    """
     serializer_class = PatientProfileSearchSerializer
 
     def get(self, request, *args, **kwargs):
         query = request.query_params.get('query', '').strip()
-        cache_key = f"patient_search_{query}"
-        cached_data = cache.get(cache_key)
 
-        if cached_data:
+        # Basic validation: require at least 2 characters to search
+        if not query or len(query) < 2:
+            return Response([], status=status.HTTP_200_OK)
+
+        # Prevent excessively long queries from being used
+        if len(query) > 50:
+            query = query[:50]
+
+        cache_key = f"patient_search_{query}"
+        cached_data = None
+
+        # Safely try cache get – if Redis is down, log and ignore errors
+        try:
+            cached_data = cache.get(cache_key)
+        except Exception:
+            logger.exception("PatientProfileSearchView: Redis cache GET failed", exc_info=True)
+            cached_data = None
+
+        if cached_data is not None:
             return Response(cached_data)
 
-        queryset = PatientProfile.objects.select_related('account__user').annotate(
-            similarity=TrigramSimilarity('first_name', query) +
-                      TrigramSimilarity('last_name', query) +
-                      TrigramSimilarity('account__user__username', query)
-        ).filter(similarity__gt=0.2).order_by('-similarity')
+        # Basic icontains search across first name, last name, and mobile (username)
+        queryset = PatientProfile.objects.select_related('account__user').filter(
+            Q(first_name__icontains=query) |
+            Q(last_name__icontains=query) |
+            Q(account__user__username__icontains=query)
+        ).order_by('first_name', 'last_name')
 
         serializer = self.get_serializer(queryset, many=True)
-        cache.set(cache_key, serializer.data, timeout=300)  # cache for 5 minutes
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        data = serializer.data
+
+        # Safely try cache set – if Redis is down, log and ignore errors
+        try:
+            cache.set(cache_key, data, timeout=300)  # cache for 5 minutes
+        except Exception:
+            logger.exception("PatientProfileSearchView: Redis cache SET failed", exc_info=True)
+            pass
+
+        return Response(data, status=status.HTTP_200_OK)
 
 
 # ============================================

@@ -106,8 +106,10 @@ async function apiRequest<T>(endpoint: string, options: AxiosRequestConfig = {})
         }
       }
       
+      // Don't log 404 for /doctor/address - "no address yet" is expected for new users
+      const isAddress404 = endpoint.includes('/doctor/address') && status === 404
       // Log full error for debugging (only for non-404 errors or if data is not empty)
-      if (status !== 404 || Object.keys(data).length > 0) {
+      if (!isAddress404 && (status !== 404 || Object.keys(data).length > 0)) {
         console.error(`[API Error] ${endpoint}:`, {
           status,
           data,
@@ -197,11 +199,17 @@ export const doctorAPI = {
       data,
     }),
 
-  // Get address
-  getAddress: () =>
-    apiRequest<any>("/doctor/address", {
-      method: "GET",
-    }),
+  // Get address (404 = no address yet, return success with null data so UI uses defaults)
+  getAddress: async () => {
+    try {
+      return await apiRequest<any>("/doctor/address", { method: "GET" })
+    } catch (e: any) {
+      if (e?.status === 404 || e?.response?.status === 404) {
+        return { status: "success", data: null }
+      }
+      throw e
+    }
+  },
 
   // Update or create address (handles both create and update)
   updateAddress: async (data: any) => {

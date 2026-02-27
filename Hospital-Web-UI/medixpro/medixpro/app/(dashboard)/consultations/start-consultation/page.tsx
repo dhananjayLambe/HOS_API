@@ -15,10 +15,10 @@ import {
 import { AlertCircle, Search, Thermometer, Stethoscope, ClipboardList, Pill, FlaskConical, FileText } from "lucide-react";
 import { ConsultationActionBar } from "@/components/consultations/consultation-action-bar";
 import { ConsultationRightMenu } from "@/components/consultations/consultation-right-menu";
-import { ConsultationDetailPanel } from "@/components/consultations/consultation-detail-panel";
+import { SymptomDetailPanel } from "@/components/consultations/symptom-detail-panel";
 import { ConsultationSection } from "@/components/consultations/consultation-section";
 import { ConsultationErrorBoundary } from "@/components/consultations/consultation-error-boundary";
-import { FollowUpSection, ProceduresSection } from "@/components/consultations/sections";
+import { FollowUpSection, ProceduresSection, SymptomsSection } from "@/components/consultations/sections";
 import { useConsultationStore } from "@/store/consultationStore";
 import { useShallow } from "zustand/react/shallow";
 import {
@@ -143,14 +143,7 @@ export default function StartConsultationPage() {
               className="min-w-0 min-h-0 overflow-y-auto lg:overflow-y-scroll lg:max-h-[calc(100vh-120px)] pr-2 sm:pr-4 [scrollbar-gutter:stable] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-gray-100 dark:[&::-webkit-scrollbar-track]:bg-gray-800 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 dark:[&::-webkit-scrollbar-thumb]:bg-gray-600 order-1 lg:order-none"
             >
               <div className="space-y-3 sm:space-y-4">
-                {isSectionVisible(consultationType, "symptoms") && (
-                  <ConsultationSection
-                    type="symptoms"
-                    title="Symptoms"
-                    icon={<Thermometer className="text-muted-foreground" />}
-                    defaultOpen
-                  />
-                )}
+                {isSectionVisible(consultationType, "symptoms") && <SymptomsSection />}
                 {isSectionVisible(consultationType, "findings") && (
                   <ConsultationSection
                     type="findings"
@@ -196,7 +189,7 @@ export default function StartConsultationPage() {
               className="min-w-0 overflow-y-scroll order-3 lg:order-none lg:sticky lg:max-h-[calc(100vh-120px)] pr-2 [scrollbar-gutter:stable] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-gray-100 dark:[&::-webkit-scrollbar-track]:bg-gray-800 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 dark:[&::-webkit-scrollbar-thumb]:bg-gray-600"
               style={{ top: STICKY_TOP_PANELS } as React.CSSProperties}
             >
-              <ConsultationDetailPanel />
+              <SymptomDetailPanel />
             </div>
           </div>
         </div>

@@ -83,41 +83,6 @@ export function AddressDetailsSection() {
           errorMessage = String(error)
         }
         
-        // Log comprehensive error details for debugging
-        try {
-          const errorDetails: any = {
-            status: status ?? 'undefined',
-            message: errorMessage,
-            errorType: error?.constructor?.name || typeof error,
-            hasStatus: 'status' in (error || {}),
-            hasResponse: 'response' in (error || {}),
-            errorKeys: error ? Object.keys(error) : [],
-          }
-          
-          // Try to stringify the error (might fail for circular references)
-          try {
-            errorDetails.errorJSON = JSON.stringify(error, null, 2)
-          } catch (e) {
-            errorDetails.errorJSON = "Could not stringify error (circular reference?)"
-          }
-          
-          // Add error properties if they exist
-          if (error) {
-            if ('status' in error) errorDetails.statusProperty = error.status
-            if ('message' in error) errorDetails.messageProperty = error.message
-            if ('response' in error) {
-              errorDetails.responseStatus = error.response?.status
-              errorDetails.responseData = error.response?.data
-            }
-          }
-          
-          console.error("Error loading address - Full details:", errorDetails)
-        } catch (logError) {
-          // Fallback if logging fails
-          console.error("Error loading address - Could not log details:", logError)
-          console.error("Original error:", error)
-        }
-        
         // Handle different error scenarios
         if (status === 404) {
           // Address doesn't exist - that's okay, use defaults
