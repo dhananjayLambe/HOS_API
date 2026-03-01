@@ -27,6 +27,8 @@ from consultations_core.api.serializers.instructions import (
 
 logger = logging.getLogger(__name__)
 
+MSG_VISIT_CANCELLED = "This visit has been cancelled. Please start a new one."
+
 
 def _normalize_specialty(raw: str) -> str:
     return (raw or "").strip().lower().replace(" ", "_")
@@ -54,6 +56,11 @@ class InstructionTemplatesAPIView(APIView):
 
     def get(self, request, encounter_id):
         encounter = get_object_or_404(ClinicalEncounter, id=encounter_id)
+        if encounter.status in ("cancelled", "no_show"):
+            return Response(
+                {"detail": MSG_VISIT_CANCELLED},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         doctor = encounter.doctor
         if not doctor:
             return Response(
@@ -109,6 +116,11 @@ class EncounterInstructionsListCreateAPIView(APIView):
 
     def get(self, request, encounter_id):
         encounter = self.get_encounter(encounter_id)
+        if encounter.status in ("cancelled", "no_show"):
+            return Response(
+                {"detail": MSG_VISIT_CANCELLED},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         qs = EncounterInstruction.objects.filter(
             encounter=encounter,
             is_active=True,
@@ -118,6 +130,11 @@ class EncounterInstructionsListCreateAPIView(APIView):
 
     def post(self, request, encounter_id):
         encounter = self.get_encounter(encounter_id)
+        if encounter.status in ("cancelled", "no_show"):
+            return Response(
+                {"detail": MSG_VISIT_CANCELLED},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         if _consultation_finalized(encounter):
             return Response(
                 {"detail": "Consultation is finalized; cannot add instructions."},
@@ -192,6 +209,11 @@ class EncounterInstructionUpdateDeleteAPIView(APIView):
 
     def patch(self, request, pk):
         ei = self.get_instruction(pk)
+        if ei.encounter.status in ("cancelled", "no_show"):
+            return Response(
+                {"detail": MSG_VISIT_CANCELLED},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         if _consultation_finalized(ei.encounter):
             return Response(
                 {"detail": "Consultation is finalized; cannot update instructions."},
@@ -211,6 +233,11 @@ class EncounterInstructionUpdateDeleteAPIView(APIView):
 
     def delete(self, request, pk):
         ei = self.get_instruction(pk)
+        if ei.encounter.status in ("cancelled", "no_show"):
+            return Response(
+                {"detail": MSG_VISIT_CANCELLED},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         if _consultation_finalized(ei.encounter):
             return Response(
                 {"detail": "Consultation is finalized; cannot remove instructions."},

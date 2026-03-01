@@ -1,0 +1,392 @@
+Excellent decision.
+This is exactly how real products become stable.
+
+Below is your DoctorPro Consultation System Master Guide (v1.0)
+This will act as the internal “Consultation Bible” — product + UX + technical reference.
+
+You can copy this into Notion / Confluence / internal docs.
+
+⸻
+
+🏥 DOCTORPRO
+
+CONSULTATION SYSTEM MASTER GUIDE (v1.0)
+
+⸻
+
+1. PURPOSE OF THIS DOCUMENT
+
+This document defines:
+	•	Encounter lifecycle
+	•	UI behavior
+	•	UX rules
+	•	State transitions
+	•	Backend enforcement
+	•	Edge cases
+	•	What is allowed / not allowed
+	•	Future extensibility rules
+
+This is the single source of truth for consultation design.
+
+No feature should violate this document.
+
+⸻
+
+2. CORE PHILOSOPHY
+
+2.1 Medical Principle
+	•	One Visit = One Encounter
+	•	One Encounter = One Clinical Record
+	•	Clinical records must be chronological and immutable after completion
+
+2.2 System Principles
+	•	Navigation ≠ State Change
+	•	Only explicit buttons change state
+	•	State is never inferred from data
+	•	No automatic record duplication
+	•	No rollback based on validation
+
+Single Source of Truth:
+
+Encounter.status
+
+
+⸻
+
+3. ENCOUNTER LIFECYCLE
+
+3.1 Status Flow
+
+CREATED
+↓
+PRE_CONSULTATION_IN_PROGRESS
+↓
+PRE_CONSULTATION_COMPLETED
+↓
+CONSULTATION_IN_PROGRESS
+↓
+CONSULTATION_COMPLETED
+↓
+CLOSED (future)
+
+Optional terminal:
+
+CANCELLED
+
+
+⸻
+
+4. STATE TRANSITION RULES
+
+4.1 Allowed Transitions
+
+From	To	Trigger
+CREATED	PRE_CONSULTATION_IN_PROGRESS	Open Pre
+PRE_CONSULTATION_IN_PROGRESS	PRE_CONSULTATION_COMPLETED	Complete Pre
+PRE_CONSULTATION_COMPLETED	CONSULTATION_IN_PROGRESS	Start Consultation
+CONSULTATION_IN_PROGRESS	CONSULTATION_COMPLETED	End Consultation
+ANY ACTIVE	CANCELLED	Explicit cancel (if enabled)
+
+No reverse transitions allowed.
+
+⸻
+
+5. ENTRY LOGIC (WHEN PATIENT SELECTED)
+
+System checks:
+
+Case A: Active Encounter Exists
+
+Status in:
+	•	CREATED
+	•	PRE_CONSULTATION_IN_PROGRESS
+	•	CONSULTATION_IN_PROGRESS
+
+→ Auto resume
+
+No popup.
+
+⸻
+
+Case B: Last Encounter Completed
+
+→ Show:
+	•	Start New Visit button
+
+⸻
+
+Case C: No Encounter
+
+→ Create new encounter
+→ Redirect to Pre
+
+⸻
+
+6. PRE-CONSULTATION UX DESIGN
+
+6.1 When Editable
+
+Editable only if status:
+	•	CREATED
+	•	PRE_CONSULTATION_IN_PROGRESS
+
+⸻
+
+6.2 Buttons
+
+Primary:
+	•	Save Draft
+	•	Complete & Start Consultation
+
+Secondary:
+	•	Start New Visit
+
+⸻
+
+6.3 On Complete
+
+Backend:
+
+status = PRE_CONSULTATION_COMPLETED
+redirect to Consultation
+status = CONSULTATION_IN_PROGRESS
+
+
+⸻
+
+6.4 If Consultation Already Started
+
+Pre becomes:
+	•	Read-only
+	•	No form inputs enabled
+	•	Banner:
+
+“Consultation already started. Pre locked.”
+
+⸻
+
+7. CONSULTATION UX DESIGN
+
+7.1 When Editable
+
+Editable only if:
+
+status = CONSULTATION_IN_PROGRESS
+
+
+⸻
+
+7.2 Buttons
+
+Primary:
+	•	Save Draft
+	•	End Consultation
+
+Secondary:
+	•	Start New Visit
+	•	View Pre (popup)
+
+⸻
+
+7.3 View Pre
+	•	Opens right-side popup
+	•	Read-only
+	•	No navigation to separate page
+
+Purpose:
+Avoid back-button confusion.
+
+⸻
+
+8. END CONSULTATION LOGIC
+
+8.1 Popup Confirmation
+
+“Are you sure you want to end this consultation?
+This will lock the encounter.”
+
+⸻
+
+8.2 Backend Action
+
+status = CONSULTATION_COMPLETED
+consultation.completed_at = now()
+
+After this:
+	•	Pre locked
+	•	Consultation locked
+	•	No further edits
+	•	Only preview / print allowed
+
+⸻
+
+9. START NEW VISIT LOGIC
+
+9.1 If Current Visit Active
+
+Show confirmation:
+
+“This visit is still active.
+End and start new visit?”
+
+If confirmed:
+	•	Mark current as CONSULTATION_COMPLETED
+	•	Create new encounter
+	•	Redirect to Pre
+
+⸻
+
+9.2 If Visit Completed
+
+No confirmation needed.
+	•	Create new encounter
+	•	Redirect to Pre
+
+⸻
+
+10. LOCKING RULES TABLE
+
+Status	Pre	Consultation
+CREATED	Editable	Hidden
+PRE_CONSULTATION_IN_PROGRESS	Editable	Hidden
+PRE_CONSULTATION_COMPLETED	Editable	Hidden
+CONSULTATION_IN_PROGRESS	Read-only	Editable
+CONSULTATION_COMPLETED	Read-only	Read-only
+CANCELLED	Read-only	Read-only
+
+
+⸻
+
+11. BACK BUTTON BEHAVIOR
+
+Browser Back:
+	•	Does NOT change state
+	•	Does NOT create encounter
+	•	Does NOT rollback
+
+On page load:
+
+Read Encounter.status
+Render UI accordingly
+
+Always deterministic.
+
+⸻
+
+12. WHAT IS STRICTLY FORBIDDEN
+	•	❌ Auto-create encounter on navigation
+	•	❌ Resume/New popup for active encounter
+	•	❌ Deriving state from form completion
+	•	❌ Deleting encounter on cancel
+	•	❌ Multiple consultations under one encounter
+	•	❌ Editing after completion (without audit layer)
+
+⸻
+
+13. VALIDATION STRATEGY
+
+Validation must:
+	•	Prevent End if required minimum data missing (optional)
+	•	Not change state automatically
+	•	Not revert status
+	•	Not auto-downgrade encounter
+
+State changes only via service layer.
+
+⸻
+
+14. TECHNICAL ARCHITECTURE RULES
+
+14.1 Backend
+	•	All state transitions via EncounterService
+	•	Use atomic transactions
+	•	Enforce status guard in every update API
+	•	Reject invalid edits with 403
+
+⸻
+
+14.2 Frontend
+	•	Disable UI inputs based on status
+	•	Never assume editability
+	•	Always re-check state from API
+	•	Avoid relying on client memory
+
+⸻
+
+15. EDGE CASES HANDLING
+
+15.1 Refresh Page
+
+→ Resume same state.
+
+15.2 Close Tab
+
+→ Resume same state.
+
+15.3 Deselect Patient
+
+→ No state change.
+
+15.4 Session Timeout
+
+→ Resume same state after login.
+
+⸻
+
+16. FUTURE EXTENSION SAFE ZONES
+
+System ready for:
+	•	Prescription preview
+	•	Billing module
+	•	Insurance claims
+	•	Follow-up auto-scheduling
+	•	Tele-consultation
+	•	Audit trail logging
+	•	Reopen completed encounter (admin role only)
+
+⸻
+
+17. DOCTOR MENTAL MODEL (VALIDATED)
+
+Doctor expects:
+	•	If I leave → my work remains.
+	•	If I end → visit closes permanently.
+	•	If I want new → I click Start New Visit.
+	•	System should not confuse me.
+
+This design satisfies all.
+
+⸻
+
+18. VERSION CONTROL
+
+Every change to consultation flow must:
+	•	Update this document
+	•	Review state transitions
+	•	Validate audit safety
+	•	Validate billing safety
+
+⸻
+
+19. FINAL SUMMARY
+
+This Consultation System is:
+	•	Linear
+	•	Deterministic
+	•	Audit-safe
+	•	Legally safe
+	•	UX stable
+	•	Enterprise-ready
+
+No ambiguity.
+No branching confusion.
+No accidental duplication.
+
+⸻
+
+If you want next, I can:
+	•	Convert this into a technical API contract guide
+	•	Or design the exact backend service-layer pseudo architecture
+	•	Or create QA testing checklist for this flow
+
+Now you officially have your Consultation Bible.

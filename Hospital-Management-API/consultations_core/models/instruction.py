@@ -2,6 +2,8 @@
 from django.db import models
 import uuid
 from account.models import User
+from consultations_core.domain.locks import EncounterLockValidator
+from consultations_core.models.consultation import Consultation
 
 # =====================================================
 # 1️⃣ InstructionCategory — Global Catalog
@@ -183,6 +185,14 @@ class EncounterInstruction(models.Model):
             )
         ]
         ordering = ["-created_at"]
+
+    def save(self, *args, **kwargs):
+        try:
+            consultation = self.encounter.consultation
+        except Consultation.DoesNotExist:
+            consultation = None
+        EncounterLockValidator.validate(consultation)
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.encounter.visit_pnr} - {self.instruction_template.label}"

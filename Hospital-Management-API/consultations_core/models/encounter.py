@@ -1,5 +1,6 @@
 import uuid
 from django.db import models
+from django.db.models import Q
 from doctor.models import doctor
 from patient_account.models import PatientAccount, PatientProfile
 from account.models import User
@@ -105,14 +106,20 @@ class ClinicalEncounter(models.Model):
     )
 
     status = models.CharField(
-        max_length=20,
+        max_length=40,
         choices=[
             ("created", "Created"),
+            ("pre_consultation_in_progress", "Pre-Consultation In Progress"),
+            ("pre_consultation_completed", "Pre-Consultation Completed"),
+            ("consultation_in_progress", "Consultation In Progress"),
+            ("consultation_completed", "Consultation Completed"),
+            ("closed", "Closed"),
+            ("cancelled", "Cancelled"),
+            ("no_show", "No Show"),
+            # Legacy (kept for existing rows)
             ("pre_consultation", "Pre Consultation"),
             ("in_consultation", "In Consultation"),
             ("completed", "Completed"),
-            ("cancelled", "Cancelled"),
-            ("no_show", "No Show"),
         ],
         default="created"
     )
@@ -151,6 +158,47 @@ class ClinicalEncounter(models.Model):
         null=True, blank=True, related_name="encounters_updated"
     )
 
+    # ⏱ Required lifecycle timestamps (enterprise)
+    check_in_time = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When patient checked in / encounter became active"
+    )
+    consultation_start_time = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When doctor started consultation"
+    )
+    consultation_end_time = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When consultation was finalized"
+    )
+    closed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When encounter was closed"
+    )
+
+    # Legacy (kept for backward compatibility)
+    started_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Timestamp when doctor starts consultation (use consultation_start_time)"
+    )
+    completed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Timestamp when consultation is finalized (use consultation_end_time)"
+    )
+    cancelled_at = models.DateTimeField(null=True, blank=True, help_text="When encounter was cancelled")
+    cancelled_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="encounters_cancelled",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -158,17 +206,28 @@ class ClinicalEncounter(models.Model):
         ordering = ["-created_at"]
         verbose_name = "Clinical Encounter"
         verbose_name_plural = "Clinical Encounters"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["patient_account", "clinic"],
+                condition=Q(is_active=True),
+                name="unique_active_encounter_per_patient_clinic"
+            )
+        ]
 
     def __str__(self):
         return f"Encounter {self.visit_pnr or '(no PNR)'}"
     def save(self, *args, **kwargs):
         # Only check existing row when updating (new instances have pk from default but no DB row yet)
         if self.pk and not self._state.adding:
-            old = type(self).objects.only("visit_pnr", "clinic_id").get(pk=self.pk)
+            old = type(self).objects.only("visit_pnr", "clinic_id", "status").get(pk=self.pk)
             if old.visit_pnr and old.visit_pnr != self.visit_pnr:
                 raise ValidationError("Visit PNR cannot be modified.")
             if old.clinic_id != self.clinic_id:
                 raise ValidationError("Clinic cannot be changed after encounter creation.")
+            if old.status != self.status:
+                raise ValidationError(
+                    "Direct status update is not allowed. Use EncounterStateMachine.transition()."
+                )
         if not self.visit_pnr:
             if not self.clinic:
                 raise ValidationError("Clinic is required to generate Visit PNR.")
@@ -176,3 +235,39 @@ class ClinicalEncounter(models.Model):
             self.visit_pnr = VisitPNRService.generate_pnr(self.clinic)
         super().save(*args, **kwargs)
 
+
+
+class EncounterStatusLog(models.Model):
+    encounter = models.ForeignKey(
+        ClinicalEncounter,
+        on_delete=models.CASCADE,
+        related_name="status_logs"
+    )
+    from_status = models.CharField(max_length=40)
+    to_status = models.CharField(max_length=40)
+    changed_by = models.ForeignKey(
+        "account.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+    changed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-changed_at"]
+
+    def __str__(self):
+        return f"{self.encounter.visit_pnr} | {self.from_status} → {self.to_status}"
+
+#  Final Architecture Summary (Lock This)
+
+# ✔ UUID primary key
+# ✔ visit_pnr = display ID
+# ✔ One Encounter per visit
+# ✔ One PreConsultation per encounter
+# ✔ One Consultation per encounter
+# ✔ Tests attached to Consultation
+# ✔ Mode controls validation
+# ✔ Strict status transition service
+# ✔ PreConsultation auto-lock on consultation start
+# ✔ Always reuse active encounter

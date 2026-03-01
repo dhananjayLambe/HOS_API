@@ -4,6 +4,7 @@ from django.db import models, transaction
 from django.core.exceptions import ValidationError
 from django.contrib.postgres.indexes import GinIndex
 import uuid
+from consultations_core.domain.locks import EncounterLockValidator
 
 
 # =====================================================
@@ -196,11 +197,7 @@ class ConsultationSymptom(models.Model):
         if self.duration_value and not self.duration_unit:
             raise ValidationError("Duration unit required when duration value provided.")
 
-        # Block after finalization
-        if self.consultation.is_finalized:
-            raise ValidationError(
-                "Cannot modify symptoms after consultation is finalized."
-            )
+        EncounterLockValidator.validate(self.consultation)
 
         # Only one primary symptom per consultation
         if self.is_primary:
@@ -235,11 +232,7 @@ class ConsultationSymptom(models.Model):
     # --------------------------
 
     def deactivate(self):
-        if self.consultation.is_finalized:
-            raise ValidationError(
-                "Cannot delete symptom after consultation finalized."
-            )
-
+        EncounterLockValidator.validate(self.consultation)
         self.is_active = False
         self.save(update_fields=["is_active"])
 
@@ -299,14 +292,8 @@ class SymptomExtensionData(models.Model):
         ]
 
     def save(self, *args, **kwargs):
-
         with transaction.atomic():
-
-            if self.symptom_entry.consultation.is_finalized:
-                raise ValidationError(
-                    "Cannot modify symptom extension after consultation finalized."
-                )
-
+            EncounterLockValidator.validate(self.symptom_entry.consultation)
             super().save(*args, **kwargs)
 
     def __str__(self):

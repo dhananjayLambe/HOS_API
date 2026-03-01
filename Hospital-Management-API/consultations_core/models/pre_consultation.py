@@ -27,6 +27,14 @@ class PreConsultation(models.Model):
         help_text="Template version used at time of data entry"
     )
     # 📊 COMPLETION STATE
+    is_completed = models.BooleanField(
+        default=False,
+        help_text="True when pre-consultation is marked complete"
+    )
+    is_skipped = models.BooleanField(
+        default=False,
+        help_text="True when doctor started consultation without completing pre-consultation"
+    )
     completed_at = models.DateTimeField(
         null=True,
         blank=True,
@@ -86,14 +94,54 @@ class PreConsultation(models.Model):
     # ======================
 
     def lock(self, reason="Consultation started"):
+        if self.is_locked:
+            return
+        now = timezone.now()
+        type(self).objects.filter(pk=self.pk, is_locked=False).update(
+            is_locked=True,
+            locked_at=now,
+            lock_reason=reason or "Consultation started",
+        )
         self.is_locked = True
-        self.locked_at = timezone.now()
-        self.lock_reason = reason
-        self.save(update_fields=["is_locked", "locked_at", "lock_reason"])
+        self.locked_at = now
+        self.lock_reason = reason or "Consultation started"
 
     def mark_completed(self):
+        self.is_completed = True
         self.completed_at = timezone.now()
-        self.save(update_fields=["completed_at"])
+        self.save(update_fields=["is_completed", "completed_at"])
+
+    def save(self, *args, **kwargs):
+        is_new = self._state.adding
+
+        # 🔒 Prevent creating pre-consultation for completed/cancelled encounters
+        if self.encounter.status in [
+            "completed", "consultation_completed", "closed", "cancelled", "no_show"
+        ]:
+            from django.core.exceptions import ValidationError
+            raise ValidationError(
+                "Cannot create or modify pre-consultation for completed or inactive encounter."
+            )
+
+        # 🔒 Enforce strict OneToOne mapping (only raise if another row exists;
+        # when creating, the reverse relation may already point to self)
+        if is_new and hasattr(self.encounter, "pre_consultation"):
+            existing = getattr(self.encounter, "pre_consultation", None)
+            if existing is not None and existing is not self:
+                from django.core.exceptions import ValidationError
+                raise ValidationError(
+                    "A pre-consultation already exists for this encounter."
+                )
+
+        # 🔒 Prevent modification if already locked in DB
+        if not is_new and self.is_locked:
+            from django.core.exceptions import ValidationError
+            if type(self).objects.filter(pk=self.pk, is_locked=True).exists():
+                raise ValidationError(
+                    "Pre-consultation is locked and cannot be modified."
+                )
+
+        super().save(*args, **kwargs)
 
     class Meta:
         verbose_name = "Pre Consultation"
@@ -203,4 +251,3 @@ class PreConsultationMedicalHistory(BasePreConsultationSection):
 
     def __str__(self):
         return f"Medical History | {self.pre_consultation.encounter.visit_pnr}"
-

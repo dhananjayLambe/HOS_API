@@ -21,17 +21,23 @@ from django.db import transaction
 from django.db import IntegrityError
 from django.http import Http404
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 # Local App Imports
 from account.permissions import IsDoctor
 from consultations_core.services.consultation_engine import ConsultationEngine
 from consultations_core.services.metadata_loader import MetadataLoader
-from consultations_core.services.preconsultation_service import PreConsultationService
+from consultations_core.services.preconsultation_service import (
+    PreConsultationService,
+    PreConsultationAlreadyExistsError,
+)
 from consultations_core.services.preconsultation_section_service import PreConsultationSectionService
 from consultations_core.services.encounter_service import EncounterService
+from consultations_core.services.encounter_state_machine import EncounterStateMachine
 from patient_account.models import PatientProfile
 from clinic.models import Clinic
 
 from consultations_core.models.encounter import ClinicalEncounter
+from consultations_core.models.consultation import Consultation
 from consultations_core.models.pre_consultation import(
      PreConsultation, 
      PreConsultationVitals, 
@@ -42,6 +48,23 @@ from consultations_core.models.pre_consultation import(
 
 
 logger = logging.getLogger(__name__)
+
+# Phase-1: single message for all "cancelled encounter" guards
+MSG_VISIT_CANCELLED = "This visit has been cancelled. Please start a new one."
+
+# #region agent log (disabled by default to avoid file I/O on every request)
+def _dlog(msg, data, hid, loc="preconsultation.py"):
+    if getattr(settings, "CONSULTATIONS_DEBUG_LOG", False):
+        try:
+            import json
+            import time
+            path = getattr(settings, "CONSULTATIONS_DEBUG_LOG_PATH", None) or ".cursor/debug-consultations.log"
+            with open(path, "a") as f:
+                f.write(json.dumps({"message": msg, "data": dict(data) if data else {}, "hid": hid, "loc": loc, "ts": round(time.time() * 1000)}) + "\n")
+        except Exception:
+            pass
+# #endregion
+
 # =====================================================
 # PRE-CONSULTATION SECTION APIs
 # =====================================================
@@ -165,12 +188,12 @@ class PreConsultationTemplateAPIView(APIView):
 
 class CreateEncounterAPIView(APIView):
     """
-    Create a new Clinical Encounter for pre-consultation
+    Create a new Clinical Encounter for pre-consultation.
+    Idempotent: if active encounter exists (including race), returns it with 200; never 409.
     """
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated, IsDoctor]
-    print("CreateEncounterAPIView")
-    @transaction.atomic
+
     def post(self, request):
         """
         Create a new encounter for the selected patient
@@ -182,14 +205,14 @@ class CreateEncounterAPIView(APIView):
                 return Response({
                     "status": False,
                     "message": "Doctor profile not found for this user."
-                }, status=status.HTTP_400_BAD_REQUEST)
+                }, status=status.HTTP_400_BAD_REQUEST, content_type="application/json")
 
             patient_profile_id = request.data.get("patient_profile_id")
             if not patient_profile_id:
                 return Response({
                     "status": False,
                     "message": "patient_profile_id is required."
-                }, status=status.HTTP_400_BAD_REQUEST)
+                }, status=status.HTTP_400_BAD_REQUEST, content_type="application/json")
 
             # Validate UUID and resolve patient
             try:
@@ -198,7 +221,7 @@ class CreateEncounterAPIView(APIView):
                 return Response({
                     "status": False,
                     "message": "Invalid patient_profile_id format."
-                }, status=status.HTTP_400_BAD_REQUEST)
+                }, status=status.HTTP_400_BAD_REQUEST, content_type="application/json")
 
             try:
                 patient_profile = PatientProfile.objects.get(id=profile_uuid)
@@ -206,9 +229,14 @@ class CreateEncounterAPIView(APIView):
                 return Response({
                     "status": False,
                     "message": "Patient not found."
-                }, status=status.HTTP_404_NOT_FOUND)
+                }, status=status.HTTP_404_NOT_FOUND, content_type="application/json")
 
-            patient_account = patient_profile.account
+            patient_account = getattr(patient_profile, "account", None)
+            if not patient_account:
+                return Response({
+                    "status": False,
+                    "message": "Patient profile has no linked account. Cannot create encounter.",
+                }, status=status.HTTP_400_BAD_REQUEST, content_type="application/json")
 
             # Resolve clinic: from request or doctor's first clinic
             clinic_id = request.data.get("clinic_id")
@@ -219,66 +247,85 @@ class CreateEncounterAPIView(APIView):
                         return Response({
                             "status": False,
                             "message": "Doctor is not associated with this clinic."
-                        }, status=status.HTTP_400_BAD_REQUEST)
+                        }, status=status.HTTP_400_BAD_REQUEST, content_type="application/json")
                 except (ValueError, TypeError):
                     return Response({
                         "status": False,
                         "message": "Invalid clinic_id format."
-                    }, status=status.HTTP_400_BAD_REQUEST)
+                    }, status=status.HTTP_400_BAD_REQUEST, content_type="application/json")
                 except Clinic.DoesNotExist:
                     return Response({
                         "status": False,
                         "message": "Clinic not found."
-                    }, status=status.HTTP_404_NOT_FOUND)
+                    }, status=status.HTTP_404_NOT_FOUND, content_type="application/json")
             else:
                 clinic = doctor_profile.clinics.first()
                 if not clinic:
                     return Response({
                         "status": False,
                         "message": "Doctor has no clinic. Provide clinic_id or associate doctor with a clinic."
-                    }, status=status.HTTP_400_BAD_REQUEST)
+                    }, status=status.HTTP_400_BAD_REQUEST, content_type="application/json")
 
             if not getattr(clinic, "code", None) or not str(clinic.code).strip():
                 return Response({
                     "status": False,
                     "message": "Clinic has no business code set. Please complete clinic setup (code is required for visit PNR)."
-                }, status=status.HTTP_400_BAD_REQUEST)
+                }, status=status.HTTP_400_BAD_REQUEST, content_type="application/json")
 
-            # Create encounter
-            encounter = EncounterService.create_encounter(
-                clinic=clinic,
-                patient_account=patient_account,
-                patient_profile=patient_profile,
-                doctor=doctor_profile,
-                encounter_type="walk_in",
-                entry_mode="doctor",
-                created_by=user
-            )
+            # Get or create encounter (reuse active encounter for same patient+clinic). Idempotent.
+            try:
+                with transaction.atomic():
+                    encounter, created = EncounterService.get_or_create_encounter(
+                        clinic=clinic,
+                        patient_account=patient_account,
+                        patient_profile=patient_profile,
+                        doctor=doctor_profile,
+                        encounter_type="walk_in",
+                        entry_mode="doctor",
+                        created_by=user
+                    )
+            except IntegrityError as e:
+                # Idempotent: active encounter already exists (e.g. race). Return it in a fresh transaction; never 409.
+                err_str = (str(e) or "Database constraint error")[:500]
+                logger.warning("IntegrityError creating encounter (returning existing): %s", err_str)
+                with transaction.atomic():
+                    existing = EncounterService.get_active_encounter(patient_account, clinic)
+                if existing:
+                    return Response({
+                        "status": True,
+                        "message": "Existing active encounter returned.",
+                        "created": False,
+                        "data": {
+                            "encounter_id": str(existing.id),
+                            "visit_pnr": existing.visit_pnr or "",
+                            "status": existing.status,
+                            "created_at": existing.created_at.isoformat()
+                        }
+                    }, status=status.HTTP_200_OK, content_type="application/json")
+                return Response({
+                    "status": False,
+                    "message": "A visit may already exist for this patient. Please refresh the page and try again.",
+                    "detail": err_str,
+                    "error": err_str
+                }, status=status.HTTP_409_CONFLICT, content_type="application/json")
 
             return Response({
                 "status": True,
-                "message": "Encounter created successfully.",
+                "message": "Encounter created successfully." if created else "Existing active encounter returned.",
+                "created": created,
                 "data": {
                     "encounter_id": str(encounter.id),
                     "visit_pnr": encounter.visit_pnr or "",
                     "status": encounter.status,
                     "created_at": encounter.created_at.isoformat()
                 }
-            }, status=status.HTTP_201_CREATED)
+            }, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK, content_type="application/json")
 
-        except IntegrityError as e:
-            logger.exception("IntegrityError creating encounter")
-            err_msg = (str(e) or "Database constraint error")[:500]
-            return Response({
-                "status": False,
-                "message": f"Failed to create encounter: {err_msg}",
-                "error": err_msg
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR, content_type="application/json")
         except Http404:
             return Response({
                 "status": False,
                 "message": "Patient not found."
-            }, status=status.HTTP_404_NOT_FOUND)
+            }, status=status.HTTP_404_NOT_FOUND, content_type="application/json")
         except ValueError as e:
             return Response({
                 "status": False,
@@ -294,13 +341,228 @@ class CreateEncounterAPIView(APIView):
                 "error": err_msg or "Validation error."
             }, status=status.HTTP_400_BAD_REQUEST, content_type="application/json")
         except Exception as e:
-            logger.exception("Error creating encounter")
+            logger.exception("Error creating encounter: %s", e)
             err_msg = (str(e) or "Unknown error")[:500]
             return Response({
                 "status": False,
                 "message": f"Failed to create encounter: {err_msg}",
+                "detail": err_msg,
                 "error": err_msg
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR, content_type="application/json")
+
+
+def _resolve_patient_and_clinic_for_entry(request):
+    """
+    Resolve patient_profile, patient_account, and clinic from request (patient_profile_id, optional clinic_id).
+    Returns (patient_profile, patient_account, clinic) or (None, None, None) with a Response to return.
+    """
+    user = request.user
+    doctor_profile = getattr(user, "doctor", None)
+    if doctor_profile is None:
+        return None, None, None, Response(
+            {"detail": "Doctor profile not found for this user."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    patient_profile_id = request.data.get("patient_profile_id")
+    if not patient_profile_id:
+        return None, None, None, Response(
+            {"detail": "patient_profile_id is required."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    try:
+        profile_uuid = uuid.UUID(str(patient_profile_id))
+    except (ValueError, TypeError):
+        return None, None, None, Response(
+            {"detail": "Invalid patient_profile_id format."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    try:
+        patient_profile = PatientProfile.objects.get(id=profile_uuid)
+    except PatientProfile.DoesNotExist:
+        return None, None, None, Response(
+            {"detail": "Patient not found."},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    patient_account = patient_profile.account
+    clinic_id = request.data.get("clinic_id")
+    if clinic_id:
+        try:
+            clinic = Clinic.objects.get(id=clinic_id)
+            if not doctor_profile.clinics.filter(pk=clinic.pk).exists():
+                return None, None, None, Response(
+                    {"detail": "Doctor is not associated with this clinic."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        except (ValueError, TypeError):
+            return None, None, None, Response(
+                {"detail": "Invalid clinic_id format."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except Clinic.DoesNotExist:
+            return None, None, None, Response(
+                {"detail": "Clinic not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+    else:
+        clinic = doctor_profile.clinics.first()
+        if not clinic:
+            return None, None, None, Response(
+                {"detail": "Doctor has no clinic. Provide clinic_id or associate doctor with a clinic."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+    return patient_profile, patient_account, clinic, None
+
+
+class EntryResolveAPIView(APIView):
+    """
+    POST /consultations/entry/resolve/
+    Returns entry_state: active | completed | none. Does not create an encounter.
+    Body: { "patient_profile_id": "<uuid>", "clinic_id": "<uuid>" (optional) }
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctor]
+
+    def post(self, request):
+        patient_profile, patient_account, clinic, err_response = _resolve_patient_and_clinic_for_entry(request)
+        if err_response is not None:
+            return err_response
+        active = EncounterService.get_active_encounter(patient_account, clinic)
+        if active:
+            redirect_to = "consultation" if active.status == "consultation_in_progress" else "pre"
+            return Response(
+                {
+                    "entry_state": "active",
+                    "encounter": {
+                        "id": str(active.id),
+                        "visit_pnr": active.visit_pnr or "",
+                        "status": _status_for_api(active.status),
+                        "created_at": active.created_at.isoformat(),
+                    },
+                    "redirect_to": redirect_to,
+                },
+                status=status.HTTP_200_OK,
+            )
+        last = (
+            ClinicalEncounter.objects.filter(
+                patient_account=patient_account,
+                clinic=clinic,
+            )
+            .order_by("-updated_at")
+            .first()
+        )
+        if last and last.status in ("consultation_completed", "closed", "cancelled"):
+            return Response(
+                {"entry_state": "completed", "encounter": None},
+                status=status.HTTP_200_OK,
+            )
+        return Response(
+            {"entry_state": "none"},
+            status=status.HTTP_200_OK,
+        )
+
+
+class StartNewVisitAPIView(APIView):
+    """
+    POST /consultations/entry/start-new-visit/
+    If an active encounter exists: transition it to consultation_completed or cancelled, then create new.
+    Returns new encounter_id and redirect_url to pre-consultation.
+    Body: { "patient_profile_id": "<uuid>", "clinic_id": "<uuid>" (optional) }
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctor]
+
+    @transaction.atomic
+    def post(self, request):
+        print("Start new visit called at:", timezone.now())
+        patient_profile, patient_account, clinic, err_response = _resolve_patient_and_clinic_for_entry(request)
+        if err_response is not None:
+            return err_response
+        if not getattr(clinic, "code", None) or not str(clinic.code).strip():
+            return Response(
+                {"detail": "Clinic has no business code set. Please complete clinic setup (code is required for visit PNR)."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        user = request.user
+        doctor_profile = getattr(user, "doctor", None)
+        # Step 1: Lock and fetch any active encounter (prevents race, ensures safe auto-close before create)
+        active = ClinicalEncounter.objects.filter(
+            patient_account=patient_account,
+            clinic=clinic,
+            is_active=True,
+        ).select_for_update().first()
+        if active:
+            if active.status == "consultation_in_progress":
+                try:
+                    consultation = active.consultation
+                    if not consultation.is_finalized:
+                        if not consultation.ended_at:
+                            consultation.ended_at = timezone.now()
+                            consultation.save(update_fields=["ended_at"])
+                        EncounterStateMachine.complete_consultation(active, user=user)
+                        consultation.refresh_from_db()
+                        if not consultation.is_finalized:
+                            consultation.is_finalized = True
+                            consultation.save(update_fields=["is_finalized"])
+                except Consultation.DoesNotExist:
+                    EncounterStateMachine.complete_consultation(active, user=user)
+            elif active.status in ("created", "pre_consultation_in_progress", "pre_consultation_completed"):
+                EncounterStateMachine.cancel(active, user=user)
+            # Safeguard: ensure closed encounter is not still active (unique constraint)
+            active.refresh_from_db()
+            if active.is_active:
+                ClinicalEncounter.objects.filter(pk=active.pk).update(
+                    is_active=False,
+                    updated_at=timezone.now(),
+                )
+        # Step 2: Create in nested atomic so IntegrityError only rolls back the create;
+        # then we can safely fetch existing encounter in the still-valid outer transaction.
+        try:
+            with transaction.atomic():
+                new_encounter = EncounterService.create_encounter(
+                    clinic=clinic,
+                    patient_account=patient_account,
+                    patient_profile=patient_profile,
+                    doctor=doctor_profile,
+                    encounter_type="walk_in",
+                    entry_mode="doctor",
+                    created_by=user,
+                    consultation_type="FULL",
+                )
+        except IntegrityError:
+            existing = ClinicalEncounter.objects.filter(
+                patient_account=patient_account,
+                clinic=clinic,
+                is_active=True,
+            ).first()
+
+            if existing:
+                return Response(
+                    {
+                        "encounter_id": str(existing.id),
+                        "visit_pnr": existing.visit_pnr or "",
+                        "status": _status_for_api(existing.status),
+                        "redirect_url": f"/consultations/pre-consultation?encounter_id={existing.id}",
+                        "message": "Existing active encounter returned.",
+                    },
+                    status=status.HTTP_200_OK,
+                )
+
+            return Response(
+                {
+                    "detail": "An active visit already exists for this patient. Please refresh and try again.",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        
+        return Response(
+            {
+                "encounter_id": str(new_encounter.id),
+                "visit_pnr": new_encounter.visit_pnr or "",
+                "status": _status_for_api(new_encounter.status),
+                "redirect_url": f"/consultations/pre-consultation?encounter_id={new_encounter.id}",
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class PreConsultationSectionAPIView(APIView):
@@ -317,9 +579,23 @@ class PreConsultationSectionAPIView(APIView):
 
     def get_preconsultation(self, encounter):
         """Get or create pre-consultation for encounter"""
-        if hasattr(encounter, "pre_consultation"):
-            return encounter.pre_consultation
-        
+        # #region agent log
+        _dlog("get_preconsultation entry", {"encounter_id": str(encounter.id)}, "H2", "preconsultation.py:get_preconsultation")
+        # #endregion
+        try:
+            if hasattr(encounter, "pre_consultation"):
+                pc = encounter.pre_consultation
+                # #region agent log
+                _dlog("get_preconsultation found existing", {"encounter_id": str(encounter.id)}, "H2", "preconsultation.py:get_preconsultation")
+                # #endregion
+                return pc
+        except PreConsultation.DoesNotExist:
+            pass
+        # May exist in DB from a concurrent request
+        pc = PreConsultation.objects.filter(encounter=encounter).first()
+        if pc is not None:
+            return pc
+
         # Get doctor specialty for template
         doctor = encounter.doctor
         if not doctor:
@@ -343,13 +619,24 @@ class PreConsultationSectionAPIView(APIView):
         Auto-creates pre-consultation if it doesn't exist
         """
         encounter = self.get_encounter(encounter_id)
-        
+        if encounter.status in ("cancelled", "no_show"):
+            return Response(
+                {"detail": MSG_VISIT_CANCELLED},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         # Get or create pre-consultation (same logic as POST)
         try:
             preconsultation = encounter.pre_consultation
         except PreConsultation.DoesNotExist:
-            # Auto-create pre-consultation if it doesn't exist
-            preconsultation = self.get_preconsultation(encounter)
+            # May exist in DB from a concurrent request; avoid duplicate key on create
+            preconsultation = PreConsultation.objects.filter(encounter=encounter).first()
+            if preconsultation is None:
+                try:
+                    preconsultation = self.get_preconsultation(encounter)
+                except PreConsultationAlreadyExistsError as e:
+                    # Race: another request created it; transaction is aborted — rollback and fetch existing
+                    transaction.rollback()
+                    preconsultation = PreConsultation.objects.get(encounter=e.encounter)
 
         if section_code not in SECTION_MODEL_MAP:
             return Response({
@@ -379,7 +666,16 @@ class PreConsultationSectionAPIView(APIView):
         Save or update section data (idempotent)
         """
         encounter = self.get_encounter(encounter_id)
-        
+        if encounter.status in ("cancelled", "no_show"):
+            return Response(
+                {"detail": MSG_VISIT_CANCELLED},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if encounter.status in ("consultation_in_progress", "consultation_completed", "closed"):
+            return Response(
+                {"detail": "Pre-consultation is read-only; consultation has started or encounter is locked."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         if section_code not in SECTION_MODEL_MAP:
             return Response({
                 "status": False,
@@ -388,6 +684,9 @@ class PreConsultationSectionAPIView(APIView):
 
         try:
             preconsultation = self.get_preconsultation(encounter)
+        except PreConsultationAlreadyExistsError as e:
+            transaction.rollback()
+            preconsultation = PreConsultation.objects.get(encounter=e.encounter)
         except ValueError as e:
             return Response({
                 "status": False,
@@ -512,3 +811,424 @@ class PreConsultationPreviousRecordsAPIView(APIView):
                 "message": "Failed to fetch previous records.",
                 "error": err_msg
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR, content_type="application/json")
+
+
+# =====================================================
+# ENCOUNTER LIFECYCLE & REDIRECT APIs
+# =====================================================
+
+def _status_for_api(encounter_status: str) -> str:
+    """Return API-facing status (UPPERCASE with underscores)."""
+    return (encounter_status or "").upper()
+
+
+class StartPreConsultationAPIView(APIView):
+    """
+    POST /encounters/{id}/pre-consultation/start/
+    Transitions CREATED -> PRE_CONSULTATION_IN_PROGRESS.
+    Idempotent: if already in/last pre-consultation (or legacy pre_consultation), returns 200.
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctor]
+
+    # Statuses where "start pre-consultation" is a no-op (already started or past)
+    _ALREADY_STARTED_OR_PAST = frozenset({
+        "pre_consultation_in_progress",
+        "pre_consultation_completed",
+        "consultation_in_progress",
+        "consultation_completed",
+        "closed",
+        "pre_consultation",  # legacy
+        "in_consultation",   # legacy
+        "completed",         # legacy
+    })
+
+    def post(self, request, encounter_id):
+        encounter = get_object_or_404(ClinicalEncounter, id=encounter_id)
+        if encounter.status in self._ALREADY_STARTED_OR_PAST:
+            return Response(
+                {
+                    "encounter_id": str(encounter.id),
+                    "status": _status_for_api(encounter.status),
+                    "message": "Pre-consultation already in progress or completed.",
+                },
+                status=status.HTTP_200_OK,
+            )
+        if encounter.status in ("cancelled", "no_show"):
+            return Response(
+                {"detail": MSG_VISIT_CANCELLED},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if encounter.status != "created":
+            return Response(
+                {"detail": f"Encounter must be in CREATED state. Current: {encounter.status}."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            EncounterStateMachine.start_pre_consultation(encounter, user=request.user)
+        except DjangoValidationError as e:
+            return Response(
+                {"detail": str(e) or "Invalid transition."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(
+            {
+                "encounter_id": str(encounter.id),
+                "status": _status_for_api(encounter.status),
+                "message": "Pre-consultation started.",
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class CompletePreConsultationAPIView(APIView):
+    """
+    POST /encounters/{id}/pre-consultation/complete/
+    Validates required fields, marks pre_consultation complete, updates encounter,
+    returns redirect metadata. Use transaction.atomic().
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctor]
+
+    @transaction.atomic
+    def post(self, request, encounter_id):
+        encounter = get_object_or_404(ClinicalEncounter, id=encounter_id)
+        if encounter.status in ("cancelled", "no_show"):
+            return Response(
+                {"detail": MSG_VISIT_CANCELLED},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        # #region agent log
+        _dlog("CompletePreConsultation post entry", {"encounter_id": str(encounter.id), "status": encounter.status}, "H4", "preconsultation.py:CompletePreConsultationAPIView")
+        # #endregion
+        redirect_url = f"/consultations/consultation/{encounter.id}"
+
+        # Idempotent: already completed, or created (doctor can go straight to consultation) → return 200 with redirect
+        if encounter.status in (
+            "created",
+            "pre_consultation_completed",
+            "consultation_in_progress",
+            "consultation_completed",
+            "closed",
+            "pre_consultation",  # legacy
+            "in_consultation",
+            "completed",
+        ):
+            return Response(
+                {
+                    "encounter_id": str(encounter.id),
+                    "status": _status_for_api(encounter.status),
+                    "next_step": "CONSULTATION",
+                    "redirect_url": redirect_url,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        if encounter.status not in ("pre_consultation_in_progress",):
+            return Response(
+                {"detail": f"Cannot complete pre-consultation. Current: {encounter.status}."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            preconsultation = encounter.pre_consultation
+        except PreConsultation.DoesNotExist:
+            return Response(
+                {"detail": "Pre-consultation record not found for this encounter."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if preconsultation.is_locked:
+            return Response(
+                {"detail": "Pre-consultation is already locked."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        PreConsultationService.mark_completed(preconsultation, user=request.user)
+        EncounterStateMachine.complete_pre_consultation(encounter, user=request.user)
+        return Response(
+            {
+                "encounter_id": str(encounter.id),
+                "status": _status_for_api(encounter.status),
+                "next_step": "CONSULTATION",
+                "redirect_url": redirect_url,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class EncounterDetailAPIView(APIView):
+    """
+    GET /encounters/{id}/
+    Returns encounter detail for consultation page (status, timestamps, etc.).
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctor]
+
+    def get(self, request, encounter_id):
+        encounter = get_object_or_404(ClinicalEncounter, id=encounter_id)
+        payload = {
+            "id": str(encounter.id),
+            "visit_pnr": encounter.visit_pnr or "",
+            "status": _status_for_api(encounter.status),
+            "check_in_time": encounter.check_in_time.isoformat() if encounter.check_in_time else None,
+            "consultation_start_time": encounter.consultation_start_time.isoformat() if encounter.consultation_start_time else None,
+            "consultation_end_time": encounter.consultation_end_time.isoformat() if encounter.consultation_end_time else None,
+            "closed_at": encounter.closed_at.isoformat() if encounter.closed_at else None,
+            "created_at": encounter.created_at.isoformat(),
+            "cancelled": encounter.status == "cancelled",
+            "cancelled_at": encounter.cancelled_at.isoformat() if getattr(encounter, "cancelled_at", None) else None,
+            "cancelled_by": str(encounter.cancelled_by_id) if (getattr(encounter, "cancelled_by_id", None) is not None and encounter.cancelled_by_id) else None,
+        }
+        return Response(payload, status=status.HTTP_200_OK)
+
+
+def _get_or_create_preconsultation_for_start(encounter, created_by):
+    """Get or create PreConsultation for an encounter (for start-consultation flow). Pre must exist before starting."""
+    try:
+        return encounter.pre_consultation
+    except PreConsultation.DoesNotExist:
+        pass
+    pc = PreConsultation.objects.filter(encounter=encounter).first()
+    if pc is not None:
+        return pc
+    # Serialize creation so concurrent requests (e.g. double-submit after cancel) don't both create → 409
+    with transaction.atomic():
+        encounter = ClinicalEncounter.objects.select_for_update().get(pk=encounter.pk)
+        pc = PreConsultation.objects.filter(encounter=encounter).first()
+        if pc is not None:
+            return pc
+        doctor = encounter.doctor
+        if not doctor:
+            raise ValueError("Encounter must have a doctor to create pre-consultation")
+        specialty_code = (getattr(doctor, "primary_specialization", None) or "").strip().lower()
+        if not specialty_code:
+            specialty_code = "general"
+        return PreConsultationService.create_preconsultation(
+            encounter=encounter,
+            specialty_code=specialty_code,
+            template_version="v1",
+            entry_mode="doctor",
+            created_by=created_by,
+        )
+
+
+class StartConsultationAPIView(APIView):
+    """
+    POST /encounters/{id}/consultation/start/
+    Idempotent, state-aware: if already CONSULTATION_IN_PROGRESS returns 200.
+    If CREATED or PRE_*: ensures PreConsultation exists, marks is_skipped if not completed, then starts.
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctor]
+
+    @transaction.atomic
+    def post(self, request, encounter_id):
+        def bad_request(detail, message=None):
+            return Response(
+                {"detail": detail, "message": message or detail},
+                status=status.HTTP_400_BAD_REQUEST,
+                content_type="application/json",
+            )
+        try:
+            encounter = get_object_or_404(ClinicalEncounter, id=encounter_id)
+        except Exception as e:
+            logger.exception("StartConsultation get_object_or_404: %s", e)
+            return bad_request("Encounter not found or invalid.", "Cannot start consultation.")
+        if encounter.status in ("cancelled", "no_show"):
+            return bad_request(MSG_VISIT_CANCELLED)
+        # 1) Reject if already completed
+        if encounter.status == "consultation_completed":
+            return bad_request("Consultation already completed.", "Cannot start consultation. Encounter is already completed.")
+
+        # 2) Idempotent: already in consultation → return success
+        has_consultation = Consultation.objects.filter(encounter=encounter).exists()
+        if encounter.status == "consultation_in_progress" and has_consultation:
+            return Response(
+                {
+                    "encounter_id": str(encounter.id),
+                    "status": _status_for_api(encounter.status),
+                    "next_step": "CONSULTATION",
+                    "redirect_url": f"/consultations/start-consultation?encounter_id={encounter.id}",
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        # 2b) consultation_in_progress but no consultation record, or user navigated away without cancelling
+        # → Require cancel first so encounter moves to CANCELLED; then user can start a new visit.
+        if encounter.status == "consultation_in_progress":
+            return bad_request(
+                "Consultation already in progress. Cancel the current visit from the consultation screen (Cancel button or Back), then start a new visit.",
+                "Consultation already in progress. Cancel the current visit first.",
+            )
+
+        # 3) Allowed start states
+        allowed = ("pre_consultation_completed", "created", "pre_consultation_in_progress")
+        if encounter.status not in allowed:
+            return bad_request(
+                f"Encounter must be PRE_CONSULTATION_COMPLETED, CREATED, or PRE_CONSULTATION_IN_PROGRESS. Current: {encounter.status}.",
+                f"Cannot start consultation. Encounter status: {encounter.status}.",
+            )
+
+        # 4) Ensure PreConsultation exists; if not completed, mark skipped (direct start = skip pre)
+        try:
+            pre = _get_or_create_preconsultation_for_start(encounter, created_by=request.user)
+        except PreConsultationAlreadyExistsError:
+            return Response(
+                {
+                    "detail": "Pre-consultation record already exists for this encounter. Please retry.",
+                    "message": "Pre-consultation record already exists for this encounter. Please retry.",
+                },
+                status=status.HTTP_409_CONFLICT,
+                content_type="application/json",
+            )
+        except ValueError as e:
+            return bad_request(str(e) or "Invalid pre-consultation state.")
+        if not pre.is_completed:
+            pre.is_skipped = True
+            pre.save(update_fields=["is_skipped"])
+
+        # 5) Create Consultation if not exists (Consultation.save calls _on_consultation_started → transition)
+        if has_consultation:
+            if encounter.status != "consultation_in_progress":
+                try:
+                    EncounterStateMachine.start_consultation(encounter, user=request.user)
+                except DjangoValidationError as e:
+                    return bad_request(str(e) or "Invalid transition.")
+        else:
+            try:
+                Consultation.objects.create(encounter=encounter)
+            except DjangoValidationError as e:
+                return bad_request(str(e) or "Invalid state for consultation.")
+            except Exception as e:
+                logger.exception("StartConsultation create failed: %s", e)
+                return Response(
+                    {"detail": str(e) or "Failed to start consultation.", "message": str(e) or "Failed to start consultation."},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    content_type="application/json",
+                )
+        encounter.refresh_from_db()
+        return Response(
+            {
+                "encounter_id": str(encounter.id),
+                "status": _status_for_api(encounter.status),
+                "next_step": "CONSULTATION",
+                "redirect_url": f"/consultations/start-consultation?encounter_id={encounter.id}",
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class EndConsultationAPIView(APIView):
+    """
+    POST /consultations/encounter/<uuid:encounter_id>/consultation/complete/
+    Ends the consultation: sets consultation.ended_at, is_finalized, and transitions
+    encounter to CONSULTATION_COMPLETED. Returns redirect_url for frontend.
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctor]
+
+    @transaction.atomic
+    def post(self, request, encounter_id):
+        encounter = get_object_or_404(ClinicalEncounter, id=encounter_id)
+        if encounter.status in ("cancelled", "no_show"):
+            return Response(
+                {"detail": MSG_VISIT_CANCELLED},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if encounter.status != "consultation_in_progress":
+            return Response(
+                {
+                    "detail": f"Cannot end consultation. Encounter must be in CONSULTATION_IN_PROGRESS. Current: {encounter.status}.",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            consultation = encounter.consultation
+        except Consultation.DoesNotExist:
+            return Response(
+                {"detail": "Consultation record not found for this encounter."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        if consultation.is_finalized:
+            return Response(
+                {
+                    "status": _status_for_api(encounter.status),
+                    "redirect_url": "/doctor-dashboard",
+                    "message": "Consultation already ended.",
+                },
+                status=status.HTTP_200_OK,
+            )
+        if not consultation.ended_at:
+            consultation.ended_at = timezone.now()
+            consultation.save(update_fields=["ended_at"])
+        EncounterStateMachine.complete_consultation(encounter, user=request.user)
+        encounter.refresh_from_db()
+        # Safeguard: terminal state must have is_active=False (prevents zombie active encounter / unique constraint)
+        if encounter.is_active:
+            ClinicalEncounter.objects.filter(pk=encounter.pk).update(
+                is_active=False,
+                updated_at=timezone.now(),
+            )
+            encounter.refresh_from_db()
+        consultation.refresh_from_db()
+        if not consultation.is_finalized:
+            consultation.is_finalized = True
+            consultation.save(update_fields=["is_finalized"])
+        return Response(
+            {
+                "status": _status_for_api(encounter.status),
+                "redirect_url": "/doctor-dashboard",
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class CancelEncounterAPIView(APIView):
+    """
+    POST /consultations/encounter/<uuid:encounter_id>/cancel/
+
+    Transitions encounter to CANCELLED so the doctor can start a new encounter for the same patient.
+    Required for state machine integrity: when user cancels (or backs out of) a consultation,
+    the encounter must leave consultation_in_progress and become cancelled. Otherwise the next
+    start_consultation call would correctly reject with 400 (already in progress).
+
+    Allowed transitions: any allowed state → cancelled (e.g. consultation_in_progress → cancelled).
+    Sets: status=cancelled, cancelled_at=now, cancelled_by=request.user, is_active=False.
+    Idempotent: if already cancelled, returns 200.
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctor]
+
+    def post(self, request, encounter_id):
+        encounter = get_object_or_404(ClinicalEncounter, id=encounter_id)
+        if encounter.status == "cancelled":
+            return Response(
+                {"detail": "Encounter already cancelled.", "status": "cancelled"},
+                status=status.HTTP_200_OK,
+            )
+        try:
+            # Required for state integrity: transition to cancelled and set cancelled_at, cancelled_by
+            # so the encounter leaves consultation_in_progress and user can start a new visit.
+            EncounterStateMachine.cancel(encounter, user=request.user)
+        except DjangoValidationError as e:
+            return Response(
+                {"detail": str(e) or "Cannot cancel this encounter."},
+                status=status.HTTP_400_BAD_REQUEST,
+                content_type="application/json",
+            )
+        encounter.refresh_from_db()
+        # Safeguard: terminal state must have is_active=False (prevents zombie active encounter / unique constraint)
+        if encounter.status != "cancelled":
+            logger.warning(
+                "CancelEncounterAPIView: encounter %s status after cancel was %s, expected cancelled",
+                encounter_id,
+                encounter.status,
+            )
+        if encounter.is_active:
+            ClinicalEncounter.objects.filter(pk=encounter.pk).update(
+                is_active=False,
+                updated_at=timezone.now(),
+            )
+            encounter.refresh_from_db()
+        return Response(
+            {"detail": "Encounter cancelled.", "status": _status_for_api(encounter.status)},
+            status=status.HTTP_200_OK,
+        )

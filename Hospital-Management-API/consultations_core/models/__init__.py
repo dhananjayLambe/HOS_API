@@ -7,3 +7,4 @@ from .diagnosis import *
 from .instruction import *
 from .prescription import *
 from .recommendations import *
+from .audit import *

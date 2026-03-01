@@ -2,6 +2,7 @@ from django.db import models, transaction
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 import uuid
+from consultations_core.domain.locks import EncounterLockValidator
 
 
 # =====================================================
@@ -249,8 +250,7 @@ class ConsultationDiagnosis(models.Model):
             if self.resolved_date < self.onset_date:
                 raise ValidationError("Resolved date cannot be before onset date.")
 
-        if self.consultation and getattr(self.consultation, "is_finalized", False):
-            raise ValidationError("Cannot modify diagnosis after consultation is finalized.")
+        EncounterLockValidator.validate(self.consultation)
 
     # ==============================
     # SAVE LOGIC
@@ -279,9 +279,7 @@ class ConsultationDiagnosis(models.Model):
     # ==============================
 
     def deactivate(self):
-        if getattr(self.consultation, "is_finalized", False):
-            raise ValidationError("Cannot delete diagnosis after consultation finalization.")
-
+        EncounterLockValidator.validate(self.consultation)
         self.is_active = False
         self.save(update_fields=["is_active", "updated_at"])
 

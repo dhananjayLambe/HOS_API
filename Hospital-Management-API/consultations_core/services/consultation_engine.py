@@ -1,3 +1,4 @@
+
 from typing import Dict, List, Any
 import logging
 from consultations_core.services.metadata_loader import MetadataLoader
@@ -200,6 +201,61 @@ class ConsultationEngine:
                 raise ValueError(
                     f"Invalid {section} code: {code}"
                 )
+
+    @staticmethod
+    def validate_workflow(encounter) -> None:
+        """
+        Enforces mode-based workflow validation before encounter completion.
+
+        Rules:
+        - FULL: Requires at least 1 diagnosis and 1 prescription
+        - QUICK_RX: Requires at least 1 prescription
+        - TEST_ONLY: Requires at least 1 test, and disallows diagnosis/prescription
+        """
+        from django.core.exceptions import ValidationError
+
+        consultation = getattr(encounter, "consultation", None)
+        if not consultation:
+            raise ValidationError("Consultation record missing for encounter.")
+
+        mode = encounter.consultation_type
+
+        # Adjust related_name if different in your models
+        diagnosis_count = getattr(consultation, "diagnoses", []).count() if hasattr(consultation, "diagnoses") else 0
+        prescription_count = getattr(consultation, "prescriptions", []).count() if hasattr(consultation, "prescriptions") else 0
+        test_count = getattr(consultation, "tests", []).count() if hasattr(consultation, "tests") else 0
+
+        # ===============================
+        # FULL CONSULTATION
+        # ===============================
+        if mode == "FULL":
+            if diagnosis_count == 0:
+                raise ValidationError("At least one diagnosis is required for FULL consultation.")
+            if prescription_count == 0:
+                raise ValidationError("At least one prescription is required for FULL consultation.")
+
+        # ===============================
+        # QUICK PRESCRIPTION
+        # ===============================
+        elif mode == "QUICK_RX":
+            if prescription_count == 0:
+                raise ValidationError("At least one prescription is required for QUICK_RX consultation.")
+
+        # ===============================
+        # TEST ONLY
+        # ===============================
+        elif mode == "TEST_ONLY":
+            if test_count == 0:
+                raise ValidationError("At least one test is required for TEST_ONLY consultation.")
+            if prescription_count > 0:
+                raise ValidationError("Prescription is not allowed in TEST_ONLY mode.")
+            if diagnosis_count > 0:
+                raise ValidationError("Diagnosis is not allowed in TEST_ONLY mode.")
+
+        else:
+            raise ValidationError("Invalid consultation type.")
+
+        return None
 
 
 # Purpose

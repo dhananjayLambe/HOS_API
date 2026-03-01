@@ -296,7 +296,7 @@ class DiagnosticOrder(models.Model):
             models.Index(fields=["encounter"]),
         ]
 
-    def update_status(self, new_status):
+    def update_status(self, new_status, user=None, source="system", reason=None):
         allowed_transitions = {
             OrderStatus.CREATED: [OrderStatus.CONFIRMED, OrderStatus.CANCELLED],
             OrderStatus.CONFIRMED: [OrderStatus.SAMPLE_COLLECTED, OrderStatus.CANCELLED],
@@ -308,8 +308,20 @@ class DiagnosticOrder(models.Model):
         if new_status not in allowed_transitions.get(self.status, []):
             raise ValidationError("Invalid order status transition.")
 
+        old_status = self.status
         self.status = new_status
         self.save(update_fields=["status"])
+
+        from consultations_core.domain.audit import AuditService
+        AuditService.log_status_change(
+            instance=self,
+            field_name="status",
+            old_value=old_status,
+            new_value=new_status,
+            user=user,
+            source=source,
+            reason=reason,
+        )
 
     def __str__(self):
         return self.order_number
@@ -378,11 +390,12 @@ class DiagnosticReport(models.Model):
 
     def save(self, *args, **kwargs):
         with transaction.atomic():
-
+            old_status = None
             if self.pk:
-                old = type(self).objects.only("is_editable").get(pk=self.pk)
+                old = type(self).objects.only("is_editable", "status").get(pk=self.pk)
                 if not old.is_editable:
                     raise ValidationError("Report locked.")
+                old_status = old.status
 
             if self.status == ReportLifecycleStatus.READY:
                 self.order.update_status(OrderStatus.REPORT_READY)
@@ -391,6 +404,18 @@ class DiagnosticReport(models.Model):
                 self.order.update_status(OrderStatus.COMPLETED)
                 self.delivered_at = timezone.now()
                 self.is_editable = False
+
+            if old_status is not None and old_status != self.status:
+                from consultations_core.domain.audit import AuditService
+                AuditService.log_status_change(
+                    instance=self,
+                    field_name="status",
+                    old_value=old_status,
+                    new_value=self.status,
+                    user=None,
+                    source="system",
+                    reason=None,
+                )
 
             super().save(*args, **kwargs)
 

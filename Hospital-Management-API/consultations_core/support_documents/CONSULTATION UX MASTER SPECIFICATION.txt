@@ -1,0 +1,429 @@
+Excellent.
+Now we will create the Consultation UX Master Specification Document (v1.0).
+
+This document is UI + UX focused, scenario-driven, and aligned with the Encounter Bible we defined earlier.
+
+This will prevent 90% of future confusion.
+
+⸻
+
+🏥 DOCTORPRO
+
+CONSULTATION UX MASTER SPECIFICATION (v1.0)
+
+⸻
+
+1️⃣ PURPOSE
+
+This document defines:
+	•	Complete UX behavior of Consultation module
+	•	All user interaction scenarios
+	•	Page states
+	•	Button logic
+	•	Lock rules
+	•	Error handling UX
+	•	Edge case handling
+	•	What must never happen
+
+This is the UI/UX reference for frontend + backend alignment.
+
+⸻
+
+2️⃣ HIGH LEVEL CONSULTATION FLOW
+
+Patient Selected
+      ↓
+Pre-Consultation
+      ↓
+Consultation
+      ↓
+End Consultation
+      ↓
+Locked Record
+
+No branching.
+No ambiguity.
+No implicit transitions.
+
+⸻
+
+3️⃣ CONSULTATION UX STRUCTURE
+
+Consultation Screen Layout:
+
+Left Panel
+	•	Symptoms
+	•	Findings
+	•	Diagnosis
+	•	Prescription (RX)
+	•	Advice
+	•	Tests
+
+Main Panel
+	•	Section content
+	•	Dynamic forms
+
+Right Side Panel
+	•	View Pre (popup)
+	•	Encounter Summary
+	•	Visit Timeline (future)
+
+Bottom / Top Actions
+	•	Save Draft
+	•	End Consultation
+	•	Start New Visit
+
+⸻
+
+4️⃣ CONSULTATION ENTRY SCENARIOS
+
+⸻
+
+🔵 Scenario A — Consultation In Progress
+
+Encounter.status = CONSULTATION_IN_PROGRESS
+
+When user opens consultation:
+
+✔ Resume automatically
+✔ Show saved data
+✔ Editable fields enabled
+
+No popup.
+
+⸻
+
+🔵 Scenario B — Consultation Completed
+
+Encounter.status = CONSULTATION_COMPLETED
+
+When user opens:
+
+✔ All fields read-only
+✔ End button hidden
+✔ Show:
+	•	Preview Rx
+	•	Print
+	•	Start New Visit
+
+⸻
+
+🔵 Scenario C — Pre Completed But Consultation Not Started
+
+Encounter.status = PRE_CONSULTATION_COMPLETED
+
+When user clicks Start Consultation:
+
+System sets:
+
+status = CONSULTATION_IN_PROGRESS
+
+Then loads consultation screen.
+
+⸻
+
+🔵 Scenario D — No Encounter Exists
+
+When patient selected:
+
+System creates new encounter.
+
+Redirect to Pre.
+
+⸻
+
+5️⃣ CONSULTATION SECTION BEHAVIOR
+
+Each section:
+	•	Saves independently
+	•	Does NOT change encounter state
+	•	Shows success toast
+	•	Allows edit until consultation completed
+
+Sections must NOT:
+	•	Auto-complete encounter
+	•	Rollback encounter state
+	•	Lock other sections
+
+⸻
+
+6️⃣ SAVE DRAFT UX
+
+When user clicks Save:
+
+✔ Save only section data
+✔ Show toast:
+“Saved successfully”
+✔ Do NOT change encounter status
+
+Save is not state transition.
+
+⸻
+
+7️⃣ END CONSULTATION UX
+
+⸻
+
+7.1 Button Behavior
+
+When clicked:
+
+Show modal:
+
+Are you sure you want to end this consultation?
+This will lock the encounter.
+
+Buttons:
+	•	Cancel
+	•	Confirm End
+
+⸻
+
+7.2 On Confirm
+
+Backend:
+
+status = CONSULTATION_COMPLETED
+completed_at = now()
+
+Frontend:
+
+✔ Disable all inputs
+✔ Hide Save
+✔ Hide End
+✔ Show Preview + Print
+✔ Show Start New Visit
+
+Redirect optional (queue/dashboard).
+
+⸻
+
+8️⃣ START NEW VISIT UX
+
+Visible on:
+	•	Pre screen
+	•	Consultation screen
+	•	Completed encounter
+
+⸻
+
+8.1 If Active Encounter
+
+Show modal:
+
+This visit is still active.
+End and start new visit?
+
+Options:
+	•	Cancel
+	•	Confirm
+
+On confirm:
+
+✔ Mark current as completed
+✔ Create new encounter
+✔ Redirect to Pre
+
+⸻
+
+8.2 If Completed Encounter
+
+No modal required.
+
+✔ Create new encounter
+✔ Redirect to Pre
+
+⸻
+
+9️⃣ VIEW PRE UX
+
+From Consultation:
+
+Button:
+“View Pre Details”
+
+Behavior:
+
+✔ Opens right-side drawer
+✔ Read-only
+✔ Does not navigate
+✔ Does not change state
+
+Purpose:
+Avoid back button confusion.
+
+⸻
+
+🔟 BACK BUTTON SCENARIOS
+
+⸻
+
+Case 1 — Back From Consultation
+
+✔ No state change
+✔ On reload, resume same encounter
+
+⸻
+
+Case 2 — Back Then Click Pre
+
+If consultation in progress:
+
+✔ Show Pre read-only
+✔ Show banner:
+“Consultation already started. Pre locked.”
+
+No popup.
+No new encounter.
+
+⸻
+
+Case 3 — Back Then Click Consultation Again
+
+✔ Resume same consultation
+✔ No popup
+
+⸻
+
+1️⃣1️⃣ PATIENT DESELECTION SCENARIO
+
+If doctor deselects patient:
+
+✔ No state change
+✔ Encounter remains active
+
+When patient reselected:
+
+✔ Resume active encounter
+
+⸻
+
+1️⃣2️⃣ REFRESH / TAB CLOSE
+
+✔ No state change
+✔ Resume based on Encounter.status
+
+⸻
+
+1️⃣3️⃣ ERROR UX
+
+⸻
+
+13.1 If Backend Rejects Edit (403)
+
+Show:
+
+This encounter is locked and cannot be edited.
+
+Reload page state.
+
+⸻
+
+13.2 If Network Fails
+
+Show:
+
+Unable to save. Please try again.
+
+Do not change state.
+
+⸻
+
+1️⃣4️⃣ LOCK RULES
+
+Status	Editable?
+CONSULTATION_IN_PROGRESS	Yes
+CONSULTATION_COMPLETED	No
+CANCELLED	No
+
+Frontend must disable UI.
+Backend must enforce guard.
+
+Double protection.
+
+⸻
+
+1️⃣5️⃣ WHAT UX MUST NEVER DO
+
+❌ Never auto-create encounter on navigation
+❌ Never auto-downgrade status
+❌ Never show resume/new popup for active encounter
+❌ Never allow edit after completion
+❌ Never create multiple consultations under one encounter
+
+⸻
+
+1️⃣6️⃣ MINIMUM COMPLETION RULE (PHASE 1)
+
+For now, allow End Consultation even if:
+	•	No diagnosis
+	•	No prescription
+
+Later:
+Add validation rules.
+
+But UX flow must remain same.
+
+⸻
+
+1️⃣7️⃣ FUTURE UX EXPANSION
+
+This structure supports:
+	•	Prescription preview modal
+	•	E-signature
+	•	Billing popup
+	•	Insurance tagging
+	•	Follow-up scheduling
+	•	Audit logs
+
+Without breaking architecture.
+
+⸻
+
+1️⃣8️⃣ QA TEST SCENARIOS CHECKLIST
+
+Before release, verify:
+	•	Back button does not create new encounter
+	•	Deselect does not change state
+	•	Completed encounter cannot be edited
+	•	Start New Visit creates new UUID
+	•	Pre locks once consultation starts
+	•	State never rolls back automatically
+
+⸻
+
+1️⃣9️⃣ FINAL UX PHILOSOPHY
+
+System behavior must be:
+
+Predictable
+Linear
+Deterministic
+Medico-legally safe
+Audit-friendly
+
+Doctors must never feel:
+
+“Why did system change my visit?”
+
+⸻
+
+2️⃣0️⃣ FINAL SUMMARY
+
+Consultation UX is:
+	•	Resume-based
+	•	State-driven
+	•	Explicit transition only
+	•	No hidden logic
+	•	No branching ambiguity
+
+This is enterprise-grade design.
+
+⸻
+
+If you want next, I can prepare:
+	•	Backend Service Layer Spec
+	•	API Contract Spec
+	•	Or Detailed QA Testing Matrix (50 edge cases)
+
+Now your Consultation module is properly documented and stable.
