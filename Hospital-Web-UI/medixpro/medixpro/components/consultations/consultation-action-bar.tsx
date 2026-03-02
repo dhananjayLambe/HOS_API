@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { ArrowLeft, ChevronDown, FileText, Eye, X, MoreHorizontal, Stethoscope, CheckCircle, LayoutList, Loader2, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useConsultationStore } from "@/store/consultationStore";
+import { usePatient } from "@/lib/patientContext";
 import { backendAxiosClient } from "@/lib/axiosClient";
 import { useToastNotification } from "@/hooks/use-toast-notification";
 import {
@@ -48,6 +49,7 @@ export function ConsultationActionBar() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const toast = useToastNotification();
+  const { selectedPatient } = usePatient();
   const { setSelectedDetail, consultationType, setConsultationType, encounterId: storeEncounterId } = useConsultationStore();
   const encounterIdFromUrl = searchParams.get("encounter_id");
   const encounterId = storeEncounterId || encounterIdFromUrl;
@@ -55,8 +57,10 @@ export function ConsultationActionBar() {
   const [isCancelling, setIsCancelling] = useState(false);
   const [showFollowUpConfirm, setShowFollowUpConfirm] = useState(false);
   const [showEndConsultationConfirm, setShowEndConsultationConfirm] = useState(false);
+  const [showStartNewVisitConfirm, setShowStartNewVisitConfirm] = useState(false);
   const [showViewPre, setShowViewPre] = useState(false);
   const [isEndingConsultation, setIsEndingConsultation] = useState(false);
+  const [isStartingNewVisit, setIsStartingNewVisit] = useState(false);
   const [endConsultationTestData, setEndConsultationTestData] = useState<Record<string, unknown> | null>(null);
   const [loadingTestData, setLoadingTestData] = useState(false);
   const [visitPnr, setVisitPnr] = useState<string | null>(null);
@@ -191,6 +195,29 @@ export function ConsultationActionBar() {
     }
   };
 
+  const handleStartNewVisit = async () => {
+    if (!selectedPatient?.id) {
+      toast.error("Select a patient first.");
+      return;
+    }
+    setIsStartingNewVisit(true);
+    try {
+      const res = await backendAxiosClient.post<{ redirect_url?: string }>(
+        "/consultations/entry/start-new-visit/",
+        { patient_profile_id: selectedPatient.id }
+      );
+      const url = res.data?.redirect_url || "/consultations/pre-consultation";
+      useConsultationStore.getState().reset();
+      router.push(url);
+    } catch (err: any) {
+      const msg = err.response?.data?.detail || err.response?.data?.message || err.message || "Failed to start new visit.";
+      toast.error(msg);
+    } finally {
+      setIsStartingNewVisit(false);
+      setShowStartNewVisitConfirm(false);
+    }
+  };
+
   return (
     <>
       <div className="sticky top-0 z-20 flex h-12 min-h-12 min-w-0 shrink-0 items-center justify-between gap-2 border-b border-[#eee] bg-white px-3 sm:px-4 md:px-5 shadow-sm dark:border-border dark:bg-background">
@@ -285,6 +312,16 @@ export function ConsultationActionBar() {
             <FileText className="h-4 w-4" />
             View Pre
           </Button>
+          {/* Start New Visit – on consultation page only (not on pre-consultation) */}
+          {/* <Button
+            size="sm"
+            variant="secondary"
+            className="gap-1.5 rounded-lg min-h-[44px] touch-manipulation md:min-h-0"
+            onClick={() => setShowStartNewVisitConfirm(true)}
+          >
+            {isStartingNewVisit ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            Start New Visit
+          </Button> */}
           {/* 3. Preview Rx */}
           <div className="hidden md:block">
             <Button
@@ -435,6 +472,24 @@ export function ConsultationActionBar() {
             <AlertDialogAction onClick={handleEndConsultation} disabled={isEndingConsultation} className="bg-blue-600 hover:bg-blue-700">
               {isEndingConsultation ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               End Consultation
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={showStartNewVisitConfirm} onOpenChange={setShowStartNewVisitConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Start new visit?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This visit is still active. End this visit and start a new one?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isStartingNewVisit}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleStartNewVisit} disabled={isStartingNewVisit} className="bg-blue-600 hover:bg-blue-700">
+              {isStartingNewVisit ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              End & Start New Visit
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

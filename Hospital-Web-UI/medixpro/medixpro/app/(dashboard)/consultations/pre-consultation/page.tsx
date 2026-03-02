@@ -28,8 +28,15 @@ export default function PreConsultationPage() {
   const [quickMode, setQuickMode] = useState(false);
   
   // Get encounter_id from URL params (required for API calls)
-  const [encounterId, setEncounterId] = useState<string | null>(searchParams.get("encounter_id"));
+  const urlEncounterId = searchParams.get("encounter_id");
+  const [encounterId, setEncounterId] = useState<string | null>(urlEncounterId);
+  const [visitPnr, setVisitPnr] = useState<string | null>(null);
   const [isCreatingEncounter, setIsCreatingEncounter] = useState(false);
+
+  // Keep encounterId in sync with URL (e.g. after redirect or direct load with ?encounter_id=)
+  useEffect(() => {
+    if (urlEncounterId) setEncounterId(urlEncounterId);
+  }, [urlEncounterId]);
   const [isCompleting, setIsCompleting] = useState(false);
   const [preConsultationStarted, setPreConsultationStarted] = useState(false);
   // Entry flow: "active" | "completed" | "none" | null (null = not resolved or has encounter_id in URL)
@@ -39,8 +46,9 @@ export default function PreConsultationPage() {
   const [isStartingNewVisit, setIsStartingNewVisit] = useState(false);
   const [showStartNewVisitConfirm, setShowStartNewVisitConfirm] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
-  const [showCancelVisitConfirm, setShowCancelVisitConfirm] = useState(false);
-  const [isCancellingVisit, setIsCancellingVisit] = useState(false);
+  // Cancel Visit (commented out for later use)
+  // const [showCancelVisitConfirm, setShowCancelVisitConfirm] = useState(false);
+  // const [isCancellingVisit, setIsCancellingVisit] = useState(false);
 
   // Prevent multiple redirects when encounter is cancelled (stops infinite loop)
   const redirectingDueToCancelledRef = useRef(false);
@@ -241,8 +249,10 @@ export default function PreConsultationPage() {
         });
         const state = response.data?.entry_state;
         if (state === "active" && response.data?.encounter?.id) {
-          const encId = response.data.encounter.id;
+          const enc = response.data.encounter;
+          const encId = enc.id;
           setEncounterId(encId);
+          setVisitPnr(enc.visit_pnr || null);
           setEntryState("active");
           router.replace(`/consultations/pre-consultation?encounter_id=${encId}`, { scroll: false });
           if (response.data.redirect_to === "consultation") {
@@ -269,11 +279,14 @@ export default function PreConsultationPage() {
     if (redirectingDueToCancelledRef.current && redirectedForEncounterIdRef.current === encounterId) return;
     let cancelled = false;
     backendAxiosClient
-      .get<{ status: string; cancelled?: boolean }>(`/consultations/encounter/${encounterId}/`)
+      .get<{ status: string; cancelled?: boolean; visit_pnr?: string }>(`/consultations/encounter/${encounterId}/`)
       .then((res) => {
         if (cancelled) return;
         const st = (res.data?.status || "").toUpperCase().replace(/\s/g, "_");
         setEncounterStatus(st);
+        if (res.data?.visit_pnr) {
+          setVisitPnr(res.data.visit_pnr);
+        }
         if (st === "CANCELLED" || res.data?.cancelled) {
           redirectingDueToCancelledRef.current = true;
           redirectedForEncounterIdRef.current = encounterId;
@@ -293,6 +306,28 @@ export default function PreConsultationPage() {
     };
     // Intentionally omit toast from deps to avoid effect re-running and causing redirect loop
   }, [encounterId, router]);
+
+  // Dedicated fetch for visit_pnr so header PNR always shows (status effect may redirect before setting it)
+  useEffect(() => {
+    if (!encounterId) {
+      setVisitPnr(null);
+      return;
+    }
+    let cancelled = false;
+    backendAxiosClient
+      .get<{ visit_pnr?: string }>(`/consultations/encounter/${encounterId}/`)
+      .then((res) => {
+        if (!cancelled && res.data?.visit_pnr) {
+          setVisitPnr(res.data.visit_pnr);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setVisitPnr(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [encounterId]);
 
   // Start pre-consultation when we have an encounter (status CREATED → PRE_CONSULTATION_IN_PROGRESS). Skip if cancelled.
   useEffect(() => {
@@ -597,36 +632,37 @@ export default function PreConsultationPage() {
     router.push("/doctor-dashboard");
   };
 
-  const handleCancelVisitClick = () => {
-    setShowCancelVisitConfirm(true);
-  };
+  // Cancel Visit (commented out for later use)
+  // const handleCancelVisitClick = () => {
+  //   setShowCancelVisitConfirm(true);
+  // };
 
-  const handleCancelVisitConfirmYes = async () => {
-    setShowCancelVisitConfirm(false);
-    if (encounterId) {
-      setIsCancellingVisit(true);
-      try {
-        await backendAxiosClient.post(`/consultations/encounter/${encounterId}/cancel/`);
-        toast.success("Visit cancelled successfully.");
-        router.push("/doctor-dashboard");
-      } catch (err: any) {
-        const msg = err.response?.data?.detail || err.response?.data?.message || err.message || "Failed to cancel visit.";
-        toast.error(msg);
-      } finally {
-        setIsCancellingVisit(false);
-      }
-    } else {
-      router.push("/doctor-dashboard");
-    }
-  };
+  // const handleCancelVisitConfirmYes = async () => {
+  //   setShowCancelVisitConfirm(false);
+  //   if (encounterId) {
+  //     setIsCancellingVisit(true);
+  //     try {
+  //       await backendAxiosClient.post(`/consultations/encounter/${encounterId}/cancel/`);
+  //       toast.success("Visit cancelled successfully.");
+  //       router.push("/doctor-dashboard");
+  //     } catch (err: any) {
+  //       const msg = err.response?.data?.detail || err.response?.data?.message || err.message || "Failed to cancel visit.";
+  //       toast.error(msg);
+  //     } finally {
+  //       setIsCancellingVisit(false);
+  //     }
+  //   } else {
+  //     router.push("/doctor-dashboard");
+  //   }
+  // };
 
-  const handleStartNewVisit = async (fromActiveVisit: boolean) => {
+  const handleStartNewVisit = async (_fromActiveVisit?: boolean) => {
     if (!selectedPatient?.id) return;
     setIsStartingNewVisit(true);
     try {
       const response = await backendAxiosClient.post<{
         encounter_id: string;
-        redirect_url: string;
+        redirect_url?: string;
       }>("/consultations/entry/start-new-visit/", {
         patient_profile_id: selectedPatient.id,
       });
@@ -775,7 +811,19 @@ export default function PreConsultationPage() {
     encounterStatus === "CLOSED" ||
     encounterStatus === "CANCELLED";
 
-  // Start New Visit page: no active visit (completed or none) — user clicks to start a new encounter and avoid auto-create errors
+  const handleCopyPnr = () => {
+    if (!visitPnr) return;
+    navigator.clipboard
+      .writeText(visitPnr)
+      .then(() => {
+        toast.success("Visit PNR copied to clipboard");
+      })
+      .catch(() => {
+        toast.error("Failed to copy PNR");
+      });
+  };
+
+  // Start New Visit page (commented out for later use): no active visit — user clicks to start a new encounter
   if (entryState === "completed" && !encounterId) {
     return (
       <div className="flex flex-col gap-6 pb-8">
@@ -856,8 +904,35 @@ export default function PreConsultationPage() {
           <Button variant="ghost" size="icon" onClick={handleBackClick} type="button">
             <ArrowLeft className="h-4 w-4" />
           </Button>
-          <div>
-            <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">Pre-Consultation</h1>
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">Pre-Consultation</h1>
+              {encounterId && (
+                <div className="flex items-center gap-1.5 shrink-0 rounded-lg border border-border/80 bg-muted/50 px-2.5 py-1.5">
+                  <span className="text-xs font-medium text-muted-foreground">PNR:</span>
+                  <span
+                    className="text-xs font-mono text-foreground truncate max-w-[160px] sm:max-w-[220px]"
+                    title={visitPnr ?? undefined}
+                  >
+                    {visitPnr ?? "…"}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 shrink-0 rounded"
+                    type="button"
+                    onClick={handleCopyPnr}
+                    disabled={!visitPnr}
+                    aria-label="Copy visit PNR"
+                  >
+                    {/* Small copy glyph using two rectangles to avoid new icon import */}
+                    <span className="inline-flex h-3.5 w-3.5 items-center justify-center text-[10px] text-muted-foreground">
+                      📋
+                    </span>
+                  </Button>
+                </div>
+              )}
+            </div>
             <p className="text-muted-foreground">Record patient information before consultation</p>
             {(isResolvingEntry || isCreatingEncounter) && (
               <p className="text-xs text-blue-600 dark:text-blue-400 mt-1 flex items-center gap-1">
@@ -883,7 +958,8 @@ export default function PreConsultationPage() {
                 <Switch id="quick-mode" checked={quickMode} onCheckedChange={setQuickMode} className="shrink-0" />
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button
+                {/* Cancel Visit button (commented out for later use) */}
+                {/* <Button
                   variant="outline"
                   onClick={handleCancelVisitClick}
                   disabled={isCancellingVisit}
@@ -892,7 +968,7 @@ export default function PreConsultationPage() {
                   <X className="h-4 w-4" />
                   <span className="hidden sm:inline">{isCancellingVisit ? "Cancelling..." : "Cancel Visit"}</span>
                   <span className="sm:hidden">{isCancellingVisit ? "..." : "Cancel"}</span>
-                </Button>
+                </Button> */}
                 <Button
                   onClick={handleCompleteAndRedirect}
                   disabled={isCompleting}
@@ -911,7 +987,7 @@ export default function PreConsultationPage() {
               </div>
             </>
           )}
-          <Button
+          {/* <Button
             variant="secondary"
             onClick={() => (preLocked || entryState === "completed" ? handleStartNewVisit(false) : setShowStartNewVisitConfirm(true))}
             disabled={isStartingNewVisit}
@@ -919,7 +995,7 @@ export default function PreConsultationPage() {
           >
             {isStartingNewVisit ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
             Start New Visit
-          </Button>
+          </Button> */}
         </div>
       </div>
 
@@ -971,7 +1047,8 @@ export default function PreConsultationPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog open={showCancelVisitConfirm} onOpenChange={setShowCancelVisitConfirm}>
+      {/* Cancel Visit confirm dialog (commented out for later use) */}
+      {/* <AlertDialog open={showCancelVisitConfirm} onOpenChange={setShowCancelVisitConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Cancel Visit?</AlertDialogTitle>
@@ -988,7 +1065,7 @@ export default function PreConsultationPage() {
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
-      </AlertDialog>
+      </AlertDialog> */}
 
       {/* Pre-Consultation Sections Grid */}
       {isLoadingHistory ? (
