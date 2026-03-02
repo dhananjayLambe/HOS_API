@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState, useMemo, useRef } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { usePatient } from "@/lib/patientContext";
+import { backendAxiosClient } from "@/lib/axiosClient";
+import { useToastNotification } from "@/hooks/use-toast-notification";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -12,7 +14,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { AlertCircle, Search, Thermometer, Stethoscope, ClipboardList, Pill, FlaskConical, FileText } from "lucide-react";
+import { AlertCircle, Search, Thermometer, Stethoscope, ClipboardList, Pill, FlaskConical, FileText, Loader2 } from "lucide-react";
 import { ConsultationActionBar } from "@/components/consultations/consultation-action-bar";
 import { ConsultationRightMenu } from "@/components/consultations/consultation-right-menu";
 import { ConsultationDynamicDetailPanel } from "@/components/consultations/consultation-dynamic-detail-panel";
@@ -31,13 +33,149 @@ import {
 export default function StartConsultationPage() {
   const { selectedPatient, triggerSearchHighlight } = usePatient();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const toast = useToastNotification();
   const [showAlert, setShowAlert] = useState(false);
-  const { consultationType, setConsultationType } = useConsultationStore(
+  const [isResolvingOrCreating, setIsResolvingOrCreating] = useState(false);
+  const entryFlowDoneRef = useRef(false);
+  const { consultationType, setConsultationType, setEncounterId } = useConsultationStore(
     useShallow((s) => ({
       consultationType: s.consultationType,
       setConsultationType: s.setConsultationType,
+      setEncounterId: s.setEncounterId,
     }))
   );
+
+  const encounterIdFromUrl = searchParams.get("encounter_id");
+  const redirectingDueToCancelledRef = useRef(false);
+  const redirectedForEncounterIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (encounterIdFromUrl) {
+      setEncounterId(encounterIdFromUrl);
+      entryFlowDoneRef.current = true;
+    }
+  }, [encounterIdFromUrl, setEncounterId]);
+
+  // When opening with encounter_id in URL, detect cancelled visit and redirect so user starts a new one
+  useEffect(() => {
+    if (!encounterIdFromUrl || redirectingDueToCancelledRef.current) return;
+    let cancelled = false;
+    backendAxiosClient
+      .get<{ status: string; cancelled?: boolean }>(`/consultations/encounter/${encounterIdFromUrl}/`)
+      .then((res) => {
+        if (cancelled) return;
+        const st = (res.data?.status ?? "").toUpperCase().replace(/\s/g, "_");
+        if (st === "CANCELLED" || res.data?.cancelled) {
+          redirectingDueToCancelledRef.current = true;
+          redirectedForEncounterIdRef.current = encounterIdFromUrl;
+          toast.error("Visit already cancelled. Please start a new visit.");
+          router.replace("/doctor-dashboard");
+        }
+      })
+      .catch(() => {
+        // On fetch error, leave user on page (encounter may still be valid)
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [encounterIdFromUrl, router, toast]);
+
+  // Direct Start Consultation: cancel any previous encounter, create new one, then start (skip pre-consultation).
+  useEffect(() => {
+    if (encounterIdFromUrl || !selectedPatient?.id || entryFlowDoneRef.current || isResolvingOrCreating) return;
+
+    const runEntryFlow = async () => {
+      setIsResolvingOrCreating(true);
+      try {
+        const startNewVisitRes = await backendAxiosClient.post<{
+          encounter_id: string;
+          visit_pnr?: string;
+          status?: string;
+          redirect_url?: string;
+        }>("/consultations/entry/start-new-visit/", {
+          patient_profile_id: selectedPatient.id,
+        });
+        const encounterId = startNewVisitRes.data?.encounter_id;
+        if (!encounterId) {
+          toast.error("Failed to create encounter. Invalid response.");
+          entryFlowDoneRef.current = true;
+          return;
+        }
+
+        // Existing encounter returned (200): go straight to consultation page; do not call start again.
+        const isExistingEncounter = startNewVisitRes.status === 200;
+        if (isExistingEncounter) {
+          setEncounterId(encounterId);
+          entryFlowDoneRef.current = true;
+          router.replace(`/consultations/start-consultation?encounter_id=${encounterId}`, { scroll: false });
+          return;
+        }
+
+        const startConsultation = async (attempt = 0): Promise<void> => {
+          const maxAttempts = 3;
+          try {
+            await backendAxiosClient.post(`/consultations/encounter/${encounterId}/consultation/start/`);
+          } catch (startErr: unknown) {
+            const ax = startErr as { response?: { data?: { detail?: string; message?: string }; status?: number } };
+            if (ax.response?.status === 409 && attempt < maxAttempts - 1) {
+              await new Promise((r) => setTimeout(r, 250));
+              return startConsultation(attempt + 1);
+            }
+            const detail = (ax.response?.data?.detail ?? ax.response?.data?.message ?? "") as string;
+            const msg = detail || "Cannot start consultation.";
+            if (ax.response?.status === 400) {
+              if (detail?.toLowerCase().includes("cancelled")) {
+                toast.error("Visit already cancelled. Please start a new visit.");
+                router.replace("/doctor-dashboard");
+                throw startErr;
+              }
+              // Already in progress: open that visit instead of cancelling and sending to dashboard
+              if (detail?.toLowerCase().includes("already in progress") || detail?.toLowerCase().includes("consultation already")) {
+                toast.success("Opening existing visit.");
+                setEncounterId(encounterId);
+                entryFlowDoneRef.current = true;
+                router.replace(`/consultations/start-consultation?encounter_id=${encounterId}`, { scroll: false });
+                throw startErr;
+              }
+              toast.error(msg);
+              router.replace("/doctor-dashboard");
+              throw startErr;
+            }
+            toast.error(msg);
+            throw startErr;
+          }
+        };
+        await startConsultation();
+
+        setEncounterId(encounterId);
+        entryFlowDoneRef.current = true;
+        router.replace(`/consultations/start-consultation?encounter_id=${encounterId}`, { scroll: false });
+      } catch (err: unknown) {
+        const ax = err as {
+          response?: { data?: { detail?: string; message?: string; error?: string }; status?: number };
+          message?: string;
+        };
+        if (ax.response?.status === 400) {
+          entryFlowDoneRef.current = true;
+          return;
+        }
+        const data = ax.response?.data;
+        const msg =
+          (typeof data?.detail === "string" ? data.detail : null) ??
+          (typeof data?.message === "string" ? data.message : null) ??
+          (typeof data?.error === "string" ? data.error : null) ??
+          (ax as Error).message ??
+          "Failed to start consultation.";
+        toast.error(String(msg));
+        entryFlowDoneRef.current = true;
+      } finally {
+        setIsResolvingOrCreating(false);
+      }
+    };
+
+    runEntryFlow();
+  }, [selectedPatient?.id, encounterIdFromUrl, isResolvingOrCreating, router, setEncounterId, toast]);
 
   const showLeftPanel = useMemo(
     () => isLeftPanelVisible(consultationType),
@@ -73,6 +211,7 @@ export default function StartConsultationPage() {
   if (!selectedPatient) {
     return (
       <AlertDialog open={showAlert} onOpenChange={setShowAlert}>
+
         <AlertDialogContent className="sm:max-w-md">
           <AlertDialogHeader>
             <div className="flex items-center gap-3 mb-2">
@@ -112,6 +251,15 @@ export default function StartConsultationPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    );
+  }
+
+  if (!encounterIdFromUrl && isResolvingOrCreating) {
+    return (
+      <div className="flex min-h-[40vh] flex-col items-center justify-center gap-4 text-muted-foreground">
+        <Loader2 className="h-10 w-10 animate-spin" />
+        <p className="text-sm font-medium">Setting up consultation…</p>
+      </div>
     );
   }
 

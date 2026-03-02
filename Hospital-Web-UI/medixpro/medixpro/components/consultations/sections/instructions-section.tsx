@@ -11,6 +11,22 @@ import { cn } from "@/lib/utils";
 
 const INSTRUCTION_TEMPLATE_PREFIX = "tpl:";
 
+// Module-level cache: fetch instructions render-schema at most once per app session (avoids repeated GETs on re-render/remount)
+let instructionsRenderSchemaPromise: Promise<InstructionsSectionSchema | null> | null = null;
+
+function fetchInstructionsRenderSchema(specialty: string): Promise<InstructionsSectionSchema | null> {
+  if (instructionsRenderSchemaPromise) return instructionsRenderSchemaPromise;
+  instructionsRenderSchemaPromise = fetch(
+    `/api/consultation/render-schema?specialty=${encodeURIComponent(specialty)}&section=instructions`
+  )
+    .then((res) => (res.ok ? res.json() : null))
+    .then((data: InstructionsSectionSchema | null) =>
+      data?.section === "instructions" && data.items ? data : null
+    )
+    .catch(() => null);
+  return instructionsRenderSchemaPromise;
+}
+
 function getAuthHeaders(): HeadersInit {
   if (typeof window === "undefined") return {};
   const token = localStorage.getItem("accessToken") || sessionStorage.getItem("accessToken");
@@ -104,21 +120,24 @@ export function InstructionsSection() {
         .catch(() => {})
         .finally(() => setLoading(false));
     } else {
+      // No encounter: use module-level cached fetch (single request per session). Skip if store already has schema.
+      if (instructionsSchema?.section === "instructions" && (instructionsSchema?.items?.length ?? 0) > 0) {
+        setLoading(false);
+        return;
+      }
       setLoading(true);
-      fetch(`/api/consultation/render-schema?specialty=${specialty}&section=instructions`)
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data: InstructionsSectionSchema | null) => {
-          if (data?.section === "instructions" && data.items) {
+      fetchInstructionsRenderSchema(specialty)
+        .then((data) => {
+          if (data) {
             setInstructionsSchema({
               ...data,
               categories: data.categories ?? [],
             });
           }
         })
-        .catch(() => {})
         .finally(() => setLoading(false));
     }
-  }, [encounterId, setInstructionsSchema, setInstructionsList, setConsultationFinalized]);
+  }, [encounterId, instructionsSchema, setInstructionsSchema, setInstructionsList, setConsultationFinalized]);
 
   const allTemplates = instructionsSchema?.items ?? [];
 

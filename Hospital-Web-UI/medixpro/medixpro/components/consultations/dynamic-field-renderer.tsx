@@ -124,28 +124,6 @@ const convertUnit = (value: number, fromUnit: string, toUnit: string, field: Fie
 const isBmiStyleFormula = (formula: string) =>
   formula && /\bweight\b/.test(formula) && /\bheight\b/.test(formula);
 
-// Sanity check for BMI: height 50–250 cm, weight 2–300 kg
-function areBmiInputsSane(sectionData: Record<string, any>, itemCode: string): boolean {
-  let heightCm: number | null = null;
-  let weightKg: number | null = null;
-  for (const data of Object.values(sectionData)) {
-    if (data && typeof data === "object") {
-      if (heightCm == null && "height" in data) {
-        const h = Number((data as any).height);
-        if (!isNaN(h)) heightCm = h < 10 ? h * 30.48 : h;
-      }
-      if (weightKg == null && "weight" in data) {
-        const w = Number((data as any).weight);
-        if (!isNaN(w)) weightKg = w; // assume kg
-      }
-    }
-  }
-  if (heightCm == null || weightKg == null) return false;
-  if (heightCm < 50 || heightCm > 250) return false;
-  if (weightKg < 2 || weightKg > 300) return false;
-  return true;
-}
-
 export const DynamicFieldRenderer = memo<DynamicFieldRendererProps>(
   ({ field, value, onChange, sectionData, itemCode, error, onUnitChange, currentUnit, onKeyDown, autoFocus, sectionCode, specialtyRanges }) => {
     const isMobile = useMediaQuery("(max-width: 768px)");
@@ -172,8 +150,8 @@ export const DynamicFieldRenderer = memo<DynamicFieldRendererProps>(
     // Render based on field type
     if (isCalculated) {
       const isBmiStyle = isBmiStyleFormula(field.formula || "");
-      const sane = isBmiStyle ? areBmiInputsSane(sectionData, itemCode) : true;
-      const showValue = calculatedValue !== null && (isBmiStyle ? sane : true);
+      const showValue = calculatedValue !== null;
+      // Always show category (Underweight/Normal/Overweight/Obese) when we have a BMI value — helpful for doctors
       let bmiStatus = "";
       let bmiColor = "";
       if (isBmiStyle && showValue && calculatedValue !== null) {

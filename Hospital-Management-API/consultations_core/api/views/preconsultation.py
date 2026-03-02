@@ -1172,13 +1172,26 @@ class EndConsultationAPIView(APIView):
         if not consultation.is_finalized:
             consultation.is_finalized = True
             consultation.save(update_fields=["is_finalized"])
-        return Response(
-            {
-                "status": _status_for_api(encounter.status),
-                "redirect_url": "/doctor-dashboard",
-            },
-            status=status.HTTP_200_OK,
-        )
+
+        # Include pre_consultation in response for testing (same encounter_id mapping)
+        response_payload = {
+            "status": _status_for_api(encounter.status),
+            "redirect_url": "/doctor-dashboard",
+        }
+        try:
+            pc = encounter.pre_consultation
+            pre_consult_payload = {"encounter_id": str(encounter_id)}
+            for section_code, section_model in SECTION_MODEL_MAP.items():
+                try:
+                    section_obj = section_model.objects.get(pre_consultation=pc)
+                    pre_consult_payload[section_code] = section_obj.data
+                except section_model.DoesNotExist:
+                    pre_consult_payload[section_code] = None
+            response_payload["pre_consultation"] = pre_consult_payload
+        except PreConsultation.DoesNotExist:
+            response_payload["pre_consultation"] = None
+
+        return Response(response_payload, status=status.HTTP_200_OK)
 
 
 class CancelEncounterAPIView(APIView):

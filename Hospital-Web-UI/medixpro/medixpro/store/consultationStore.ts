@@ -197,7 +197,11 @@ export const useConsultationStore = create<ConsultationStore>((set, get) => ({
     })),
 
   setDraftStatus: (draftStatus) => set({ draftStatus }),
-  setSelectedSymptomId: (selectedSymptomId) => set({ selectedSymptomId }),
+  setSelectedSymptomId: (selectedSymptomId) =>
+    set((s) => ({
+      selectedSymptomId,
+      selectedDetail: selectedSymptomId ? null : s.selectedDetail,
+    })),
   setMedicalHistory: (medicalHistory) => set({ medicalHistory }),
   setVitals: (patch) =>
     set((s) => ({ vitals: { ...s.vitals, ...patch } })),
@@ -335,7 +339,15 @@ export const useConsultationStore = create<ConsultationStore>((set, get) => ({
         ),
       },
     })),
-  setSelectedDetail: (payload) => set({ selectedDetail: payload }),
+  setSelectedDetail: (payload) =>
+    set((s) => ({
+      selectedDetail: payload,
+      // Clear symptom selection when user selects findings/diagnosis/instructions so only one section is "active"
+      selectedSymptomId:
+        payload?.section && ["findings", "diagnosis", "instructions"].includes(payload.section)
+          ? null
+          : s.selectedSymptomId,
+    })),
 
   reset: () =>
     set({

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { usePatient } from "@/lib/patientContext";
 import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -30,6 +30,21 @@ export default function PreConsultationPage() {
   // Get encounter_id from URL params (required for API calls)
   const [encounterId, setEncounterId] = useState<string | null>(searchParams.get("encounter_id"));
   const [isCreatingEncounter, setIsCreatingEncounter] = useState(false);
+  const [isCompleting, setIsCompleting] = useState(false);
+  const [preConsultationStarted, setPreConsultationStarted] = useState(false);
+  // Entry flow: "active" | "completed" | "none" | null (null = not resolved or has encounter_id in URL)
+  const [entryState, setEntryState] = useState<"active" | "completed" | "none" | null>(null);
+  const [isResolvingEntry, setIsResolvingEntry] = useState(false);
+  const [encounterStatus, setEncounterStatus] = useState<string | null>(null);
+  const [isStartingNewVisit, setIsStartingNewVisit] = useState(false);
+  const [showStartNewVisitConfirm, setShowStartNewVisitConfirm] = useState(false);
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+  const [showCancelVisitConfirm, setShowCancelVisitConfirm] = useState(false);
+  const [isCancellingVisit, setIsCancellingVisit] = useState(false);
+
+  // Prevent multiple redirects when encounter is cancelled (stops infinite loop)
+  const redirectingDueToCancelledRef = useRef(false);
+  const redirectedForEncounterIdRef = useRef<string | null>(null);
 
   // Template store for checking enabled sections
   const { template, fetchTemplate, isSectionEnabled } = usePreConsultationTemplateStore();
@@ -204,86 +219,139 @@ export default function PreConsultationPage() {
     }
   }, [template, fetchTemplate]);
 
-  // Auto-create encounter if missing but patient is selected
+  // Entry flow: when no encounter_id in URL and patient selected, resolve (active / completed / none)
   useEffect(() => {
-    if (encounterId || !selectedPatient?.id || isCreatingEncounter) return;
+    if (encounterId || !selectedPatient?.id || isResolvingEntry) return;
 
-    const createEncounter = async () => {
-      setIsCreatingEncounter(true);
+    const resolveEntry = async () => {
+      setIsResolvingEntry(true);
       try {
-        const response = await backendAxiosClient.post(
-          "/consultations/pre-consult/encounter/create/",
-          { patient_profile_id: selectedPatient.id }
-        );
-
-        if (response.data?.status && response.data?.data?.encounter_id) {
-          const newEncounterId = response.data.data.encounter_id;
-          setEncounterId(newEncounterId);
-          // Update URL without page reload
-          router.replace(`/consultations/pre-consultation?encounter_id=${newEncounterId}`, { scroll: false });
-          toast.success("Encounter created. You can now save pre-consultation data.");
-        } else {
-          console.error("Unexpected response format:", response.data);
-          toast.error("Failed to create encounter: Invalid response format.");
+        const response = await backendAxiosClient.post<{
+          entry_state: "active" | "completed" | "none";
+          encounter?: { id: string; visit_pnr: string; status: string };
+          redirect_to?: "pre" | "consultation";
+        }>("/consultations/entry/resolve/", {
+          patient_profile_id: selectedPatient.id,
+        });
+        const state = response.data?.entry_state;
+        if (state === "active" && response.data?.encounter?.id) {
+          const encId = response.data.encounter.id;
+          setEncounterId(encId);
+          setEntryState("active");
+          router.replace(`/consultations/pre-consultation?encounter_id=${encId}`, { scroll: false });
+          if (response.data.redirect_to === "consultation") {
+            router.replace(`/consultations/start-consultation?encounter_id=${encId}`);
+          }
+        } else if (state === "completed" || state === "none") {
+          // No active visit: show Start New Visit page so user explicitly starts a new visit (avoids auto-create errors/race)
+          setEntryState("completed");
         }
       } catch (error: any) {
-        console.error("Error creating encounter:", error);
-        const errorMessage = error.response?.data?.message || error.message || "Unknown error";
-        const statusCode = error.response?.status;
-        console.error(`Status: ${statusCode}, Message: ${errorMessage}`);
-        console.error("Request URL:", error.config?.url);
-        toast.error(`Failed to create encounter (${statusCode || "Network Error"}): ${errorMessage}`);
+        const msg = error.response?.data?.detail || error.response?.data?.message || error.message || "Failed to resolve entry.";
+        toast.error(msg);
       } finally {
-        setIsCreatingEncounter(false);
+        setIsResolvingEntry(false);
       }
     };
 
-    createEncounter();
-  }, [selectedPatient, encounterId, isCreatingEncounter, router, toast]);
+    resolveEntry();
+  }, [selectedPatient?.id, encounterId, isResolvingEntry, router]);
 
-  // Load existing section data if encounter_id is available
+  // When encounter_id in URL, fetch encounter detail to know status (redirect to consultation if in progress, or redirect when cancelled)
   useEffect(() => {
     if (!encounterId) return;
-
-    const loadExistingData = async () => {
-      const sectionCodes = ["vitals", "chief_complaint", "allergies", "medical_history"];
-      const sectionMap: Record<string, keyof typeof preConsultationData> = {
-        vitals: "vitals",
-        chief_complaint: "chiefComplaint",
-        allergies: "allergies",
-        medical_history: "history",
-      };
-
-      for (const sectionCode of sectionCodes) {
-        try {
-          const response = await backendAxiosClient.get(
-            `/consultations/pre-consult/encounter/${encounterId}/section/${sectionCode}/`
-          );
-          if (response.data?.data) {
-            const sectionKey = sectionMap[sectionCode];
-            if (sectionKey) {
-              setPreConsultationData((prev) => ({
-                ...prev,
-                [sectionKey]: response.data.data,
-              }));
-            }
-          }
-        } catch (error: any) {
-          // 404 is expected if section doesn't exist yet
-          if (error?.response?.status !== 404) {
-            console.error(`Error loading ${sectionCode}:`, error);
-          }
+    if (redirectingDueToCancelledRef.current && redirectedForEncounterIdRef.current === encounterId) return;
+    let cancelled = false;
+    backendAxiosClient
+      .get<{ status: string; cancelled?: boolean }>(`/consultations/encounter/${encounterId}/`)
+      .then((res) => {
+        if (cancelled) return;
+        const st = (res.data?.status || "").toUpperCase().replace(/\s/g, "_");
+        setEncounterStatus(st);
+        if (st === "CANCELLED" || res.data?.cancelled) {
+          redirectingDueToCancelledRef.current = true;
+          redirectedForEncounterIdRef.current = encounterId;
+          toast.error("Visit already cancelled.");
+          router.replace("/doctor-dashboard");
+          return;
         }
+        if (st === "CONSULTATION_IN_PROGRESS") {
+          router.replace(`/consultations/start-consultation?encounter_id=${encounterId}`);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setEncounterStatus(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // Intentionally omit toast from deps to avoid effect re-running and causing redirect loop
+  }, [encounterId, router]);
+
+  // Start pre-consultation when we have an encounter (status CREATED → PRE_CONSULTATION_IN_PROGRESS). Skip if cancelled.
+  useEffect(() => {
+    if (!encounterId || preConsultationStarted || redirectingDueToCancelledRef.current) return;
+    if (encounterStatus === "CANCELLED") return;
+    const startPreConsultation = async () => {
+      try {
+        await backendAxiosClient.post(
+          `/consultations/encounter/${encounterId}/pre-consultation/start/`
+        );
+        setPreConsultationStarted(true);
+      } catch (e: any) {
+        if (e?.response?.status === 400) setPreConsultationStarted(true);
+      }
+    };
+    startPreConsultation();
+  }, [encounterId, encounterStatus, preConsultationStarted]);
+
+  // Load existing section data if encounter_id is available (parallel requests). Skip if cancelled.
+  useEffect(() => {
+    if (!encounterId || redirectingDueToCancelledRef.current || encounterStatus === "CANCELLED") return;
+
+    const sectionCodes = ["vitals", "chief_complaint", "allergies", "medical_history"] as const;
+    const sectionMap: Record<string, keyof typeof preConsultationData> = {
+      vitals: "vitals",
+      chief_complaint: "chiefComplaint",
+      allergies: "allergies",
+      medical_history: "history",
+    };
+
+    let cancelled = false;
+    const loadExistingData = async () => {
+      const results = await Promise.allSettled(
+        sectionCodes.map((sectionCode) =>
+          backendAxiosClient.get(
+            `/consultations/pre-consult/encounter/${encounterId}/section/${sectionCode}/`
+          )
+        )
+      );
+      if (cancelled) return;
+      const updates: Partial<typeof preConsultationData> = {};
+      results.forEach((result, i) => {
+        if (result.status !== "fulfilled" || result.value?.data?.data == null) {
+          if (result.status === "rejected" && result.reason?.response?.status !== 404) {
+            console.error(`Error loading ${sectionCodes[i]}:`, result.reason);
+          }
+          return;
+        }
+        const sectionKey = sectionMap[sectionCodes[i]];
+        if (sectionKey) updates[sectionKey] = result.value.data.data;
+      });
+      if (Object.keys(updates).length > 0) {
+        setPreConsultationData((prev) => ({ ...prev, ...updates }));
       }
     };
 
     loadExistingData();
-  }, [encounterId]);
+    return () => {
+      cancelled = true;
+    };
+  }, [encounterId, encounterStatus]);
 
   useEffect(() => {
     if (!selectedPatient) {
       setShowAlert(true);
-      // Clear previous records when no patient is selected
       setPreviousRecords({
         vitals: [],
         history: [],
@@ -291,10 +359,9 @@ export default function PreConsultationPage() {
         chiefComplaint: [],
       });
     } else {
-      // Fetch previous records from API
       fetchPreviousRecords();
     }
-  }, [selectedPatient]);
+  }, [selectedPatient?.id]);
 
   const fetchPreviousRecords = async () => {
     if (!selectedPatient?.id) return;
@@ -475,9 +542,9 @@ export default function PreConsultationPage() {
         return;
       }
 
-      toast.success("Pre-consultation data saved successfully!");
+      toast.success("Pre-consultation draft saved.");
 
-      // Navigate after a short delay to show the success message
+      // Optional: stay on page for further edits, or go to dashboard
       setTimeout(() => {
         router.push("/doctor-dashboard");
       }, 500);
@@ -515,8 +582,126 @@ export default function PreConsultationPage() {
     }
   };
 
-  const handleCancel = () => {
-    router.back();
+  const handleBackClick = () => {
+    setShowLeaveConfirm(true);
+  };
+
+  const handleLeaveConfirmYes = () => {
+    setShowLeaveConfirm(false);
+    router.push("/doctor-dashboard");
+  };
+
+  const handleCancelVisitClick = () => {
+    setShowCancelVisitConfirm(true);
+  };
+
+  const handleCancelVisitConfirmYes = async () => {
+    setShowCancelVisitConfirm(false);
+    if (encounterId) {
+      setIsCancellingVisit(true);
+      try {
+        await backendAxiosClient.post(`/consultations/encounter/${encounterId}/cancel/`);
+        toast.success("Visit cancelled successfully.");
+        router.push("/doctor-dashboard");
+      } catch (err: any) {
+        const msg = err.response?.data?.detail || err.response?.data?.message || err.message || "Failed to cancel visit.";
+        toast.error(msg);
+      } finally {
+        setIsCancellingVisit(false);
+      }
+    } else {
+      router.push("/doctor-dashboard");
+    }
+  };
+
+  const handleStartNewVisit = async (fromActiveVisit: boolean) => {
+    if (!selectedPatient?.id) return;
+    setIsStartingNewVisit(true);
+    try {
+      const response = await backendAxiosClient.post<{
+        encounter_id: string;
+        redirect_url: string;
+      }>("/consultations/entry/start-new-visit/", {
+        patient_profile_id: selectedPatient.id,
+      });
+      const url = response.data?.redirect_url || `/consultations/pre-consultation?encounter_id=${response.data?.encounter_id}`;
+      toast.success("New visit started.");
+      router.push(url);
+    } catch (error: any) {
+      const msg = error.response?.data?.detail || error.response?.data?.message || error.message || "Failed to start new visit.";
+      toast.error(msg);
+    } finally {
+      setIsStartingNewVisit(false);
+      setShowStartNewVisitConfirm(false);
+    }
+  };
+
+  const handleCompleteAndRedirect = async () => {
+    const hasAnyData = Object.values(preConsultationData).some(
+      (data) => data !== null && Object.keys(data).length > 0
+    );
+    if (!hasAnyData) {
+      toast.error("Please add at least one pre-consultation entry before completing.");
+      return;
+    }
+    if (!selectedPatient?.id) {
+      toast.error("Please select a patient first.");
+      return;
+    }
+    let currentEncounterId = encounterId;
+    if (!currentEncounterId) {
+      try {
+        const createRes = await backendAxiosClient.post(
+          "/consultations/pre-consult/encounter/create/",
+          { patient_profile_id: selectedPatient.id }
+        );
+        if (!createRes.data?.status || !createRes.data?.data?.encounter_id) {
+          toast.error("Failed to create encounter.");
+          return;
+        }
+        currentEncounterId = createRes.data.data.encounter_id;
+        setEncounterId(currentEncounterId);
+        router.replace(`/consultations/pre-consultation?encounter_id=${currentEncounterId}`, { scroll: false });
+      } catch (err: any) {
+        toast.error(err.response?.data?.message || err.message || "Failed to create encounter.");
+        return;
+      }
+    }
+    setIsCompleting(true);
+    const sectionMap: Record<string, string> = {
+      vitals: "vitals",
+      chiefComplaint: "chief_complaint",
+      allergies: "allergies",
+      history: "medical_history",
+    };
+    try {
+      const sectionsToSave = Object.entries(preConsultationData)
+        .filter(([_, data]) => data !== null && Object.keys(data).length > 0)
+        .map(([sectionKey, data]) => ({ sectionKey, data, sectionCode: sectionMap[sectionKey] }));
+      for (const { sectionCode, data } of sectionsToSave) {
+        if (!sectionCode) continue;
+        await backendAxiosClient.post(
+          `/consultations/pre-consult/encounter/${currentEncounterId}/section/${sectionCode}/`,
+          { data }
+        );
+      }
+      const completeRes = await backendAxiosClient.post<{
+        redirect_url?: string;
+        status?: string;
+        detail?: string;
+      }>(`/consultations/encounter/${currentEncounterId}/pre-consultation/complete/`);
+      const redirectUrl = completeRes.data?.redirect_url || `/consultations/consultation/${currentEncounterId}`;
+      toast.success("Pre-consultation completed. Redirecting to consultation.");
+      router.push(redirectUrl);
+    } catch (error: any) {
+      const msg = error.response?.data?.detail ?? error.response?.data?.message ?? error.message ?? "Failed to complete pre-consultation.";
+      toast.error(msg);
+      if (currentEncounterId) {
+        router.push(`/consultations/consultation/${currentEncounterId}`);
+      }
+    } finally {
+      setIsCompleting(false);
+    }
   };
 
   const sectionMap: Record<string, string> = {
@@ -575,9 +760,46 @@ export default function PreConsultationPage() {
       ...prev,
       [section]: data,
     }));
-    // Persist to backend so records appear in DB even when user only clicks "Save Vitals" (etc.)
-    persistSectionToBackend(section, data);
+    // Phase-1: No auto-save; data stays in state until "Complete & Start Consultation"
   };
+
+  const preLocked =
+    encounterStatus === "CONSULTATION_IN_PROGRESS" ||
+    encounterStatus === "CONSULTATION_COMPLETED" ||
+    encounterStatus === "CLOSED" ||
+    encounterStatus === "CANCELLED";
+
+  // Start New Visit page: no active visit (completed or none) — user clicks to start a new encounter and avoid auto-create errors
+  if (entryState === "completed" && !encounterId) {
+    return (
+      <div className="flex flex-col gap-6 pb-8">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <Link href="/doctor-dashboard">
+              <Button variant="ghost" size="icon">
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+            </Link>
+            <div>
+              <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">Pre-Consultation</h1>
+              <p className="text-muted-foreground">No active visit for this patient.</p>
+            </div>
+          </div>
+        </div>
+        <div className="rounded-lg border bg-muted/30 p-6 text-center max-w-md mx-auto">
+          <p className="text-muted-foreground mb-4">Start a new visit to record pre-consultation and begin consultation.</p>
+          <Button
+            onClick={() => handleStartNewVisit(false)}
+            disabled={isStartingNewVisit}
+            className="gap-2 bg-purple-600 hover:bg-purple-700"
+          >
+            {isStartingNewVisit ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            Start New Visit
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   if (!selectedPatient) {
     return (
@@ -625,59 +847,142 @@ export default function PreConsultationPage() {
       {/* Header with Action Buttons */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b pb-4 -mx-6 px-6">
         <div className="flex items-center gap-4">
-          <Link href="/doctor-dashboard">
-            <Button variant="ghost" size="icon">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </Link>
+          <Button variant="ghost" size="icon" onClick={handleBackClick} type="button">
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
           <div>
             <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">Pre-Consultation</h1>
             <p className="text-muted-foreground">Record patient information before consultation</p>
-            {isCreatingEncounter && (
+            {(isResolvingEntry || isCreatingEncounter) && (
               <p className="text-xs text-blue-600 dark:text-blue-400 mt-1 flex items-center gap-1">
                 <Loader2 className="h-3 w-3 animate-spin" />
-                <span>Creating encounter...</span>
-              </p>
-            )}
-            {!encounterId && !isCreatingEncounter && selectedPatient && (
-              <p className="text-xs text-amber-600 dark:text-amber-400 mt-1 flex items-center gap-1">
-                <span>⚠️</span>
-                <span>Encounter will be created automatically when you save</span>
+                <span>{isResolvingEntry ? "Checking visit status..." : "Creating encounter..."}</span>
               </p>
             )}
           </div>
         </div>
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
-          {/* Quick Mode Toggle */}
-          <div className="flex items-center gap-2 px-3 py-2 rounded-lg border bg-muted/50">
-            <Zap className="h-4 w-4 text-amber-500 shrink-0" />
-            <div className="flex flex-col min-w-0">
-              <Label htmlFor="quick-mode" className="text-sm font-medium cursor-pointer">
-                Quick Mode
-              </Label>
-              {quickMode && (
-                <span className="text-xs text-muted-foreground truncate">Showing: Vitals, Complaint, Allergies</span>
-              )}
-            </div>
-            <Switch id="quick-mode" checked={quickMode} onCheckedChange={setQuickMode} className="shrink-0" />
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={handleCancel} className="gap-2 flex-1 sm:flex-initial">
-              <X className="h-4 w-4" />
-              <span className="hidden sm:inline">Cancel</span>
-            </Button>
-            <Button
-              onClick={handleSave}
-              disabled={isSaving}
-              className="gap-2 bg-purple-600 hover:bg-purple-700 flex-1 sm:flex-initial"
-            >
-              <Save className="h-4 w-4" />
-              <span className="hidden sm:inline">{isSaving ? "Saving..." : "Save Pre-Consultation"}</span>
-              <span className="sm:hidden">{isSaving ? "Saving..." : "Save"}</span>
-            </Button>
-          </div>
+          {!preLocked && (
+            <>
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg border bg-muted/50">
+                <Zap className="h-4 w-4 text-amber-500 shrink-0" />
+                <div className="flex flex-col min-w-0">
+                  <Label htmlFor="quick-mode" className="text-sm font-medium cursor-pointer">
+                    Quick Mode
+                  </Label>
+                  {quickMode && (
+                    <span className="text-xs text-muted-foreground truncate">Showing: Vitals, Complaint, Allergies</span>
+                  )}
+                </div>
+                <Switch id="quick-mode" checked={quickMode} onCheckedChange={setQuickMode} className="shrink-0" />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  onClick={handleCancelVisitClick}
+                  disabled={isCancellingVisit}
+                  className="gap-2 flex-1 sm:flex-initial"
+                >
+                  <X className="h-4 w-4" />
+                  <span className="hidden sm:inline">{isCancellingVisit ? "Cancelling..." : "Cancel Visit"}</span>
+                  <span className="sm:hidden">{isCancellingVisit ? "..." : "Cancel"}</span>
+                </Button>
+                <Button
+                  onClick={handleCompleteAndRedirect}
+                  disabled={isCompleting}
+                  className="gap-2 bg-purple-600 hover:bg-purple-700 flex-1 sm:flex-initial"
+                >
+                  {isCompleting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4" />
+                  )}
+                  <span className="hidden sm:inline">
+                    {isCompleting ? "Completing..." : "Complete & Start Consultation"}
+                  </span>
+                  <span className="sm:hidden">{isCompleting ? "..." : "Complete"}</span>
+                </Button>
+              </div>
+            </>
+          )}
+          <Button
+            variant="secondary"
+            onClick={() => (preLocked || entryState === "completed" ? handleStartNewVisit(false) : setShowStartNewVisitConfirm(true))}
+            disabled={isStartingNewVisit}
+            className="gap-2 flex-1 sm:flex-initial"
+          >
+            {isStartingNewVisit ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            Start New Visit
+          </Button>
         </div>
       </div>
+
+      {preLocked && (
+        <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 flex items-center gap-2">
+          <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0" />
+          <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
+            Consultation already started. Pre-consultation is locked.
+          </p>
+        </div>
+      )}
+
+      <AlertDialog open={showStartNewVisitConfirm} onOpenChange={setShowStartNewVisitConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Start new visit?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This visit is still active. End this visit and start a new one?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <Button variant="outline" onClick={() => setShowStartNewVisitConfirm(false)}>
+              Cancel
+            </Button>
+            <Button onClick={() => handleStartNewVisit(true)} disabled={isStartingNewVisit}>
+              {isStartingNewVisit ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              End & Start New Visit
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={showLeaveConfirm} onOpenChange={setShowLeaveConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Leave Pre-Consultation?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Unsaved data will be lost. Are you sure you want to go back?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <Button variant="outline" onClick={() => setShowLeaveConfirm(false)}>
+              No, Stay
+            </Button>
+            <Button onClick={handleLeaveConfirmYes} className="bg-purple-600 hover:bg-purple-700">
+              Yes, Go Back
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={showCancelVisitConfirm} onOpenChange={setShowCancelVisitConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancel Visit?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This visit will be marked as cancelled and you can start a new one. Are you sure?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <Button variant="outline" onClick={() => setShowCancelVisitConfirm(false)}>
+              No, Stay
+            </Button>
+            <Button onClick={handleCancelVisitConfirmYes} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Yes, Cancel Visit
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Pre-Consultation Sections Grid */}
       {isLoadingHistory ? (
@@ -686,7 +991,7 @@ export default function PreConsultationPage() {
           <span className="ml-2 text-muted-foreground">Loading previous records...</span>
         </div>
       ) : (
-        <div className="space-y-6">
+        <div className={preLocked ? "space-y-6 pointer-events-none opacity-75" : "space-y-6"}>
           {/* First Row: Vitals and Chief Complaint (Most Important) */}
           <div className="grid gap-6 md:grid-cols-2">
             {/* Vitals Section - Always show (fallback if template not loaded) */}

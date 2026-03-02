@@ -9,20 +9,20 @@ import { useConsultationStore } from "@/store/consultationStore";
 export function ConsultationDynamicDetailPanel() {
   const { selectedSymptomId, selectedDetail } = useConsultationStore();
 
-  if (selectedSymptomId) {
-    return <SymptomDetailPanel />;
-  }
-
+  // When user selects an item from findings/diagnosis/instructions, show that panel
+  // (check selectedDetail first so the right panel shows even if a symptom was selected earlier)
   if (selectedDetail?.section === "findings") {
     return <FindingDetailPanel />;
   }
-
   if (selectedDetail?.section === "diagnosis") {
     return <DiagnosisDetailPanel />;
   }
-
   if (selectedDetail?.section === "instructions") {
     return <InstructionDetailPanel />;
+  }
+
+  if (selectedSymptomId) {
+    return <SymptomDetailPanel />;
   }
 
   // Default: show symptom placeholder panel
