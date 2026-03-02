@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo, useRef } from "react";
+import { Suspense, useEffect, useState, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { usePatient } from "@/lib/patientContext";
 import { backendAxiosClient } from "@/lib/axiosClient";
@@ -30,7 +30,16 @@ import {
   isInvestigationsSectionExpandedByDefault,
 } from "@/lib/consultation-workflow";
 
-export default function StartConsultationPage() {
+function StartConsultationLoading() {
+  return (
+    <div className="flex min-h-[40vh] flex-col items-center justify-center gap-4 text-muted-foreground">
+      <Loader2 className="h-10 w-10 animate-spin" />
+      <p className="text-sm font-medium">Loading consultation…</p>
+    </div>
+  );
+}
+
+function StartConsultationContent() {
   const { selectedPatient, triggerSearchHighlight } = usePatient();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -327,5 +336,13 @@ export default function StartConsultationPage() {
         </div>
       </div>
     </ConsultationErrorBoundary>
+  );
+}
+
+export default function StartConsultationPage() {
+  return (
+    <Suspense fallback={<StartConsultationLoading />}>
+      <StartConsultationContent />
+    </Suspense>
   );
 }

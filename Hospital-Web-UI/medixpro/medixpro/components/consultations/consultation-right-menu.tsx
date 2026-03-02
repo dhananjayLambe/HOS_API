@@ -3,7 +3,6 @@
 import { History, Activity, Stethoscope } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useConsultationStore } from "@/store/consultationStore";
 
@@ -16,8 +15,6 @@ export function ConsultationRightMenu() {
     medicalHistory,
     vitals,
     doctorNotes,
-    setMedicalHistory,
-    setVitals,
     setDoctorNotes,
   } = useConsultationStore();
 
@@ -39,23 +36,23 @@ export function ConsultationRightMenu() {
         </CardContent>
       </Card>
 
-      {/* Medical History */}
+      {/* Medical History — read-only; data loaded from backend later */}
       <Card className="rounded-2xl border border-border/80 bg-card shadow-sm transition-shadow hover:shadow-md">
         <CardHeader className="flex flex-row items-center gap-2 py-4 pb-3">
           <History className="h-4 w-4 text-muted-foreground" />
           <h3 className="font-bold text-sm">Medical History</h3>
         </CardHeader>
         <CardContent className="pt-0 pb-5">
-          <Textarea
-            placeholder="Patient medical history (e.g. allergies, chronic conditions). Loaded from patient record when available."
-            value={medicalHistory}
-            onChange={(e) => setMedicalHistory(e.target.value)}
-            className="min-h-[100px] resize-y rounded-md text-sm"
-          />
+          <div
+            className="min-h-[100px] w-full rounded-md border border-border/80 bg-muted/50 px-3 py-2.5 text-sm text-foreground cursor-default"
+            aria-readonly="true"
+          >
+            {medicalHistory?.trim() ? medicalHistory : <span className="text-muted-foreground">No medical history loaded yet.</span>}
+          </div>
         </CardContent>
       </Card>
 
-      {/* Vitals */}
+      {/* Vitals — read-only; data loaded from backend later */}
       <Card className="rounded-2xl border border-border/80 bg-card shadow-sm transition-shadow hover:shadow-md">
         <CardHeader className="flex flex-row items-center gap-2 py-4 pb-3">
           <Activity className="h-4 w-4 text-muted-foreground" />
@@ -65,47 +62,27 @@ export function ConsultationRightMenu() {
           <div className="grid grid-cols-2 gap-3 sm:gap-3">
             <div className="space-y-1.5">
               <Label className="text-xs">Weight (kg)</Label>
-              <Input
-                type="text"
-                inputMode="decimal"
-                placeholder="kg"
-                value={vitals.weightKg ?? ""}
-                onChange={(e) => setVitals({ weightKg: e.target.value })}
-                className="rounded-md h-10 min-h-10 touch-manipulation sm:h-9"
-              />
+              <div className="rounded-md h-10 min-h-10 flex items-center px-3 bg-muted/50 border border-border/80 text-sm text-foreground cursor-default" aria-readonly="true">
+                {vitals.weightKg ?? <span className="text-muted-foreground">—</span>}
+              </div>
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Height (cm)</Label>
-              <Input
-                type="text"
-                inputMode="decimal"
-                placeholder="cm"
-                value={vitals.heightCm ?? ""}
-                onChange={(e) => setVitals({ heightCm: e.target.value })}
-                className="rounded-md h-10 min-h-10 touch-manipulation sm:h-9"
-              />
+              <div className="rounded-md h-10 min-h-10 flex items-center px-3 bg-muted/50 border border-border/80 text-sm text-foreground cursor-default" aria-readonly="true">
+                {vitals.heightCm ?? <span className="text-muted-foreground">—</span>}
+              </div>
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">BMI (kg/m²)</Label>
-              <Input
-                type="text"
-                inputMode="decimal"
-                placeholder="kg/m²"
-                value={vitals.bmi ?? ""}
-                onChange={(e) => setVitals({ bmi: e.target.value })}
-                className="rounded-md h-10 min-h-10 touch-manipulation sm:h-9"
-              />
+              <div className="rounded-md h-10 min-h-10 flex items-center px-3 bg-muted/50 border border-border/80 text-sm text-foreground cursor-default" aria-readonly="true">
+                {vitals.bmi ?? <span className="text-muted-foreground">—</span>}
+              </div>
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Temperature (°F)</Label>
-              <Input
-                type="text"
-                inputMode="decimal"
-                placeholder="°F"
-                value={vitals.temperatureF ?? ""}
-                onChange={(e) => setVitals({ temperatureF: e.target.value })}
-                className="rounded-md h-10 min-h-10 touch-manipulation sm:h-9"
-              />
+              <div className="rounded-md h-10 min-h-10 flex items-center px-3 bg-muted/50 border border-border/80 text-sm text-foreground cursor-default" aria-readonly="true">
+                {vitals.temperatureF ?? <span className="text-muted-foreground">—</span>}
+              </div>
             </div>
           </div>
         </CardContent>

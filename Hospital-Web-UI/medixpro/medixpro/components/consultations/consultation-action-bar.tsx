@@ -2,10 +2,9 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ArrowLeft, ChevronDown, FileText, Save, Eye, X, MoreHorizontal, Stethoscope, CheckCircle, LayoutList, Loader2 } from "lucide-react";
+import { ArrowLeft, ChevronDown, FileText, Eye, X, MoreHorizontal, Stethoscope, CheckCircle, LayoutList, Loader2, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useConsultationStore } from "@/store/consultationStore";
-import { usePatient } from "@/lib/patientContext";
 import { backendAxiosClient } from "@/lib/axiosClient";
 import { useToastNotification } from "@/hooks/use-toast-notification";
 import {
@@ -49,20 +48,45 @@ export function ConsultationActionBar() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const toast = useToastNotification();
-  const { selectedPatient } = usePatient();
-  const { draftStatus, setSelectedDetail, consultationType, setConsultationType, encounterId: storeEncounterId } = useConsultationStore();
+  const { setSelectedDetail, consultationType, setConsultationType, encounterId: storeEncounterId } = useConsultationStore();
   const encounterIdFromUrl = searchParams.get("encounter_id");
   const encounterId = storeEncounterId || encounterIdFromUrl;
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [showFollowUpConfirm, setShowFollowUpConfirm] = useState(false);
   const [showEndConsultationConfirm, setShowEndConsultationConfirm] = useState(false);
-  const [showStartNewVisitConfirm, setShowStartNewVisitConfirm] = useState(false);
   const [showViewPre, setShowViewPre] = useState(false);
   const [isEndingConsultation, setIsEndingConsultation] = useState(false);
-  const [isStartingNewVisit, setIsStartingNewVisit] = useState(false);
   const [endConsultationTestData, setEndConsultationTestData] = useState<Record<string, unknown> | null>(null);
   const [loadingTestData, setLoadingTestData] = useState(false);
+  const [visitPnr, setVisitPnr] = useState<string | null>(null);
+
+  // Fetch visit_pnr when encounterId is available
+  useEffect(() => {
+    if (!encounterId) {
+      setVisitPnr(null);
+      return;
+    }
+    let cancelled = false;
+    backendAxiosClient
+      .get<{ visit_pnr?: string }>(`/consultations/encounter/${encounterId}/`)
+      .then((res) => {
+        if (!cancelled && res.data?.visit_pnr) setVisitPnr(res.data.visit_pnr);
+      })
+      .catch(() => setVisitPnr(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [encounterId]);
+
+  const copyPnrToClipboard = () => {
+    if (!visitPnr) return;
+    navigator.clipboard.writeText(visitPnr).then(() => {
+      toast.success("Visit PNR copied to clipboard");
+    }).catch(() => {
+      toast.error("Failed to copy PNR");
+    });
+  };
 
   // Intercept browser back so the same "Unsaved changes" dialog appears; on confirm, same as Cancel (reset + dashboard)
   useEffect(() => {
@@ -138,21 +162,6 @@ export function ConsultationActionBar() {
       .finally(() => setLoadingTestData(false));
   }, [showEndConsultationConfirm, encounterId]);
 
-  const formatDraftTime = (date: Date | null) => {
-    if (!date) return null;
-    const secs = Math.floor((Date.now() - date.getTime()) / 1000);
-    if (secs < 60) return `${secs}s ago`;
-    const mins = Math.floor(secs / 60);
-    return `${mins}m ago`;
-  };
-
-  const handleSaveDraft = () => {
-    useConsultationStore.getState().setDraftStatus({
-      savedAt: new Date(),
-      message: "Draft saved",
-    });
-  };
-
   const handleTypeChange = (nextType: ConsultationWorkflowType) => {
     if (nextType !== consultationType) {
       setConsultationType(nextType);
@@ -182,47 +191,43 @@ export function ConsultationActionBar() {
     }
   };
 
-  const handleStartNewVisit = async () => {
-    if (!selectedPatient?.id) {
-      toast.error("Select a patient first.");
-      return;
-    }
-    setIsStartingNewVisit(true);
-    try {
-      const res = await backendAxiosClient.post<{ redirect_url?: string }>(
-        "/consultations/entry/start-new-visit/",
-        { patient_profile_id: selectedPatient.id }
-      );
-      const url = res.data?.redirect_url || "/consultations/pre-consultation";
-      useConsultationStore.getState().reset();
-      router.push(url);
-    } catch (err: any) {
-      const msg = err.response?.data?.detail || err.response?.data?.message || err.message || "Failed to start new visit.";
-      toast.error(msg);
-    } finally {
-      setIsStartingNewVisit(false);
-      setShowStartNewVisitConfirm(false);
-    }
-  };
-
   return (
     <>
-      <div className="sticky top-0 z-20 flex h-14 min-h-14 min-w-0 shrink-0 items-center justify-between gap-2 border-b border-[#eee] bg-white px-3 sm:px-4 md:px-5 shadow-sm dark:border-border dark:bg-background">
-        <div className="flex shrink-0 items-center gap-2 md:gap-3 min-h-[44px]">
+      <div className="sticky top-0 z-20 flex h-12 min-h-12 min-w-0 shrink-0 items-center justify-between gap-2 border-b border-[#eee] bg-white px-3 sm:px-4 md:px-5 shadow-sm dark:border-border dark:bg-background">
+        <div className="flex shrink-0 items-center gap-2 md:gap-3 min-h-0">
           <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Back"
+            variant="outline"
+            size="sm"
+            aria-label="Back to appointments"
             onClick={() => setShowCancelConfirm(true)}
-            className="h-10 w-10 shrink-0 rounded-lg touch-manipulation sm:h-9 sm:w-9"
+            className="gap-1.5 h-8 shrink-0 rounded-lg border-border/80 bg-muted/60 px-2.5 text-muted-foreground hover:text-foreground hover:bg-muted hover:border-muted-foreground/30 touch-manipulation"
           >
-            <ArrowLeft className="h-4 w-4" />
+            <ArrowLeft className="h-4 w-4 shrink-0" />
+            <span className="text-sm font-medium">Back</span>
           </Button>
-          <span className="flex items-center gap-2 text-base font-semibold tracking-tight sm:text-lg truncate min-w-0">
-            <Stethoscope className="h-5 w-5 shrink-0 text-primary/80" aria-hidden />
-            <span className="hidden sm:inline">Start Consultation</span>
+          <span className="flex items-center gap-2 text-sm font-semibold tracking-tight sm:text-base truncate min-w-0">
+            <Stethoscope className="h-4 w-4 shrink-0 text-primary/80" aria-hidden />
+            <span className="hidden sm:inline">Consultation</span>
             <span className="sm:hidden">Consultation</span>
           </span>
+          {encounterId && (
+            <div className="flex items-center gap-1.5 shrink-0 rounded-lg border border-border/80 bg-muted/50 px-2.5 py-1">
+              <span className="text-xs font-medium text-muted-foreground">PNR:</span>
+              <span className="text-xs font-mono text-foreground truncate max-w-[140px] sm:max-w-[200px]" title={visitPnr ?? undefined}>
+                {visitPnr ?? "…"}
+              </span>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 shrink-0 rounded"
+                onClick={copyPnrToClipboard}
+                disabled={!visitPnr}
+                aria-label="Copy visit PNR"
+              >
+                <Copy className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
+              </Button>
+            </div>
+          )}
         </div>
 
         <div className="flex min-w-0 shrink items-center justify-end gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&_button]:shrink-0">
@@ -261,45 +266,46 @@ export function ConsultationActionBar() {
               </SelectContent>
             </Select>
           </div>
-          {/* Desktop: Templates and actions */}
-          <div className="hidden md:flex items-center gap-1.5 lg:gap-2.5">
+          {/* 1. Templates */}
+          <div className="hidden md:block">
             <Button variant="ghost" size="sm" className="gap-1.5 rounded-lg">
               <FileText className="h-4 w-4 text-muted-foreground" />
               Templates
               <ChevronDown className="h-4 w-4 text-muted-foreground" />
             </Button>
+          </div>
+          {/* 2. View Pre Consultation */}
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5 rounded-lg min-h-[44px] touch-manipulation md:min-h-0"
+            onClick={() => setShowViewPre(true)}
+            disabled={!encounterId}
+          >
+            <FileText className="h-4 w-4" />
+            View Pre
+          </Button>
+          {/* 3. Preview Rx */}
+          <div className="hidden md:block">
             <Button
-              variant="outline"
               size="sm"
-              onClick={handleSaveDraft}
-              className="gap-1.5 rounded-lg"
+              variant="outline"
+              className="gap-1.5 rounded-lg border-violet-200 dark:border-violet-800 bg-violet-100 dark:bg-violet-950/50 text-violet-700 dark:text-violet-300 hover:bg-violet-200 dark:hover:bg-violet-900/50 hover:text-violet-800 dark:hover:text-violet-200"
             >
-              <Save className="h-4 w-4" />
-              Save Draft
-            </Button>
-            {draftStatus.savedAt && (
-              <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50/80 px-2.5 py-1.5 dark:border-emerald-800 dark:bg-emerald-950/30">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                <span className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
-                  Draft Saved – {formatDraftTime(draftStatus.savedAt)}
-                </span>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-6 w-6" aria-label="Draft options">
-                      <MoreHorizontal className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem>View draft history</DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            )}
-            <Button size="sm" className="gap-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 border-0">
               <Eye className="h-4 w-4" />
               Preview Rx
             </Button>
           </div>
+          {/* 4. End Consultation */}
+          <Button
+            size="sm"
+            className="gap-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 min-h-[44px] touch-manipulation md:min-h-0 border-0"
+            onClick={() => setShowEndConsultationConfirm(true)}
+          >
+            {isEndingConsultation ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
+            End Consultation
+          </Button>
+          {/* Mobile: Actions dropdown (Templates, Preview Rx – View Pre & End Consultation are buttons above) */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm" className="gap-1.5 rounded-lg md:hidden min-h-[44px] touch-manipulation">
@@ -312,51 +318,21 @@ export function ConsultationActionBar() {
                 <FileText className="h-4 w-4" />
                 Templates
               </DropdownMenuItem>
-              <DropdownMenuItem className="gap-2 py-3" onClick={handleSaveDraft}>
-                <Save className="h-4 w-4" />
-                Save Draft
-              </DropdownMenuItem>
               <DropdownMenuItem className="gap-2 py-3">
                 <Eye className="h-4 w-4" />
                 Preview Rx
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-            <Button
+            {/* Cancel button – uncomment to show in header */}
+            {/* <Button
               size="sm"
-              variant="outline"
-              className="gap-1.5 rounded-lg min-h-[44px] touch-manipulation md:min-h-0"
-              onClick={() => setShowViewPre(true)}
-              disabled={!encounterId}
+              className="gap-1.5 rounded-lg bg-red-600 text-white hover:bg-red-700 min-h-[44px] touch-manipulation md:min-h-0 border-0"
+              onClick={() => setShowCancelConfirm(true)}
             >
-              <FileText className="h-4 w-4" />
-              View Pre
-            </Button>
-            <Button
-              size="sm"
-              variant="secondary"
-              className="gap-1.5 rounded-lg min-h-[44px] touch-manipulation md:min-h-0"
-              onClick={() => setShowStartNewVisitConfirm(true)}
-            >
-              {isStartingNewVisit ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              Start New Visit
-            </Button>
-            <Button
-              size="sm"
-              className="gap-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 min-h-[44px] touch-manipulation md:min-h-0 border-0"
-              onClick={() => setShowEndConsultationConfirm(true)}
-            >
-              {isEndingConsultation ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
-              End Consultation
-            </Button>
-          <Button
-            size="sm"
-            className="gap-1.5 rounded-lg bg-red-600 text-white hover:bg-red-700 min-h-[44px] touch-manipulation md:min-h-0 border-0"
-            onClick={() => setShowCancelConfirm(true)}
-          >
-            <X className="h-4 w-4" />
-            Cancel
-          </Button>
+              <X className="h-4 w-4" />
+              Cancel
+            </Button> */}
         </div>
       </div>
 
@@ -392,7 +368,10 @@ export function ConsultationActionBar() {
                 setShowCancelConfirm(false);
                 setIsCancelling(false);
                 toast.success("Visit cancelled. You can start a new visit from the dashboard.");
-                router.replace("/doctor-dashboard");
+                // Defer navigation to next tick so React can commit state and avoid hook-order issues during transition
+                setTimeout(() => {
+                  router.replace("/doctor-dashboard");
+                }, 0);
               }}
             >
               {isCancelling ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
@@ -456,24 +435,6 @@ export function ConsultationActionBar() {
             <AlertDialogAction onClick={handleEndConsultation} disabled={isEndingConsultation} className="bg-blue-600 hover:bg-blue-700">
               {isEndingConsultation ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               End Consultation
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <AlertDialog open={showStartNewVisitConfirm} onOpenChange={setShowStartNewVisitConfirm}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Start new visit?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This visit is still active. End this visit and start a new one?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isStartingNewVisit}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleStartNewVisit} disabled={isStartingNewVisit} className="bg-blue-600 hover:bg-blue-700">
-              {isStartingNewVisit ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              End & Start New Visit
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
