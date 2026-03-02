@@ -209,11 +209,22 @@ export const DynamicFieldRenderer = memo<DynamicFieldRendererProps>(
     }
 
     switch (field.type) {
-      case "number":
+      case "number": {
         const activeUnit = currentUnit || field.unit || field.canonical_unit || "";
         const canonicalUnit = field.canonical_unit || field.unit || "";
-        const step = field.step ?? (activeUnit === "c" || activeUnit === "f" ? 1 : 0.01);
-        
+        // Default step: use field.step when set; else step 1 for small integer ranges (e.g. pain 0-10); else 0.01
+        const rawMin = field.min ?? field.range?.[0] ?? field.validation?.min;
+        const rawMax = field.max ?? field.range?.[1] ?? field.validation?.max;
+        const isSmallIntegerRange =
+          typeof rawMin === "number" &&
+          typeof rawMax === "number" &&
+          Number.isInteger(rawMin) &&
+          Number.isInteger(rawMax) &&
+          rawMax - rawMin <= 30;
+        const step =
+          field.step ??
+          (activeUnit === "c" || activeUnit === "f" ? 1 : isSmallIntegerRange ? 1 : 0.01);
+
         // Use range resolver for dynamic specialty-specific ranges
         const { displayMin, displayMax } = resolveValidationRange(field, specialtyRanges, activeUnit);
         
@@ -251,14 +262,20 @@ export const DynamicFieldRenderer = memo<DynamicFieldRendererProps>(
           }
           return roundToStep(out, step);
         }, [value, canonicalUnit, activeUnit, hasUnitSwitcher, step]);
-        // Sizing: small (~104px) for BP, Pulse, SpO₂; medium (~152px) for Height, Weight, Temp
+        // Sizing: small for BP, Pulse, SpO₂; medium for Height, Weight; larger for Temperature (°C/°F) for readability
         const rangeSpan = field.range?.[1] != null && field.range?.[0] != null ? field.range[1] - field.range[0] : null;
+        const isTempField = field.unit === "c" || field.unit === "f";
         const isSmallNumeric =
-          field.unit === "mmHg" ||
-          field.unit === "/min" ||
-          field.unit === "%" ||
-          (rangeSpan != null && rangeSpan <= 15);
-        const inputWidthClass = isSmallNumeric ? "w-[6.5rem] min-w-[5.5rem]" : "w-[9.5rem] min-w-[6rem]";
+          !isTempField &&
+          (field.unit === "mmHg" ||
+            field.unit === "/min" ||
+            field.unit === "%" ||
+            (rangeSpan != null && rangeSpan <= 15));
+        const inputWidthClass = isSmallNumeric
+          ? "w-[6.5rem] min-w-[5.5rem]"
+          : isTempField
+            ? "w-[11rem] min-w-[8rem]"
+            : "w-[9.5rem] min-w-[6rem]";
         return (
           <div className="space-y-1.5">
             <Label htmlFor={field.key} className="text-sm font-medium">
@@ -389,7 +406,8 @@ export const DynamicFieldRenderer = memo<DynamicFieldRendererProps>(
             </div>
             {min !== undefined && max !== undefined && !error && (
               <p className="text-xs text-muted-foreground">
-                Range: {min?.toFixed(activeUnit === "ft" || activeUnit === "lb" ? 1 : 0)}–{max?.toFixed(activeUnit === "ft" || activeUnit === "lb" ? 1 : 0)} {activeUnit === "c" ? "°C" : activeUnit === "f" ? "°F" : activeUnit}
+                Range: {min?.toFixed(activeUnit === "ft" || activeUnit === "lb" ? 1 : 0)}–{max?.toFixed(activeUnit === "ft" || activeUnit === "lb" ? 1 : 0)}{" "}
+                {field.suffix != null && field.suffix !== "" ? field.suffix : activeUnit === "c" ? "°C" : activeUnit === "f" ? "°F" : activeUnit}
               </p>
             )}
             {sectionCode === "vitals" && displayValue !== "" && displayValue !== null && displayValue !== undefined && (min !== undefined || max !== undefined) &&
@@ -398,6 +416,7 @@ export const DynamicFieldRenderer = memo<DynamicFieldRendererProps>(
               )}
           </div>
         );
+      }
 
       case "text":
         const textValue = value ?? "";

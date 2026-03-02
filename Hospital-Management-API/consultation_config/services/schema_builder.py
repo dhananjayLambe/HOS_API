@@ -368,3 +368,37 @@ def get_render_schema(specialty: str, section: str) -> Dict[str, Any]:
     cache.set(cache_key, schema, timeout=SCHEMA_CACHE_TTL_SECONDS)
     return schema
 
+
+def clear_consultation_schema_cache() -> int:
+    """
+    Delete all consultation schema cache entries (consult_schema:*).
+    Used after template JSON changes so the next API request loads fresh data.
+    Returns the number of keys deleted.
+    """
+    specialty_config = _get_specialty_config()
+    sections_config = _get_sections_config()
+    version = _get_metadata_version()
+    global_sections = sections_config.get("sections", [])
+    deleted = 0
+    for specialty in specialty_config:
+        if specialty.startswith("_") or specialty == "meta":
+            continue
+        entry = specialty_config.get(specialty)
+        if not isinstance(entry, dict):
+            continue
+        allowed = entry.get("sections", []) or global_sections
+        for section in allowed:
+            if section not in global_sections:
+                continue
+            cache_key = SCHEMA_CACHE_KEY_PATTERN.format(
+                version=version,
+                specialty=specialty,
+                section=section,
+            )
+            try:
+                cache.delete(cache_key)
+                deleted += 1
+            except Exception:
+                pass
+    return deleted
+

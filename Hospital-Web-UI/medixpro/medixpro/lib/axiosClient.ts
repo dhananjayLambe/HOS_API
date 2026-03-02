@@ -194,14 +194,15 @@ backendAxiosClient.interceptors.request.use(
 backendAxiosClient.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
-    // Log error details for debugging (skip 404s for section endpoints - they're expected for new encounters)
+    // Log error details for debugging (skip 404s for section/template endpoints - they're expected when not configured)
     if (error.config) {
       const fullUrl = `${error.config.baseURL || ""}${error.config.url || ""}`;
       const isSectionEndpoint = fullUrl.includes("/section/");
+      const isTemplateEndpoint = fullUrl.includes("/pre-consult/template");
       const is404 = error.response?.status === 404;
       
-      // Only log non-404 errors, or 404s that aren't section endpoints
-      if (!is404 || !isSectionEndpoint) {
+      // Only log non-404 errors, or 404s that aren't section/template endpoints
+      if (!is404 || (!isSectionEndpoint && !isTemplateEndpoint)) {
         console.error(`[backendAxiosClient] Error ${error.response?.status || "Network"} on ${error.config.method?.toUpperCase()} ${fullUrl}`);
         if (error.response?.data && Object.keys(error.response.data).length > 0) {
           console.error("[backendAxiosClient] Error response:", error.response.data);

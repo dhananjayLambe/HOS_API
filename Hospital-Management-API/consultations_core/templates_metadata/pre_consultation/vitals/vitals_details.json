@@ -6,6 +6,7 @@
         "type": "number",
         "label": "Height",
         "unit": "cm",
+        "suffix": "cm",
         "supported_units": ["cm", "ft"],
         "canonical_unit": "cm",
         "step": 0.1,
@@ -35,8 +36,13 @@
         "type": "number",
         "label": "Weight",
         "unit": "kg",
+        "suffix": "kg",
         "supported_units": ["kg", "lb"],
         "canonical_unit": "kg",
+        "step": 0.1,
+        "min": 0.1,
+        "max": 500,
+        "range": [0.1, 500],
         "ui_group": "body",
         "tab_order": 20,
         "validation": {
@@ -67,6 +73,11 @@
         "type": "number",
         "label": "Systolic",
         "unit": "mmHg",
+        "suffix": "mmHg",
+        "step": 1,
+        "min": 50,
+        "max": 300,
+        "range": [50, 300],
         "ui_group": "bp",
         "tab_order": 30,
         "validation": {
@@ -86,6 +97,11 @@
         "type": "number",
         "label": "Diastolic",
         "unit": "mmHg",
+        "suffix": "mmHg",
+        "step": 1,
+        "min": 30,
+        "max": 200,
+        "range": [30, 200],
         "ui_group": "bp",
         "tab_order": 40,
         "validation": {
@@ -112,6 +128,7 @@
         "type": "number",
         "label": "Temperature",
         "unit": "c",
+        "suffix": "°C",
         "supported_units": ["c", "f"],
         "canonical_unit": "c",
         "step": 0.1,
@@ -142,6 +159,11 @@
         "type": "number",
         "label": "Pulse",
         "unit": "/min",
+        "suffix": "/min",
+        "step": 1,
+        "min": 30,
+        "max": 220,
+        "range": [30, 220],
         "ui_group": "basic",
         "tab_order": 60,
         "validation": {
@@ -165,6 +187,11 @@
         "type": "number",
         "label": "SpO₂",
         "unit": "%",
+        "suffix": "%",
+        "step": 1,
+        "min": 0,
+        "max": 100,
+        "range": [0, 100],
         "ui_group": "basic",
         "tab_order": 70,
         "validation": {
@@ -187,7 +214,12 @@
         "key": "resp_rate",
         "type": "number",
         "label": "Respiratory Rate",
-        "unit": "/min"
+        "unit": "/min",
+        "suffix": "/min",
+        "step": 1,
+        "min": 8,
+        "max": 60,
+        "range": [8, 60]
       }
     ]
   },
@@ -199,8 +231,13 @@
         "type": "number",
         "label": "Waist Circumference",
         "unit": "cm",
+        "suffix": "cm",
         "supported_units": ["cm", "inch"],
-        "canonical_unit": "cm"
+        "canonical_unit": "cm",
+        "step": 0.1,
+        "min": 50,
+        "max": 200,
+        "range": [50, 200]
       }
     ]
   },
@@ -211,6 +248,10 @@
         "key": "pain_score",
         "type": "number",
         "label": "Pain Score",
+        "suffix": "",
+        "step": 1,
+        "min": 0,
+        "max": 10,
         "range": [0, 10],
         "validation": {
           "required": false,
@@ -233,8 +274,13 @@
         "type": "number",
         "label": "Head Circumference",
         "unit": "cm",
+        "suffix": "cm",
         "supported_units": ["cm", "inch"],
-        "canonical_unit": "cm"
+        "canonical_unit": "cm",
+        "step": 0.1,
+        "min": 30,
+        "max": 60,
+        "range": [30, 60]
       }
     ]
   },

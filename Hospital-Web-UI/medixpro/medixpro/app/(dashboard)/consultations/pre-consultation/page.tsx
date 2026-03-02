@@ -212,10 +212,16 @@ export default function PreConsultationPage() {
     };
   };
 
-  // Fetch template on mount
+  // Fetch template on mount. In development, force refresh once so template changes (step, suffix, range) load after backend/cache clear.
+  const hasFetchedTemplateRef = useRef(false);
   useEffect(() => {
-    if (!template) {
-      fetchTemplate();
+    const isDev = process.env.NODE_ENV === "development";
+    if (!template && !hasFetchedTemplateRef.current) {
+      hasFetchedTemplateRef.current = true;
+      fetchTemplate(isDev);
+    } else if (isDev && !hasFetchedTemplateRef.current) {
+      hasFetchedTemplateRef.current = true;
+      fetchTemplate(true);
     }
   }, [template, fetchTemplate]);
 

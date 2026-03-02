@@ -19,6 +19,10 @@
         "keyboard": "numeric",
         "placeholder": "e.g. 3",
         "suffix": "days",
+        "step": 1,
+        "min": 0,
+        "max": 365,
+        "range": [0, 365],
         "required": false,
         "importance": "high"
       },
@@ -65,8 +69,11 @@
         "label": "Pain Score (1–10)",
         "type": "number",
         "keyboard": "numeric",
+        "suffix": "",
+        "step": 1,
         "min": 1,
-        "max": 10
+        "max": 10,
+        "range": [1, 10]
       },
       {
         "key": "triggers",
@@ -166,14 +173,22 @@
         "label": "Amount Lost",
         "type": "number",
         "keyboard": "decimal",
-        "suffix": "kg"
+        "suffix": "kg",
+        "step": 0.1,
+        "min": 0,
+        "max": 500,
+        "range": [0, 500]
       },
       {
         "key": "timeframe",
         "label": "Over Period",
         "type": "number",
         "keyboard": "numeric",
-        "suffix": "months"
+        "suffix": "months",
+        "step": 1,
+        "min": 0,
+        "max": 120,
+        "range": [0, 120]
       },
       {
         "key": "intentional",
@@ -224,7 +239,11 @@
         "label": "Duration",
         "type": "number",
         "keyboard": "numeric",
-        "suffix": "days"
+        "suffix": "days",
+        "step": 1,
+        "min": 0,
+        "max": 365,
+        "range": [0, 365]
       },
       {
         "key": "progression",
@@ -242,6 +261,11 @@
         "label": "Frequency per day",
         "type": "number",
         "keyboard": "numeric",
+        "suffix": "per day",
+        "step": 1,
+        "min": 0,
+        "max": 24,
+        "range": [0, 24],
         "importance": "high"
       }
     ]

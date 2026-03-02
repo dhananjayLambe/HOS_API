@@ -9,6 +9,7 @@ export interface FieldConfig {
   type: "number" | "text" | "single_select" | "multi_select" | "calculated";
   label: string;
   unit?: string;
+  suffix?: string; // Display label for unit (e.g. "days", "kg", "mmHg") — used when unit is not set or for range hint
   supported_units?: string[];
   canonical_unit?: string;
   formula?: string;

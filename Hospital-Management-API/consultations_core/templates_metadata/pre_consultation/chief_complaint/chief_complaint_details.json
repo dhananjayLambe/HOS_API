@@ -48,6 +48,11 @@
           "key": "duration_value",
           "type": "number",
           "label": "Duration",
+          "suffix": "",
+          "step": 1,
+          "min": 0,
+          "max": 999,
+          "range": [0, 999],
           "ui_group": "row",
           "tab_order": 10
         },
@@ -76,6 +81,10 @@
           "key": "pain_score",
           "type": "number",
           "label": "Pain Score (0–10)",
+          "suffix": "",
+          "step": 1,
+          "min": 0,
+          "max": 10,
           "range": [0, 10],
           "ui_group": "row",
           "tab_order": 20
