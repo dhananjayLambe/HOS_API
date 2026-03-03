@@ -14,15 +14,52 @@ import type {
 } from "@/lib/consultation-types";
 import { getSectionConfig } from "@/data/consultation-section-data";
 
-/** True if item is missing mandatory fields: Duration (when applicable) or Severity. */
+/** True if item is missing mandatory fields.
+ *
+ * - For most sections, we require Duration (when applicable) and Severity.
+ * - For Findings and Diagnosis, we only show a warning while **no detail at all** has been added.
+ */
 function isItemIncomplete(
   item: ConsultationSectionItem,
   config: ConsultationSectionConfig
 ): boolean {
-  const d = item.detail;
+  const d = item.detail ?? {};
+
+  // Findings & Diagnosis: treat as incomplete only when there is no useful detail filled.
+  if (config.type === "findings" || config.type === "diagnosis") {
+    const hasStandardDetail =
+      !!d.notes ||
+      !!d.duration ||
+      !!d.severity ||
+      (Array.isArray(d.attributes) && d.attributes.length > 0) ||
+      (Array.isArray(d.customTags) && d.customTags.length > 0);
+
+    // Also consider any other non-empty custom fields that may come from schema.
+    const hasCustomDetail =
+      Object.keys(d).some((key) => {
+        if (
+          key === "notes" ||
+          key === "duration" ||
+          key === "severity" ||
+          key === "attributes" ||
+          key === "customTags"
+        ) {
+          return false;
+        }
+        const value = (d as Record<string, unknown>)[key];
+        if (Array.isArray(value)) {
+          return value.length > 0;
+        }
+        return value !== null && value !== undefined && String(value).trim() !== "";
+      });
+
+    return !(hasStandardDetail || hasCustomDetail);
+  }
+
+  // Default rule (symptoms, etc.): duration (when applicable) and severity.
   const needsDuration = config.durationOptions.length > 0;
-  const missingDuration = needsDuration && !d?.duration;
-  const missingSeverity = !d?.severity;
+  const missingDuration = needsDuration && !d.duration;
+  const missingSeverity = !d.severity;
   return missingDuration || missingSeverity;
 }
 import { useToast } from "@/hooks/use-toast";
