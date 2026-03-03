@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from django.conf import settings
 from rest_framework.permissions import (
- IsAuthenticated
+    IsAuthenticated,
 )
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -45,6 +45,7 @@ from consultations_core.models.pre_consultation import(
      PreConsultationAllergies, 
      PreConsultationMedicalHistory
 )
+from collections import OrderedDict
 
 
 logger = logging.getLogger(__name__)
@@ -75,6 +76,41 @@ SECTION_MODEL_MAP = {
     "allergies": PreConsultationAllergies,
     "medical_history": PreConsultationMedicalHistory,
 }
+
+
+def _prune_empty_values(value):
+    """
+    Recursively remove structurally empty values from JSON-like data.
+    Returns a cleaned value, or None if the entire structure is empty.
+    """
+    if value is None:
+        return None
+
+    # Strings: normalise whitespace-only to None
+    if isinstance(value, str):
+        return value if value.strip() else None
+
+    # Lists / tuples: prune empty children
+    if isinstance(value, (list, tuple)):
+        cleaned_items = []
+        for item in value:
+            cleaned = _prune_empty_values(item)
+            if cleaned is not None:
+                cleaned_items.append(cleaned)
+        return cleaned_items or None
+
+    # Dicts: drop keys whose values are empty
+    if isinstance(value, dict):
+        cleaned_dict = {}
+        for key, val in value.items():
+            cleaned_val = _prune_empty_values(val)
+            if cleaned_val is not None:
+                cleaned_dict[key] = cleaned_val
+        return cleaned_dict or None
+
+    # Primitive types (int, float, bool, etc.) – keep as-is
+    return value
+
 
 class PreConsultationTemplateAPIView(APIView):
     """
@@ -724,6 +760,112 @@ class PreConsultationSectionAPIView(APIView):
                 "message": f"Failed to save {section_code}.",
                 "error": str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class PreConsultationPreviewAPIView(APIView):
+    """
+    Aggregated, read-only preview for pre-consultation.
+
+    GET /consultations/pre-consultation/preview/?encounter_id=<uuid>
+
+    - Returns only non-empty sections in clinical order.
+    - If all sections are empty or no pre-consultation exists, returns:
+        { "message": "NO_PRECONSULT_DATA" }
+    """
+
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctor]
+
+    _CLINICAL_ORDER = [
+        "chief_complaint",
+        "vitals",
+        "allergies",
+        "medical_history",
+    ]
+
+    def get(self, request):
+        encounter_id = request.query_params.get("encounter_id")
+        if not encounter_id:
+            return Response(
+                {"detail": "encounter_id query parameter is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            uuid.UUID(str(encounter_id))
+        except (ValueError, TypeError):
+            return Response(
+                {"detail": "Invalid encounter_id format."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        encounter = get_object_or_404(ClinicalEncounter, id=encounter_id)
+
+        if encounter.status in ("cancelled", "no_show"):
+            return Response(
+                {"detail": MSG_VISIT_CANCELLED},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            preconsultation = encounter.pre_consultation
+        except PreConsultation.DoesNotExist:
+            preconsultation = PreConsultation.objects.filter(encounter=encounter).first()
+            if preconsultation is None:
+                return Response(
+                    {"message": "NO_PRECONSULT_DATA"},
+                    status=status.HTTP_200_OK,
+                )
+
+        ordered_payload = OrderedDict()
+
+        for section_code in self._CLINICAL_ORDER:
+            section_model = SECTION_MODEL_MAP.get(section_code)
+            if section_model is None:
+                continue
+
+            try:
+                section_obj = section_model.objects.get(pre_consultation=preconsultation)
+            except section_model.DoesNotExist:
+                continue
+
+            cleaned = _prune_empty_values(section_obj.data)
+            if cleaned is None:
+                continue
+
+            ordered_payload[section_code] = cleaned
+
+        if not ordered_payload:
+            return Response(
+                {"message": "NO_PRECONSULT_DATA"},
+                status=status.HTTP_200_OK,
+            )
+
+        # Meta information for footer / audit
+        filled_by_user = None
+        if preconsultation.created_by is not None:
+            name = getattr(preconsultation.created_by, "get_full_name", None)
+            if callable(name):
+                filled_by_user = preconsultation.created_by.get_full_name() or None
+            if not filled_by_user:
+                filled_by_user = getattr(preconsultation.created_by, "username", None)
+
+        meta = {
+            "entry_mode": preconsultation.get_entry_mode_display()
+            if hasattr(preconsultation, "get_entry_mode_display")
+            else preconsultation.entry_mode,
+            "filled_by": filled_by_user,
+            "last_updated": preconsultation.updated_at.isoformat()
+            if getattr(preconsultation, "updated_at", None)
+            else None,
+        }
+
+        response_payload = OrderedDict()
+        for key, val in ordered_payload.items():
+            response_payload[key] = val
+        response_payload["meta"] = meta
+
+        return Response(response_payload, status=status.HTTP_200_OK)
 
 
 class PreConsultationPreviousRecordsAPIView(APIView):

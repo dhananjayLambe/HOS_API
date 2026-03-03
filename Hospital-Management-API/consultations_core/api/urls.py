@@ -14,6 +14,7 @@ from consultations_core.api.views.preconsultation import (
     StartConsultationAPIView,
     EndConsultationAPIView,
     CancelEncounterAPIView,
+    PreConsultationPreviewAPIView,
 )
 from consultations_core.api.views.instructions import (
     InstructionTemplatesAPIView,
@@ -38,6 +39,11 @@ urlpatterns = [
         "pre-consult/patient/<uuid:patient_id>/previous-records/",
         PreConsultationPreviousRecordsAPIView.as_view(),
         name="pre-consult-previous-records",
+    ),
+    path(
+        "pre-consultation/preview/",
+        PreConsultationPreviewAPIView.as_view(),
+        name="pre-consultation-preview",
     ),
     # Encounter lifecycle (pre-consultation → consultation redirect)
     path(
