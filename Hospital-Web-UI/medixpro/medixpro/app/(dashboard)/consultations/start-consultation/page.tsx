@@ -47,11 +47,13 @@ function StartConsultationContent() {
   const [showAlert, setShowAlert] = useState(false);
   const [isResolvingOrCreating, setIsResolvingOrCreating] = useState(false);
   const entryFlowDoneRef = useRef(false);
-  const { consultationType, setConsultationType, setEncounterId } = useConsultationStore(
+  const { consultationType, setConsultationType, setEncounterId, setVitals, setVitalsLoaded } = useConsultationStore(
     useShallow((s) => ({
       consultationType: s.consultationType,
       setConsultationType: s.setConsultationType,
       setEncounterId: s.setEncounterId,
+      setVitals: s.setVitals,
+      setVitalsLoaded: s.setVitalsLoaded,
     }))
   );
 
@@ -65,6 +67,103 @@ function StartConsultationContent() {
       entryFlowDoneRef.current = true;
     }
   }, [encounterIdFromUrl, setEncounterId]);
+
+  // Load pre-consultation preview (including vitals) for this encounter so doctor sees read-only vitals.
+  useEffect(() => {
+    if (!encounterIdFromUrl) return;
+    let cancelled = false;
+
+    // Mark that we're starting a load; right menu can distinguish \"not yet loaded\" vs \"loaded but empty\".
+    setVitalsLoaded(false);
+
+    backendAxiosClient
+      .get(`/consultations/pre-consultation/preview/`, {
+        params: { encounter_id: encounterIdFromUrl },
+      })
+      .then((res) => {
+        if (cancelled) return;
+
+        const data = res.data as any;
+
+        // No pre-consultation data recorded at all.
+        if (!data || data.message === "NO_PRECONSULT_DATA" || !data.vitals) {
+          setVitals({
+            weightKg: undefined,
+            heightCm: undefined,
+            bmi: undefined,
+            temperatureF: undefined,
+          });
+          setVitalsLoaded(true);
+          return;
+        }
+
+        const vitalsData = data.vitals;
+
+        // Support both nested and flat structures from pre-consult vitals JSON.
+        const heightRaw =
+          vitalsData?.height_weight?.height_cm ??
+          vitalsData?.height_weight?.height ??
+          vitalsData?.height_cm ??
+          vitalsData?.height ??
+          null;
+        const weightRaw =
+          vitalsData?.height_weight?.weight_kg ??
+          vitalsData?.height_weight?.weight ??
+          vitalsData?.weight_kg ??
+          vitalsData?.weight ??
+          null;
+        const temperatureRaw =
+          vitalsData?.temperature?.temperature ??
+          vitalsData?.temperature?.value ??
+          vitalsData?.temperatureF ??
+          vitalsData?.temperature ??
+          null;
+
+        let bmi: string | undefined;
+        const heightNum = heightRaw != null && heightRaw !== "" ? Number(heightRaw) : NaN;
+        const weightNum = weightRaw != null && weightRaw !== "" ? Number(weightRaw) : NaN;
+
+        if (!Number.isNaN(heightNum) && !Number.isNaN(weightNum) && heightNum > 0 && weightNum > 0) {
+          const heightMeters = heightNum / 100;
+          const rawBmi = weightNum / (heightMeters * heightMeters);
+          bmi = rawBmi.toFixed(2);
+        }
+
+        // Normalise temperature to a simple string (handle objects gracefully).
+        let temperatureStr: string | undefined;
+        if (temperatureRaw != null && String(temperatureRaw).trim() !== "") {
+          if (typeof temperatureRaw === "object") {
+            const maybeVal =
+              (temperatureRaw as any).value ??
+              (temperatureRaw as any).reading ??
+              null;
+            if (maybeVal != null && String(maybeVal).trim() !== "") {
+              temperatureStr = String(maybeVal);
+            }
+          } else {
+            temperatureStr = String(temperatureRaw);
+          }
+        }
+
+        setVitals({
+          weightKg: weightRaw != null && String(weightRaw) !== "" ? String(weightRaw) : undefined,
+          heightCm: heightRaw != null && String(heightRaw) !== "" ? String(heightRaw) : undefined,
+          temperatureF: temperatureStr,
+          bmi,
+        });
+        setVitalsLoaded(true);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        // Soft-fail: keep consultation usable but let the doctor know vitals could not be loaded.
+        toast.error("Unable to load vitals from pre-consultation.");
+        setVitalsLoaded(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [encounterIdFromUrl, setVitals, setVitalsLoaded, toast]);
 
   // When opening with encounter_id in URL, detect cancelled visit and redirect so user starts a new one
   useEffect(() => {

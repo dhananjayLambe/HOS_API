@@ -1,6 +1,6 @@
 "use client";
 
-import { History, Activity, Stethoscope } from "lucide-react";
+import { History, Activity, Stethoscope, AlertCircle } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -15,8 +15,83 @@ export function ConsultationRightMenu() {
     medicalHistory,
     vitals,
     doctorNotes,
+    vitalsLoaded,
     setDoctorNotes,
   } = useConsultationStore();
+
+  const renderValue = (value: unknown) => {
+    if (value !== null && value !== undefined && String(value).trim() !== "") {
+      return String(value);
+    }
+    // Simple, compact placeholder when no data is available
+    return <span className="text-muted-foreground">-</span>;
+  };
+
+  /** Format height (stored in cm) as feet for display. */
+  const renderHeightFeet = (value: unknown) => {
+    if (value === null || value === undefined || String(value).trim() === "") {
+      return <span className="text-muted-foreground">-</span>;
+    }
+    const numCm = Number(value);
+    if (!Number.isNaN(numCm)) {
+      const feet = numCm / 30.48;
+      return feet.toFixed(2);
+    }
+    return String(value);
+  };
+
+  /** Format temperature for display: up to 3 decimal places. */
+  const renderTemperature = (value: unknown) => {
+    if (value === null || value === undefined || String(value).trim() === "") {
+      return <span className="text-muted-foreground">-</span>;
+    }
+    const numF = Number(value);
+    if (!Number.isNaN(numF)) {
+      const celsius = ((numF - 32) * 5) / 9;
+      return celsius.toFixed(3);
+    }
+    return String(value);
+  };
+
+  /** BMI category (WHO ranges). */
+  const getBmiCategory = (bmi: number): { label: string; className: string } => {
+    if (bmi < 18.5) return { label: "Underweight", className: "text-blue-600 dark:text-blue-400" };
+    if (bmi <= 24.9) return { label: "Normal", className: "text-green-600 dark:text-green-400" };
+    if (bmi <= 29.9) return { label: "Overweight", className: "text-amber-600 dark:text-amber-400" };
+    return { label: "Obese", className: "text-red-600 dark:text-red-400" };
+  };
+
+  /** Display BMI value with category (Underweight / Normal / Overweight / Obese). */
+  const renderBmi = (value: unknown) => {
+    if (value === null || value === undefined || String(value).trim() === "") {
+      return <span className="text-muted-foreground">-</span>;
+    }
+    const num = Number(value);
+    if (Number.isNaN(num)) return String(value);
+    const category = getBmiCategory(num);
+    return (
+      <span className="flex flex-wrap items-baseline gap-1.5">
+        <span>{num.toFixed(2)}</span>
+        <span className={`text-xs font-medium ${category.className}`}>{category.label}</span>
+      </span>
+    );
+  };
+
+  const allVitalsEmpty =
+    (!vitals.weightKg || vitals.weightKg === "") &&
+    (!vitals.heightCm || vitals.heightCm === "") &&
+    (!vitals.bmi || vitals.bmi === "") &&
+    (!vitals.temperatureF || vitals.temperatureF === "");
+
+  const missingForBmi =
+    !vitals.bmi &&
+    (vitals.heightCm || vitals.weightKg)
+      ? !vitals.heightCm
+        ? "height"
+        : !vitals.weightKg
+          ? "weight"
+          : null
+      : null;
 
   return (
     <div className="flex w-full max-w-full min-w-0 shrink-0 flex-col gap-4 sm:gap-6 self-start pb-4">
@@ -63,28 +138,41 @@ export function ConsultationRightMenu() {
             <div className="space-y-1.5">
               <Label className="text-xs">Weight (kg)</Label>
               <div className="rounded-md h-10 min-h-10 flex items-center px-3 bg-muted/50 border border-border/80 text-sm text-foreground cursor-default" aria-readonly="true">
-                {vitals.weightKg ?? <span className="text-muted-foreground">—</span>}
+                {renderValue(vitals.weightKg)}
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Height (cm)</Label>
+              <Label className="text-xs">Height (ft)</Label>
               <div className="rounded-md h-10 min-h-10 flex items-center px-3 bg-muted/50 border border-border/80 text-sm text-foreground cursor-default" aria-readonly="true">
-                {vitals.heightCm ?? <span className="text-muted-foreground">—</span>}
+                {renderHeightFeet(vitals.heightCm)}
               </div>
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">BMI (kg/m²)</Label>
-              <div className="rounded-md h-10 min-h-10 flex items-center px-3 bg-muted/50 border border-border/80 text-sm text-foreground cursor-default" aria-readonly="true">
-                {vitals.bmi ?? <span className="text-muted-foreground">—</span>}
+              <div className="rounded-md min-h-10 flex items-center px-3 py-2 bg-muted/50 border border-border/80 text-sm text-foreground cursor-default" aria-readonly="true">
+                {renderBmi(vitals.bmi)}
               </div>
+              {vitalsLoaded && missingForBmi && (
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  BMI cannot be calculated due to missing {missingForBmi}.
+                </p>
+              )}
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Temperature (°F)</Label>
+              <Label className="text-xs">Temperature (°C)</Label>
               <div className="rounded-md h-10 min-h-10 flex items-center px-3 bg-muted/50 border border-border/80 text-sm text-foreground cursor-default" aria-readonly="true">
-                {vitals.temperatureF ?? <span className="text-muted-foreground">—</span>}
+                {renderTemperature(vitals.temperatureF)}
               </div>
             </div>
           </div>
+          {vitalsLoaded && allVitalsEmpty && (
+            <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 flex items-start gap-2">
+              <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5" />
+              <p className="text-xs text-amber-900">
+                Vitals not recorded in pre-consultation. Please ask helpdesk to complete vitals before proceeding.
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

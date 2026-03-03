@@ -41,6 +41,8 @@ type ConsultationStore = ConsultationState & {
   selectedSymptomId: string | null;
   /** Reusable section pattern: items per section (local, backend-agnostic). */
   sectionItems: Record<ConsultationSectionType, ConsultationSectionItem[]>;
+  /** True once vitals have been loaded (or attempted) from backend for this consultation. */
+  vitalsLoaded: boolean;
   /** Backend-driven schema for symptoms (per consultation session). */
   symptomsSchema: SymptomsSectionSchema | null;
   /** Quick lookup of schema item by key. */
@@ -84,6 +86,7 @@ type ConsultationStore = ConsultationState & {
   setSelectedSymptomId: (id: string | null) => void;
   setMedicalHistory: (value: string) => void;
   setVitals: (vitals: Partial<ConsultationVitals>) => void;
+  setVitalsLoaded: (loaded: boolean) => void;
   setPrescriptionNotes: (value: string) => void;
   setDoctorNotes: (value: string) => void;
   setConsultationType: (type: ConsultationWorkflowType) => void;
@@ -136,6 +139,7 @@ export const useConsultationStore = create<ConsultationStore>((set, get) => ({
   draftStatus: { savedAt: null, message: null },
   selectedSymptomId: null,
   sectionItems: emptySectionItems(),
+  vitalsLoaded: false,
   selectedDetail: null,
   symptomsSchema: null,
   symptomSchemaByKey: {},
@@ -205,6 +209,7 @@ export const useConsultationStore = create<ConsultationStore>((set, get) => ({
   setMedicalHistory: (medicalHistory) => set({ medicalHistory }),
   setVitals: (patch) =>
     set((s) => ({ vitals: { ...s.vitals, ...patch } })),
+  setVitalsLoaded: (vitalsLoaded) => set({ vitalsLoaded }),
   setPrescriptionNotes: (prescriptionNotes) => set({ prescriptionNotes }),
   setDoctorNotes: (doctorNotes) => set({ doctorNotes }),
   setConsultationType: (consultationType) => set({ consultationType }),
@@ -360,5 +365,6 @@ export const useConsultationStore = create<ConsultationStore>((set, get) => ({
       instructionsSchema: null,
       instructionsList: [],
       consultationFinalized: false,
+      vitalsLoaded: false,
     }),
 }));
