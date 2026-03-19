@@ -7,6 +7,50 @@ import uuid
 from consultations_core.domain.locks import EncounterLockValidator
 
 
+class CustomSymptom(models.Model):
+    """
+    Temporary custom symptom created during consultation.
+    Phase-1: Attached only to single consultation.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    name = models.CharField(max_length=255, db_index=True)
+
+    consultation = models.ForeignKey(
+        "consultations_core.Consultation",
+        on_delete=models.CASCADE,
+        related_name="custom_symptoms"
+    )
+
+    created_by = models.ForeignKey(
+        "account.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=[
+            ("pending", "Pending Review"),
+            ("reviewed", "Reviewed")
+        ],
+        default="pending"
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name"]
+        indexes = [
+            models.Index(fields=["name"]),
+        ]
+
+    def __str__(self):
+        return self.name
+
 # =====================================================
 # 1️⃣ SymptomMaster — Global Catalog
 # =====================================================
@@ -74,11 +118,21 @@ class ConsultationSymptom(models.Model):
 
     symptom = models.ForeignKey(
         SymptomMaster,
+        null=True,
+        blank=True,
         on_delete=models.PROTECT,
         related_name="consultation_entries",
         db_index=True
     )
-
+    custom_symptom = models.ForeignKey(
+    CustomSymptom,
+    null=True,
+    blank=True,
+    on_delete=models.CASCADE,
+    related_name="consultation_entries"
+    )
+    display_name = models.CharField(max_length=255)
+    is_custom = models.BooleanField(default=False)
     # --------------------------
     # Structured Fields
     # --------------------------

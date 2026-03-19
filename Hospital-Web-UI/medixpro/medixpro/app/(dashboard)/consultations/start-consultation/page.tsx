@@ -30,6 +30,12 @@ import {
   isInvestigationsSectionExpandedByDefault,
 } from "@/lib/consultation-workflow";
 
+function isUuidLike(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value,
+  );
+}
+
 function StartConsultationLoading() {
   return (
     <div className="flex min-h-[40vh] flex-col items-center justify-center gap-4 text-muted-foreground">
@@ -71,6 +77,7 @@ function StartConsultationContent() {
   // Load pre-consultation preview (including vitals) for this encounter so doctor sees read-only vitals.
   useEffect(() => {
     if (!encounterIdFromUrl) return;
+    if (!isUuidLike(encounterIdFromUrl)) return;
     let cancelled = false;
 
     // Mark that we're starting a load; right menu can distinguish \"not yet loaded\" vs \"loaded but empty\".

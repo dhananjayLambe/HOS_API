@@ -178,10 +178,20 @@ backendAxiosClient.interceptors.request.use(
     if (accessToken && config.headers) {
       config.headers.Authorization = `Bearer ${accessToken}`;
     }
-    // Log the full URL for debugging
+    // Log a best-effort full URL (including params) for debugging
     if (config.url) {
-      const fullUrl = `${config.baseURL || ""}${config.url}`;
-      console.log(`[backendAxiosClient] ${config.method?.toUpperCase()} ${fullUrl}`);
+      const base = `${config.baseURL || ""}${config.url}`;
+      const params =
+        config.params && typeof config.params === "object"
+          ? `?${new URLSearchParams(
+              Object.entries(config.params).reduce<Record<string, string>>((acc, [k, v]) => {
+                if (v === undefined || v === null) return acc;
+                acc[k] = String(v);
+                return acc;
+              }, {}),
+            ).toString()}`
+          : "";
+      console.log(`[backendAxiosClient] ${config.method?.toUpperCase()} ${base}${params}`);
     }
     return config;
   },
@@ -204,7 +214,8 @@ backendAxiosClient.interceptors.response.use(
       // Only log non-404 errors, or 404s that aren't section/template endpoints
       if (!is404 || (!isSectionEndpoint && !isTemplateEndpoint)) {
         console.error(`[backendAxiosClient] Error ${error.response?.status || "Network"} on ${error.config.method?.toUpperCase()} ${fullUrl}`);
-        if (error.response?.data && Object.keys(error.response.data).length > 0) {
+        // Always log response payload if present (even if empty) to avoid losing DRF "detail" messages
+        if (error.response) {
           console.error("[backendAxiosClient] Error response:", error.response.data);
         }
       }

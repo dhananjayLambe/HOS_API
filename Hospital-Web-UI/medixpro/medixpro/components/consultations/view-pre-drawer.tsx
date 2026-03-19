@@ -5,6 +5,13 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { backendAxiosClient } from "@/lib/axiosClient";
 import { Loader2 } from "lucide-react";
 
+function isUuidLike(value: string) {
+  // Accepts canonical UUID v1-v5 and generic UUID shape
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value,
+  );
+}
+
 const SECTION_LABELS: Record<string, string> = {
   chief_complaint: "Chief Complaint",
   vitals: "Vitals",
@@ -37,6 +44,10 @@ export function ViewPreDrawer({ open, onOpenChange, encounterId }: ViewPreDrawer
 
   useEffect(() => {
     if (!open || !encounterId) return;
+    if (!isUuidLike(encounterId)) {
+      setError("Invalid encounter id. Please reopen the visit and try again.");
+      return;
+    }
     let cancelled = false;
     setLoading(true);
     setError(null);
