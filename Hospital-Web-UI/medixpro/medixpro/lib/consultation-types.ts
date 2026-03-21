@@ -137,6 +137,12 @@ export interface ConsultationSectionItem {
   id: string;
   label: string;
   isCustom?: boolean;
+  /** DiagnosisMaster key from render-schema (diagnosis section). */
+  diagnosisKey?: string;
+  /** DiagnosisMaster ICD code from render-schema (diagnosis section). */
+  diagnosisIcdCode?: string;
+  /** CustomDiagnosis UUID when pre-created during draft mode. */
+  customDiagnosisId?: string;
   /** Master catalog key from render-schema (e.g. pallor); used as finding_code when creating. */
   findingKey?: string;
   detail?: SectionItemDetail;

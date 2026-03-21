@@ -25,6 +25,9 @@ from consultations_core.api.views.findings import (
     EncounterFindingsListCreateAPIView,
     ConsultationFindingUpdateDeleteAPIView,
 )
+from consultations_core.api.views.diagnosis import (
+    EncounterCustomDiagnosisCreateAPIView,
+)
 
 router = DefaultRouter()
 
@@ -105,5 +108,10 @@ urlpatterns = [
         "findings/<uuid:pk>/",
         ConsultationFindingUpdateDeleteAPIView.as_view(),
         name="consultation-finding-update-delete",
+    ),
+    path(
+        "encounter/<uuid:encounter_id>/diagnoses/custom/",
+        EncounterCustomDiagnosisCreateAPIView.as_view(),
+        name="encounter-custom-diagnosis-create",
     ),
 ]

@@ -34,6 +34,7 @@ import {
 import type { ConsultationWorkflowType } from "@/lib/consultation-types";
 import { ViewPreDrawer } from "./view-pre-drawer";
 import { draftFindingsToEndConsultationPayload } from "@/lib/consultation-findings-helpers";
+import { sectionItemsToEndConsultationDiagnosisPayload } from "@/lib/consultation-diagnosis-helpers";
 
 const CONSULTATION_TYPE_LABELS: Record<ConsultationWorkflowType, string> = {
   FULL: "Full Consultation",
@@ -188,6 +189,9 @@ export function ConsultationActionBar() {
         {
           symptoms: store.symptoms,
           findings: draftFindingsToEndConsultationPayload(store.draftFindings),
+          diagnoses: sectionItemsToEndConsultationDiagnosisPayload(
+            store.sectionItems["diagnosis"] ?? []
+          ),
         }
       );
       const url = res.data?.redirect_url || "/doctor-dashboard";

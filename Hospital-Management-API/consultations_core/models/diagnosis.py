@@ -5,6 +5,47 @@ import uuid
 from consultations_core.domain.locks import EncounterLockValidator
 
 
+
+class CustomDiagnosis(models.Model):
+    """
+    Custom diagnosis created during consultation.
+    NOT part of master catalog.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    name = models.CharField(max_length=255, db_index=True)
+
+    consultation = models.ForeignKey(
+        "consultations_core.Consultation",
+        on_delete=models.CASCADE,
+        related_name="custom_diagnoses"
+    )
+
+    created_by = models.ForeignKey(
+        "account.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=[
+            ("pending", "Pending Review"),
+            ("reviewed", "Reviewed")
+        ],
+        default="pending"
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
 # =====================================================
 # 1️⃣ DiagnosisMaster — Global Catalog
 # =====================================================
@@ -120,6 +161,12 @@ class ConsultationDiagnosis(models.Model):
     """
     Consultation-level diagnosis.
 
+    Supports:
+    - Master diagnosis (ICD)
+    - Custom diagnosis
+    - Snapshot (medico-legal safe)
+    - Primary diagnosis enforcement
+
     Enterprise Features:
     - Multiple diagnoses allowed
     - Single primary enforcement
@@ -130,8 +177,10 @@ class ConsultationDiagnosis(models.Model):
     - Soft delete supported
     """
 
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-
+    id = models.UUIDField(
+        primary_key=True, default=uuid.uuid4, editable=False)
+    display_name = models.CharField(
+        max_length=255, default="Unknown")
     consultation = models.ForeignKey(
         "consultations_core.Consultation",
         on_delete=models.CASCADE,
@@ -145,11 +194,21 @@ class ConsultationDiagnosis(models.Model):
         blank=True,
         related_name="consultation_entries"
     )
-
+    custom_diagnosis = models.ForeignKey(
+        CustomDiagnosis,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="consultation_entries"
+    )
+    is_custom = models.BooleanField(default=False, db_index=True)
+    
     # Snapshot Fields (never rely only on FK)
     label = models.CharField(max_length=255)
     icd_code = models.CharField(max_length=20, blank=True, null=True)
-
+    # --------------------------
+    # Clinical Attributes
+    # --------------------------
     diagnosis_type = models.CharField(
         max_length=30,
         choices=[
@@ -174,7 +233,9 @@ class ConsultationDiagnosis(models.Model):
         blank=True,
         null=True
     )
+    # Snapshot (MEDICO-LEGAL SAFE) Fields (never rely only on FK)
 
+    #Audit
     is_primary = models.BooleanField(default=False, db_index=True)
 
     is_chronic = models.BooleanField(default=False)
@@ -226,8 +287,20 @@ class ConsultationDiagnosis(models.Model):
     # ==============================
 
     def clean(self):
-        if not self.label:
-            raise ValidationError("Diagnosis label is required.")
+        has_master = self.master is not None
+        has_custom = self.custom_diagnosis is not None
+
+        # Only one source allowed
+        if has_master == has_custom:
+            raise ValidationError(
+                "Provide exactly one source: master or custom diagnosis."
+            )
+
+        # Custom must belong to same consultation
+        if has_custom and self.custom_diagnosis.consultation_id != self.consultation_id:
+            raise ValidationError(
+                "Custom diagnosis must belong to same consultation."
+            )
 
         if self.ai_confidence_score is not None:
             if not (0 <= self.ai_confidence_score <= 100):
@@ -236,6 +309,7 @@ class ConsultationDiagnosis(models.Model):
         if self.severity and self.master and not self.master.severity_supported:
             raise ValidationError("Severity not supported for this diagnosis.")
 
+        # Only one primary diagnosis
         if self.is_primary:
             existing_primary = ConsultationDiagnosis.objects.filter(
                 consultation=self.consultation,
@@ -244,11 +318,16 @@ class ConsultationDiagnosis(models.Model):
             ).exclude(pk=self.pk)
 
             if existing_primary.exists():
-                raise ValidationError("Only one primary diagnosis allowed per consultation.")
+                raise ValidationError(
+                    "Only one primary diagnosis allowed per consultation."
+                )
 
+        # Date validation
         if self.resolved_date and self.onset_date:
             if self.resolved_date < self.onset_date:
-                raise ValidationError("Resolved date cannot be before onset date.")
+                raise ValidationError(
+                    "Resolved date cannot be before onset date."
+                )
 
         EncounterLockValidator.validate(self.consultation)
 
@@ -258,20 +337,29 @@ class ConsultationDiagnosis(models.Model):
 
     def save(self, *args, **kwargs):
         with transaction.atomic():
-            self.full_clean()
 
-            # Snapshot freeze from master
+            # Snapshot assignment
             if self.master:
                 self.label = self.master.label
                 self.icd_code = self.master.icd10_code
                 self.is_chronic = self.master.is_chronic
+                self.is_custom = False
 
-            # Prevent consultation reassignment
-            if self.pk:
+            elif self.custom_diagnosis:
+                self.label = self.custom_diagnosis.name
+                self.icd_code = None
+                self.is_custom = True
+
+            # Prevent reassignment
+            # UUID PK exists before first insert; use ORM state to detect updates.
+            if self.pk and not self._state.adding:
                 old = ConsultationDiagnosis.objects.only("consultation_id").get(pk=self.pk)
                 if old.consultation_id != self.consultation_id:
-                    raise ValidationError("Diagnosis cannot be reassigned to another consultation.")
+                    raise ValidationError(
+                        "Diagnosis cannot be reassigned to another consultation."
+                    )
 
+            self.full_clean()
             super().save(*args, **kwargs)
 
     # ==============================
@@ -282,6 +370,11 @@ class ConsultationDiagnosis(models.Model):
         EncounterLockValidator.validate(self.consultation)
         self.is_active = False
         self.save(update_fields=["is_active", "updated_at"])
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError(
+            "Hard delete not allowed. Use deactivate()."
+        )
 
     def __str__(self):
         return self.label
