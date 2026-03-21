@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/select";
 import type { ConsultationWorkflowType } from "@/lib/consultation-types";
 import { ViewPreDrawer } from "./view-pre-drawer";
+import { draftFindingsToEndConsultationPayload } from "@/lib/consultation-findings-helpers";
 
 const CONSULTATION_TYPE_LABELS: Record<ConsultationWorkflowType, string> = {
   FULL: "Full Consultation",
@@ -134,6 +135,7 @@ export function ConsultationActionBar() {
       follow_up_reason: store.follow_up_reason,
       follow_up_early_if_persist: store.follow_up_early_if_persist,
       sectionItems: store.sectionItems,
+      draftFindings: store.draftFindings,
       instructionsList: store.instructionsList,
       consultationFinalized: store.consultationFinalized,
       selectedDetail: store.selectedDetail,
@@ -180,8 +182,13 @@ export function ConsultationActionBar() {
     }
     setIsEndingConsultation(true);
     try {
+      const store = useConsultationStore.getState();
       const res = await backendAxiosClient.post<{ redirect_url?: string }>(
-        `/consultations/encounter/${id}/consultation/complete/`
+        `/consultations/encounter/${id}/consultation/complete/`,
+        {
+          symptoms: store.symptoms,
+          findings: draftFindingsToEndConsultationPayload(store.draftFindings),
+        }
       );
       const url = res.data?.redirect_url || "/doctor-dashboard";
       useConsultationStore.getState().reset();

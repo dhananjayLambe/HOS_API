@@ -72,7 +72,8 @@ class SymptomMaster(models.Model):
 
     display_name = models.CharField(
         max_length=255,
-        db_index=True
+        db_index=True,
+        default="Unknown"
     )
 
     specialty = models.CharField(
@@ -131,7 +132,7 @@ class ConsultationSymptom(models.Model):
     on_delete=models.CASCADE,
     related_name="consultation_entries"
     )
-    display_name = models.CharField(max_length=255)
+    display_name = models.CharField(max_length=255,default="Unknown")
     is_custom = models.BooleanField(default=False)
     # --------------------------
     # Structured Fields
@@ -243,9 +244,30 @@ class ConsultationSymptom(models.Model):
 
     def clean(self):
 
+        has_master_symptom = self.symptom is not None
+        has_custom_symptom = self.custom_symptom is not None
+
+        # Exactly one source must be provided.
+        if has_master_symptom == has_custom_symptom:
+            raise ValidationError(
+                "Provide exactly one symptom source: either symptom or custom_symptom."
+            )
+
         # Prevent inactive master use
-        if not self.symptom.is_active:
+        if has_master_symptom and not self.symptom.is_active:
             raise ValidationError("This symptom is inactive.")
+
+        # Keep consistency between source and flag.
+        if self.is_custom and not has_custom_symptom:
+            raise ValidationError("is_custom=True requires custom_symptom.")
+        if not self.is_custom and has_custom_symptom and not has_master_symptom:
+            self.is_custom = True
+
+        # For safety, custom symptom should belong to the same consultation.
+        if has_custom_symptom and self.custom_symptom.consultation_id != self.consultation_id:
+            raise ValidationError(
+                "Custom symptom must belong to the same consultation."
+            )
 
         # Duration validation
         if self.duration_value and not self.duration_unit:
@@ -270,8 +292,16 @@ class ConsultationSymptom(models.Model):
     def save(self, *args, **kwargs):
 
         with transaction.atomic():
+            if self.symptom is not None:
+                self.display_name = self.symptom.display_name
+                self.is_custom = False
+            elif self.custom_symptom is not None:
+                self.display_name = self.custom_symptom.name
+                self.is_custom = True
 
-            if self.pk:
+            # UUID primary keys are populated before first save.
+            # Use _state.adding to detect create vs update safely.
+            if not self._state.adding:
                 old = type(self).objects.only("consultation_id").get(pk=self.pk)
                 if old.consultation_id != self.consultation_id:
                     raise ValidationError(
@@ -291,7 +321,15 @@ class ConsultationSymptom(models.Model):
         self.save(update_fields=["is_active"])
 
     def __str__(self):
-        return f"{self.symptom.display_name} | {self.consultation.encounter.visit_pnr}"
+        symptom_name = self.display_name
+        if not symptom_name:
+            if self.symptom:
+                symptom_name = self.symptom.display_name
+            elif self.custom_symptom:
+                symptom_name = self.custom_symptom.name
+            else:
+                symptom_name = "Unknown"
+        return f"{symptom_name} | {self.consultation.encounter.visit_pnr}"
 
 
 # =====================================================
@@ -351,4 +389,11 @@ class SymptomExtensionData(models.Model):
             super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"Extension | {self.symptom_entry.symptom.display_name}"
+        entry = self.symptom_entry
+        if entry.symptom:
+            symptom_name = entry.symptom.display_name
+        elif entry.custom_symptom:
+            symptom_name = entry.custom_symptom.name
+        else:
+            symptom_name = entry.display_name or "Unknown"
+        return f"Extension | {symptom_name}"

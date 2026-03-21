@@ -11,6 +11,7 @@ import type {
   ConsultationSectionType,
   ConsultationSectionItem,
   SectionItemDetail,
+  DraftConsultationFinding,
 } from "@/lib/consultation-types";
 import type {
   SymptomsSectionSchema,
@@ -36,9 +37,15 @@ export type SelectedDetailPayload = {
   itemId?: string;
 } | null;
 
+function newDraftFindingId(): string {
+  return `df-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
 type ConsultationStore = ConsultationState & {
   draftStatus: DraftStatus;
   selectedSymptomId: string | null;
+  /** Draft findings — persisted only on End Consultation. */
+  draftFindings: DraftConsultationFinding[];
   /** Reusable section pattern: items per section (local, backend-agnostic). */
   sectionItems: Record<ConsultationSectionType, ConsultationSectionItem[]>;
   /** True once vitals have been loaded (or attempted) from backend for this consultation. */
@@ -107,6 +114,7 @@ type ConsultationStore = ConsultationState & {
   // Section items (reusable pattern)
   getSectionItems: (section: ConsultationSectionType) => ConsultationSectionItem[];
   addSectionItem: (section: ConsultationSectionType, item: ConsultationSectionItem) => void;
+  replaceSectionItems: (section: ConsultationSectionType, items: ConsultationSectionItem[]) => void;
   removeSectionItem: (section: ConsultationSectionType, id: string) => void;
   updateSectionItemDetail: (
     section: ConsultationSectionType,
@@ -114,6 +122,13 @@ type ConsultationStore = ConsultationState & {
     detail: Partial<SectionItemDetail>
   ) => void;
   setSelectedDetail: (payload: SelectedDetailPayload) => void;
+  addDraftFindingMaster: (finding_code: string, display_label: string) => void;
+  addDraftFindingCustom: (custom_name: string) => void;
+  updateDraftFinding: (
+    id: string,
+    patch: Partial<DraftConsultationFinding>
+  ) => void;
+  markDraftFindingDeleted: (id: string) => void;
 };
 
 const SECTION_TYPES: ConsultationSectionType[] = [
@@ -138,6 +153,7 @@ export const useConsultationStore = create<ConsultationStore>((set, get) => ({
   ...DEFAULT_CONSULTATION_STATE,
   draftStatus: { savedAt: null, message: null },
   selectedSymptomId: null,
+  draftFindings: [],
   sectionItems: emptySectionItems(),
   vitalsLoaded: false,
   selectedDetail: null,
@@ -154,7 +170,14 @@ export const useConsultationStore = create<ConsultationStore>((set, get) => ({
 
   setSymptoms: (symptoms) => set({ symptoms }),
   addSymptom: (symptom) =>
-    set((s) => ({ symptoms: [...s.symptoms, symptom] })),
+    set((s) => {
+      const incoming = symptom.name.trim().toLowerCase();
+      const duplicate = s.symptoms.some(
+        (existing) => existing.name.trim().toLowerCase() === incoming
+      );
+      if (duplicate) return s;
+      return { symptoms: [...s.symptoms, symptom] };
+    }),
   removeSymptom: (id) =>
     set((s) => ({
       symptoms: s.symptoms.filter((x) => x.id !== id),
@@ -321,6 +344,13 @@ export const useConsultationStore = create<ConsultationStore>((set, get) => ({
         },
       };
     }),
+  replaceSectionItems: (section, items) =>
+    set((s) => ({
+      sectionItems: {
+        ...s.sectionItems,
+        [section]: items,
+      },
+    })),
   removeSectionItem: (section, id) =>
     set((s) => {
       const next = (s.sectionItems[section] ?? []).filter((i) => i.id !== id);
@@ -354,11 +384,78 @@ export const useConsultationStore = create<ConsultationStore>((set, get) => ({
           : s.selectedSymptomId,
     })),
 
+  addDraftFindingMaster: (finding_code, display_label) =>
+    set((s) => {
+      const active = s.draftFindings.filter((d) => !d.is_deleted);
+      if (
+        active.some(
+          (d) => !d.is_custom && (d.finding_code ?? "").toLowerCase() === finding_code.toLowerCase()
+        )
+      ) {
+        return s;
+      }
+      const row: DraftConsultationFinding = {
+        id: newDraftFindingId(),
+        finding_code,
+        display_label,
+        is_custom: false,
+        note: "",
+        extension_data: null,
+        is_deleted: false,
+      };
+      return { draftFindings: [...s.draftFindings, row] };
+    }),
+
+  addDraftFindingCustom: (custom_name) =>
+    set((s) => {
+      const trimmed = custom_name.trim();
+      if (!trimmed) return s;
+      const active = s.draftFindings.filter((d) => !d.is_deleted);
+      if (
+        active.some(
+          (d) =>
+            d.is_custom &&
+            (d.custom_name ?? "").trim().toLowerCase() === trimmed.toLowerCase()
+        )
+      ) {
+        return s;
+      }
+      const row: DraftConsultationFinding = {
+        id: newDraftFindingId(),
+        custom_name: trimmed,
+        display_label: trimmed,
+        is_custom: true,
+        note: "",
+        extension_data: null,
+        is_deleted: false,
+      };
+      return { draftFindings: [...s.draftFindings, row] };
+    }),
+
+  updateDraftFinding: (id, patch) =>
+    set((s) => ({
+      draftFindings: s.draftFindings.map((d) =>
+        d.id === id ? { ...d, ...patch } : d
+      ),
+    })),
+
+  markDraftFindingDeleted: (id) =>
+    set((s) => ({
+      draftFindings: s.draftFindings.map((d) =>
+        d.id === id ? { ...d, is_deleted: true } : d
+      ),
+      selectedDetail:
+        s.selectedDetail?.section === "findings" && s.selectedDetail?.itemId === id
+          ? null
+          : s.selectedDetail,
+    })),
+
   reset: () =>
     set({
       ...DEFAULT_CONSULTATION_STATE,
       draftStatus: { savedAt: null, message: null },
       selectedSymptomId: null,
+      draftFindings: [],
       sectionItems: emptySectionItems(),
       selectedDetail: null,
       encounterId: null,

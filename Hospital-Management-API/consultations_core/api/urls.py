@@ -12,14 +12,18 @@ from consultations_core.api.views.preconsultation import (
     CompletePreConsultationAPIView,
     EncounterDetailAPIView,
     StartConsultationAPIView,
-    EndConsultationAPIView,
     CancelEncounterAPIView,
     PreConsultationPreviewAPIView,
 )
+from consultations_core.api.views.consultation import EndConsultationAPIView
 from consultations_core.api.views.instructions import (
     InstructionTemplatesAPIView,
     EncounterInstructionsListCreateAPIView,
     EncounterInstructionUpdateDeleteAPIView,
+)
+from consultations_core.api.views.findings import (
+    EncounterFindingsListCreateAPIView,
+    ConsultationFindingUpdateDeleteAPIView,
 )
 
 router = DefaultRouter()
@@ -91,5 +95,15 @@ urlpatterns = [
         "instructions/<uuid:pk>/",
         EncounterInstructionUpdateDeleteAPIView.as_view(),
         name="encounter-instruction-update-delete",
+    ),
+    path(
+        "encounter/<uuid:encounter_id>/findings/",
+        EncounterFindingsListCreateAPIView.as_view(),
+        name="encounter-findings-list-create",
+    ),
+    path(
+        "findings/<uuid:pk>/",
+        ConsultationFindingUpdateDeleteAPIView.as_view(),
+        name="consultation-finding-update-delete",
     ),
 ]

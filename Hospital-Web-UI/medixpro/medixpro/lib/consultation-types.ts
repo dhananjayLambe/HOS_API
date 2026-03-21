@@ -116,10 +116,29 @@ export interface SectionItemDetail {
 }
 
 /** Single item in any section (symptom, finding, diagnosis, etc.). */
+/** Draft-only consultation findings (no DB until End Consultation). */
+export interface DraftConsultationFinding {
+  id: string;
+  /** FindingMaster UUID when known (optional during draft). */
+  finding_id?: string | null;
+  /** Catalog key from render-schema (e.g. pallor) for master rows. */
+  finding_code?: string | null;
+  custom_name?: string | null;
+  /** Chip / panel title */
+  display_label: string;
+  is_custom: boolean;
+  severity?: "mild" | "moderate" | "severe" | null;
+  note?: string;
+  extension_data?: Record<string, unknown> | null;
+  is_deleted?: boolean;
+}
+
 export interface ConsultationSectionItem {
   id: string;
   label: string;
   isCustom?: boolean;
+  /** Master catalog key from render-schema (e.g. pallor); used as finding_code when creating. */
+  findingKey?: string;
   detail?: SectionItemDetail;
   /** Optional category for add form (e.g. dropdown). */
   category?: string;

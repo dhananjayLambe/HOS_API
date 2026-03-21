@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { MoreHorizontal } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,49 +21,40 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useConsultationStore } from "@/store/consultationStore";
-import type { SectionItemDetail } from "@/lib/consultation-types";
-import type { FindingFieldSchema } from "@/lib/consultation-schema-types";
+import { useConsultationStore, type SelectedDetailPayload } from "@/store/consultationStore";
+import type { DraftConsultationFinding, SectionItemDetail } from "@/lib/consultation-types";
+import type { FindingFieldSchema, FindingItemSchema } from "@/lib/consultation-schema-types";
 import { cn } from "@/lib/utils";
+import { mergeDetailPatchIntoDraft } from "@/lib/consultation-findings-helpers";
 
-export function FindingDetailPanel() {
-  const {
-    sectionItems,
-    selectedDetail,
-    updateSectionItemDetail,
-    getFindingSchemaForLabel,
-  } = useConsultationStore();
+function FindingDetailPanelBody({
+  draft,
+  updateDraftFinding,
+  getFindingSchemaForLabel,
+  setSelectedDetail,
+}: {
+  draft: DraftConsultationFinding;
+  updateDraftFinding: (
+    id: string,
+    patch: Partial<DraftConsultationFinding>
+  ) => void;
+  getFindingSchemaForLabel: (label: string) => FindingItemSchema | undefined;
+  setSelectedDetail: (payload: SelectedDetailPayload) => void;
+}) {
+  const schemaItem = getFindingSchemaForLabel(draft.display_label);
+  const detail = useMemo(
+    () =>
+      ({
+        notes: draft.note ?? "",
+        severity: draft.severity,
+        ...(draft.extension_data ?? {}),
+      }) as SectionItemDetail & Record<string, unknown>,
+    [draft]
+  );
 
-  if (!selectedDetail || selectedDetail.section !== "findings" || !selectedDetail.itemId) {
-    return (
-      <Card
-        className={cn(
-          "h-fit w-full max-w-full min-w-0 max-w-md shrink-0 self-start rounded-2xl border border-border/80 bg-card shadow-sm transition-shadow hover:shadow-md"
-        )}
-      >
-        <CardHeader className="py-4 pb-3">
-          <h3 className="font-bold text-muted-foreground">Finding details</h3>
-        </CardHeader>
-        <CardContent className="flex min-h-[200px] flex-col items-center justify-center py-12 text-center">
-          <p className="text-sm text-muted-foreground">
-            Select a finding from the list to view or add details here.
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  const items = sectionItems["findings"] ?? [];
-  const item = items.find((i) => i.id === selectedDetail.itemId);
-
-  if (!item) {
-    return null;
-  }
-
-  const schemaItem = getFindingSchemaForLabel(item.label);
-  const detail = (item.detail ?? {}) as SectionItemDetail & Record<string, unknown>;
-  const set = (patch: Partial<SectionItemDetail> & Record<string, unknown>) =>
-    updateSectionItemDetail("findings", item.id, patch);
+  const set = (patch: Partial<SectionItemDetail> & Record<string, unknown>) => {
+    updateDraftFinding(draft.id, mergeDetailPatchIntoDraft(draft, patch));
+  };
 
   return (
     <Card
@@ -71,7 +63,7 @@ export function FindingDetailPanel() {
       )}
     >
       <CardHeader className="flex flex-row items-center justify-between space-y-0 py-4 pb-3">
-        <h3 className="font-bold truncate pr-2">{item.label}</h3>
+        <h3 className="font-bold truncate pr-2">{draft.display_label}</h3>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Options">
@@ -79,13 +71,7 @@ export function FindingDetailPanel() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem
-              onClick={() =>
-                updateSectionItemDetail("findings", item.id, {
-                  // no-op; closing handled in ConsultationSection via selectedDetail
-                })
-              }
-            >
+            <DropdownMenuItem onClick={() => setSelectedDetail(null)}>
               Close panel
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -121,6 +107,52 @@ export function FindingDetailPanel() {
   );
 }
 
+export function FindingDetailPanel() {
+  const {
+    draftFindings,
+    selectedDetail,
+    updateDraftFinding,
+    getFindingSchemaForLabel,
+    setSelectedDetail,
+  } = useConsultationStore();
+
+  if (!selectedDetail || selectedDetail.section !== "findings" || !selectedDetail.itemId) {
+    return (
+      <Card
+        className={cn(
+          "h-fit w-full max-w-full min-w-0 max-w-md shrink-0 self-start rounded-2xl border border-border/80 bg-card shadow-sm transition-shadow hover:shadow-md"
+        )}
+      >
+        <CardHeader className="py-4 pb-3">
+          <h3 className="font-bold text-muted-foreground">Finding details</h3>
+        </CardHeader>
+        <CardContent className="flex min-h-[200px] flex-col items-center justify-center py-12 text-center">
+          <p className="text-sm text-muted-foreground">
+            Select a finding from the list to view or add details here.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const draft = draftFindings.find(
+    (d) => d.id === selectedDetail.itemId && !d.is_deleted
+  );
+
+  if (!draft) {
+    return null;
+  }
+
+  return (
+    <FindingDetailPanelBody
+      draft={draft}
+      updateDraftFinding={updateDraftFinding}
+      getFindingSchemaForLabel={getFindingSchemaForLabel}
+      setSelectedDetail={setSelectedDetail}
+    />
+  );
+}
+
 function FindingFieldRenderer({
   field,
   detail,
@@ -146,7 +178,7 @@ function FindingFieldRenderer({
           <Input
             type="number"
             placeholder={field.placeholder}
-            value={(detail as any)[storeKey] ?? ""}
+            value={(detail as Record<string, unknown>)[storeKey as string] ?? ""}
             onChange={(e) => set({ [storeKey]: e.target.value })}
             className={cn("rounded-md max-w-[140px]", importanceClass)}
           />
@@ -158,7 +190,11 @@ function FindingFieldRenderer({
 
   if (field.type === "select" && field.options) {
     const isMulti = field.is_multi;
-    const currentValue = (detail as any)[storeKey];
+    const rawValue = (detail as Record<string, unknown>)[storeKey as string];
+    const currentValue =
+      field.key === "severity" && typeof rawValue === "string" && rawValue
+        ? rawValue.charAt(0).toUpperCase() + rawValue.slice(1).toLowerCase()
+        : rawValue;
 
     if (isMulti) {
       const currentArr: string[] = Array.isArray(currentValue) ? currentValue : [];
@@ -199,8 +235,13 @@ function FindingFieldRenderer({
       <div className="space-y-2">
         <Label>{baseLabel}</Label>
         <Select
-          value={currentValue ?? ""}
-          onValueChange={(v) => set({ [storeKey]: v })}
+          value={(currentValue as string) ?? ""}
+          onValueChange={(v) =>
+            set({
+              [storeKey]:
+                field.key === "severity" ? v.toLowerCase() : v,
+            })
+          }
         >
           <SelectTrigger className={cn("rounded-md", importanceClass)}>
             <SelectValue placeholder={field.placeholder ?? "Select"} />
@@ -222,7 +263,7 @@ function FindingFieldRenderer({
       <div className="space-y-2">
         <Label>{baseLabel}</Label>
         <RadioGroup
-          value={(detail as any)[storeKey] ?? ""}
+          value={(detail as Record<string, unknown>)[storeKey as string] as string ?? ""}
           onValueChange={(v) => set({ [storeKey]: v })}
           className="flex flex-wrap gap-4"
         >
@@ -243,7 +284,7 @@ function FindingFieldRenderer({
         <Label>{baseLabel}</Label>
         <Textarea
           placeholder={field.placeholder}
-          value={(detail as any)[storeKey] ?? ""}
+          value={(detail as Record<string, unknown>)[storeKey as string] as string ?? ""}
           onChange={(e) => set({ [storeKey]: e.target.value })}
           className={cn("min-h-[80px] resize-y rounded-md", importanceClass)}
         />
@@ -258,7 +299,7 @@ function FindingFieldRenderer({
         <Input
           type="date"
           placeholder={field.placeholder}
-          value={(detail as any)[storeKey] ?? ""}
+          value={(detail as Record<string, unknown>)[storeKey as string] as string ?? ""}
           onChange={(e) => set({ [storeKey]: e.target.value })}
           className={cn("rounded-md max-w-[180px]", importanceClass)}
         />
@@ -267,7 +308,7 @@ function FindingFieldRenderer({
   }
 
   if (field.type === "toggle") {
-    const current = (detail as any)[storeKey];
+    const current = (detail as Record<string, unknown>)[storeKey as string];
     const isOn = Boolean(current);
     return (
       <div className="space-y-2">
@@ -294,11 +335,10 @@ function FindingFieldRenderer({
       <Label>{baseLabel}</Label>
       <Input
         placeholder={field.placeholder}
-        value={(detail as any)[storeKey] ?? ""}
+        value={(detail as Record<string, unknown>)[storeKey as string] as string ?? ""}
         onChange={(e) => set({ [storeKey]: e.target.value })}
         className={cn("rounded-md", importanceClass)}
       />
     </div>
   );
 }
-

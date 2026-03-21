@@ -155,8 +155,7 @@ export function SymptomsSection() {
     item: Omit<ConsultationSectionItem, "id">
   ): ConsultationSectionItem => {
     const id = symptomId();
-    addSymptom({ id, name: item.label });
-    setSelectedSymptomId(id);
+    add(item.label);
     return { ...item, id };
   };
 
