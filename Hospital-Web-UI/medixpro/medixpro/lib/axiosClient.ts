@@ -206,17 +206,36 @@ backendAxiosClient.interceptors.response.use(
   async (error: AxiosError) => {
     // Log error details for debugging (skip 404s for section/template endpoints - they're expected when not configured)
     if (error.config) {
-      const fullUrl = `${error.config.baseURL || ""}${error.config.url || ""}`;
+      const baseAndPath = `${error.config.baseURL || ""}${error.config.url || ""}`;
+      const params =
+        error.config.params && typeof error.config.params === "object"
+          ? `?${new URLSearchParams(
+              Object.entries(error.config.params as Record<string, unknown>).reduce<Record<string, string>>(
+                (acc, [k, v]) => {
+                  if (v === undefined || v === null) return acc;
+                  acc[k] = String(v);
+                  return acc;
+                },
+                {},
+              ),
+            ).toString()}`
+          : "";
+      const fullUrl = `${baseAndPath}${params}`;
+
       const isSectionEndpoint = fullUrl.includes("/section/");
       const isTemplateEndpoint = fullUrl.includes("/pre-consult/template");
       const is404 = error.response?.status === 404;
       
       // Only log non-404 errors, or 404s that aren't section/template endpoints
       if (!is404 || (!isSectionEndpoint && !isTemplateEndpoint)) {
-        console.error(`[backendAxiosClient] Error ${error.response?.status || "Network"} on ${error.config.method?.toUpperCase()} ${fullUrl}`);
+        console.error(
+          `[backendAxiosClient] Error ${error.response?.status || "Network"} on ${error.config.method?.toUpperCase()} ${fullUrl}`,
+        );
         // Always log response payload if present (even if empty) to avoid losing DRF "detail" messages
         if (error.response) {
-          console.error("[backendAxiosClient] Error response:", error.response.data);
+          console.error("[backendAxiosClient] Error response statusText:", error.response.statusText);
+          console.error("[backendAxiosClient] Error response headers:", error.response.headers);
+          console.error("[backendAxiosClient] Error response data:", error.response.data);
         }
       }
     }
