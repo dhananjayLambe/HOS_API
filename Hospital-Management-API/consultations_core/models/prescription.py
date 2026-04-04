@@ -116,6 +116,94 @@ Encounter → Consultation → Prescription → PrescriptionLine
 =====================================================
 """
 
+
+class CustomMedicine(models.Model):
+    """
+    Temporary / doctor-created medicine
+
+    Not part of DrugMaster
+    Used to avoid blocking workflow
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    name = models.CharField(max_length=255)
+
+    dose_type = models.CharField(
+        max_length=50,
+        choices=[
+            ("tablet", "Tablet"),
+            ("capsule", "Capsule"),
+            ("syrup", "Syrup"),
+            ("injection", "Injection"),
+            ("cream", "Cream"),
+            ("drops", "Drops"),
+            ("inhaler", "Inhaler"),
+            ("powder", "Powder"),
+            ("other", "Other"),
+        ],
+        db_index=True
+    )
+
+    strength_value = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        null=True,
+        blank=True
+    )
+
+    strength_unit = models.CharField(
+        max_length=20,
+        null=True,
+        blank=True
+    )
+
+    notes = models.TextField(null=True, blank=True)
+
+    # 👤 Context
+    created_by = models.ForeignKey(
+        "account.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="custom_medicines_created",
+    )
+
+    clinic = models.ForeignKey(
+        "clinic.Clinic",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+    )
+
+    # 🔄 Future normalization
+    is_normalized = models.BooleanField(default=False)
+
+    normalized_drug = models.ForeignKey(
+        "medicines.DrugMaster",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+    deleted_by = models.ForeignKey(
+        "account.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="custom_medicines_deleted",
+    )
+    class Meta:
+        indexes = [
+            models.Index(fields=["name"]),
+            models.Index(fields=["clinic"]),
+        ]
+
+    def __str__(self):
+        return f"{self.name} (Custom)"
 # =====================================================
 # ENUMS
 # =====================================================
@@ -328,7 +416,16 @@ class PrescriptionLine(models.Model):
 
     drug = models.ForeignKey(
         "medicines.DrugMaster",
-        on_delete=models.PROTECT
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True
+    )
+
+    custom_medicine = models.ForeignKey(
+        "consultations_core.CustomMedicine",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True
     )
 
     # 🧾 Snapshot fields (CRITICAL)
@@ -372,28 +469,22 @@ class PrescriptionLine(models.Model):
     # Flags
     is_prn = models.BooleanField(default=False)
     is_stat = models.BooleanField(default=False)
-
+    is_custom = models.BooleanField(default=False)
     # Audit
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+    deleted_by = models.ForeignKey(
+        "account.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
 
     class Meta:
         indexes = [
             models.Index(fields=["prescription"]),
         ]
-
-    # =====================================================
-    # VALIDATION
-    # =====================================================
-
-    def clean(self):
-
-        EncounterLockValidator.validate(self.prescription.consultation)
-
-        if self.dose_value <= 0:
-            raise ValidationError("Dose must be positive.")
-
-        if self.prescription.status == PrescriptionStatus.FINALIZED:
-            raise ValidationError("Cannot modify finalized prescription.")
 
     # =====================================================
     # SAVE
@@ -417,20 +508,50 @@ class PrescriptionLine(models.Model):
     # =====================================================
     # SNAPSHOT
     # =====================================================
-
     def _create_snapshot(self):
 
-        drug = self.drug
+        if self.drug:
+            self.is_custom = False  # ✅ IMPORTANT
 
-        self.drug_name_snapshot = drug.brand_name
-        self.generic_name_snapshot = drug.generic_name
-        self.strength_snapshot = drug.strength
-        self.formulation_snapshot = drug.formulation.name
+            drug = self.drug
+            self.drug_name_snapshot = drug.brand_name
+            self.generic_name_snapshot = drug.generic_name
+            self.strength_snapshot = drug.strength
+            self.formulation_snapshot = drug.formulation.name
 
+        elif self.custom_medicine:
+            self.is_custom = True  # ✅ IMPORTANT
+
+            cm = self.custom_medicine
+
+            self.drug_name_snapshot = cm.name
+            self.generic_name_snapshot = None
+
+            if cm.strength_value and cm.strength_unit:
+                self.strength_snapshot = f"{cm.strength_value} {cm.strength_unit}"
+            else:
+                self.strength_snapshot = None
+
+            self.formulation_snapshot = cm.dose_type
     def __str__(self):
         return f"{self.drug_name_snapshot} | {self.prescription.prescription_pnr}"
+    def clean(self):
+        super().clean()
+        EncounterLockValidator.validate(self.prescription.consultation)
 
+        if self.dose_value <= 0:
+            raise ValidationError("Dose must be positive.")
+
+        if self.prescription.status == PrescriptionStatus.FINALIZED:
+            raise ValidationError("Cannot modify finalized prescription.")
+
+        if not self.drug and not self.custom_medicine:
+            raise ValidationError("Either drug or custom medicine required.")
+
+        if self.drug and self.custom_medicine:
+            raise ValidationError("Only one of drug or custom medicine allowed.")
 class PrescriptionInstruction(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     prescription = models.OneToOneField(
         Prescription,
         on_delete=models.CASCADE,
@@ -440,3 +561,12 @@ class PrescriptionInstruction(models.Model):
     advice = models.TextField(null=True, blank=True)
     diet = models.TextField(null=True, blank=True)
     precautions = models.TextField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+    deleted_by = models.ForeignKey(
+        "account.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
