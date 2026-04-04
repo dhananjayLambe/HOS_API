@@ -180,7 +180,7 @@ export const useConsultationStore = create<ConsultationStore>((set, get) => ({
         (existing) => existing.name.trim().toLowerCase() === incoming
       );
       if (duplicate) return s;
-      return { symptoms: [...s.symptoms, symptom] };
+      return { symptoms: [symptom, ...s.symptoms] };
     }),
   removeSymptom: (id) =>
     set((s) => ({
@@ -344,7 +344,7 @@ export const useConsultationStore = create<ConsultationStore>((set, get) => ({
       return {
         sectionItems: {
           ...s.sectionItems,
-          [section]: [...current, item],
+          [section]: [item, ...current],
         },
       };
     }),
@@ -411,7 +411,7 @@ export const useConsultationStore = create<ConsultationStore>((set, get) => ({
         extension_data: null,
         is_deleted: false,
       };
-      return { draftFindings: [...s.draftFindings, row] };
+      return { draftFindings: [row, ...s.draftFindings] };
     }),
 
   addDraftFindingCustom: (custom_name) =>
@@ -437,7 +437,7 @@ export const useConsultationStore = create<ConsultationStore>((set, get) => ({
         extension_data: null,
         is_deleted: false,
       };
-      return { draftFindings: [...s.draftFindings, row] };
+      return { draftFindings: [row, ...s.draftFindings] };
     }),
 
   updateDraftFinding: (id, patch) =>

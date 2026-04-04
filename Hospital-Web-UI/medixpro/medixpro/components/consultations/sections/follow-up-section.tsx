@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { Calendar } from "lucide-react";
 import { useConsultationStore } from "@/store/consultationStore";
 import { cn } from "@/lib/utils";
+import { useConsultationSectionScroll } from "@/components/consultations/consultation-section-scroll-context";
 
 function formatFollowUpSummary(
   interval: number,
@@ -45,8 +46,9 @@ export function FollowUpSection() {
     follow_up_date,
     follow_up_reason,
     setSelectedDetail,
-    selectedDetail,
   } = useConsultationStore();
+  const { registerSectionRef, activateSection, activeSectionKey } =
+    useConsultationSectionScroll();
 
   const isConfigured =
     follow_up_date ||
@@ -64,22 +66,27 @@ export function FollowUpSection() {
   }, [follow_up_interval, follow_up_unit, follow_up_date, isConfigured]);
 
   const title = summary ? `Follow-Up • ${summary}` : "Follow-Up";
-  const isSelected = selectedDetail?.section === "follow_up";
 
   return (
     <div
+      ref={(el) => registerSectionRef("follow_up", el)}
+      id="follow_up-section"
       role="button"
       tabIndex={0}
-      onClick={() => setSelectedDetail({ section: "follow_up" })}
+      onClick={() => {
+        setSelectedDetail({ section: "follow_up" });
+        activateSection("follow_up");
+      }}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
           setSelectedDetail({ section: "follow_up" });
+          activateSection("follow_up");
         }
       }}
       className={cn(
-        "mb-4 rounded-2xl border border-border/80 bg-card p-4 shadow-sm transition-shadow hover:shadow-md cursor-pointer touch-manipulation",
-        isSelected && "ring-2 ring-blue-500/50 ring-offset-2"
+        "ccp-mid-section scroll-mt-2 mb-4 rounded-2xl border border-border/80 bg-card p-4 shadow-sm transition-[box-shadow,opacity,border-color] hover:shadow-md cursor-pointer touch-manipulation",
+        activeSectionKey === "follow_up" && "ccp-mid-section--active"
       )}
     >
       <div className="flex flex-row items-center justify-between space-y-0">

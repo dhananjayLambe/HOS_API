@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/select";
 import type { ConsultationWorkflowType } from "@/lib/consultation-types";
 import { ViewPreDrawer } from "./view-pre-drawer";
+import { ConsultationAutosaveIndicator } from "./consultation-autosave-indicator";
 import { draftFindingsToEndConsultationPayload } from "@/lib/consultation-findings-helpers";
 import { sectionItemsToEndConsultationDiagnosisPayload } from "@/lib/consultation-diagnosis-helpers";
 
@@ -249,7 +250,11 @@ export function ConsultationActionBar() {
             <span className="sm:hidden">Consultation</span>
           </span>
           {encounterId && (
-            <div className="flex items-center gap-1.5 shrink-0 rounded-lg border border-border/80 bg-muted/50 px-2.5 py-1">
+            <div className="flex items-center gap-3 shrink-0 min-w-0">
+              <div className="flex items-center shrink-0" aria-live="polite">
+                <ConsultationAutosaveIndicator />
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0 rounded-lg border border-border/80 bg-muted/50 px-2.5 py-1">
               <span className="text-xs font-medium text-muted-foreground">PNR:</span>
               <span className="text-xs font-mono text-foreground truncate max-w-[140px] sm:max-w-[200px]" title={visitPnr ?? undefined}>
                 {visitPnr ?? "…"}
@@ -264,6 +269,7 @@ export function ConsultationActionBar() {
               >
                 <Copy className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
               </Button>
+              </div>
             </div>
           )}
         </div>

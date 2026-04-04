@@ -1,13 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { FileText, Lock, Loader2, Plus, Search, AlertTriangle } from "lucide-react";
-import { ConsultationSectionCard } from "@/components/consultations/consultation-section-card";
+import {
+  ConsultationSectionCard,
+  type ConsultationSectionCardHandle,
+} from "@/components/consultations/consultation-section-card";
+import { useConsultationSectionScroll } from "@/components/consultations/consultation-section-scroll-context";
+import { ConsultationEditingBadge } from "@/components/consultations/consultation-editing-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useConsultationStore } from "@/store/consultationStore";
 import type { InstructionsSectionSchema, InstructionItemSchema } from "@/lib/consultation-schema-types";
 import { cn } from "@/lib/utils";
+import { reorderItemsByActiveId } from "@/lib/consultation-chip-ux";
 
 const INSTRUCTION_TEMPLATE_PREFIX = "tpl:";
 
@@ -61,6 +67,9 @@ export function InstructionsSection() {
   const [inlineSearch, setInlineSearch] = useState("");
   const inlineSearchDebounced = useDebouncedValue(inlineSearch, 300);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const sectionCardRef = useRef<ConsultationSectionCardHandle>(null);
+  const { registerSectionRef, activateSection, activeSectionKey } =
+    useConsultationSectionScroll();
 
   const specialty = "physician";
 
@@ -157,6 +166,23 @@ export function InstructionsSection() {
     return id === templateOrInstructionId;
   };
 
+  const activeInstructionId =
+    selectedDetail?.section === "instructions" ? selectedDetail.itemId ?? null : null;
+
+  const orderedInstructions = useMemo(
+    () => reorderItemsByActiveId(instructionsList, activeInstructionId),
+    [instructionsList, activeInstructionId]
+  );
+
+  const selectInstructionAndScroll = useCallback(
+    (itemId: string) => {
+      setSelectedDetail({ section: "instructions", itemId });
+      sectionCardRef.current?.expand();
+      activateSection("instructions");
+    },
+    [setSelectedDetail, activateSection]
+  );
+
   const isAdded = (templateId: string) =>
     instructionsList.some((i) => i.instruction_template_id === templateId);
 
@@ -177,7 +203,7 @@ export function InstructionsSection() {
     if (!template.requires_input) {
       if (isAdded(templateId)) {
         const existing = instructionsList.find((i) => i.instruction_template_id === templateId);
-        if (existing) setSelectedDetail({ section: "instructions", itemId: existing.id });
+        if (existing) selectInstructionAndScroll(existing.id);
         return;
       }
       if (encounterId) {
@@ -194,8 +220,8 @@ export function InstructionsSection() {
           if (res.status === 403) setConsultationFinalized(true);
           if (res.ok) {
             const created = await res.json();
-            setInstructionsList([...instructionsList, created]);
-            setSelectedDetail({ section: "instructions", itemId: created.id });
+            setInstructionsList([created, ...instructionsList]);
+            selectInstructionAndScroll(created.id);
           }
         } catch {
           // ignore
@@ -203,7 +229,6 @@ export function InstructionsSection() {
       } else {
         const tempId = `inst-local-${templateId}-${Date.now()}`;
         setInstructionsList([
-          ...instructionsList,
           {
             id: tempId,
             instruction_template_id: templateId,
@@ -212,23 +237,26 @@ export function InstructionsSection() {
             custom_note: null,
             is_active: true,
           },
+          ...instructionsList,
         ]);
-        setSelectedDetail({ section: "instructions", itemId: tempId });
+        selectInstructionAndScroll(tempId);
       }
       return;
     }
 
     if (isAdded(templateId)) {
       const existing = instructionsList.find((i) => i.instruction_template_id === templateId);
-      if (existing) setSelectedDetail({ section: "instructions", itemId: existing.id });
+      if (existing) selectInstructionAndScroll(existing.id);
       return;
     }
     setSelectedDetail({ section: "instructions", itemId: INSTRUCTION_TEMPLATE_PREFIX + templateId });
+    sectionCardRef.current?.expand();
+    activateSection("instructions");
   };
 
   const handleAddedInstructionClick = (instructionId: string) => {
     setSelectedSymptomId(null);
-    setSelectedDetail({ section: "instructions", itemId: instructionId });
+    selectInstructionAndScroll(instructionId);
   };
 
   const handleRemoveInstruction = async (instructionId: string) => {
@@ -260,7 +288,16 @@ export function InstructionsSection() {
   const locked = consultationFinalized;
 
   return (
+    <div
+      ref={(el) => registerSectionRef("instructions", el)}
+      id="instructions-section"
+      className={cn(
+        "ccp-mid-section scroll-mt-2 rounded-2xl",
+        activeSectionKey === "instructions" && "ccp-mid-section--active"
+      )}
+    >
     <ConsultationSectionCard
+      ref={sectionCardRef}
       title="Instructions"
       icon={<FileText className="text-muted-foreground" />}
       defaultOpen={false}
@@ -279,7 +316,7 @@ export function InstructionsSection() {
             </div>
           )}
 
-          {/* Row 1: Compact search (left) + Add New (right) – same as Diagnosis */}
+          <div className="consultation-section-search-row sticky top-0 z-[5] -mx-1 px-1 bg-card/95 dark:bg-card/95 backdrop-blur-sm pb-2 pt-0.5">
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative flex-1 min-w-[180px]">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
@@ -288,7 +325,14 @@ export function InstructionsSection() {
                 type="search"
                 placeholder="Search instructions"
                 value={inlineSearch}
-                onChange={(e) => setInlineSearch(e.target.value)}
+                onFocus={() => {
+                  activateSection("instructions");
+                  sectionCardRef.current?.expand();
+                }}
+                onChange={(e) => {
+                  activateSection("instructions", { scroll: false });
+                  setInlineSearch(e.target.value);
+                }}
                 className="h-10 pl-9 rounded-lg bg-muted/40 border-border/60 text-foreground placeholder:text-muted-foreground focus-visible:bg-background focus-visible:ring-2"
                 aria-label="Search instructions"
               />
@@ -298,25 +342,31 @@ export function InstructionsSection() {
               variant="outline"
               size="sm"
               className="gap-1.5 shrink-0 h-10 rounded-lg"
-              onClick={() => searchInputRef.current?.focus()}
+              onClick={() => {
+                activateSection("instructions");
+                sectionCardRef.current?.expand();
+                searchInputRef.current?.focus();
+              }}
             >
               <Plus className="h-4 w-4" />
               Add New
             </Button>
           </div>
+          </div>
 
-          {/* Selected items: all blue chips with × (same as Diagnosis – clear distinction from grey suggested below) */}
           {instructionsList.length > 0 && (
             <div className="flex flex-wrap gap-2">
-              {instructionsList.map((inst) => {
+              {orderedInstructions.map((inst) => {
                 const focused = isSelected(inst.id);
                 const incomplete = isInstructionIncomplete(inst);
                 return (
                   <span
                     key={inst.id}
                     className={cn(
-                      "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-colors bg-blue-600 text-white shadow-sm dark:bg-blue-600",
-                      focused && "ring-2 ring-blue-400 ring-offset-1 dark:ring-offset-gray-900"
+                      "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-all duration-200 ease-out",
+                      focused
+                        ? "bg-indigo-600 text-white shadow-sm dark:bg-indigo-600 animate-consultation-chip-pop font-medium"
+                        : "border border-border bg-muted/50 text-foreground hover:bg-muted hover:border-muted-foreground/40"
                     )}
                     title={incomplete ? "Input required – fill details in the right panel" : undefined}
                   >
@@ -324,12 +374,21 @@ export function InstructionsSection() {
                       type="button"
                       onClick={() => handleAddedInstructionClick(inst.id)}
                       disabled={locked}
-                      className="focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded"
+                      className="min-w-0 truncate text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded"
                     >
                       {inst.label}
                     </button>
+                    {focused && (
+                      <ConsultationEditingBadge onDarkChip className="ml-1 shrink-0" />
+                    )}
                     {incomplete && (
-                      <span className="shrink-0 text-amber-200 dark:text-amber-100" aria-hidden>
+                      <span
+                        className={cn(
+                          "shrink-0",
+                          focused ? "text-amber-200 dark:text-amber-100" : "text-amber-700 dark:text-amber-600"
+                        )}
+                        aria-hidden
+                      >
                         <AlertTriangle className="h-3.5 w-3.5" />
                       </span>
                     )}
@@ -340,7 +399,10 @@ export function InstructionsSection() {
                           e.stopPropagation();
                           handleRemoveInstruction(inst.id);
                         }}
-                        className="ml-0.5 rounded-full p-0.5 hover:opacity-80 hover:bg-blue-700 dark:hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        className={cn(
+                          "ml-0.5 rounded-full p-0.5 hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                          focused ? "hover:bg-indigo-700 dark:hover:bg-indigo-700" : "hover:bg-muted"
+                        )}
                         aria-label={`Remove ${inst.label}`}
                       >
                         ×
@@ -389,5 +451,6 @@ export function InstructionsSection() {
         </div>
       )}
     </ConsultationSectionCard>
+    </div>
   );
 }

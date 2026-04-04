@@ -1,8 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Stethoscope, Search, Plus, AlertTriangle } from "lucide-react";
-import { ConsultationSectionCard } from "@/components/consultations/consultation-section-card";
+import {
+  ConsultationSectionCard,
+  type ConsultationSectionCardHandle,
+} from "@/components/consultations/consultation-section-card";
+import { useConsultationSectionScroll } from "@/components/consultations/consultation-section-scroll-context";
+import { ConsultationEditingBadge } from "@/components/consultations/consultation-editing-badge";
 import { ConsultationSearchAddDrawer } from "@/components/consultations/consultation-search-add-drawer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +20,11 @@ import type { FindingsSectionSchema } from "@/lib/consultation-schema-types";
 import { useConsultationStore } from "@/store/consultationStore";
 import { useToastNotification } from "@/hooks/use-toast-notification";
 import { cn } from "@/lib/utils";
+import {
+  CONSULTATION_TAB_SECTION_DATA_ATTR,
+  reorderItemsByActiveId,
+} from "@/lib/consultation-chip-ux";
+import { flushConsultationAutosave } from "@/lib/consultation-autosave";
 
 function useDebouncedValue<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value);
@@ -67,6 +77,13 @@ export function FindingsSection() {
   const [search, setSearch] = useState("");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerInitialValue, setDrawerInitialValue] = useState<string | undefined>(undefined);
+  const sectionCardRef = useRef<ConsultationSectionCardHandle>(null);
+  const { registerSectionRef, registerTabSectionExpander, activateSection, activeSectionKey } =
+    useConsultationSectionScroll();
+
+  useEffect(() => {
+    return registerTabSectionExpander("findings", () => sectionCardRef.current?.expand());
+  }, [registerTabSectionExpander]);
 
   const searchDebounced = useDebouncedValue(search, 300);
 
@@ -163,6 +180,25 @@ export function FindingsSection() {
     replaceSectionItems("findings", mirror);
   }, [visible, replaceSectionItems]);
 
+  const selectedId =
+    selectedDetail?.section === "findings"
+      ? selectedDetail.itemId ?? null
+      : null;
+
+  const orderedVisible = useMemo(
+    () => reorderItemsByActiveId(visible, selectedId),
+    [visible, selectedId]
+  );
+
+  const selectFindingAndScroll = useCallback(
+    (itemId: string) => {
+      setSelectedDetail({ section: "findings", itemId });
+      sectionCardRef.current?.expand();
+      activateSection("findings");
+    },
+    [setSelectedDetail, activateSection]
+  );
+
   const addMasterFromSchema = useCallback(
     (key: string, displayName: string) => {
       const active = useConsultationStore
@@ -185,11 +221,11 @@ export function FindingsSection() {
             !d.is_custom &&
             (d.finding_code ?? "").toLowerCase() === key.toLowerCase()
         );
-      if (created) setSelectedDetail({ section: "findings", itemId: created.id });
+      if (created) selectFindingAndScroll(created.id);
       setSearch("");
       toast.success(`${displayName} added`);
     },
-    [addDraftFindingMaster, setSelectedDetail, toast]
+    [addDraftFindingMaster, selectFindingAndScroll, toast]
   );
 
   const addCustomByName = useCallback(
@@ -205,7 +241,7 @@ export function FindingsSection() {
           (d.custom_name ?? "").trim().toLowerCase() === trimmed.toLowerCase()
       );
       if (existing) {
-        setSelectedDetail({ section: "findings", itemId: existing.id });
+        selectFindingAndScroll(existing.id);
         setSearch("");
         return;
       }
@@ -218,11 +254,11 @@ export function FindingsSection() {
             d.is_custom &&
             (d.custom_name ?? "").trim().toLowerCase() === trimmed.toLowerCase()
         );
-      if (created) setSelectedDetail({ section: "findings", itemId: created.id });
+      if (created) selectFindingAndScroll(created.id);
       setSearch("");
       toast.success("Finding added");
     },
-    [addDraftFindingCustom, setSelectedDetail, toast]
+    [addDraftFindingCustom, selectFindingAndScroll, toast]
   );
 
   const removeFinding = useCallback(
@@ -231,9 +267,6 @@ export function FindingsSection() {
     },
     [markDraftFindingDeleted]
   );
-
-  const selectedId =
-    selectedDetail?.section === "findings" ? selectedDetail.itemId : null;
 
   const incompleteCount = useMemo(() => {
     return visible.filter((d) => {
@@ -246,28 +279,50 @@ export function FindingsSection() {
   }, [visible, findingsSchema]);
 
   const openDrawer = () => {
+    activateSection("findings");
+    sectionCardRef.current?.expand();
     const trimmed = searchDebounced.trim();
     setDrawerInitialValue(trimmed || undefined);
     setDrawerOpen(true);
   };
 
   return (
+    <>
+    <div
+      ref={(el) => registerSectionRef("findings", el)}
+      id="findings-section"
+      className={cn(
+        "ccp-mid-section scroll-mt-2 rounded-2xl",
+        activeSectionKey === "findings" && "ccp-mid-section--active"
+      )}
+    >
     <ConsultationSectionCard
+      ref={sectionCardRef}
       title="Findings"
       icon={<Stethoscope className="text-muted-foreground" />}
       defaultOpen={false}
       incompleteCount={incompleteCount}
     >
       <div className="space-y-3">
+        <div className="consultation-section-search-row sticky top-0 z-[5] -mx-1 px-1 bg-card/95 dark:bg-card/95 backdrop-blur-sm pb-2 pt-0.5">
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative flex-1 min-w-[180px]">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               id={inputId}
               type="search"
+              {...{ [CONSULTATION_TAB_SECTION_DATA_ATTR]: "findings" }}
               placeholder={drawerConfig.searchPlaceholder}
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onFocus={() => {
+                activateSection("findings");
+                sectionCardRef.current?.expand();
+              }}
+              onChange={(e) => {
+                activateSection("findings", { scroll: false });
+                setSearch(e.target.value);
+              }}
+              onBlur={() => void flushConsultationAutosave({ reason: "blur" })}
               onKeyDown={(e) => {
                 if (e.key !== "Enter") return;
                 e.preventDefault();
@@ -277,7 +332,7 @@ export function FindingsSection() {
                   (d) => d.display_label.toLowerCase() === trimmed.toLowerCase()
                 );
                 if (existing) {
-                  setSelectedDetail({ section: "findings", itemId: existing.id });
+                  selectFindingAndScroll(existing.id);
                   setSearch("");
                   return;
                 }
@@ -286,6 +341,8 @@ export function FindingsSection() {
                   addMasterFromSchema(s.key, s.display_name);
                   return;
                 }
+                activateSection("findings");
+                sectionCardRef.current?.expand();
                 setDrawerInitialValue(trimmed);
                 setDrawerOpen(true);
                 setSearch("");
@@ -305,10 +362,11 @@ export function FindingsSection() {
             Add New
           </Button>
         </div>
+        </div>
 
         {visible.length > 0 && (
           <div className="flex flex-wrap gap-2">
-            {visible.map((item) => {
+            {orderedVisible.map((item) => {
               const schemaItem = findingsSchema?.items.find(
                 (s) => s.key === item.finding_code || s.display_name === item.display_label
               );
@@ -319,25 +377,22 @@ export function FindingsSection() {
                 <span
                   key={item.id}
                   className={cn(
-                    "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
+                    "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-all duration-200 ease-out",
                     selected
-                      ? "bg-blue-600 text-white shadow-sm dark:bg-blue-600"
-                      : "border border-border bg-muted/50 text-foreground hover:bg-muted"
+                      ? "bg-indigo-600 text-white shadow-sm dark:bg-indigo-600 animate-consultation-chip-pop font-medium"
+                      : "border border-border bg-muted/50 text-foreground hover:bg-muted hover:border-muted-foreground/40"
                   )}
                 >
                   <button
                     type="button"
-                    onClick={() =>
-                      setSelectedDetail(
-                        selected
-                          ? null
-                          : { section: "findings", itemId: item.id }
-                      )
-                    }
-                    className="focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded"
+                    onClick={() => selectFindingAndScroll(item.id)}
+                    className="focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded min-w-0 truncate text-left"
                   >
                     {item.display_label}
                   </button>
+                  {selected && (
+                    <ConsultationEditingBadge onDarkChip className="ml-1 shrink-0" />
+                  )}
                   {incomplete && (
                     <span
                       className={cn(
@@ -360,7 +415,7 @@ export function FindingsSection() {
                     className={cn(
                       "ml-0.5 rounded-full p-0.5 hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                       selected
-                        ? "hover:bg-blue-700 dark:hover:bg-blue-700"
+                        ? "hover:bg-indigo-700 dark:hover:bg-indigo-700"
                         : "hover:bg-muted"
                     )}
                     aria-label={`Remove ${item.display_label}`}
@@ -392,47 +447,48 @@ export function FindingsSection() {
           </div>
         )}
       </div>
-
-      <ConsultationSearchAddDrawer
-        open={drawerOpen}
-        onOpenChange={setDrawerOpen}
-        config={drawerConfig}
-        existingItems={existingItems}
-        onSelect={(picked) => {
-          if (picked.id.startsWith("local-")) {
-            addCustomByName(picked.label);
+    </ConsultationSectionCard>
+    </div>
+    <ConsultationSearchAddDrawer
+      open={drawerOpen}
+      onOpenChange={setDrawerOpen}
+      config={drawerConfig}
+      existingItems={existingItems}
+      onSelect={(picked) => {
+        if (picked.id.startsWith("local-")) {
+          addCustomByName(picked.label);
+          return;
+        }
+        const fromSchema = findingsSchema?.items.find(
+          (s) => s.key === picked.id || s.display_name === picked.label
+        );
+        if (fromSchema) {
+          addMasterFromSchema(fromSchema.key, fromSchema.display_name);
+        } else {
+          addCustomByName(picked.label);
+        }
+      }}
+      onAddNew={(partial) => ({
+        id: `local-${Date.now()}`,
+        label: partial.label.trim(),
+        isCustom: true,
+      })}
+      onDuplicate={() => {
+        const trimmed = (drawerInitialValue ?? "").trim();
+        if (trimmed) {
+          const existing = visible.find(
+            (d) => d.display_label.toLowerCase() === trimmed.toLowerCase()
+          );
+          if (existing) {
+            selectFindingAndScroll(existing.id);
             return;
           }
-          const fromSchema = findingsSchema?.items.find(
-            (s) => s.key === picked.id || s.display_name === picked.label
-          );
-          if (fromSchema) {
-            addMasterFromSchema(fromSchema.key, fromSchema.display_name);
-          } else {
-            addCustomByName(picked.label);
-          }
-        }}
-        onAddNew={(partial) => ({
-          id: `local-${Date.now()}`,
-          label: partial.label.trim(),
-          isCustom: true,
-        })}
-        onDuplicate={() => {
-          const trimmed = (drawerInitialValue ?? "").trim();
-          if (trimmed) {
-            const existing = visible.find(
-              (d) => d.display_label.toLowerCase() === trimmed.toLowerCase()
-            );
-            if (existing) {
-              setSelectedDetail({ section: "findings", itemId: existing.id });
-              return;
-            }
-          }
-          toast.error("Finding already added");
-        }}
-        onClosed={() => setDrawerInitialValue(undefined)}
-        initialValue={drawerInitialValue}
-      />
-    </ConsultationSectionCard>
+        }
+        toast.error("Finding already added");
+      }}
+      onClosed={() => setDrawerInitialValue(undefined)}
+      initialValue={drawerInitialValue}
+    />
+    </>
   );
 }

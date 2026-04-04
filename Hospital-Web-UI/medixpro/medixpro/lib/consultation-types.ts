@@ -116,6 +116,11 @@ export type MedicineDurationSpecial = "sos" | "till_required" | "continue" | "st
  */
 export interface MedicinePrescriptionDetail {
   drug_id?: string;
+  /** Custom entry only — aligns with API `is_custom` / future normalization. */
+  is_custom?: boolean;
+  /** Optional structured strength from quick-add form (custom medicines). */
+  custom_strength_value?: number;
+  custom_strength_unit?: string;
   strength_label?: string;
   generic_name?: string;
   composition?: string;

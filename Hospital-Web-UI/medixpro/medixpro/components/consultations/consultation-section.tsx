@@ -2,7 +2,12 @@
 
 import { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import { Plus, Search, AlertTriangle } from "lucide-react";
-import { ConsultationSectionCard } from "@/components/consultations/consultation-section-card";
+import {
+  ConsultationSectionCard,
+  type ConsultationSectionCardHandle,
+} from "@/components/consultations/consultation-section-card";
+import { useConsultationSectionScroll } from "@/components/consultations/consultation-section-scroll-context";
+import { ConsultationEditingBadge } from "@/components/consultations/consultation-editing-badge";
 import { ConsultationSearchAddDrawer } from "@/components/consultations/consultation-search-add-drawer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -73,6 +78,11 @@ function isItemIncomplete(
 }
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import {
+  CONSULTATION_TAB_SECTION_DATA_ATTR,
+  reorderItemsByActiveId,
+} from "@/lib/consultation-chip-ux";
+import { flushConsultationAutosave } from "@/lib/consultation-autosave";
 
 function useDebouncedValue<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value);
@@ -120,14 +130,37 @@ export function ConsultationSection({
   const inlineSearchDebounced = useDebouncedValue(inlineSearch, 300);
   const sectionHeaderRef = useRef<HTMLButtonElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const sectionCardRef = useRef<ConsultationSectionCardHandle>(null);
+  const { registerSectionRef, registerTabSectionExpander, activateSection, activeSectionKey } =
+    useConsultationSectionScroll();
+
+  useEffect(() => {
+    if (type !== "medicines") return;
+    return registerTabSectionExpander("medicines", () => sectionCardRef.current?.expand());
+  }, [type, registerTabSectionExpander]);
 
   useEffect(() => {
     if (type !== "medicines" || medicinesSearchFocusNonce === 0) return;
     searchInputRef.current?.focus();
-  }, [type, medicinesSearchFocusNonce]);
+    activateSection("medicines");
+  }, [type, medicinesSearchFocusNonce, activateSection]);
 
   const isSelected = selectedDetail?.section === type;
-  const selectedId = isSelected ? selectedDetail.itemId : null;
+  const selectedId = isSelected ? selectedDetail?.itemId ?? null : null;
+
+  const selectItemAndScroll = useCallback(
+    (itemId: string) => {
+      setSelectedDetail({ section: type, itemId });
+      sectionCardRef.current?.expand();
+      activateSection(type);
+    },
+    [type, setSelectedDetail, activateSection]
+  );
+
+  const orderedItems = useMemo(
+    () => reorderItemsByActiveId(items, selectedId ?? null),
+    [items, selectedId]
+  );
 
   const allOptions = useMemo(
     () => [
@@ -164,7 +197,7 @@ export function ConsultationSection({
           (i) => i.label.toLowerCase() === item.label.toLowerCase()
         );
         if (existing) {
-          setSelectedDetail({ section: type, itemId: existing.id });
+          selectItemAndScroll(existing.id);
         }
         if (type !== "medicines") {
           toast({ title: "Item already exists", variant: "destructive" });
@@ -174,16 +207,24 @@ export function ConsultationSection({
       }
       const toAdd = type === "medicines" ? withDefaultMedicineDetail(item) : item;
       addSectionItem(type, toAdd);
-      setSelectedDetail({ section: type, itemId: toAdd.id });
+      selectItemAndScroll(toAdd.id);
       setDrawerOpen(false);
     },
-    [type, items, addSectionItem, setSelectedDetail, toast]
+    [type, items, addSectionItem, selectItemAndScroll, toast]
   );
 
   const handleAddNewFromDrawer = useCallback(
     (item: Omit<ConsultationSectionItem, "id">): ConsultationSectionItem => {
       const id = generateId(type.slice(0, 3));
-      const newItem: ConsultationSectionItem = { ...item, id };
+      const med = item.detail?.medicine;
+      const detail =
+        type === "medicines" && med
+          ? {
+              ...item.detail,
+              medicine: { ...med, drug_id: id },
+            }
+          : item.detail;
+      const newItem: ConsultationSectionItem = { ...item, id, detail };
       const toAdd = type === "medicines" ? withDefaultMedicineDetail(newItem) : newItem;
       addSectionItem(type, toAdd);
       return toAdd;
@@ -201,17 +242,17 @@ export function ConsultationSection({
           (i) => i.label.toLowerCase() === item.label.toLowerCase()
         );
         if (existing) {
-          setSelectedDetail({ section: type, itemId: existing.id });
+          selectItemAndScroll(existing.id);
         }
         setDrawerOpen(false);
         return;
       }
       const toAdd = type === "medicines" ? withDefaultMedicineDetail(item) : item;
       addSectionItem(type, toAdd);
-      setSelectedDetail({ section: type, itemId: toAdd.id });
+      selectItemAndScroll(toAdd.id);
       setDrawerOpen(false);
     },
-    [type, items, addSectionItem, setSelectedDetail]
+    [type, items, addSectionItem, selectItemAndScroll]
   );
 
   const handleInlineSelect = (item: ConsultationSectionItem) => {
@@ -219,13 +260,13 @@ export function ConsultationSection({
       (i) => i.id === item.id || i.label.toLowerCase() === item.label.toLowerCase()
     );
     if (existingByIdOrLabel) {
-      setSelectedDetail({ section: type, itemId: existingByIdOrLabel.id });
+      selectItemAndScroll(existingByIdOrLabel.id);
       setInlineSearch("");
       return;
     }
     const toAdd = type === "medicines" ? withDefaultMedicineDetail(item) : item;
     addSectionItem(type, toAdd);
-    setSelectedDetail({ section: type, itemId: toAdd.id });
+    selectItemAndScroll(toAdd.id);
     setInlineSearch("");
   };
 
@@ -240,7 +281,7 @@ export function ConsultationSection({
       (i) => i.label.toLowerCase() === trimmed.toLowerCase()
     );
     if (existing) {
-      setSelectedDetail({ section: type, itemId: existing.id });
+      selectItemAndScroll(existing.id);
       setInlineSearch("");
       return;
     }
@@ -257,12 +298,16 @@ export function ConsultationSection({
     }
 
     // If not exists → open Add drawer with value pre-filled so doctor can add details
+    activateSection(type);
+    sectionCardRef.current?.expand();
     setDrawerInitialValue(trimmed);
     setDrawerOpen(true);
     setInlineSearch("");
   };
 
   const openDrawer = () => {
+    activateSection(type);
+    sectionCardRef.current?.expand();
     const typed = inlineSearchDebounced.trim();
     if (typed && !items.some((i) => i.label.toLowerCase() === typed.toLowerCase())) {
       setDrawerInitialValue(typed);
@@ -279,14 +324,24 @@ export function ConsultationSection({
 
   return (
     <>
+      <div
+        ref={(el) => registerSectionRef(type, el)}
+        id={`${type}-section`}
+        className={cn(
+          "ccp-mid-section scroll-mt-2 rounded-2xl",
+          activeSectionKey === type && "ccp-mid-section--active"
+        )}
+      >
       <ConsultationSectionCard
+        ref={sectionCardRef}
         title={title}
         icon={icon}
         defaultOpen={defaultOpen}
         incompleteCount={incompleteCount}
       >
         <div className="space-y-3">
-          {/* Row 1: Optional left chip + Search bar (same design as Symptoms in reference) + Add New */}
+          {/* Row 1: Optional left chip + Search bar + Add New — sticky within section while scrolling */}
+          <div className="consultation-section-search-row sticky top-0 z-[5] -mx-1 px-1 bg-card/95 dark:bg-card/95 backdrop-blur-sm pb-2 pt-0.5">
           <div className="flex flex-wrap items-center gap-2">
             {config.searchLeftChip && (
               <span className="inline-flex rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
@@ -298,9 +353,22 @@ export function ConsultationSection({
               <Input
                 ref={searchInputRef}
                 type="search"
+                {...(type === "medicines"
+                  ? { [CONSULTATION_TAB_SECTION_DATA_ATTR]: "medicines" }
+                  : {})}
                 placeholder={config.searchPlaceholder}
                 value={inlineSearch}
-                onChange={(e) => setInlineSearch(e.target.value)}
+                onFocus={() => {
+                  activateSection(type);
+                  sectionCardRef.current?.expand();
+                }}
+                onChange={(e) => {
+                  activateSection(type, { scroll: false });
+                  setInlineSearch(e.target.value);
+                }}
+                onBlur={() => {
+                  if (type === "medicines") void flushConsultationAutosave({ reason: "blur" });
+                }}
                 onKeyDown={handleInlineKeyDown}
                 className="h-10 pl-9 rounded-lg bg-muted/40 border-border/60 text-foreground placeholder:text-muted-foreground focus-visible:bg-background focus-visible:ring-2"
                 aria-label={`Search ${title}`}
@@ -321,20 +389,21 @@ export function ConsultationSection({
               Add New
             </Button>
           </div>
+          </div>
 
-          {/* Selected items: blue chips with × (click to open detail, × to remove) */}
+          {/* Selected chips: active first, indigo highlight, × to remove */}
           {items.length > 0 && (
             <div className="flex flex-wrap gap-2">
-              {items.map((item, index) => (
+              {orderedItems.map((item) => (
                 <Chip
-                  key={`${item.id}-${index}`}
+                  key={item.id}
                   label={item.label}
                   selected={selectedId === item.id}
                   isIncomplete={isItemIncomplete(item, config)}
                   tags={
                     type === "medicines"
                       ? [
-                          ...(item.isCustom ? [{ key: "custom", label: "Custom drug" }] : []),
+                          ...(item.isCustom ? [{ key: "custom", label: "Custom" }] : []),
                           ...(item.detail?.medicine?.is_chronic
                             ? [{ key: "chronic", label: "Chronic" }]
                             : []),
@@ -346,7 +415,7 @@ export function ConsultationSection({
                       ? getMedicineValidationMessages(item).map((m) => `⚠ ${m}`)
                       : undefined
                   }
-                  onSelect={() => setSelectedDetail({ section: type, itemId: item.id })}
+                  onSelect={() => selectItemAndScroll(item.id)}
                   onRemove={() => removeSectionItem(type, item.id)}
                 />
               ))}
@@ -381,7 +450,27 @@ export function ConsultationSection({
                 })}
             </div>
           ) : canAddInline ? (
-            <p className="text-sm text-muted-foreground">No results found. Press Enter or use Add New to add it.</p>
+            type === "medicines" ? (
+              <button
+                type="button"
+                onClick={() => {
+                  activateSection(type);
+                  sectionCardRef.current?.expand();
+                  const t = inlineSearch.trim() || inlineSearchDebounced.trim();
+                  setDrawerInitialValue(t);
+                  setDrawerOpen(true);
+                  setInlineSearch("");
+                }}
+                className="inline-flex w-full max-w-md items-center justify-center gap-2 rounded-lg border border-border/80 bg-muted/30 px-3 py-2.5 text-sm font-medium text-foreground hover:bg-muted/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
+              >
+                <Plus className="h-4 w-4 shrink-0" />
+                Create &quot;{inlineSearch.trim() || inlineSearchDebounced.trim()}&quot;
+              </button>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                No results found. Press Enter or use Add New to add it.
+              </p>
+            )
           ) : !inlineSearchDebounced && allOptions.length > 0 ? (
             <div className="flex flex-wrap gap-2">
               {allOptions
@@ -404,6 +493,7 @@ export function ConsultationSection({
           ) : null}
         </div>
       </ConsultationSectionCard>
+      </div>
 
       <ConsultationSearchAddDrawer
         open={drawerOpen}
@@ -454,10 +544,10 @@ function Chip({
     <span className="inline-flex max-w-full flex-col gap-1">
       <span
         className={cn(
-          "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
+          "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-all duration-200 ease-out",
           selected
-            ? "bg-blue-600 text-white shadow-sm dark:bg-blue-600"
-            : "border border-border bg-muted/50 text-foreground hover:bg-muted"
+            ? "bg-indigo-600 text-white shadow-sm dark:bg-indigo-600 animate-consultation-chip-pop font-medium"
+            : "border border-border bg-muted/50 text-foreground hover:bg-muted hover:border-muted-foreground/40"
         )}
         title={titleHint}
       >
@@ -468,6 +558,9 @@ function Chip({
         >
           {label}
         </button>
+        {selected && (
+          <ConsultationEditingBadge onDarkChip className="ml-1 shrink-0" />
+        )}
         {isIncomplete && !(validationLines && validationLines.length > 0) && (
           <span
             className={cn(
@@ -487,7 +580,7 @@ function Chip({
           }}
           className={cn(
             "ml-0.5 shrink-0 rounded-full p-0.5 hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            selected ? "hover:bg-blue-700 dark:hover:bg-blue-700" : "hover:bg-muted"
+            selected ? "hover:bg-indigo-700 dark:hover:bg-indigo-700" : "hover:bg-muted"
           )}
           aria-label={`Remove ${label}`}
         >
@@ -502,7 +595,7 @@ function Chip({
               className={cn(
                 "rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
                 t.key === "custom"
-                  ? "border border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-200"
+                  ? "border-0 bg-[#FEF3C7] font-medium normal-case tracking-normal text-[#92400E] dark:bg-[#FEF3C7]/90 dark:text-[#92400E]"
                   : "border border-violet-500/35 bg-violet-500/10 text-violet-800 dark:text-violet-200"
               )}
             >

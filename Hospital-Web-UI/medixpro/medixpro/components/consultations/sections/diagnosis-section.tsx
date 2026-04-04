@@ -1,8 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { AlertTriangle, ClipboardList, Plus, Search } from "lucide-react";
-import { ConsultationSectionCard } from "@/components/consultations/consultation-section-card";
+import {
+  ConsultationSectionCard,
+  type ConsultationSectionCardHandle,
+} from "@/components/consultations/consultation-section-card";
+import { useConsultationSectionScroll } from "@/components/consultations/consultation-section-scroll-context";
+import { ConsultationEditingBadge } from "@/components/consultations/consultation-editing-badge";
 import { ConsultationSearchAddDrawer } from "@/components/consultations/consultation-search-add-drawer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +17,11 @@ import { useConsultationStore } from "@/store/consultationStore";
 import { useToastNotification } from "@/hooks/use-toast-notification";
 import { backendAxiosClient } from "@/lib/axiosClient";
 import { cn } from "@/lib/utils";
+import {
+  CONSULTATION_TAB_SECTION_DATA_ATTR,
+  reorderItemsByActiveId,
+} from "@/lib/consultation-chip-ux";
+import { flushConsultationAutosave } from "@/lib/consultation-autosave";
 
 function isDiagnosisIncomplete(item: ConsultationSectionItem): boolean {
   const d = item.detail ?? {};
@@ -56,6 +66,13 @@ export function DiagnosisSection() {
   const [drawerInitialValue, setDrawerInitialValue] = useState<string | undefined>(
     undefined
   );
+  const sectionCardRef = useRef<ConsultationSectionCardHandle>(null);
+  const { registerSectionRef, registerTabSectionExpander, activateSection, activeSectionKey } =
+    useConsultationSectionScroll();
+
+  useEffect(() => {
+    return registerTabSectionExpander("diagnosis", () => sectionCardRef.current?.expand());
+  }, [registerTabSectionExpander]);
 
   const diagnosisItems = sectionItems["diagnosis"] ?? [];
 
@@ -119,7 +136,31 @@ export function DiagnosisSection() {
   }, [diagnosisSchema, diagnosisItems, search]);
 
   const selectedId =
-    selectedDetail?.section === "diagnosis" ? selectedDetail.itemId : null;
+    selectedDetail?.section === "diagnosis"
+      ? selectedDetail.itemId ?? null
+      : null;
+
+  const orderedDiagnosis = useMemo(
+    () => reorderItemsByActiveId(diagnosisItems, selectedId ?? null),
+    [diagnosisItems, selectedId]
+  );
+
+  const selectDiagnosisAndScroll = useCallback(
+    (itemId: string) => {
+      setSelectedDetail({ section: "diagnosis", itemId });
+      sectionCardRef.current?.expand();
+      activateSection("diagnosis");
+    },
+    [setSelectedDetail, activateSection]
+  );
+
+  const openDrawer = useCallback(() => {
+    activateSection("diagnosis");
+    sectionCardRef.current?.expand();
+    setDrawerInitialValue(search.trim() || undefined);
+    setDrawerOpen(true);
+  }, [activateSection, search]);
+
   const incompleteCount = useMemo(
     () => diagnosisItems.filter((item) => isDiagnosisIncomplete(item)).length,
     [diagnosisItems]
@@ -142,13 +183,13 @@ export function DiagnosisSection() {
         diagnosisIcdCode: icdCode,
       };
       replaceSectionItems("diagnosis", [
-        ...(useConsultationStore.getState().sectionItems["diagnosis"] ?? []),
         item,
+        ...(useConsultationStore.getState().sectionItems["diagnosis"] ?? []),
       ]);
-      setSelectedDetail({ section: "diagnosis", itemId: item.id });
+      selectDiagnosisAndScroll(item.id);
       setSearch("");
     },
-    [replaceSectionItems, setSelectedDetail, toast]
+    [replaceSectionItems, selectDiagnosisAndScroll, toast]
   );
 
   const addCustomDiagnosis = useCallback(
@@ -159,7 +200,7 @@ export function DiagnosisSection() {
         (d) => d.isCustom && d.label.trim().toLowerCase() === trimmed.toLowerCase()
       );
       if (existing) {
-        setSelectedDetail({ section: "diagnosis", itemId: existing.id });
+        selectDiagnosisAndScroll(existing.id);
         return;
       }
       if (!encounterId) {
@@ -179,32 +220,52 @@ export function DiagnosisSection() {
         customDiagnosisId: res.data?.id,
       };
       replaceSectionItems("diagnosis", [
-        ...(useConsultationStore.getState().sectionItems["diagnosis"] ?? []),
         item,
+        ...(useConsultationStore.getState().sectionItems["diagnosis"] ?? []),
       ]);
-      setSelectedDetail({ section: "diagnosis", itemId: item.id });
+      selectDiagnosisAndScroll(item.id);
       setSearch("");
     },
-    [encounterId, replaceSectionItems, setSelectedDetail, toast]
+    [encounterId, replaceSectionItems, selectDiagnosisAndScroll, toast]
   );
 
   return (
+    <>
+    <div
+      ref={(el) => registerSectionRef("diagnosis", el)}
+      id="diagnosis-section"
+      className={cn(
+        "ccp-mid-section scroll-mt-2 rounded-2xl",
+        activeSectionKey === "diagnosis" && "ccp-mid-section--active"
+      )}
+    >
     <ConsultationSectionCard
+      ref={sectionCardRef}
       title="Diagnosis"
       icon={<ClipboardList className="text-muted-foreground" />}
       defaultOpen={false}
       incompleteCount={incompleteCount}
     >
       <div className="space-y-3">
+        <div className="consultation-section-search-row sticky top-0 z-[5] -mx-1 px-1 bg-card/95 dark:bg-card/95 backdrop-blur-sm pb-2 pt-0.5">
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative flex-1 min-w-[180px]">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               id={inputId}
               type="search"
+              {...{ [CONSULTATION_TAB_SECTION_DATA_ATTR]: "diagnosis" }}
               placeholder="Search diagnosis"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onFocus={() => {
+                activateSection("diagnosis");
+                sectionCardRef.current?.expand();
+              }}
+              onChange={(e) => {
+                activateSection("diagnosis", { scroll: false });
+                setSearch(e.target.value);
+              }}
+              onBlur={() => void flushConsultationAutosave({ reason: "blur" })}
               onKeyDown={async (e) => {
                 if (e.key !== "Enter") return;
                 e.preventDefault();
@@ -214,7 +275,7 @@ export function DiagnosisSection() {
                   (d) => d.label.toLowerCase() === trimmed.toLowerCase()
                 );
                 if (existing) {
-                  setSelectedDetail({ section: "diagnosis", itemId: existing.id });
+                  selectDiagnosisAndScroll(existing.id);
                   setSearch("");
                   return;
                 }
@@ -238,43 +299,39 @@ export function DiagnosisSection() {
             variant="outline"
             size="sm"
             className="h-10 shrink-0 gap-1.5 rounded-lg"
-            onClick={() => {
-              setDrawerInitialValue(search.trim() || undefined);
-              setDrawerOpen(true);
-            }}
+            onClick={openDrawer}
           >
             <Plus className="h-4 w-4" />
             Add New
           </Button>
         </div>
+        </div>
 
         {diagnosisItems.length > 0 && (
           <div className="flex flex-wrap gap-2">
-            {diagnosisItems.map((item) => {
+            {orderedDiagnosis.map((item) => {
               const selected = selectedId === item.id;
               const incomplete = isDiagnosisIncomplete(item);
               return (
                 <span
                   key={item.id}
                   className={cn(
-                    "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
+                    "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-all duration-200 ease-out",
                     selected
-                      ? "bg-blue-600 text-white shadow-sm dark:bg-blue-600"
-                      : "border border-border bg-muted/50 text-foreground hover:bg-muted"
+                      ? "bg-indigo-600 text-white shadow-sm dark:bg-indigo-600 animate-consultation-chip-pop font-medium"
+                      : "border border-border bg-muted/50 text-foreground hover:bg-muted hover:border-muted-foreground/40"
                   )}
                 >
                 <button
                   type="button"
-                  onClick={() =>
-                    setSelectedDetail(
-                      selectedId === item.id
-                        ? null
-                        : { section: "diagnosis", itemId: item.id }
-                    )
-                  }
+                  onClick={() => selectDiagnosisAndScroll(item.id)}
+                  className="min-w-0 truncate text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded"
                 >
                   {item.label}
                 </button>
+                {selected && (
+                  <ConsultationEditingBadge onDarkChip className="ml-1 shrink-0" />
+                )}
                 {incomplete && (
                   <span
                     className={cn(
@@ -300,7 +357,7 @@ export function DiagnosisSection() {
                   className={cn(
                     "ml-0.5 rounded-full p-0.5 hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                     selected
-                      ? "hover:bg-blue-700 dark:hover:bg-blue-700"
+                      ? "hover:bg-indigo-700 dark:hover:bg-indigo-700"
                       : "hover:bg-muted"
                   )}
                 >
@@ -333,37 +390,38 @@ export function DiagnosisSection() {
           </div>
         )}
       </div>
-      <ConsultationSearchAddDrawer
-        open={drawerOpen}
-        onOpenChange={setDrawerOpen}
-        config={drawerConfig}
-        existingItems={diagnosisItems}
-        onSelect={async (picked) => {
-          const fromSchema = diagnosisSchema?.items.find(
-            (s) => s.key === picked.id || s.display_name === picked.label
-          );
-          try {
-            if (fromSchema) {
-              addMasterFromSchema(
-                fromSchema.key,
-                fromSchema.display_name,
-                fromSchema.icd10_code
-              );
-            }
-            else await addCustomDiagnosis(picked.label);
-          } catch {
-            toast.error("Unable to add diagnosis.");
-          }
-        }}
-        onAddNew={(partial) => ({
-          id: `local-${Date.now()}`,
-          label: partial.label.trim(),
-          isCustom: true,
-        })}
-        onDuplicate={() => toast.error("Diagnosis already added")}
-        onClosed={() => setDrawerInitialValue(undefined)}
-        initialValue={drawerInitialValue}
-      />
     </ConsultationSectionCard>
+    </div>
+    <ConsultationSearchAddDrawer
+      open={drawerOpen}
+      onOpenChange={setDrawerOpen}
+      config={drawerConfig}
+      existingItems={diagnosisItems}
+      onSelect={async (picked) => {
+        const fromSchema = diagnosisSchema?.items.find(
+          (s) => s.key === picked.id || s.display_name === picked.label
+        );
+        try {
+          if (fromSchema) {
+            addMasterFromSchema(
+              fromSchema.key,
+              fromSchema.display_name,
+              fromSchema.icd10_code
+            );
+          } else await addCustomDiagnosis(picked.label);
+        } catch {
+          toast.error("Unable to add diagnosis.");
+        }
+      }}
+      onAddNew={(partial) => ({
+        id: `local-${Date.now()}`,
+        label: partial.label.trim(),
+        isCustom: true,
+      })}
+      onDuplicate={() => toast.error("Diagnosis already added")}
+      onClosed={() => setDrawerInitialValue(undefined)}
+      initialValue={drawerInitialValue}
+    />
+    </>
   );
 }

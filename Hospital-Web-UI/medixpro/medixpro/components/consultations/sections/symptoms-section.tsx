@@ -1,8 +1,13 @@
 "use client";
 
-import { useState, useId, useEffect, useMemo } from "react";
+import { useState, useId, useEffect, useMemo, useRef } from "react";
 import { Thermometer, Plus, AlertTriangle, Search } from "lucide-react";
-import { ConsultationSectionCard } from "@/components/consultations/consultation-section-card";
+import {
+  ConsultationSectionCard,
+  type ConsultationSectionCardHandle,
+} from "@/components/consultations/consultation-section-card";
+import { useConsultationSectionScroll } from "@/components/consultations/consultation-section-scroll-context";
+import { ConsultationEditingBadge } from "@/components/consultations/consultation-editing-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ConsultationSearchAddDrawer } from "@/components/consultations/consultation-search-add-drawer";
@@ -10,6 +15,11 @@ import { SYMPTOM_ATTRIBUTES } from "@/data/consultation-section-data";
 import { useConsultationStore } from "@/store/consultationStore";
 import type { SymptomsSectionSchema } from "@/lib/consultation-schema-types";
 import { cn } from "@/lib/utils";
+import {
+  CONSULTATION_TAB_SECTION_DATA_ATTR,
+  reorderItemsByActiveId,
+} from "@/lib/consultation-chip-ux";
+import { flushConsultationAutosave } from "@/lib/consultation-autosave";
 import type {
   SymptomDetail,
   ConsultationSectionConfig,
@@ -36,6 +46,13 @@ export function SymptomsSection() {
   const [drawerInitialValue, setDrawerInitialValue] = useState<string | undefined>(
     undefined
   );
+  const sectionCardRef = useRef<ConsultationSectionCardHandle>(null);
+  const { registerSectionRef, registerTabSectionExpander, activateSection, activeSectionKey } =
+    useConsultationSectionScroll();
+
+  useEffect(() => {
+    return registerTabSectionExpander("symptoms", () => sectionCardRef.current?.expand());
+  }, [registerTabSectionExpander]);
 
   // Load backend-driven schema for symptoms (Phase 1: physician only).
   useEffect(() => {
@@ -66,6 +83,12 @@ export function SymptomsSection() {
     return () => controller.abort();
   }, [symptomsSchema, setSymptomsSchema]);
 
+  const selectSymptomAndScroll = (id: string) => {
+    setSelectedSymptomId(id);
+    sectionCardRef.current?.expand();
+    activateSection("symptoms");
+  };
+
   const add = (name: string) => {
     const trimmed = name.trim();
     if (!trimmed) return;
@@ -75,15 +98,14 @@ export function SymptomsSection() {
       (s) => s.name.toLowerCase() === trimmed.toLowerCase()
     );
     if (existing) {
-      setSelectedSymptomId(existing.id);
+      selectSymptomAndScroll(existing.id);
       setSearch("");
       return;
     }
 
     const id = symptomId();
     addSymptom({ id, name: trimmed });
-    // Auto-select newly added symptom, similar to other sections opening detail panel
-    setSelectedSymptomId(id);
+    selectSymptomAndScroll(id);
     setSearch("");
   };
 
@@ -95,6 +117,11 @@ export function SymptomsSection() {
   const incompleteCount = useMemo(
     () => symptoms.filter((s) => isSymptomIncomplete(s.detail)).length,
     [symptoms]
+  );
+
+  const orderedSymptoms = useMemo(
+    () => reorderItemsByActiveId(symptoms, selectedSymptomId),
+    [symptoms, selectedSymptomId]
   );
 
   const filteredSuggestions = useMemo(() => {
@@ -142,6 +169,8 @@ export function SymptomsSection() {
   );
 
   const openDrawer = () => {
+    activateSection("symptoms");
+    sectionCardRef.current?.expand();
     const trimmed = search.trim();
     setDrawerInitialValue(trimmed || undefined);
     setDrawerOpen(true);
@@ -160,23 +189,42 @@ export function SymptomsSection() {
   };
 
   return (
+    <>
+    <div
+      ref={(el) => registerSectionRef("symptoms", el)}
+      id="symptoms-section"
+      className={cn(
+        "ccp-mid-section scroll-mt-2 rounded-2xl",
+        activeSectionKey === "symptoms" && "ccp-mid-section--active"
+      )}
+    >
     <ConsultationSectionCard
+      ref={sectionCardRef}
       title="Symptoms"
       icon={<Thermometer className="text-muted-foreground" />}
       defaultOpen
       incompleteCount={incompleteCount}
     >
       <div className="space-y-2">
-        {/* Row 1: Search + Add New (match other sections) */}
+        <div className="consultation-section-search-row sticky top-0 z-[5] -mx-1 px-1 bg-card/95 dark:bg-card/95 backdrop-blur-sm pb-2 pt-0.5">
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative flex-1 min-w-[180px]">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               id={inputId}
               type="search"
+              {...{ [CONSULTATION_TAB_SECTION_DATA_ATTR]: "symptoms" }}
               placeholder="Search symptoms"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onFocus={() => {
+                activateSection("symptoms");
+                sectionCardRef.current?.expand();
+              }}
+              onChange={(e) => {
+                activateSection("symptoms", { scroll: false });
+                setSearch(e.target.value);
+              }}
+              onBlur={() => void flushConsultationAutosave({ reason: "blur" })}
               onKeyDown={(e) => {
                 if (e.key !== "Enter") return;
                 e.preventDefault();
@@ -188,7 +236,7 @@ export function SymptomsSection() {
                   (s) => s.name.toLowerCase() === trimmed.toLowerCase()
                 );
                 if (existing) {
-                  setSelectedSymptomId(existing.id);
+                  selectSymptomAndScroll(existing.id);
                   setSearch("");
                   return;
                 }
@@ -200,6 +248,8 @@ export function SymptomsSection() {
                 }
 
                 // Otherwise open the Add Symptom drawer prefilled with this value
+                activateSection("symptoms");
+                sectionCardRef.current?.expand();
                 setDrawerInitialValue(trimmed);
                 setDrawerOpen(true);
               }}
@@ -218,22 +268,21 @@ export function SymptomsSection() {
             Add New
           </Button>
         </div>
+        </div>
 
-        {/* Selected symptoms */}
-        {/* Selected symptoms: same chip style as other sections, with incomplete icon */}
         {symptoms.length > 0 && (
           <div className="flex flex-wrap gap-2">
-            {symptoms.map((s) => {
+            {orderedSymptoms.map((s) => {
               const incomplete = isSymptomIncomplete(s.detail);
               const selected = selectedSymptomId === s.id;
               return (
                 <span
                   key={s.id}
                   className={cn(
-                    "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
+                    "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-all duration-200 ease-out",
                     selected
-                      ? "bg-blue-600 text-white shadow-sm dark:bg-blue-600"
-                      : "border border-border bg-muted/50 text-foreground hover:bg-muted"
+                      ? "bg-indigo-600 text-white shadow-sm dark:bg-indigo-600 animate-consultation-chip-pop font-medium"
+                      : "border border-border bg-muted/50 text-foreground hover:bg-muted hover:border-muted-foreground/40"
                   )}
                   title={
                     incomplete ? "No details filled for this symptom yet" : undefined
@@ -241,13 +290,14 @@ export function SymptomsSection() {
                 >
                   <button
                     type="button"
-                    onClick={() =>
-                      setSelectedSymptomId(selected ? null : s.id)
-                    }
-                    className="focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded"
+                    onClick={() => selectSymptomAndScroll(s.id)}
+                    className="focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded min-w-0 truncate text-left"
                   >
                     {s.name}
                   </button>
+                  {selected && (
+                    <ConsultationEditingBadge onDarkChip className="ml-1 shrink-0" />
+                  )}
                   {incomplete && (
                     <span
                       className={cn(
@@ -270,7 +320,7 @@ export function SymptomsSection() {
                     className={cn(
                       "ml-0.5 rounded-full p-0.5 hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                       selected
-                        ? "hover:bg-blue-700 dark:hover:bg-blue-700"
+                        ? "hover:bg-indigo-700 dark:hover:bg-indigo-700"
                         : "hover:bg-muted"
                     )}
                     aria-label={`Remove ${s.name}`}
@@ -304,27 +354,26 @@ export function SymptomsSection() {
           </div>
         )}
       </div>
-      <ConsultationSearchAddDrawer
-        open={drawerOpen}
-        onOpenChange={setDrawerOpen}
-        config={drawerConfig}
-        existingItems={existingItems}
-        onSelect={handleDrawerSelect}
-        onAddNew={handleDrawerAddNew}
-        onDuplicate={() => {
-          // If duplicate added via drawer, just select the existing symptom.
-          const trimmed = (drawerInitialValue ?? "").trim();
-          const existing = trimmed
-            ? symptoms.find(
-                (s) => s.name.toLowerCase() === trimmed.toLowerCase()
-              )
-            : undefined;
-          if (existing) {
-            setSelectedSymptomId(existing.id);
-          }
-        }}
-        initialValue={drawerInitialValue}
-      />
     </ConsultationSectionCard>
+    </div>
+    <ConsultationSearchAddDrawer
+      open={drawerOpen}
+      onOpenChange={setDrawerOpen}
+      config={drawerConfig}
+      existingItems={existingItems}
+      onSelect={handleDrawerSelect}
+      onAddNew={handleDrawerAddNew}
+      onDuplicate={() => {
+        const trimmed = (drawerInitialValue ?? "").trim();
+        const existing = trimmed
+          ? symptoms.find((s) => s.name.toLowerCase() === trimmed.toLowerCase())
+          : undefined;
+        if (existing) {
+          selectSymptomAndScroll(existing.id);
+        }
+      }}
+      initialValue={drawerInitialValue}
+    />
+  </>
   );
 }

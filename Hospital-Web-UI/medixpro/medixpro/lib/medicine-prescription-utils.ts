@@ -31,6 +31,8 @@ const DOSE_PRESETS_BY_UNIT: Record<string, number[]> = {
   suppository: [1, 2],
   inhaler: [1, 2, 4],
   nebulizer: [1, 2],
+  powder: [0.5, 1, 1.5, 2],
+  other: [1, 2],
 };
 
 export function getDosePresetChips(doseUnitId: string): number[] {
@@ -59,6 +61,8 @@ export const DOSE_UNIT_OPTIONS: readonly { id: string; label: string }[] = [
   { id: "suppository", label: "Suppository" },
   { id: "inhaler", label: "Inhaler (puff)" },
   { id: "nebulizer", label: "Nebulizer" },
+  { id: "powder", label: "Powder" },
+  { id: "other", label: "Other" },
 ] as const;
 
 export function formatDoseDisplay(value: number | undefined): string {
@@ -489,6 +493,225 @@ function strengthFromLabel(label: string): string | undefined {
   return m ? m[1].trim() : undefined;
 }
 
+/**
+ * Custom-medicine quick-add: same dose forms as the prescription panel (`DOSE_UNIT_OPTIONS`).
+ */
+export const CUSTOM_MEDICINE_QUICK_ADD_DOSE_TYPES: readonly { id: string; label: string }[] =
+  DOSE_UNIT_OPTIONS;
+
+/** Strength row units (custom medicine quick-add; doctor can override any default). */
+export const CUSTOM_MEDICINE_STRENGTH_UNITS: readonly { id: string; label: string }[] = [
+  { id: "mg", label: "mg" },
+  { id: "mcg", label: "mcg" },
+  { id: "g", label: "g" },
+  { id: "ml", label: "ml" },
+  { id: "iu", label: "IU" },
+  { id: "puff", label: "puff" },
+  { id: "%", label: "%" },
+] as const;
+
+/** Default strength unit when dose type changes (volume vs mass vs IU vs actuations). */
+const QUICK_ADD_DEFAULT_STRENGTH_UNIT_BY_DOSE_TYPE: Record<string, string> = {
+  tablet: "mg",
+  capsule: "mg",
+  sachet: "mg",
+  syrup: "ml",
+  ml: "ml",
+  drops: "ml",
+  injection: "ml",
+  ampoule: "ml",
+  vial: "ml",
+  insulin: "iu",
+  units: "iu",
+  cream: "g",
+  ointment: "g",
+  gel: "g",
+  spray: "ml",
+  patch: "mg",
+  suppository: "mg",
+  inhaler: "puff",
+  nebulizer: "ml",
+  powder: "g",
+  other: "mg",
+};
+
+const QUICK_ADD_STRENGTH_PLACEHOLDER_BY_DOSE_TYPE: Record<string, string> = {
+  tablet: "e.g. 500 mg",
+  capsule: "e.g. 250 mg",
+  sachet: "e.g. 5 g",
+  syrup: "e.g. 120 ml",
+  ml: "e.g. 10 ml",
+  drops: "e.g. 5 ml",
+  injection: "e.g. 2 ml",
+  ampoule: "e.g. 2 ml",
+  vial: "e.g. 10 ml",
+  insulin: "e.g. 10 IU",
+  units: "e.g. 20 IU",
+  cream: "e.g. 15 g",
+  ointment: "e.g. 20 g",
+  gel: "e.g. 25 g",
+  spray: "e.g. 50 ml",
+  patch: "e.g. 25 mg",
+  suppository: "e.g. 500 mg",
+  inhaler: "e.g. 2 puffs",
+  nebulizer: "e.g. 3 ml",
+  powder: "e.g. 1 g",
+  other: "e.g. 500 mg",
+};
+
+export function defaultStrengthUnitForDoseType(doseTypeId: string): string {
+  const u = doseTypeId?.trim().toLowerCase() ?? "";
+  return QUICK_ADD_DEFAULT_STRENGTH_UNIT_BY_DOSE_TYPE[u] ?? "mg";
+}
+
+export function customMedicineStrengthPlaceholder(doseTypeId: string): string {
+  const u = doseTypeId?.trim().toLowerCase() ?? "";
+  return QUICK_ADD_STRENGTH_PLACEHOLDER_BY_DOSE_TYPE[u] ?? "e.g. 500 mg";
+}
+
+/** Light sanity ranges for strength (warn only; never block save). Unknown units → no range warning. */
+export const CUSTOM_MEDICINE_STRENGTH_UNIT_LIMITS: Record<
+  string,
+  { min: number; max: number }
+> = {
+  mg: { min: 1, max: 2000 },
+  ml: { min: 1, max: 1000 },
+  g: { min: 1, max: 500 },
+  mcg: { min: 1, max: 50000 },
+  iu: { min: 1, max: 20000 },
+  puff: { min: 1, max: 100 },
+  "%": { min: 0.01, max: 100 },
+};
+
+/**
+ * Typical strength units per dose form — for soft hints when the picked unit is unusual.
+ * Empty list = skip mismatch hint (e.g. `other`).
+ */
+const TYPICAL_STRENGTH_UNITS_FOR_DOSE_TYPE: Record<string, string[]> = {
+  tablet: ["mg", "mcg"],
+  capsule: ["mg", "mcg"],
+  sachet: ["mg", "g"],
+  syrup: ["ml"],
+  ml: ["ml"],
+  drops: ["ml"],
+  injection: ["ml", "iu"],
+  ampoule: ["ml"],
+  vial: ["ml"],
+  insulin: ["iu"],
+  units: ["iu"],
+  cream: ["g", "mg", "%"],
+  ointment: ["g", "mg", "%"],
+  gel: ["g", "mg", "%"],
+  spray: ["ml", "g"],
+  patch: ["mg"],
+  suppository: ["mg"],
+  inhaler: ["puff"],
+  nebulizer: ["ml"],
+  powder: ["g", "mg"],
+  other: [],
+};
+
+export type ParsedCustomMedicineStrength =
+  | { kind: "empty" }
+  | { kind: "invalid"; message: string }
+  | { kind: "ok"; value: number };
+
+/**
+ * Strength is optional: empty → `empty`. Non-empty must be a positive decimal number.
+ */
+export function parseCustomMedicineStrengthValue(raw: string): ParsedCustomMedicineStrength {
+  const trimmed = raw.trim();
+  if (!trimmed) return { kind: "empty" };
+  const normalized = trimmed.replace(/,/g, ".");
+  if (!/^(\d+\.?\d*|\.\d+)$/.test(normalized)) {
+    return { kind: "invalid", message: "Enter a valid number" };
+  }
+  const n = parseFloat(normalized);
+  if (!Number.isFinite(n) || n <= 0) {
+    return { kind: "invalid", message: "Enter a valid number" };
+  }
+  return { kind: "ok", value: n };
+}
+
+function strengthUnitLabel(unitId: string): string {
+  const u = unitId?.trim().toLowerCase() ?? "";
+  return CUSTOM_MEDICINE_STRENGTH_UNITS.find((x) => x.id === u)?.label ?? unitId;
+}
+
+/** Soft: typical numeric band for this strength unit. Returns null if unknown unit or in range. */
+export function getCustomMedicineStrengthRangeWarning(
+  value: number,
+  strengthUnitId: string
+): string | null {
+  const key = strengthUnitId?.trim().toLowerCase() ?? "";
+  const limits = CUSTOM_MEDICINE_STRENGTH_UNIT_LIMITS[key];
+  if (!limits) return null;
+  if (value < limits.min || value > limits.max) {
+    const lbl = strengthUnitLabel(key);
+    return `Typical range is ${limits.min}–${limits.max} ${lbl}`;
+  }
+  return null;
+}
+
+/** Soft: dose form vs strength unit. Returns null if no typical list or unit fits. */
+export function getCustomMedicineDoseTypeStrengthUnitWarning(
+  doseTypeId: string,
+  strengthUnitId: string
+): string | null {
+  const d = doseTypeId?.trim().toLowerCase() ?? "";
+  const u = strengthUnitId?.trim().toLowerCase() ?? "";
+  const typical = TYPICAL_STRENGTH_UNITS_FOR_DOSE_TYPE[d];
+  if (!typical || typical.length === 0) return null;
+  if (typical.includes(u)) return null;
+  const labels = typical.map(strengthUnitLabel).join(", ");
+  return `Usually used with ${labels} for this dose type`;
+}
+
+/**
+ * Prescription draft for a doctor-added custom medicine (quick-add drawer).
+ * `itemId` should be the section item id once known — for catalog lookup safety use a temp id until parent assigns.
+ */
+export function buildMedicinePrescriptionForCustomEntry(
+  itemId: string,
+  label: string,
+  input: {
+    doseTypeId: string;
+    strengthValue?: number | null;
+    strengthUnit?: string;
+    notes?: string;
+  }
+): MedicinePrescriptionDetail {
+  const trimmedName = label.trim();
+  const doseType = (input.doseTypeId || "tablet").trim().toLowerCase();
+  const base = buildDefaultMedicinePrescription(itemId, trimmedName);
+  const unitPatch = patchMedicineAfterUnitChange({ ...base, dose_unit_id: base.dose_unit_id }, doseType);
+  let merged: MedicinePrescriptionDetail = {
+    ...base,
+    ...unitPatch,
+    dose_unit_id: doseType,
+    is_custom: true,
+    drug_id: itemId,
+    generic_name: trimmedName,
+    composition: trimmedName,
+    instructions: input.notes?.trim() ? input.notes.trim() : base.instructions,
+  };
+
+  const rawVal = input.strengthValue;
+  const hasNum =
+    rawVal != null &&
+    !Number.isNaN(Number(rawVal)) &&
+    Number(rawVal) > 0;
+  const uStr = String(input.strengthUnit ?? "").trim();
+  if (hasNum && uStr) {
+    const num = Number(rawVal);
+    merged.custom_strength_value = num;
+    merged.custom_strength_unit = uStr;
+    merged.strength_label = `${formatDoseDisplay(num)} ${uStr}`;
+  }
+
+  return merged;
+}
+
 export function buildDefaultMedicinePrescription(
   drugId: string,
   label: string
@@ -659,7 +882,13 @@ export function medicinePrescriptionToPayload(
     is_prn: Boolean(m.is_prn || (m.frequency_id === "SOS")),
     is_stat: Boolean(m.is_stat),
     is_chronic: Boolean(m.is_chronic),
-    is_custom_drug: Boolean(meta?.is_custom_drug),
+    is_custom_drug: Boolean(meta?.is_custom_drug ?? m.is_custom),
+    /** Mirrors UX spec / future API (`is_custom`, structured strength on custom rows). */
+    is_custom: Boolean(m.is_custom || meta?.is_custom_drug),
+    dose_type: m.dose_unit_id ?? "",
+    strength_value: m.custom_strength_value ?? null,
+    strength_unit: m.custom_strength_unit ?? null,
+    notes: m.instructions ?? "",
   };
 }
 

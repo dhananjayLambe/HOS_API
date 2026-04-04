@@ -1,6 +1,11 @@
 "use client";
 
-import { type ReactNode, useState } from "react";
+import {
+  type ReactNode,
+  forwardRef,
+  useImperativeHandle,
+  useState,
+} from "react";
 import { AlertTriangle, ChevronDown, Minus, Plus } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,16 +26,28 @@ export interface ConsultationSectionCardProps {
   incompleteCount?: number;
 }
 
-export function ConsultationSectionCard({
-  title,
-  icon,
-  children,
-  defaultOpen = false,
-  headerRight,
-  className,
-  incompleteCount = 0,
-}: ConsultationSectionCardProps) {
+export type ConsultationSectionCardHandle = {
+  expand: () => void;
+};
+
+export const ConsultationSectionCard = forwardRef<
+  ConsultationSectionCardHandle,
+  ConsultationSectionCardProps
+>(function ConsultationSectionCard(
+  {
+    title,
+    icon,
+    children,
+    defaultOpen = false,
+    headerRight,
+    className,
+    incompleteCount = 0,
+  },
+  ref
+) {
   const [open, setOpen] = useState(defaultOpen);
+
+  useImperativeHandle(ref, () => ({ expand: () => setOpen(true) }), []);
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
@@ -88,4 +105,4 @@ export function ConsultationSectionCard({
       </Card>
     </Collapsible>
   );
-}
+});

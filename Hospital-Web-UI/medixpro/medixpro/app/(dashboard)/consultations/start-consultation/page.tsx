@@ -20,6 +20,7 @@ import { ConsultationRightMenu } from "@/components/consultations/consultation-r
 import { ConsultationDynamicDetailPanel } from "@/components/consultations/consultation-dynamic-detail-panel";
 import { ConsultationSection } from "@/components/consultations/consultation-section";
 import { ConsultationErrorBoundary } from "@/components/consultations/consultation-error-boundary";
+import { ConsultationSectionScrollProvider } from "@/components/consultations/consultation-section-scroll-context";
 import { FollowUpSection, ProceduresSection, SymptomsSection, FindingsSection, DiagnosisSection, InstructionsSection } from "@/components/consultations/sections";
 import { useConsultationStore } from "@/store/consultationStore";
 import { useShallow } from "zustand/react/shallow";
@@ -387,6 +388,7 @@ function StartConsultationContent() {
 
   return (
     <ConsultationErrorBoundary>
+      <ConsultationSectionScrollProvider>
       <div className="flex min-h-0 flex-1 flex-col mt-0 pt-0 overflow-x-hidden min-w-0 w-full max-w-full">
         <ConsultationActionBar />
         <div className="mx-auto w-full max-w-[1600px] min-w-0 flex-1 min-h-0 overflow-x-hidden px-3 sm:px-4 md:px-5 lg:px-6 pt-3 sm:pt-4 pb-6 pb-safe sm:pb-8 flex flex-col overflow-y-auto lg:overflow-y-hidden">
@@ -403,6 +405,7 @@ function StartConsultationContent() {
               </div>
             )}
             <div
+              id="consultation-container"
               className="min-w-0 min-h-0 overflow-y-auto lg:overflow-y-scroll lg:max-h-[calc(100vh-120px)] pr-2 sm:pr-4 [scrollbar-gutter:stable] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-gray-100 dark:[&::-webkit-scrollbar-track]:bg-gray-800 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 dark:[&::-webkit-scrollbar-thumb]:bg-gray-600 order-1 lg:order-none"
             >
               <div className="space-y-3 sm:space-y-4">
@@ -441,6 +444,7 @@ function StartConsultationContent() {
           </div>
         </div>
       </div>
+      </ConsultationSectionScrollProvider>
     </ConsultationErrorBoundary>
   );
 }
