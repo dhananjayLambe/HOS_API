@@ -63,6 +63,8 @@ export interface ConsultationSearchAddDrawerProps {
   onSelect: (item: ConsultationSectionItem) => void;
   onAddNew: (item: Omit<ConsultationSectionItem, "id">) => ConsultationSectionItem;
   onDuplicate: () => void;
+  /** When true, choosing an item that already exists selects it instead of treating as duplicate error. */
+  selectExistingOnDuplicate?: boolean;
   /** Called when drawer closes so parent can return focus. */
   onClosed?: () => void;
   /** When set, drawer opens with Add form visible and Name pre-filled (e.g. value not found in search). */
@@ -77,6 +79,7 @@ export function ConsultationSearchAddDrawer({
   onSelect,
   onAddNew,
   onDuplicate,
+  selectExistingOnDuplicate = false,
   onClosed,
   initialValue,
 }: ConsultationSearchAddDrawerProps) {
@@ -132,7 +135,12 @@ export function ConsultationSearchAddDrawer({
       (i) => i.label.toLowerCase() === item.label.toLowerCase()
     );
     if (existing) {
-      onDuplicate();
+      if (selectExistingOnDuplicate) {
+        onSelect(existing);
+        handleClose(false);
+      } else {
+        onDuplicate();
+      }
       return;
     }
     onSelect(item);

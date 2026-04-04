@@ -104,6 +104,51 @@ export type ConsultationSectionType =
   | "instructions"
   | "follow_up";
 
+/** Medicine timings (multi-select in medicines panel). */
+export type MedicineTiming = "before_food" | "after_food" | "empty_stomach" | "bedtime";
+
+/** Duration panel: open-ended / long-term / stat — exclusive with numeric course. */
+export type MedicineDurationSpecial = "sos" | "till_required" | "continue" | "stat";
+
+/**
+ * Prescription draft for medicines section (`sectionItems.medicines[].detail.medicine`).
+ * Aligns with end-state payload for future API integration.
+ */
+export interface MedicinePrescriptionDetail {
+  drug_id?: string;
+  strength_label?: string;
+  generic_name?: string;
+  composition?: string;
+  dose_value?: number;
+  dose_unit_id?: string;
+  dose_is_custom?: boolean;
+  dose_custom_text?: string;
+  route_id?: string;
+  /** Where applied — only when route is Other; optional for validation. */
+  route_body_site?: string;
+  frequency_id?: string;
+  /** Legacy; combined UI keeps standard chips + M/A/N in sync without a mode toggle. */
+  frequency_ui_mode?: "standard" | "pattern";
+  /** Slots for pattern mode; `frequency_custom_text` stores derived `m-a-n`. */
+  frequency_pattern_morning?: boolean;
+  frequency_pattern_afternoon?: boolean;
+  frequency_pattern_night?: boolean;
+  /** When `frequency_id` is `CUSTOM` (legacy free-text) or `PATTERN` (MAN-derived). e.g. 1-0-1 */
+  frequency_custom_text?: string;
+  duration_value?: number;
+  duration_unit?: "days" | "weeks" | "months";
+  /** Mutually exclusive with numeric `duration_value` / `duration_unit` in the duration UI. */
+  duration_special?: MedicineDurationSpecial;
+  duration_is_custom?: boolean;
+  duration_custom_text?: string;
+  timing?: MedicineTiming[];
+  instructions?: string;
+  is_prn?: boolean;
+  is_stat?: boolean;
+  /** Long-term / maintenance medication (e.g. HTN, DM). */
+  is_chronic?: boolean;
+}
+
 /** Detail fields common to all section items (right-side panel). */
 export interface SectionItemDetail {
   notes?: string;
@@ -113,6 +158,8 @@ export interface SectionItemDetail {
   attributes?: string[];
   /** User-added tags. */
   customTags?: string[];
+  /** When section is `medicines`, structured prescription draft. */
+  medicine?: MedicinePrescriptionDetail;
 }
 
 /** Single item in any section (symptom, finding, diagnosis, etc.). */

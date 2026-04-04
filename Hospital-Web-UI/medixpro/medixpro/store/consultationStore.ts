@@ -68,6 +68,8 @@ type ConsultationStore = ConsultationState & {
   instructionsList: EncounterInstructionRow[];
   /** When true, instruction add/edit/delete is disabled. */
   consultationFinalized: boolean;
+  /** Incremented to focus medicines search input (e.g. after "Change" on medicine panel). */
+  medicinesSearchFocusNonce: number;
   selectedDetail: SelectedDetailPayload;
   setSymptoms: (symptoms: ConsultationSymptom[]) => void;
   addSymptom: (symptom: ConsultationSymptom) => void;
@@ -122,6 +124,7 @@ type ConsultationStore = ConsultationState & {
     detail: Partial<SectionItemDetail>
   ) => void;
   setSelectedDetail: (payload: SelectedDetailPayload) => void;
+  requestMedicinesSearchFocus: () => void;
   addDraftFindingMaster: (finding_code: string, display_label: string) => void;
   addDraftFindingCustom: (custom_name: string) => void;
   updateDraftFinding: (
@@ -156,6 +159,7 @@ export const useConsultationStore = create<ConsultationStore>((set, get) => ({
   draftFindings: [],
   sectionItems: emptySectionItems(),
   vitalsLoaded: false,
+  medicinesSearchFocusNonce: 0,
   selectedDetail: null,
   symptomsSchema: null,
   symptomSchemaByKey: {},
@@ -374,12 +378,16 @@ export const useConsultationStore = create<ConsultationStore>((set, get) => ({
         ),
       },
     })),
+  requestMedicinesSearchFocus: () =>
+    set((s) => ({ medicinesSearchFocusNonce: s.medicinesSearchFocusNonce + 1 })),
+
   setSelectedDetail: (payload) =>
     set((s) => ({
       selectedDetail: payload,
-      // Clear symptom selection when user selects findings/diagnosis/instructions so only one section is "active"
+      // Clear symptom selection when user selects findings/diagnosis/instructions/medicines so only one section is "active"
       selectedSymptomId:
-        payload?.section && ["findings", "diagnosis", "instructions"].includes(payload.section)
+        payload?.section &&
+        ["findings", "diagnosis", "instructions", "medicines"].includes(payload.section)
           ? null
           : s.selectedSymptomId,
     })),
@@ -463,5 +471,6 @@ export const useConsultationStore = create<ConsultationStore>((set, get) => ({
       instructionsList: [],
       consultationFinalized: false,
       vitalsLoaded: false,
+      medicinesSearchFocusNonce: 0,
     }),
 }));

@@ -78,18 +78,19 @@ export const DIAGNOSIS_STATIC: { id: string; label: string }[] = [
 export const DIAGNOSIS_ATTRIBUTES = ["Provisional", "Confirmed", "R/O", "Differential"];
 
 export const MEDICINES_STATIC: { id: string; label: string }[] = [
-  { id: "paracetamol", label: "Paracetamol" },
-  { id: "ibuprofen", label: "Ibuprofen" },
-  { id: "amoxicillin", label: "Amoxicillin" },
-  { id: "omeprazole", label: "Omeprazole" },
-  { id: "cetirizine", label: "Cetirizine" },
-  { id: "metformin", label: "Metformin" },
-  { id: "amlodipine", label: "Amlodipine" },
-  { id: "azithromycin", label: "Azithromycin" },
-  { id: "dolo", label: "Dolo 650" },
-  { id: "crocin", label: "Crocin" },
+  { id: "paracetamol", label: "Paracetamol (500mg)" },
+  { id: "ibuprofen", label: "Ibuprofen (200mg)" },
+  { id: "amoxicillin", label: "Amoxicillin (500mg)" },
+  { id: "omeprazole", label: "Omeprazole (20mg)" },
+  { id: "cetirizine", label: "Cetirizine (10mg)" },
+  { id: "metformin", label: "Metformin (500mg)" },
+  { id: "amlodipine", label: "Amlodipine (5mg)" },
+  { id: "azithromycin", label: "Azithromycin (500mg)" },
+  { id: "dolo", label: "Dolo 650 (650mg)" },
+  { id: "crocin", label: "Crocin (500mg)" },
 ];
 
+/** Legacy — medicines panel uses `MedicineDetailPanel` chips instead. */
 export const MEDICINE_ATTRIBUTES = ["Morning", "Night", "SOS", "After food", "Before food", "With food"];
 
 export const INVESTIGATIONS_STATIC: { id: string; label: string }[] = [

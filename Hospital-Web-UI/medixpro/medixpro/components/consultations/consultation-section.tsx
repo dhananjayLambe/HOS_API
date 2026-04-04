@@ -13,6 +13,11 @@ import type {
   ConsultationSectionConfig,
 } from "@/lib/consultation-types";
 import { getSectionConfig } from "@/data/consultation-section-data";
+import {
+  getMedicineValidationMessages,
+  isMedicineItemComplete,
+  withDefaultMedicineDetail,
+} from "@/lib/medicine-prescription-utils";
 
 /** True if item is missing mandatory fields.
  *
@@ -24,6 +29,10 @@ function isItemIncomplete(
   config: ConsultationSectionConfig
 ): boolean {
   const d = item.detail ?? {};
+
+  if (config.type === "medicines") {
+    return !isMedicineItemComplete(item);
+  }
 
   // Findings & Diagnosis: treat as incomplete only when there is no useful detail filled.
   if (config.type === "findings" || config.type === "diagnosis") {
@@ -101,6 +110,7 @@ export function ConsultationSection({
     removeSectionItem,
     setSelectedDetail,
     selectedDetail,
+    medicinesSearchFocusNonce,
   } = useConsultationStore();
   const { toast } = useToast();
   const items = getSectionItems(type);
@@ -108,7 +118,13 @@ export function ConsultationSection({
   const [drawerInitialValue, setDrawerInitialValue] = useState("");
   const [inlineSearch, setInlineSearch] = useState("");
   const inlineSearchDebounced = useDebouncedValue(inlineSearch, 300);
-  const sectionHeaderRef = useRef<HTMLDivElement>(null);
+  const sectionHeaderRef = useRef<HTMLButtonElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (type !== "medicines" || medicinesSearchFocusNonce === 0) return;
+    searchInputRef.current?.focus();
+  }, [type, medicinesSearchFocusNonce]);
 
   const isSelected = selectedDetail?.section === type;
   const selectedId = isSelected ? selectedDetail.itemId : null;
@@ -144,11 +160,21 @@ export function ConsultationSection({
         (i) => i.label.toLowerCase() === item.label.toLowerCase()
       );
       if (exists) {
-        toast({ title: "Item already exists", variant: "destructive" });
+        const existing = items.find(
+          (i) => i.label.toLowerCase() === item.label.toLowerCase()
+        );
+        if (existing) {
+          setSelectedDetail({ section: type, itemId: existing.id });
+        }
+        if (type !== "medicines") {
+          toast({ title: "Item already exists", variant: "destructive" });
+        }
+        setDrawerOpen(false);
         return;
       }
-      addSectionItem(type, item);
-      setSelectedDetail({ section: type, itemId: item.id });
+      const toAdd = type === "medicines" ? withDefaultMedicineDetail(item) : item;
+      addSectionItem(type, toAdd);
+      setSelectedDetail({ section: type, itemId: toAdd.id });
       setDrawerOpen(false);
     },
     [type, items, addSectionItem, setSelectedDetail, toast]
@@ -158,8 +184,9 @@ export function ConsultationSection({
     (item: Omit<ConsultationSectionItem, "id">): ConsultationSectionItem => {
       const id = generateId(type.slice(0, 3));
       const newItem: ConsultationSectionItem = { ...item, id };
-      addSectionItem(type, newItem);
-      return newItem;
+      const toAdd = type === "medicines" ? withDefaultMedicineDetail(newItem) : newItem;
+      addSectionItem(type, toAdd);
+      return toAdd;
     },
     [type, addSectionItem]
   );
@@ -179,22 +206,26 @@ export function ConsultationSection({
         setDrawerOpen(false);
         return;
       }
-      addSectionItem(type, item);
-      setSelectedDetail({ section: type, itemId: item.id });
+      const toAdd = type === "medicines" ? withDefaultMedicineDetail(item) : item;
+      addSectionItem(type, toAdd);
+      setSelectedDetail({ section: type, itemId: toAdd.id });
       setDrawerOpen(false);
     },
     [type, items, addSectionItem, setSelectedDetail]
   );
 
   const handleInlineSelect = (item: ConsultationSectionItem) => {
-    const exists = items.some((i) => i.id === item.id || i.label === item.label);
-    if (exists) {
-      setSelectedDetail({ section: type, itemId: item.id });
+    const existingByIdOrLabel = items.find(
+      (i) => i.id === item.id || i.label.toLowerCase() === item.label.toLowerCase()
+    );
+    if (existingByIdOrLabel) {
+      setSelectedDetail({ section: type, itemId: existingByIdOrLabel.id });
       setInlineSearch("");
       return;
     }
-    addSectionItem(type, item);
-    setSelectedDetail({ section: type, itemId: item.id });
+    const toAdd = type === "medicines" ? withDefaultMedicineDetail(item) : item;
+    addSectionItem(type, toAdd);
+    setSelectedDetail({ section: type, itemId: toAdd.id });
     setInlineSearch("");
   };
 
@@ -265,6 +296,7 @@ export function ConsultationSection({
             <div className="relative flex-1 min-w-[180px]">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
               <Input
+                ref={searchInputRef}
                 type="search"
                 placeholder={config.searchPlaceholder}
                 value={inlineSearch}
@@ -299,6 +331,21 @@ export function ConsultationSection({
                   label={item.label}
                   selected={selectedId === item.id}
                   isIncomplete={isItemIncomplete(item, config)}
+                  tags={
+                    type === "medicines"
+                      ? [
+                          ...(item.isCustom ? [{ key: "custom", label: "Custom drug" }] : []),
+                          ...(item.detail?.medicine?.is_chronic
+                            ? [{ key: "chronic", label: "Chronic" }]
+                            : []),
+                        ]
+                      : undefined
+                  }
+                  validationLines={
+                    type === "medicines"
+                      ? getMedicineValidationMessages(item).map((m) => `⚠ ${m}`)
+                      : undefined
+                  }
                   onSelect={() => setSelectedDetail({ section: type, itemId: item.id })}
                   onRemove={() => removeSectionItem(type, item.id)}
                 />
@@ -365,9 +412,11 @@ export function ConsultationSection({
         existingItems={items}
         onSelect={handleSelectFromDrawer}
         onAddNew={handleAddNewFromDrawer}
-        onDuplicate={() =>
-          toast({ title: "Item already exists", variant: "destructive" })
-        }
+        selectExistingOnDuplicate={type === "medicines"}
+        onDuplicate={() => {
+          if (type === "medicines") return;
+          toast({ title: "Item already exists", variant: "destructive" });
+        }}
         onClosed={closeDrawer}
         initialValue={drawerInitialValue || undefined}
       />
@@ -379,57 +428,98 @@ function Chip({
   label,
   selected,
   isIncomplete,
+  tags,
+  validationLines,
   onSelect,
   onRemove,
 }: {
   label: string;
   selected: boolean;
   isIncomplete?: boolean;
+  /** Small labels under the chip (e.g. Custom drug, Chronic for medicines). */
+  tags?: { key: string; label: string }[];
+  /** Inline validation (e.g. medicines); no blocking dialogs. */
+  validationLines?: string[];
   onSelect: () => void;
   onRemove: () => void;
 }) {
+  const titleHint =
+    validationLines && validationLines.length > 0
+      ? validationLines.join("\n")
+      : isIncomplete
+        ? "Duration or severity not filled"
+        : undefined;
+
   return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
-        selected
-          ? "bg-blue-600 text-white shadow-sm dark:bg-blue-600"
-          : "border border-border bg-muted/50 text-foreground hover:bg-muted"
-      )}
-      title={isIncomplete ? "Duration or severity not filled" : undefined}
-    >
-      <button
-        type="button"
-        onClick={onSelect}
-        className="focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded"
+    <span className="inline-flex max-w-full flex-col gap-1">
+      <span
+        className={cn(
+          "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
+          selected
+            ? "bg-blue-600 text-white shadow-sm dark:bg-blue-600"
+            : "border border-border bg-muted/50 text-foreground hover:bg-muted"
+        )}
+        title={titleHint}
       >
-        {label}
-      </button>
-      {isIncomplete && (
-        <span
-          className={cn(
-            "shrink-0",
-            selected ? "text-amber-200 dark:text-amber-100" : "text-amber-700 dark:text-amber-600"
-          )}
-          aria-hidden
+        <button
+          type="button"
+          onClick={onSelect}
+          className="min-w-0 truncate text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded"
         >
-          <AlertTriangle className="h-3.5 w-3.5" />
+          {label}
+        </button>
+        {isIncomplete && !(validationLines && validationLines.length > 0) && (
+          <span
+            className={cn(
+              "shrink-0",
+              selected ? "text-amber-200 dark:text-amber-100" : "text-amber-700 dark:text-amber-600"
+            )}
+            aria-hidden
+          >
+            <AlertTriangle className="h-3.5 w-3.5" />
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
+          className={cn(
+            "ml-0.5 shrink-0 rounded-full p-0.5 hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            selected ? "hover:bg-blue-700 dark:hover:bg-blue-700" : "hover:bg-muted"
+          )}
+          aria-label={`Remove ${label}`}
+        >
+          ×
+        </button>
+      </span>
+      {tags && tags.length > 0 && (
+        <span className="flex flex-wrap gap-1 pl-1">
+          {tags.map((t) => (
+            <span
+              key={t.key}
+              className={cn(
+                "rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                t.key === "custom"
+                  ? "border border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-200"
+                  : "border border-violet-500/35 bg-violet-500/10 text-violet-800 dark:text-violet-200"
+              )}
+            >
+              {t.label}
+            </span>
+          ))}
         </span>
       )}
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          onRemove();
-        }}
-        className={cn(
-          "ml-0.5 rounded-full p-0.5 hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          selected ? "hover:bg-blue-700 dark:hover:bg-blue-700" : "hover:bg-muted"
-        )}
-        aria-label={`Remove ${label}`}
-      >
-        ×
-      </button>
+      {validationLines && validationLines.length > 0 && (
+        <span className="pl-1 text-[11px] leading-snug text-amber-700 dark:text-amber-500 max-w-[220px]">
+          {validationLines.map((line) => (
+            <span key={line} className="block">
+              {line}
+            </span>
+          ))}
+        </span>
+      )}
     </span>
   );
 }
