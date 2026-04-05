@@ -64,7 +64,7 @@ class MedicineSuggestionEngine:
         self._patient_last_used: dict[uuid.UUID, datetime | None] = {}
         self._drug_by_id: dict[uuid.UUID, DrugMaster] = {}
 
-    def run(self) -> dict[str, Any]:
+    def run_ranked_rows(self) -> list[dict[str, Any]]:
         merged = self._collect_signal_scores()
         if not merged:
             merged = self._fallback_global_only_scores()
@@ -77,7 +77,10 @@ class MedicineSuggestionEngine:
             rows = self._rows_from_merged(merged)
             rows.sort(key=lambda r: r["final_score"], reverse=True)
 
-        return self._split_buckets(rows)
+        return rows
+
+    def run(self) -> dict[str, Any]:
+        return self._split_buckets(self.run_ranked_rows())
 
     def _new_scores_dict(
         self,

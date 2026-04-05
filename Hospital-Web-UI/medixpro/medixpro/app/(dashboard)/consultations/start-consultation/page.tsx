@@ -4,7 +4,6 @@ import { Suspense, useEffect, useState, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { usePatient } from "@/lib/patientContext";
 import { useAuth } from "@/lib/authContext";
-import { useMedicineSuggestions } from "@/hooks/useMedicineSuggestions";
 import { backendAxiosClient } from "@/lib/axiosClient";
 import { useToastNotification } from "@/hooks/use-toast-notification";
 import {
@@ -95,15 +94,6 @@ function StartConsultationContent() {
     }
     return out;
   }, [sectionItems.diagnosis, diagnosisSchemaByKey]);
-
-  const medicineSuggestions = useMedicineSuggestions({
-    doctorId,
-    patientId: selectedPatient?.id ?? null,
-    consultationId: encounterIdFromUrl ?? encounterIdFromStore,
-    diagnosisIds: diagnosisIdsForApi,
-    limit: 12,
-    enabled: Boolean(doctorId && selectedPatient?.id),
-  });
 
   const redirectingDueToCancelledRef = useRef(false);
   const redirectedForEncounterIdRef = useRef<string | null>(null);
@@ -458,9 +448,16 @@ function StartConsultationContent() {
                     title="Medicines"
                     icon={<Pill className="text-muted-foreground" />}
                     defaultOpen={medicinesDefaultOpen}
-                    medicineSuggestionChips={medicineSuggestions.chips}
-                    medicineSuggestionById={medicineSuggestions.byId}
-                    medicineSuggestionsLoading={medicineSuggestions.loading}
+                    medicineApiContext={
+                      doctorId && selectedPatient?.id
+                        ? {
+                            doctorId,
+                            patientId: selectedPatient.id,
+                            consultationId: encounterIdFromUrl ?? encounterIdFromStore,
+                            diagnosisIds: diagnosisIdsForApi,
+                          }
+                        : null
+                    }
                   />
                 )}
                 {isSectionVisible(consultationType, "investigations") && (

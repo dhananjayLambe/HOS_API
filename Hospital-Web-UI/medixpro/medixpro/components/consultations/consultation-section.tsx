@@ -19,12 +19,15 @@ import type {
 } from "@/lib/consultation-types";
 import { getSectionConfig } from "@/data/consultation-section-data";
 import {
+  buildDefaultMedicinePrescription,
+  buildMedicinePrescriptionFromSuggestion,
   getMedicineValidationMessages,
   isMedicineItemComplete,
   withDefaultMedicineDetail,
   withMedicineDetailFromSuggestion,
 } from "@/lib/medicine-prescription-utils";
 import type { MedicineSuggestionDrug } from "@/lib/medicineSuggestionsApi";
+import { useMedicineSearch } from "@/hooks/useMedicineSearch";
 
 /** True if item is missing mandatory fields.
  *
@@ -110,6 +113,13 @@ export interface ConsultationSectionProps {
   medicineSuggestionChips?: { id: string; label: string }[];
   medicineSuggestionById?: Record<string, MedicineSuggestionDrug>;
   medicineSuggestionsLoading?: boolean;
+  /** When set, fetches suggestions (idle) or hybrid (typing) via hook. */
+  medicineApiContext?: {
+    doctorId: string;
+    patientId: string;
+    consultationId?: string | null;
+    diagnosisIds: string[];
+  } | null;
 }
 
 export function ConsultationSection({
@@ -121,12 +131,14 @@ export function ConsultationSection({
   medicineSuggestionChips,
   medicineSuggestionById,
   medicineSuggestionsLoading = false,
+  medicineApiContext = null,
 }: ConsultationSectionProps) {
   const config = configOverride ?? getSectionConfig(type);
   const {
     getSectionItems,
     addSectionItem,
     removeSectionItem,
+    updateSectionItemDetail,
     setSelectedDetail,
     selectedDetail,
     medicinesSearchFocusNonce,
@@ -136,7 +148,29 @@ export function ConsultationSection({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerInitialValue, setDrawerInitialValue] = useState("");
   const [inlineSearch, setInlineSearch] = useState("");
+  const [highlightedSuggestionIndex, setHighlightedSuggestionIndex] = useState(-1);
   const inlineSearchDebounced = useDebouncedValue(inlineSearch, 300);
+
+  const medicineSearch = useMedicineSearch({
+    doctorId: medicineApiContext?.doctorId ?? null,
+    patientId: medicineApiContext?.patientId ?? null,
+    consultationId: medicineApiContext?.consultationId ?? null,
+    diagnosisIds: medicineApiContext?.diagnosisIds ?? [],
+    searchQuery: type === "medicines" ? inlineSearch : "",
+    limit: 12,
+    enabled: Boolean(type === "medicines" && medicineApiContext),
+  });
+
+  const effectiveSuggestionChips = medicineApiContext
+    ? medicineSearch.chips
+    : (medicineSuggestionChips ?? []);
+  const effectiveSuggestionById = medicineApiContext
+    ? medicineSearch.byId
+    : (medicineSuggestionById ?? {});
+  const effectiveSuggestionsLoading = medicineApiContext
+    ? medicineSearch.loading
+    : medicineSuggestionsLoading;
+  const isHybridLoadingUi = Boolean(medicineApiContext && medicineSearch.isHybridLoading);
   const sectionHeaderRef = useRef<HTMLButtonElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const sectionCardRef = useRef<ConsultationSectionCardHandle>(null);
@@ -182,7 +216,19 @@ export function ConsultationSection({
   /** Medicines: API suggestions first, then static + custom; dedupe by id only. */
   const mergedInlineOptions = useMemo(() => {
     if (type !== "medicines") return allOptions;
-    const api = medicineSuggestionChips ?? [];
+    const qTyping = inlineSearchDebounced.trim();
+    if (medicineApiContext && qTyping) {
+      const api = effectiveSuggestionChips;
+      const seen = new Set<string>();
+      const out: { id: string; label: string }[] = [];
+      for (const o of api) {
+        if (seen.has(o.id)) continue;
+        seen.add(o.id);
+        out.push(o);
+      }
+      return out;
+    }
+    const api = effectiveSuggestionChips;
     const seen = new Set<string>();
     const out: { id: string; label: string }[] = [];
     for (const o of api) {
@@ -196,30 +242,56 @@ export function ConsultationSection({
       out.push(o);
     }
     return out;
-  }, [type, medicineSuggestionChips, allOptions]);
+  }, [
+    type,
+    medicineApiContext,
+    inlineSearchDebounced,
+    effectiveSuggestionChips,
+    allOptions,
+  ]);
 
   const filteredInline = useMemo(() => {
     const q = inlineSearchDebounced.trim().toLowerCase();
     const base = type === "medicines" ? mergedInlineOptions : allOptions;
+    if (type === "medicines" && medicineApiContext && q) {
+      return base.slice(0, 25);
+    }
     if (!q) return base.slice(0, 25);
     return base.filter((o) => o.label.toLowerCase().includes(q));
-  }, [inlineSearchDebounced, allOptions, mergedInlineOptions, type]);
+  }, [inlineSearchDebounced, allOptions, mergedInlineOptions, type, medicineApiContext]);
+
+  const visibleInlineSuggestions = useMemo(() => {
+    if (type !== "medicines") return [];
+    return filteredInline.filter((opt) => !items.some((i) => i.id === opt.id));
+  }, [type, filteredInline, items]);
+
+  useEffect(() => {
+    setHighlightedSuggestionIndex(-1);
+  }, [inlineSearch, filteredInline.length]);
 
   const hasInlineResults = filteredInline.length > 0;
   const canAddInline = inlineSearchDebounced.trim().length > 0;
+  const showHybridEmpty =
+    type === "medicines" &&
+    medicineApiContext &&
+    inlineSearchDebounced.trim().length > 0 &&
+    !isHybridLoadingUi &&
+    !effectiveSuggestionsLoading &&
+    !hasInlineResults &&
+    canAddInline;
   const showAddInline = canAddInline && !filteredInline.some(
     (o) => o.label.toLowerCase() === inlineSearchDebounced.trim().toLowerCase()
   );
 
   const resolveMedicineItemToAdd = useCallback(
     (item: ConsultationSectionItem): ConsultationSectionItem => {
-      const api = medicineSuggestionById?.[item.id];
+      const api = effectiveSuggestionById[item.id];
       if (api) {
         return withMedicineDetailFromSuggestion({ ...item }, api);
       }
       return withDefaultMedicineDetail(item);
     },
-    [medicineSuggestionById]
+    [effectiveSuggestionById]
   );
 
   const incompleteCount = useMemo(
@@ -312,18 +384,68 @@ export function ConsultationSection({
     if (existingByIdOrLabel) {
       selectItemAndScroll(existingByIdOrLabel.id);
       setInlineSearch("");
+      setHighlightedSuggestionIndex(-1);
+      return;
+    }
+    if (type === "medicines" && medicineApiContext) {
+      const drug = effectiveSuggestionById[item.id];
+      addSectionItem(type, { id: item.id, label: item.label });
+      setSelectedDetail({ section: type, itemId: item.id });
+      sectionCardRef.current?.expand();
+      activateSection(type);
+      if (drug) {
+        updateSectionItemDetail(type, item.id, {
+          medicine: buildMedicinePrescriptionFromSuggestion(item.id, drug),
+        });
+      } else {
+        updateSectionItemDetail(type, item.id, {
+          medicine: buildDefaultMedicinePrescription(item.id, item.label),
+        });
+      }
+      setInlineSearch("");
+      setHighlightedSuggestionIndex(-1);
       return;
     }
     const toAdd = type === "medicines" ? resolveMedicineItemToAdd(item) : item;
     addSectionItem(type, toAdd);
     selectItemAndScroll(toAdd.id);
     setInlineSearch("");
+    setHighlightedSuggestionIndex(-1);
   };
 
   const handleInlineKeyDown = (e: React.KeyboardEvent) => {
+    if (
+      type === "medicines" &&
+      (e.key === "ArrowDown" || e.key === "ArrowUp") &&
+      visibleInlineSuggestions.length > 0
+    ) {
+      e.preventDefault();
+      setHighlightedSuggestionIndex((prev) => {
+        if (e.key === "ArrowDown") {
+          if (prev < 0) return 0;
+          return Math.min(prev + 1, visibleInlineSuggestions.length - 1);
+        }
+        if (prev <= 0) return -1;
+        return prev - 1;
+      });
+      return;
+    }
+
     if (e.key !== "Enter") return;
-    e.preventDefault();
     const trimmed = inlineSearch.trim();
+
+    if (
+      type === "medicines" &&
+      highlightedSuggestionIndex >= 0 &&
+      visibleInlineSuggestions[highlightedSuggestionIndex]
+    ) {
+      e.preventDefault();
+      const opt = visibleInlineSuggestions[highlightedSuggestionIndex];
+      handleInlineSelect({ id: opt.id, label: opt.label } as ConsultationSectionItem);
+      return;
+    }
+
+    e.preventDefault();
     if (!trimmed) return;
 
     // If exists → auto-select
@@ -333,6 +455,7 @@ export function ConsultationSection({
     if (existing) {
       selectItemAndScroll(existing.id);
       setInlineSearch("");
+      setHighlightedSuggestionIndex(-1);
       return;
     }
 
@@ -353,6 +476,7 @@ export function ConsultationSection({
     setDrawerInitialValue(trimmed);
     setDrawerOpen(true);
     setInlineSearch("");
+    setHighlightedSuggestionIndex(-1);
   };
 
   const openDrawer = () => {
@@ -478,16 +602,28 @@ export function ConsultationSection({
               canAddInline ||
               (!inlineSearchDebounced &&
                 (type === "medicines" ? mergedInlineOptions.length > 0 : allOptions.length > 0)) ||
-              (type === "medicines" && medicineSuggestionsLoading)) && (
+              (type === "medicines" && (effectiveSuggestionsLoading || isHybridLoadingUi))) && (
             <hr className="border-border my-2" />
           )}
 
           {/* Suggested items: light grey chips, click to add */}
-          {type === "medicines" &&
-          medicineSuggestionsLoading &&
-          !inlineSearchDebounced &&
-          !hasInlineResults &&
-          !canAddInline ? (
+          {type === "medicines" && isHybridLoadingUi ? (
+            <div className="space-y-2" aria-busy="true" aria-live="polite">
+              <p className="text-xs text-muted-foreground">Searching…</p>
+              <div className="flex flex-wrap gap-2">
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="h-8 w-24 animate-pulse rounded-full bg-muted"
+                  />
+                ))}
+              </div>
+            </div>
+          ) : type === "medicines" &&
+            effectiveSuggestionsLoading &&
+            !inlineSearchDebounced &&
+            !hasInlineResults &&
+            !canAddInline ? (
             <div className="flex flex-wrap gap-2" aria-busy="true">
               {Array.from({ length: 6 }).map((_, i) => (
                 <div
@@ -495,6 +631,27 @@ export function ConsultationSection({
                   className="h-8 w-24 animate-pulse rounded-full bg-muted"
                 />
               ))}
+            </div>
+          ) : showHybridEmpty ? (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                No medicines found — try a different name
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  activateSection(type);
+                  sectionCardRef.current?.expand();
+                  const t = inlineSearch.trim() || inlineSearchDebounced.trim();
+                  setDrawerInitialValue(t);
+                  setDrawerOpen(true);
+                  setInlineSearch("");
+                }}
+                className="inline-flex w-full max-w-md items-center justify-center gap-2 rounded-lg border border-border/80 bg-muted/30 px-3 py-2.5 text-sm font-medium text-foreground hover:bg-muted/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
+              >
+                <Plus className="h-4 w-4 shrink-0" />
+                Create &quot;{inlineSearch.trim() || inlineSearchDebounced.trim()}&quot;
+              </button>
             </div>
           ) : hasInlineResults ? (
             <div className="flex flex-wrap gap-2">
@@ -509,14 +666,24 @@ export function ConsultationSection({
                     id: opt.id,
                     label: opt.label,
                   };
+                  const isKbHighlight =
+                    type === "medicines" &&
+                    highlightedSuggestionIndex >= 0 &&
+                    visibleInlineSuggestions[highlightedSuggestionIndex]?.id === opt.id;
                   return (
                     <button
                       key={opt.id}
                       type="button"
+                      title={opt.label}
                       onClick={() => handleInlineSelect(item as ConsultationSectionItem)}
-                      className="rounded-full border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground hover:bg-muted/60 hover:border-muted-foreground/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      className={cn(
+                        "max-w-[220px] min-w-0 rounded-full border px-3 py-1.5 text-sm text-foreground hover:bg-muted/60 hover:border-muted-foreground/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                        isKbHighlight
+                          ? "border-primary bg-primary/10 ring-2 ring-primary/30"
+                          : "border-border bg-muted/40"
+                      )}
                     >
-                      {opt.label}
+                      <span className="block truncate">{opt.label}</span>
                     </button>
                   );
                 })}
@@ -558,10 +725,11 @@ export function ConsultationSection({
                       <button
                         key={opt.id}
                         type="button"
+                        title={opt.label}
                         onClick={() => handleInlineSelect(item as ConsultationSectionItem)}
-                        className="rounded-full border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground hover:bg-muted/60 hover:border-muted-foreground/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        className="max-w-[220px] min-w-0 rounded-full border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground hover:bg-muted/60 hover:border-muted-foreground/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                       >
-                        {opt.label}
+                        <span className="block truncate">{opt.label}</span>
                       </button>
                     );
                 })}
@@ -571,7 +739,7 @@ export function ConsultationSection({
             !hasInlineResults &&
             !canAddInline &&
             mergedInlineOptions.length === 0 &&
-            !medicineSuggestionsLoading ? (
+            !effectiveSuggestionsLoading ? (
             <p className="text-sm text-muted-foreground">Start typing medicine</p>
           ) : null}
         </div>

@@ -950,8 +950,19 @@ export function buildMedicinePrescriptionFromSuggestion(
 ): MedicinePrescriptionDetail {
   const dose_unit_id = mapFormulationToDoseUnitId(drug);
   const src = String(drug.source ?? drug.dominant_signal ?? "").toLowerCase();
-  const frequency_id =
-    src === "doctor" ? "BD" : src === "diagnosis" ? "BD" : "OD";
+  let frequency_id =
+    src === "doctor"
+      ? "BD"
+      : src === "diagnosis"
+        ? "BD"
+        : src === "search"
+          ? "OD"
+          : "OD";
+  const hasLastUsed =
+    Boolean(drug.last_used?.trim()) || Boolean(drug.last_used_ago?.trim());
+  if (hasLastUsed && frequency_id === "OD") {
+    frequency_id = "BD";
+  }
   const slots = slotsFromPrimaryChipId(frequency_id);
   const strength =
     drug.strength?.trim() ||

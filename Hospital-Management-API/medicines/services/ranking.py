@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
+# Hybrid search raw scores are capped such that raw / SEARCH_SCORE_DENOMINATOR is ~[0, 1].
+SEARCH_SCORE_DENOMINATOR = 140.0
+
 
 class MedicineRanker:
     WEIGHTS = {
@@ -57,3 +60,14 @@ class MedicineRanker:
             "final_score": fs,
             "dominant_signal": cls.dominant_signal(components),
         }
+
+    @classmethod
+    def search_norm_from_raw(cls, raw_score: float) -> float:
+        return float(raw_score) / SEARCH_SCORE_DENOMINATOR
+
+    @classmethod
+    def hybrid_merge_score(cls, search_norm: float, suggestion_norm: float) -> float:
+        """Locked: max(a,b) + 0.2 * min(a,b); both norms in [0, 1]."""
+        a = float(search_norm)
+        b = float(suggestion_norm)
+        return max(a, b) + 0.2 * min(a, b)

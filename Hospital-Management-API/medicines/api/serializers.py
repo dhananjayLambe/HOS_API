@@ -110,3 +110,30 @@ def serialize_suggestion_response(
         key: serialize_bucket_rows(rows, include_scores=include_scores)
         for key, rows in buckets.items()
     }
+
+
+def serialize_hybrid_result(drug: DrugMaster, source: str, score: float) -> dict:
+    from medicines.services.hybrid_engine import format_hybrid_result
+
+    return format_hybrid_result(drug, source, score)
+
+
+class MedicineHybridQuerySerializer(serializers.Serializer):
+    q = serializers.CharField(required=False, allow_blank=True, default="")
+    doctor_id = serializers.UUIDField(required=True)
+    patient_id = serializers.UUIDField(required=False, allow_null=True)
+    consultation_id = serializers.UUIDField(required=False, allow_null=True)
+    diagnosis_ids = serializers.ListField(
+        child=serializers.UUIDField(),
+        required=False,
+        default=list,
+    )
+    symptom_ids = serializers.ListField(
+        child=serializers.UUIDField(),
+        required=False,
+        default=list,
+    )
+    limit = serializers.IntegerField(required=False, default=10, min_value=1, max_value=15)
+
+    def validate_limit(self, value: int) -> int:
+        return min(int(value), 15)

@@ -1,5 +1,6 @@
 import uuid
 
+from django.core.cache import cache
 from django.db.models import F
 from django.test import TestCase
 from django.urls import reverse
@@ -12,6 +13,7 @@ from consultations_core.models.diagnosis import DiagnosisMaster
 from medicines.models import DrugMaster, FormulationMaster
 from medicines.services.cache import suggestion_cache_key
 from medicines.services.ranking import MedicineRanker
+from medicines.services.search_engine import MAX_CANDIDATES, search_medicines
 from medicines.services.suggestion_engine import MedicineSuggestionEngine
 
 
@@ -26,6 +28,40 @@ class SuggestionCacheKeyTests(TestCase):
         self.assertIn(":limit:12", key)
 
 
+class SearchEngineLargeCatalogTests(TestCase):
+    """
+    Regression: search must stay bounded for huge DrugMaster tables.
+
+    We cannot load millions of rows in CI; we create > MAX_CANDIDATES matching rows and
+    assert the service never returns more than MAX_CANDIDATES (same as SQL LIMIT).
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.form = FormulationMaster.objects.create(name="scale-form")
+        rows = [
+            DrugMaster(
+                code=f"SC{i:05d}",
+                brand_name=f"ScalxMed {i} Tablet",
+                formulation=cls.form,
+                is_active=True,
+            )
+            for i in range(MAX_CANDIDATES + 80)
+        ]
+        DrugMaster.objects.bulk_create(rows)
+
+    def test_search_medicines_bounded_when_many_rows_match(self):
+        hits = search_medicines("scalx", include_fts=False)
+        self.assertLessEqual(
+            len(hits),
+            MAX_CANDIDATES,
+            msg="Without a fixed cap, search cost grows with catalog size",
+        )
+
+    def test_max_candidates_constant_documented(self):
+        self.assertEqual(MAX_CANDIDATES, 50)
+
+
 class MedicineRankerTests(TestCase):
     def test_normalize_by_max(self):
         self.assertEqual(MedicineRanker.normalize_by_max([10.0, 5.0, 0.0]), [1.0, 0.5, 0.0])
@@ -37,6 +73,15 @@ class MedicineRankerTests(TestCase):
     def test_dominant_signal(self):
         c = {"doctor": 0.2, "diagnosis": 0.9, "patient": 0.1, "global": 0.0}
         self.assertEqual(MedicineRanker.dominant_signal(c), "diagnosis")
+
+    def test_hybrid_merge_score(self):
+        self.assertAlmostEqual(
+            MedicineRanker.hybrid_merge_score(0.7, 0.5),
+            0.7 + 0.2 * 0.5,
+        )
+
+    def test_search_norm_from_raw(self):
+        self.assertAlmostEqual(MedicineRanker.search_norm_from_raw(140), 1.0)
 
 
 class MedicineSuggestionEngineTests(TestCase):
@@ -81,6 +126,14 @@ class MedicineSuggestionEngineTests(TestCase):
         quick = out["quick_suggestions"]
         self.assertGreaterEqual(len(quick), 1)
         self.assertEqual(quick[0]["drug"].id, self.drug_a.id)
+
+    def test_run_ranked_rows_superset_of_bucket_drugs(self):
+        engine = MedicineSuggestionEngine(doctor_id=self.user.id, limit=10)
+        rows = engine.run_ranked_rows()
+        buckets = engine.run()
+        ranked_ids = {r["drug"].id for r in rows}
+        bucket_ids = {r["drug"].id for rows in buckets.values() for r in rows}
+        self.assertTrue(bucket_ids.issubset(ranked_ids))
 
     def test_diagnosis_boosts_mapped_drug(self):
         dx = DiagnosisMaster.objects.create(
@@ -259,3 +312,119 @@ class MedicineSuggestionsAPITests(TestCase):
         self.assertIn("last_used_ago", item)
         self.assertIn("display_name", item)
         self.assertIn("is_common", item)
+
+
+class MedicineHybridAPITests(TestCase):
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="hybdoc",
+            email="hybdoc@test.com",
+            password="testpass123",
+            first_name="H",
+            last_name="Y",
+        )
+        self.other = User.objects.create_user(
+            username="hybother",
+            email="hybother@test.com",
+            password="testpass123",
+            first_name="O",
+            last_name="T",
+        )
+        self.form = FormulationMaster.objects.create(name="hybtab")
+        self.drug = DrugMaster.objects.create(
+            code="HYB1",
+            brand_name="Paracetamol",
+            formulation=self.form,
+            is_common=True,
+        )
+        DoctorMedicineUsage.objects.create(
+            doctor=self.user,
+            drug=self.drug,
+            usage_count=50,
+        )
+
+    def test_hybrid_wrong_doctor_403(self):
+        self.client.force_authenticate(user=self.user)
+        url = reverse("medicine-hybrid")
+        r = self.client.get(
+            url,
+            {"doctor_id": str(self.other.id), "q": "para"},
+        )
+        self.assertEqual(r.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_hybrid_empty_q_suggestion_mode(self):
+        self.client.force_authenticate(user=self.user)
+        url = reverse("medicine-hybrid")
+        r = self.client.get(url, {"doctor_id": str(self.user.id)})
+        self.assertEqual(r.status_code, status.HTTP_200_OK)
+        self.assertEqual(r.data["meta"]["mode"], "suggestion")
+        self.assertIn("results", r.data)
+        self.assertIn("timing_ms", r.data["meta"])
+
+    def test_hybrid_limit_capped_at_15(self):
+        self.client.force_authenticate(user=self.user)
+        url = reverse("medicine-hybrid")
+        r = self.client.get(
+            url,
+            {"doctor_id": str(self.user.id), "q": "a", "limit": 99},
+        )
+        self.assertEqual(r.status_code, status.HTTP_200_OK)
+        self.assertLessEqual(len(r.data["results"]), 15)
+
+    def test_hybrid_no_duplicate_drug_ids_in_results(self):
+        self.client.force_authenticate(user=self.user)
+        url = reverse("medicine-hybrid")
+        r = self.client.get(
+            url,
+            {"doctor_id": str(self.user.id), "q": "para"},
+        )
+        self.assertEqual(r.status_code, status.HTTP_200_OK)
+        ids = [row["id"] for row in r.data["results"]]
+        self.assertEqual(len(ids), len(set(ids)))
+
+    def test_hybrid_short_query_returns_results(self):
+        self.client.force_authenticate(user=self.user)
+        url = reverse("medicine-hybrid")
+        r = self.client.get(
+            url,
+            {"doctor_id": str(self.user.id), "q": "p"},
+        )
+        self.assertEqual(r.status_code, status.HTTP_200_OK)
+        self.assertEqual(r.data["meta"]["mode"], "hybrid_light")
+        ids = [row["id"] for row in r.data["results"]]
+        self.assertIn(str(self.drug.id), ids)
+
+    def test_hybrid_strong_mode_longer_query(self):
+        self.client.force_authenticate(user=self.user)
+        url = reverse("medicine-hybrid")
+        r = self.client.get(
+            url,
+            {"doctor_id": str(self.user.id), "q": "para"},
+        )
+        self.assertEqual(r.status_code, status.HTTP_200_OK)
+        self.assertEqual(r.data["meta"]["mode"], "hybrid_strong")
+
+    def test_hybrid_result_shape(self):
+        self.client.force_authenticate(user=self.user)
+        url = reverse("medicine-hybrid")
+        r = self.client.get(
+            url,
+            {"doctor_id": str(self.user.id), "q": "para"},
+        )
+        self.assertEqual(r.status_code, status.HTTP_200_OK)
+        if r.data["results"]:
+            row = r.data["results"][0]
+            for key in (
+                "id",
+                "display_name",
+                "brand_name",
+                "strength",
+                "drug_type",
+                "formulation",
+                "source",
+                "score",
+            ):
+                self.assertIn(key, row)
+            self.assertIn("name", row["formulation"])
