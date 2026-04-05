@@ -3,6 +3,8 @@
 import { Suspense, useEffect, useState, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { usePatient } from "@/lib/patientContext";
+import { useAuth } from "@/lib/authContext";
+import { useMedicineSuggestions } from "@/hooks/useMedicineSuggestions";
 import { backendAxiosClient } from "@/lib/axiosClient";
 import { useToastNotification } from "@/hooks/use-toast-notification";
 import {
@@ -54,17 +56,55 @@ function StartConsultationContent() {
   const [showAlert, setShowAlert] = useState(false);
   const [isResolvingOrCreating, setIsResolvingOrCreating] = useState(false);
   const entryFlowDoneRef = useRef(false);
-  const { consultationType, setConsultationType, setEncounterId, setVitals, setVitalsLoaded } = useConsultationStore(
+  const { user } = useAuth();
+  const doctorId = user?.user_id ?? null;
+  const encounterIdFromUrl = searchParams.get("encounter_id");
+
+  const {
+    consultationType,
+    setConsultationType,
+    setEncounterId,
+    setVitals,
+    setVitalsLoaded,
+    sectionItems,
+    diagnosisSchemaByKey,
+    encounterId: encounterIdFromStore,
+  } = useConsultationStore(
     useShallow((s) => ({
       consultationType: s.consultationType,
       setConsultationType: s.setConsultationType,
       setEncounterId: s.setEncounterId,
       setVitals: s.setVitals,
       setVitalsLoaded: s.setVitalsLoaded,
+      sectionItems: s.sectionItems,
+      diagnosisSchemaByKey: s.diagnosisSchemaByKey,
+      encounterId: s.encounterId,
     }))
   );
 
-  const encounterIdFromUrl = searchParams.get("encounter_id");
+  const diagnosisIdsForApi = useMemo(() => {
+    const list = sectionItems.diagnosis ?? [];
+    const out: string[] = [];
+    for (const it of list) {
+      const key = it.diagnosisKey;
+      if (!key) continue;
+      const row = diagnosisSchemaByKey[key] as { id?: string } | undefined;
+      if (row?.id && isUuidLike(String(row.id))) {
+        out.push(String(row.id));
+      }
+    }
+    return out;
+  }, [sectionItems.diagnosis, diagnosisSchemaByKey]);
+
+  const medicineSuggestions = useMedicineSuggestions({
+    doctorId,
+    patientId: selectedPatient?.id ?? null,
+    consultationId: encounterIdFromUrl ?? encounterIdFromStore,
+    diagnosisIds: diagnosisIdsForApi,
+    limit: 12,
+    enabled: Boolean(doctorId && selectedPatient?.id),
+  });
+
   const redirectingDueToCancelledRef = useRef(false);
   const redirectedForEncounterIdRef = useRef<string | null>(null);
 
@@ -418,6 +458,9 @@ function StartConsultationContent() {
                     title="Medicines"
                     icon={<Pill className="text-muted-foreground" />}
                     defaultOpen={medicinesDefaultOpen}
+                    medicineSuggestionChips={medicineSuggestions.chips}
+                    medicineSuggestionById={medicineSuggestions.byId}
+                    medicineSuggestionsLoading={medicineSuggestions.loading}
                   />
                 )}
                 {isSectionVisible(consultationType, "investigations") && (

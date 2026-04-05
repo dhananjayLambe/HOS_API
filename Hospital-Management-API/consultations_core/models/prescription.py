@@ -3,7 +3,8 @@ from django.db import models, transaction
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from consultations_core.domain.locks import EncounterLockValidator
-from django.db.models import Max
+from django.db.models import F, Max
+from analytics.models import DoctorMedicineUsage, DiagnosisMedicineMap, PatientMedicineUsage
 
 #consultation_core/models/prescription.py
 #Encounter → Consultation → Prescription → PrescriptionLine
@@ -392,6 +393,38 @@ class Prescription(models.Model):
 
         self.status = PrescriptionStatus.FINALIZED
         self.finalized_at = timezone.now()
+        now = self.finalized_at
+        patient_id = self.consultation.encounter.patient_profile_id
+
+        # TODO: AI suggestions / allergy filtering can consume these aggregates
+        for line in self.lines.all():
+            if not line.drug_id:
+                continue
+
+            if self.created_by_id:
+                n = DoctorMedicineUsage.objects.filter(
+                    doctor=self.created_by,
+                    drug_id=line.drug_id,
+                ).update(usage_count=F("usage_count") + 1, last_used_at=now)
+                if n == 0:
+                    DoctorMedicineUsage.objects.create(
+                        doctor=self.created_by,
+                        drug=line.drug,
+                        usage_count=1,
+                        last_used_at=now,
+                    )
+
+            n_p = PatientMedicineUsage.objects.filter(
+                patient_id=patient_id,
+                drug_id=line.drug_id,
+            ).update(usage_count=F("usage_count") + 1, last_used_at=now)
+            if n_p == 0:
+                PatientMedicineUsage.objects.create(
+                    patient_id=patient_id,
+                    drug=line.drug,
+                    usage_count=1,
+                    last_used_at=now,
+                )
 
         self.save(update_fields=["status", "finalized_at"])
 

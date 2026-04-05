@@ -22,7 +22,9 @@ import {
   getMedicineValidationMessages,
   isMedicineItemComplete,
   withDefaultMedicineDetail,
+  withMedicineDetailFromSuggestion,
 } from "@/lib/medicine-prescription-utils";
+import type { MedicineSuggestionDrug } from "@/lib/medicineSuggestionsApi";
 
 /** True if item is missing mandatory fields.
  *
@@ -104,6 +106,10 @@ export interface ConsultationSectionProps {
   defaultOpen?: boolean;
   /** Optional config override (used for dynamic sections like findings). */
   configOverride?: ConsultationSectionConfig;
+  /** Django suggestions (flattened, deduped by drug id server-side order). */
+  medicineSuggestionChips?: { id: string; label: string }[];
+  medicineSuggestionById?: Record<string, MedicineSuggestionDrug>;
+  medicineSuggestionsLoading?: boolean;
 }
 
 export function ConsultationSection({
@@ -112,6 +118,9 @@ export function ConsultationSection({
   icon,
   defaultOpen = false,
   configOverride,
+  medicineSuggestionChips,
+  medicineSuggestionById,
+  medicineSuggestionsLoading = false,
 }: ConsultationSectionProps) {
   const config = configOverride ?? getSectionConfig(type);
   const {
@@ -170,16 +179,47 @@ export function ConsultationSection({
     [config.staticOptions, items]
   );
 
+  /** Medicines: API suggestions first, then static + custom; dedupe by id only. */
+  const mergedInlineOptions = useMemo(() => {
+    if (type !== "medicines") return allOptions;
+    const api = medicineSuggestionChips ?? [];
+    const seen = new Set<string>();
+    const out: { id: string; label: string }[] = [];
+    for (const o of api) {
+      if (seen.has(o.id)) continue;
+      seen.add(o.id);
+      out.push(o);
+    }
+    for (const o of allOptions) {
+      if (seen.has(o.id)) continue;
+      seen.add(o.id);
+      out.push(o);
+    }
+    return out;
+  }, [type, medicineSuggestionChips, allOptions]);
+
   const filteredInline = useMemo(() => {
     const q = inlineSearchDebounced.trim().toLowerCase();
-    if (!q) return allOptions.slice(0, 25);
-    return allOptions.filter((o) => o.label.toLowerCase().includes(q));
-  }, [inlineSearchDebounced, allOptions]);
+    const base = type === "medicines" ? mergedInlineOptions : allOptions;
+    if (!q) return base.slice(0, 25);
+    return base.filter((o) => o.label.toLowerCase().includes(q));
+  }, [inlineSearchDebounced, allOptions, mergedInlineOptions, type]);
 
   const hasInlineResults = filteredInline.length > 0;
   const canAddInline = inlineSearchDebounced.trim().length > 0;
   const showAddInline = canAddInline && !filteredInline.some(
     (o) => o.label.toLowerCase() === inlineSearchDebounced.trim().toLowerCase()
+  );
+
+  const resolveMedicineItemToAdd = useCallback(
+    (item: ConsultationSectionItem): ConsultationSectionItem => {
+      const api = medicineSuggestionById?.[item.id];
+      if (api) {
+        return withMedicineDetailFromSuggestion({ ...item }, api);
+      }
+      return withDefaultMedicineDetail(item);
+    },
+    [medicineSuggestionById]
   );
 
   const incompleteCount = useMemo(
@@ -189,12 +229,16 @@ export function ConsultationSection({
 
   const handleAddFromList = useCallback(
     (item: ConsultationSectionItem) => {
-      const exists = items.some(
-        (i) => i.label.toLowerCase() === item.label.toLowerCase()
+      const exists = items.some((i) =>
+        type === "medicines"
+          ? i.id === item.id
+          : i.label.toLowerCase() === item.label.toLowerCase()
       );
       if (exists) {
-        const existing = items.find(
-          (i) => i.label.toLowerCase() === item.label.toLowerCase()
+        const existing = items.find((i) =>
+          type === "medicines"
+            ? i.id === item.id
+            : i.label.toLowerCase() === item.label.toLowerCase()
         );
         if (existing) {
           selectItemAndScroll(existing.id);
@@ -205,12 +249,12 @@ export function ConsultationSection({
         setDrawerOpen(false);
         return;
       }
-      const toAdd = type === "medicines" ? withDefaultMedicineDetail(item) : item;
+      const toAdd = type === "medicines" ? resolveMedicineItemToAdd(item) : item;
       addSectionItem(type, toAdd);
       selectItemAndScroll(toAdd.id);
       setDrawerOpen(false);
     },
-    [type, items, addSectionItem, selectItemAndScroll, toast]
+    [type, items, addSectionItem, selectItemAndScroll, toast, resolveMedicineItemToAdd]
   );
 
   const handleAddNewFromDrawer = useCallback(
@@ -234,12 +278,16 @@ export function ConsultationSection({
 
   const handleSelectFromDrawer = useCallback(
     (item: ConsultationSectionItem) => {
-      const exists = items.some(
-        (i) => i.label.toLowerCase() === item.label.toLowerCase()
+      const exists = items.some((i) =>
+        type === "medicines"
+          ? i.id === item.id
+          : i.label.toLowerCase() === item.label.toLowerCase()
       );
       if (exists) {
-        const existing = items.find(
-          (i) => i.label.toLowerCase() === item.label.toLowerCase()
+        const existing = items.find((i) =>
+          type === "medicines"
+            ? i.id === item.id
+            : i.label.toLowerCase() === item.label.toLowerCase()
         );
         if (existing) {
           selectItemAndScroll(existing.id);
@@ -247,24 +295,26 @@ export function ConsultationSection({
         setDrawerOpen(false);
         return;
       }
-      const toAdd = type === "medicines" ? withDefaultMedicineDetail(item) : item;
+      const toAdd = type === "medicines" ? resolveMedicineItemToAdd(item) : item;
       addSectionItem(type, toAdd);
       selectItemAndScroll(toAdd.id);
       setDrawerOpen(false);
     },
-    [type, items, addSectionItem, selectItemAndScroll]
+    [type, items, addSectionItem, selectItemAndScroll, resolveMedicineItemToAdd]
   );
 
   const handleInlineSelect = (item: ConsultationSectionItem) => {
-    const existingByIdOrLabel = items.find(
-      (i) => i.id === item.id || i.label.toLowerCase() === item.label.toLowerCase()
+    const existingByIdOrLabel = items.find((i) =>
+      type === "medicines"
+        ? i.id === item.id
+        : i.id === item.id || i.label.toLowerCase() === item.label.toLowerCase()
     );
     if (existingByIdOrLabel) {
       selectItemAndScroll(existingByIdOrLabel.id);
       setInlineSearch("");
       return;
     }
-    const toAdd = type === "medicines" ? withDefaultMedicineDetail(item) : item;
+    const toAdd = type === "medicines" ? resolveMedicineItemToAdd(item) : item;
     addSectionItem(type, toAdd);
     selectItemAndScroll(toAdd.id);
     setInlineSearch("");
@@ -423,15 +473,37 @@ export function ConsultationSection({
           )}
 
           {/* Separator line when both selected and suggested areas exist */}
-          {items.length > 0 && (hasInlineResults || canAddInline || (!inlineSearchDebounced && allOptions.length > 0)) && (
+          {items.length > 0 &&
+            (hasInlineResults ||
+              canAddInline ||
+              (!inlineSearchDebounced &&
+                (type === "medicines" ? mergedInlineOptions.length > 0 : allOptions.length > 0)) ||
+              (type === "medicines" && medicineSuggestionsLoading)) && (
             <hr className="border-border my-2" />
           )}
 
           {/* Suggested items: light grey chips, click to add */}
-          {hasInlineResults ? (
+          {type === "medicines" &&
+          medicineSuggestionsLoading &&
+          !inlineSearchDebounced &&
+          !hasInlineResults &&
+          !canAddInline ? (
+            <div className="flex flex-wrap gap-2" aria-busy="true">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="h-8 w-24 animate-pulse rounded-full bg-muted"
+                />
+              ))}
+            </div>
+          ) : hasInlineResults ? (
             <div className="flex flex-wrap gap-2">
               {filteredInline
-                .filter((opt) => !items.some((i) => i.id === opt.id || i.label === opt.label))
+                .filter((opt) =>
+                  type === "medicines"
+                    ? !items.some((i) => i.id === opt.id)
+                    : !items.some((i) => i.id === opt.id || i.label === opt.label)
+                )
                 .map((opt) => {
                   const item = items.find((i) => i.id === opt.id) ?? {
                     id: opt.id,
@@ -471,10 +543,14 @@ export function ConsultationSection({
                 No results found. Press Enter or use Add New to add it.
               </p>
             )
-          ) : !inlineSearchDebounced && allOptions.length > 0 ? (
+          ) : !inlineSearchDebounced && mergedInlineOptions.length > 0 ? (
             <div className="flex flex-wrap gap-2">
-              {allOptions
-                .filter((opt) => !items.some((i) => i.id === opt.id || i.label === opt.label))
+              {mergedInlineOptions
+                .filter((opt) =>
+                  type === "medicines"
+                    ? !items.some((i) => i.id === opt.id)
+                    : !items.some((i) => i.id === opt.id || i.label === opt.label)
+                )
                 .slice(0, 20)
                 .map((opt) => {
                     const item = { id: opt.id, label: opt.label };
@@ -490,6 +566,13 @@ export function ConsultationSection({
                     );
                 })}
             </div>
+          ) : type === "medicines" &&
+            !inlineSearchDebounced &&
+            !hasInlineResults &&
+            !canAddInline &&
+            mergedInlineOptions.length === 0 &&
+            !medicineSuggestionsLoading ? (
+            <p className="text-sm text-muted-foreground">Start typing medicine</p>
           ) : null}
         </div>
       </ConsultationSectionCard>

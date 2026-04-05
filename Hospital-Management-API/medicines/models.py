@@ -263,9 +263,15 @@ class DrugMaster(models.Model):
 
     is_otc = models.BooleanField(default=False)
 
+    is_common = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text="High-volume / commonly prescribed; boosts global fallback ordering.",
+    )
+
     is_active = models.BooleanField(default=True)
 
-    search_vector = SearchVectorField(null=True)
+    search_vector = SearchVectorField(null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -275,6 +281,7 @@ class DrugMaster(models.Model):
         indexes = [
             GinIndex(fields=["search_vector"]),
             models.Index(fields=["is_active", "brand_name"]),
+            models.Index(fields=["is_active", "is_common", "brand_name"]),
             models.Index(fields=["generic_name"]),
             models.Index(fields=["manufacturer"]),
         ]
@@ -294,7 +301,7 @@ class DrugMaster(models.Model):
 
     def save(self, *args, **kwargs):
 
-        if self.pk:
+        if not self._state.adding:
             old = type(self).objects.only("code").get(pk=self.pk)
             if old.code != self.code:
                 raise ValidationError("Drug code cannot be modified.")

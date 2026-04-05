@@ -15,6 +15,7 @@ idna==3.7
 jiter==0.5.0
 Markdown==3.7
 openai==1.40.6
+openpyxl==3.1.5
 psycopg2==2.9.9
 pydantic==2.8.2
 pydantic_core==2.20.1

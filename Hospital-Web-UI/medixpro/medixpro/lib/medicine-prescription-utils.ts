@@ -4,6 +4,7 @@ import type {
   MedicinePrescriptionDetail,
   MedicineTiming,
 } from "@/lib/consultation-types";
+import type { MedicineSuggestionDrug } from "@/lib/medicineSuggestionsApi";
 
 /**
  * Quick-select presets per dose unit (tap-first; custom input always available).
@@ -900,6 +901,107 @@ export function withDefaultMedicineDetail(item: ConsultationSectionItem): Consul
     detail: {
       ...item.detail,
       medicine: buildDefaultMedicinePrescription(item.id, item.label),
+    },
+  };
+}
+
+/**
+ * Map backend formulation / drug_type strings to prescription `dose_unit_id` (must match `DOSE_UNIT_OPTIONS`).
+ */
+export function mapFormulationToDoseUnitId(drug: MedicineSuggestionDrug): string {
+  const name = (drug.formulation?.name ?? "").toLowerCase();
+  const dtype = (drug.drug_type ?? "").toLowerCase();
+  const combined = `${name} ${dtype}`;
+  if (/\btablet\b|\btab\b/.test(combined)) return "tablet";
+  if (/capsule|\bcap\b/.test(combined)) return "capsule";
+  if (/syrup|elixir/.test(combined)) return "ml";
+  if (/injection|inject|vial|ampoule|infusion/.test(combined)) return "ml";
+  if (/cream|ointment|gel/.test(combined)) return "cream";
+  if (/drop/.test(combined)) return "drops";
+  if (/powder|sachet/.test(combined)) return "powder";
+  if (/inhaler|puff|dpi|mdi/.test(combined)) return "inhaler";
+  if (/nebul/.test(combined)) return "nebulizer";
+  if (/patch/.test(combined)) return "patch";
+  if (/suppository/.test(combined)) return "suppository";
+  return "tablet";
+}
+
+function routeIdForDoseUnitId(doseUnitId: string): string {
+  const u = doseUnitId.toLowerCase();
+  if (
+    u === "cream" ||
+    u === "ointment" ||
+    u === "gel" ||
+    u === "spray" ||
+    u === "patch"
+  ) {
+    return "topical";
+  }
+  return "oral";
+}
+
+/**
+ * Build prescription draft from Django suggestions API row (UUID drug id).
+ * Frequency: `source === doctor` → BD habit; `diagnosis` → BD; else OD.
+ */
+export function buildMedicinePrescriptionFromSuggestion(
+  drugId: string,
+  drug: MedicineSuggestionDrug
+): MedicinePrescriptionDetail {
+  const dose_unit_id = mapFormulationToDoseUnitId(drug);
+  const src = String(drug.source ?? drug.dominant_signal ?? "").toLowerCase();
+  const frequency_id =
+    src === "doctor" ? "BD" : src === "diagnosis" ? "BD" : "OD";
+  const slots = slotsFromPrimaryChipId(frequency_id);
+  const strength =
+    drug.strength?.trim() ||
+    strengthFromLabel(drug.display_name || drug.brand_name || "") ||
+    undefined;
+  const nameOnly = (drug.generic_name || drug.brand_name || "").trim() || "Medicine";
+  const composition =
+    [drug.brand_name, drug.strength].filter(Boolean).join(" ").trim() ||
+    drug.display_name ||
+    nameOnly;
+
+  return {
+    drug_id: drugId,
+    strength_label: strength,
+    generic_name: drug.generic_name?.trim() || nameOnly,
+    composition,
+    dose_value: 1,
+    dose_unit_id,
+    dose_is_custom: false,
+    dose_custom_text: "",
+    route_id: routeIdForDoseUnitId(dose_unit_id),
+    route_body_site: "",
+    frequency_id,
+    frequency_ui_mode: "standard",
+    frequency_pattern_morning: slots.morning,
+    frequency_pattern_afternoon: slots.afternoon,
+    frequency_pattern_night: slots.night,
+    frequency_custom_text: patternStringFromSlots(slots.morning, slots.afternoon, slots.night),
+    duration_value: 5,
+    duration_unit: "days",
+    duration_special: undefined,
+    duration_is_custom: false,
+    duration_custom_text: "",
+    timing: ["after_food"],
+    instructions: "",
+    is_prn: false,
+    is_stat: false,
+    is_chronic: false,
+  };
+}
+
+export function withMedicineDetailFromSuggestion(
+  item: ConsultationSectionItem,
+  drug: MedicineSuggestionDrug
+): ConsultationSectionItem {
+  return {
+    ...item,
+    detail: {
+      ...item.detail,
+      medicine: buildMedicinePrescriptionFromSuggestion(item.id, drug),
     },
   };
 }
