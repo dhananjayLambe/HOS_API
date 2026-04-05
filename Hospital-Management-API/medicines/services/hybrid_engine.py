@@ -3,12 +3,10 @@ from __future__ import annotations
 import logging
 import time
 import uuid
-from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
-from django.db import close_old_connections
-
 from medicines.models import DrugMaster
+from medicines.services.autofill import build_autofill, load_master_cache
 from medicines.services.cache import (
     HybridSuggestionEntry,
     get_cached_hybrid_suggestion_entries,
@@ -150,6 +148,7 @@ def run_hybrid(
             except (ValueError, TypeError):
                 continue
         drugs_by_id = _hydrate_drugs(ids)
+        master_cache = load_master_cache()
         results: list[dict[str, Any]] = []
         for e in entries:
             try:
@@ -163,7 +162,9 @@ def run_hybrid(
             dom = str(e["dominant_signal"])
             fs = MedicineRanker.hybrid_merge_score(0.0, sn)
             src = _resolve_source(0.0, sn, dom)
-            results.append(format_hybrid_result(drug, src, fs))
+            row = format_hybrid_result(drug, src, fs)
+            row["autofill"] = build_autofill(drug, master_cache=master_cache)
+            results.append(row)
 
         results.sort(key=lambda r: r["score"], reverse=True)
         timing_ms = (time.monotonic() - t0) * 1000.0
@@ -173,19 +174,17 @@ def run_hybrid(
         }
 
     mode = "hybrid_light" if len(q_norm) <= 2 else "hybrid_strong"
+    # Snapshot FTS eligibility at request start (same idea as when search ran in parallel).
+    include_fts = mode == "hybrid_strong" and (time.monotonic() - t0) <= DEADLINE_SKIP_FTS_S
 
     def task_search() -> list[tuple[DrugMaster, float]]:
-        close_old_connections()
         try:
-            elapsed = time.monotonic() - t0
-            include_fts = mode == "hybrid_strong" and elapsed <= DEADLINE_SKIP_FTS_S
             return search_medicines(q_norm, include_fts=include_fts)
         except Exception:
             logger.exception("hybrid search failed; using suggestions merge only")
             return []
 
     def task_suggestions() -> list[HybridSuggestionEntry]:
-        close_old_connections()
         cached = get_cached_hybrid_suggestion_entries(cache_key)
         if cached is not None:
             return cached
@@ -203,11 +202,11 @@ def run_hybrid(
         set_cached_hybrid_suggestion_entries(cache_key, entries)
         return entries
 
-    with ThreadPoolExecutor(max_workers=2) as ex:
-        f_search = ex.submit(task_search)
-        f_sug = ex.submit(task_suggestions)
-        search_hits = f_search.result()
-        sug_entries = f_sug.result()
+    # Same-thread DB access (TestCase + PostgreSQL safe). Run suggestions before search so
+    # DEADLINE_NO_COLD_SUGGEST_S is evaluated near t0; if search ran first, cold suggest
+    # would almost always be skipped and results could be empty.
+    sug_entries = task_suggestions()
+    search_hits = task_search()
 
     all_ids: set[uuid.UUID] = set()
     for drug, _ in search_hits:
@@ -267,7 +266,12 @@ def run_hybrid(
         out_rows.append((drug, fs, src))
 
     out_rows.sort(key=lambda x: x[1], reverse=True)
-    results = [format_hybrid_result(d, src, score) for d, score, src in out_rows[:cap]]
+    master_cache = load_master_cache()
+    results: list[dict[str, Any]] = []
+    for d, score, src in out_rows[:cap]:
+        row = format_hybrid_result(d, src, score)
+        row["autofill"] = build_autofill(d, master_cache=master_cache)
+        results.append(row)
 
     timing_ms = (time.monotonic() - t0) * 1000.0
     return {

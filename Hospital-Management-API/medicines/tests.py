@@ -11,7 +11,8 @@ from account.models import User
 from analytics.models import DiagnosisMedicineMap, DoctorMedicineUsage, PatientMedicineUsage
 from consultations_core.models.diagnosis import DiagnosisMaster
 from medicines.models import DrugMaster, FormulationMaster
-from medicines.services.cache import suggestion_cache_key
+from medicines.services.autofill import clear_master_cache
+from medicines.services.cache import hybrid_suggestion_cache_key, suggestion_cache_key
 from medicines.services.ranking import MedicineRanker
 from medicines.services.search_engine import MAX_CANDIDATES, search_medicines
 from medicines.services.suggestion_engine import MedicineSuggestionEngine
@@ -26,6 +27,16 @@ class SuggestionCacheKeyTests(TestCase):
             12,
         )
         self.assertIn(":limit:12", key)
+        self.assertTrue(key.startswith("med_suggest_v2:"))
+
+    def test_hybrid_suggestion_cache_key_uses_v2_prefix(self):
+        key = hybrid_suggestion_cache_key(
+            "550e8400-e29b-41d4-a716-446655440000",
+            [],
+            "np",
+            10,
+        )
+        self.assertTrue(key.startswith("med_hybrid_v2:"))
 
 
 class SearchEngineLargeCatalogTests(TestCase):
@@ -266,6 +277,8 @@ class UsageIncrementPatternTests(TestCase):
 
 class MedicineSuggestionsAPITests(TestCase):
     def setUp(self):
+        cache.clear()
+        clear_master_cache()
         self.client = APIClient()
         self.user = User.objects.create_user(
             username="apidoc",
@@ -312,11 +325,14 @@ class MedicineSuggestionsAPITests(TestCase):
         self.assertIn("last_used_ago", item)
         self.assertIn("display_name", item)
         self.assertIn("is_common", item)
+        self.assertIn("autofill", item)
+        self.assertIn("dose", item["autofill"])
 
 
 class MedicineHybridAPITests(TestCase):
     def setUp(self):
         cache.clear()
+        clear_master_cache()
         self.client = APIClient()
         self.user = User.objects.create_user(
             username="hybdoc",
@@ -386,10 +402,16 @@ class MedicineHybridAPITests(TestCase):
 
     def test_hybrid_short_query_returns_results(self):
         self.client.force_authenticate(user=self.user)
+        # hybrid_light requires len(q) <= 2. Short queries use icontains + a 50-row cap;
+        # common substrings ("pa", etc.) can exclude this row when the catalog is large.
+        DrugMaster.objects.filter(pk=self.drug.pk).update(
+            brand_name="XqHybShortParacetamol",
+        )
+        self.drug.refresh_from_db()
         url = reverse("medicine-hybrid")
         r = self.client.get(
             url,
-            {"doctor_id": str(self.user.id), "q": "p"},
+            {"doctor_id": str(self.user.id), "q": "xq"},
         )
         self.assertEqual(r.status_code, status.HTTP_200_OK)
         self.assertEqual(r.data["meta"]["mode"], "hybrid_light")
@@ -428,3 +450,7 @@ class MedicineHybridAPITests(TestCase):
             ):
                 self.assertIn(key, row)
             self.assertIn("name", row["formulation"])
+            self.assertIn("autofill", row)
+            af = row["autofill"]
+            for k in ("dose", "frequency", "timing", "duration", "route", "instructions"):
+                self.assertIn(k, af)

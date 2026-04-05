@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from datetime import datetime
 
 from django.utils import timezone
@@ -55,6 +56,7 @@ def drug_to_payload(
     source: str | None = None,
     last_used_at: datetime | None = None,
     include_scores: bool = False,
+    autofill: dict | None = None,
 ) -> dict:
     formulation = drug.formulation
     payload = {
@@ -72,6 +74,8 @@ def drug_to_payload(
         "last_used": _dt_iso(last_used_at),
         "last_used_ago": _last_used_ago(last_used_at),
     }
+    if autofill is not None:
+        payload["autofill"] = autofill
     if include_scores:
         payload["final_score"] = final_score
         payload["components"] = components
@@ -83,10 +87,14 @@ def serialize_bucket_rows(
     rows: list[dict],
     *,
     include_scores: bool = False,
+    autofill_by_drug_id: dict[uuid.UUID, dict] | None = None,
 ) -> list[dict]:
     out: list[dict] = []
     for r in rows:
         drug = r["drug"]
+        af = None
+        if autofill_by_drug_id is not None:
+            af = autofill_by_drug_id.get(drug.id)
         out.append(
             drug_to_payload(
                 drug,
@@ -96,6 +104,7 @@ def serialize_bucket_rows(
                 source=r.get("source"),
                 last_used_at=r.get("last_used_at"),
                 include_scores=include_scores,
+                autofill=af,
             )
         )
     return out
@@ -105,9 +114,14 @@ def serialize_suggestion_response(
     buckets: dict[str, list[dict]],
     *,
     include_scores: bool = False,
+    autofill_by_drug_id: dict[uuid.UUID, dict] | None = None,
 ) -> dict:
     return {
-        key: serialize_bucket_rows(rows, include_scores=include_scores)
+        key: serialize_bucket_rows(
+            rows,
+            include_scores=include_scores,
+            autofill_by_drug_id=autofill_by_drug_id,
+        )
         for key, rows in buckets.items()
     }
 
@@ -133,7 +147,8 @@ class MedicineHybridQuerySerializer(serializers.Serializer):
         required=False,
         default=list,
     )
-    limit = serializers.IntegerField(required=False, default=10, min_value=1, max_value=15)
+    # Allow large client values; cap in validate_limit (max_value=15 rejects e.g. 99 with 400).
+    limit = serializers.IntegerField(required=False, default=10, min_value=1, max_value=10_000)
 
     def validate_limit(self, value: int) -> int:
         return min(int(value), 15)

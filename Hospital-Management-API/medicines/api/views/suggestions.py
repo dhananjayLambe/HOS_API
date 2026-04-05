@@ -9,10 +9,12 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from consultations_core.models import Consultation
+from medicines.models import DrugMaster
 from medicines.api.serializers import (
     MedicineSuggestionsQuerySerializer,
     serialize_suggestion_response,
 )
+from medicines.services.autofill import build_autofill, load_master_cache
 from medicines.services.cache import (
     get_cached_suggestions,
     set_cached_suggestions,
@@ -21,6 +23,16 @@ from medicines.services.cache import (
 from medicines.services.suggestion_engine import MedicineSuggestionEngine
 
 logger = logging.getLogger(__name__)
+
+
+def _collect_drugs_from_buckets(buckets: dict[str, list[dict]]) -> dict[uuid.UUID, DrugMaster]:
+    """Distinct DrugMaster instances across all suggestion buckets."""
+    seen: dict[uuid.UUID, DrugMaster] = {}
+    for rows in buckets.values():
+        for r in rows:
+            drug = r["drug"]
+            seen[drug.id] = drug
+    return seen
 
 
 def _truthy(val: str | None) -> bool:
@@ -113,7 +125,16 @@ class MedicineSuggestionsAPIView(APIView):
             limit=limit,
         )
         buckets = engine.run()
-        payload = serialize_suggestion_response(buckets, include_scores=include_scores)
+        unique_drugs = _collect_drugs_from_buckets(buckets)
+        master_cache = load_master_cache()
+        autofill_by_drug_id = {
+            did: build_autofill(drug, master_cache=master_cache) for did, drug in unique_drugs.items()
+        }
+        payload = serialize_suggestion_response(
+            buckets,
+            include_scores=include_scores,
+            autofill_by_drug_id=autofill_by_drug_id,
+        )
         set_cached_suggestions(cache_key, payload)
         return Response(payload)
 

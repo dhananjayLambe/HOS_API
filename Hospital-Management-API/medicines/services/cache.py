@@ -4,8 +4,8 @@ from typing import Any, TypedDict
 
 from django.core.cache import cache
 
-SUGGESTION_CACHE_PREFIX = "med_suggest"
-HYBRID_SUGGESTION_CACHE_PREFIX = "med_hybrid_suggest"
+SUGGESTION_CACHE_PREFIX = "med_suggest_v2"
+HYBRID_SUGGESTION_CACHE_PREFIX = "med_hybrid_v2"
 DEFAULT_TTL_SECONDS = 8 * 60  # 8 minutes
 
 
