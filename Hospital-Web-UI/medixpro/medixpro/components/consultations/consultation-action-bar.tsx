@@ -34,8 +34,7 @@ import {
 import type { ConsultationWorkflowType } from "@/lib/consultation-types";
 import { ViewPreDrawer } from "./view-pre-drawer";
 import { ConsultationAutosaveIndicator } from "./consultation-autosave-indicator";
-import { draftFindingsToEndConsultationPayload } from "@/lib/consultation-findings-helpers";
-import { sectionItemsToEndConsultationDiagnosisPayload } from "@/lib/consultation-diagnosis-helpers";
+import { buildEndConsultationPayload } from "@/lib/consultation-payload-builder";
 
 const CONSULTATION_TYPE_LABELS: Record<ConsultationWorkflowType, string> = {
   FULL: "Full Consultation",
@@ -177,6 +176,9 @@ export function ConsultationActionBar() {
   };
 
   const handleEndConsultation = async () => {
+    if (isEndingConsultation) {
+      return;
+    }
     const id = encounterId;
     if (!id) {
       toast.error("Encounter not found. Refresh the page or go back to the consultation.");
@@ -185,25 +187,33 @@ export function ConsultationActionBar() {
     setIsEndingConsultation(true);
     try {
       const store = useConsultationStore.getState();
-      const res = await backendAxiosClient.post<{ redirect_url?: string }>(
+      const payload = buildEndConsultationPayload(store);
+      const res = await backendAxiosClient.post<{ redirect_url?: string; status?: string }>(
         `/consultations/encounter/${id}/consultation/complete/`,
-        {
-          symptoms: store.symptoms,
-          findings: draftFindingsToEndConsultationPayload(store.draftFindings),
-          diagnoses: sectionItemsToEndConsultationDiagnosisPayload(
-            store.sectionItems["diagnosis"] ?? []
-          ),
-        }
+        payload
       );
       const url = res.data?.redirect_url || "/doctor-dashboard";
       useConsultationStore.getState().reset();
+      setShowEndConsultationConfirm(false);
       router.push(url);
     } catch (err: any) {
-      const msg = err.response?.data?.detail || err.response?.data?.message || err.message || "Failed to end consultation.";
+      const errorMap = err.response?.data?.errors;
+      const flattenedErrors =
+        errorMap && typeof errorMap === "object"
+          ? Object.values(errorMap)
+              .flat()
+              .filter((v) => typeof v === "string")
+              .join("; ")
+          : "";
+      const msg =
+        err.response?.data?.message ||
+        err.response?.data?.detail ||
+        flattenedErrors ||
+        err.message ||
+        "Failed to end consultation.";
       toast.error(msg);
     } finally {
       setIsEndingConsultation(false);
-      setShowEndConsultationConfirm(false);
     }
   };
 

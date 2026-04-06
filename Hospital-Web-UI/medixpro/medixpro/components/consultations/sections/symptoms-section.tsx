@@ -89,7 +89,7 @@ export function SymptomsSection() {
     activateSection("symptoms");
   };
 
-  const add = (name: string) => {
+  const add = (name: string, isCustom = false) => {
     const trimmed = name.trim();
     if (!trimmed) return;
 
@@ -104,7 +104,7 @@ export function SymptomsSection() {
     }
 
     const id = symptomId();
-    addSymptom({ id, name: trimmed });
+    addSymptom({ id, name: trimmed, isCustom });
     selectSymptomAndScroll(id);
     setSearch("");
   };
@@ -177,14 +177,14 @@ export function SymptomsSection() {
   };
 
   const handleDrawerSelect = (item: ConsultationSectionItem) => {
-    add(item.label);
+    add(item.label, Boolean(item.isCustom));
   };
 
   const handleDrawerAddNew = (
     item: Omit<ConsultationSectionItem, "id">
   ): ConsultationSectionItem => {
     const id = symptomId();
-    add(item.label);
+    add(item.label, true);
     return { ...item, id };
   };
 
@@ -243,7 +243,7 @@ export function SymptomsSection() {
 
                 // If exactly one suggested backend option → add/select it directly
                 if (filteredSuggestions.length === 1) {
-                  add(filteredSuggestions[0].display_name);
+                  add(filteredSuggestions[0].display_name, false);
                   return;
                 }
 
@@ -345,7 +345,7 @@ export function SymptomsSection() {
               <button
                 key={item.key}
                 type="button"
-                onClick={() => add(item.display_name)}
+                onClick={() => add(item.display_name, false)}
                 className="rounded-full border border-muted-foreground/40 bg-muted/30 px-3 py-1.5 text-sm text-muted-foreground hover:border-muted-foreground/60 hover:bg-muted/50 hover:text-foreground"
               >
                 {item.display_name}

@@ -18,6 +18,7 @@ export interface ConsultationSymptom {
   id: string;
   name: string;
   detail?: SymptomDetail;
+  isCustom?: boolean;
 }
 
 export interface ConsultationMedicine {

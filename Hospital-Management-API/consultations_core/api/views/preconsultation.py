@@ -21,7 +21,6 @@ from django.db import transaction
 from django.db import IntegrityError
 from django.http import Http404
 from django.shortcuts import get_object_or_404
-from django.utils.text import slugify
 from django.utils import timezone
 # Local App Imports
 from account.permissions import IsDoctor
@@ -34,30 +33,12 @@ from consultations_core.services.preconsultation_service import (
 from consultations_core.services.preconsultation_section_service import PreConsultationSectionService
 from consultations_core.services.encounter_service import EncounterService
 from consultations_core.services.encounter_state_machine import EncounterStateMachine
+from consultations_core.services.end_consultation_service import persist_consultation_end_state
 from patient_account.models import PatientProfile
 from clinic.models import Clinic
 
 from consultations_core.models.encounter import ClinicalEncounter
 from consultations_core.models.consultation import Consultation
-from consultations_core.models.symptoms import (
-    ConsultationSymptom,
-    CustomSymptom,
-    SymptomMaster,
-)
-from consultations_core.models.findings import (
-    ConsultationFinding,
-    CustomFinding,
-    FindingMaster,
-)
-from consultations_core.models.diagnosis import (
-    ConsultationDiagnosis,
-    CustomDiagnosis,
-    DiagnosisMaster,
-)
-from consultations_core.api.serializers.findings import ConsultationFindingSerializer
-from consultations_core.services.finding_master_service import (
-    get_or_create_finding_master_for_code,
-)
 from consultations_core.models.pre_consultation import(
      PreConsultation, 
      PreConsultationVitals, 
@@ -72,6 +53,14 @@ logger = logging.getLogger(__name__)
 
 # Phase-1: single message for all "cancelled encounter" guards
 MSG_VISIT_CANCELLED = "This visit has been cancelled. Please start a new one."
+
+
+def _contract_error(message, errors=None):
+    return {
+        "status": "error",
+        "message": message,
+        "errors": errors or {},
+    }
 
 # #region agent log (disabled by default to avoid file I/O on every request)
 def _dlog(msg, data, hid, loc="preconsultation.py"):
@@ -1287,513 +1276,69 @@ class EndConsultationAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated, IsDoctor]
 
-    def _persist_consultation_symptoms(self, consultation, user, raw_symptoms):
-        """
-        Persist symptoms sent from consultation UI at end-consultation time.
-        """
-        if not isinstance(raw_symptoms, list):
-            return
-
-        seen_names = set()
-        existing_entries = {
-            (entry.display_name or "").strip().lower(): entry
-            for entry in consultation.symptoms.select_related("symptom", "custom_symptom").all()
-        }
-
-        for item in raw_symptoms:
-            if not isinstance(item, dict):
-                continue
-            name = str(item.get("name", "")).strip()
-            if not name:
-                continue
-
-            lowered_name = name.lower()
-            if lowered_name in seen_names:
-                continue
-            seen_names.add(lowered_name)
-
-            detail = item.get("detail")
-            detail_dict = detail if isinstance(detail, dict) else {}
-
-            symptom_entry = existing_entries.get(lowered_name)
-            if symptom_entry is None:
-                master_symptom = SymptomMaster.objects.filter(
-                    display_name__iexact=name,
-                    is_active=True,
-                ).first()
-
-                custom_symptom = None
-                if master_symptom is not None:
-                    symptom_entry = ConsultationSymptom.objects.filter(
-                        consultation=consultation,
-                        symptom=master_symptom,
-                    ).first()
-
-                if master_symptom is None:
-                    custom_symptom = CustomSymptom.objects.filter(
-                        consultation=consultation,
-                        name__iexact=name,
-                    ).first()
-                    if custom_symptom is None:
-                        custom_symptom = CustomSymptom.objects.create(
-                            consultation=consultation,
-                            name=name,
-                            created_by=user,
-                        )
-
-                if symptom_entry is None:
-                    symptom_entry = ConsultationSymptom(
-                        consultation=consultation,
-                        symptom=master_symptom,
-                        custom_symptom=custom_symptom,
-                        created_by=user,
-                    )
-
-            symptom_entry.display_name = name
-            symptom_entry.extra_data = detail_dict or None
-            symptom_entry.updated_by = user
-            try:
-                symptom_entry.save()
-            except IntegrityError:
-                # Handle races/duplicate master symptom rows gracefully by reusing existing row.
-                if symptom_entry.symptom_id:
-                    existing = ConsultationSymptom.objects.filter(
-                        consultation=consultation,
-                        symptom_id=symptom_entry.symptom_id,
-                    ).first()
-                    if existing is not None:
-                        existing.display_name = name
-                        existing.extra_data = detail_dict or None
-                        existing.updated_by = user
-                        existing.save()
-                        continue
-                raise
-
-    def _persist_consultation_findings(self, consultation, user, raw_findings):
-        """
-        Draft-first: persist findings only at end consultation.
-
-        Master rows: upsert on (consultation, finding) because unique constraint applies
-        even when a prior row is inactive.
-
-        Custom rows: new CustomFinding + ConsultationFinding per payload entry.
-
-        Any other active ConsultationFinding rows for this consultation are deactivated
-        (removed in UI draft).
-        """
-        if not isinstance(raw_findings, list):
-            logger.info("EndConsultation findings: payload not a list, skipping")
-            return
-
-        seen_master = set()
-        keeper_ids = set()
-
-        for item in raw_findings:
-            if not isinstance(item, dict):
-                continue
-            if item.get("is_deleted"):
-                continue
-
-            raw_fid = item.get("finding_id")
-            finding_code = (item.get("finding_code") or "").strip()
-            custom_name = (item.get("custom_name") or "").strip()
-            has_fid = raw_fid is not None and str(raw_fid).strip() != ""
-            # Be permissive: infer custom rows when custom_name is present and
-            # no master source is provided, even if is_custom is absent/false.
-            is_custom = bool(item.get("is_custom")) or (
-                bool(custom_name) and not has_fid and not finding_code
-            )
-
-            if is_custom:
-                if not custom_name:
-                    logger.warning("EndConsultation findings skip empty custom_name: %s", item)
-                    continue
-                if has_fid or finding_code:
-                    logger.warning(
-                        "EndConsultation findings skip custom with master fields: %s", item
-                    )
-                    continue
-            else:
-                if not has_fid and not finding_code:
-                    logger.warning(
-                        "EndConsultation findings skip master without finding_id/code: %s", item
-                    )
-                    continue
-                if custom_name:
-                    logger.warning(
-                        "EndConsultation findings skip master with custom_name: %s", item
-                    )
-                    continue
-
-                dedup = None
-                if has_fid:
-                    try:
-                        dedup = ("id", str(uuid.UUID(str(raw_fid))))
-                    except (ValueError, TypeError):
-                        dedup = None
-                if dedup is None and finding_code:
-                    dedup = ("code", finding_code.lower())
-                if dedup is not None:
-                    if dedup in seen_master:
-                        continue
-                    seen_master.add(dedup)
-
-            sev = item.get("severity")
-            if sev in ("", None):
-                sev = None
-            elif sev not in ("mild", "moderate", "severe"):
-                sev = None
-
-            raw_note = item.get("note")
-            if isinstance(raw_note, str):
-                note = raw_note.strip() or None
-            elif raw_note is None:
-                note = None
-            else:
-                note = str(raw_note).strip() or None
-
-            ext = item.get("extension_data")
-            if ext is not None and not isinstance(ext, dict):
-                ext = None
-
-            try:
-                if is_custom:
-                    cf = CustomFinding.objects.create(
-                        consultation=consultation,
-                        name=custom_name,
-                        created_by=user,
-                    )
-                    row = ConsultationFinding(
-                        consultation=consultation,
-                        finding=None,
-                        custom_finding=cf,
-                        severity=sev,
-                        note=note,
-                        extension_data=ext,
-                        created_by=user,
-                        is_active=True,
-                    )
-                    row.save()
-                    logger.info(
-                        "EndConsultation findings created custom row consultation=%s custom_finding=%s name=%s finding_row=%s",
-                        consultation.id,
-                        cf.id,
-                        custom_name,
-                        row.id,
-                    )
-                    keeper_ids.add(row.id)
-                else:
-                    master = None
-                    if has_fid:
-                        try:
-                            fid = uuid.UUID(str(raw_fid))
-                            master = FindingMaster.objects.filter(
-                                id=fid, is_active=True
-                            ).first()
-                        except (ValueError, TypeError):
-                            master = None
-                    if master is None and finding_code:
-                        master = get_or_create_finding_master_for_code(
-                            finding_code, user=user
-                        )
-                    if master is None:
-                        logger.warning(
-                            "EndConsultation findings could not resolve master, skip: %s", item
-                        )
-                        continue
-
-                    row = ConsultationFinding.objects.filter(
-                        consultation=consultation,
-                        finding=master,
-                    ).first()
-                    if row is None:
-                        row = ConsultationFinding(
-                            consultation=consultation,
-                            finding=master,
-                            custom_finding=None,
-                            created_by=user,
-                        )
-                    row.custom_finding = None
-                    row.severity = sev
-                    row.note = note
-                    row.extension_data = ext
-                    row.is_active = True
-                    row.updated_by = user
-                    if row.pk is None:
-                        row.created_by = user
-                    row.save()
-                    logger.info(
-                        "EndConsultation findings upserted master row consultation=%s finding=%s finding_row=%s",
-                        consultation.id,
-                        master.id,
-                        row.id,
-                    )
-                    keeper_ids.add(row.id)
-            except DjangoValidationError:
-                raise
-            except IntegrityError as e:
-                logger.warning(
-                    "EndConsultation finding IntegrityError consultation=%s: %s",
-                    consultation.id,
-                    e,
-                )
-                raise
-
-        stale_qs = ConsultationFinding.objects.filter(
-            consultation=consultation, is_active=True
-        ).exclude(pk__in=keeper_ids)
-        stale_n = stale_qs.update(is_active=False, updated_at=timezone.now())
-        if stale_n:
-            logger.info(
-                "EndConsultation findings: deactivated %s stale row(s) consultation=%s",
-                stale_n,
-                consultation.id,
-            )
-
-        logger.info(
-            "EndConsultation findings: kept/created %s row(s) consultation=%s",
-            len(keeper_ids),
-            consultation.id,
+    def _error_response(self, message, *, errors=None, status_code=status.HTTP_400_BAD_REQUEST):
+        return Response(
+            _contract_error(message, errors=errors),
+            status=status_code,
         )
-
-    def _persist_consultation_diagnoses(self, consultation, user, raw_diagnoses):
-        """
-        Persist diagnosis rows only at end consultation.
-
-        Each payload row must provide exactly one source:
-        - master: diagnosis_key
-        - custom: custom_diagnosis_id or custom_name
-        """
-        if not isinstance(raw_diagnoses, list):
-            logger.info("EndConsultation diagnoses: payload not a list, skipping")
-            return
-
-        keeper_ids = set()
-        seen_master = set()
-        seen_custom = set()
-        primary_count = 0
-
-        for item in raw_diagnoses:
-            if not isinstance(item, dict):
-                continue
-
-            is_custom = bool(item.get("is_custom"))
-            diagnosis_key = str(item.get("diagnosis_key") or "").strip()
-            diagnosis_icd_code = str(item.get("diagnosis_icd_code") or "").strip()
-            diagnosis_label = str(item.get("diagnosis_label") or "").strip()
-            custom_name = str(item.get("custom_name") or "").strip()
-            custom_diagnosis_id = str(item.get("custom_diagnosis_id") or "").strip()
-
-            has_master = bool(diagnosis_key or diagnosis_icd_code or (diagnosis_label and not is_custom))
-            has_custom = bool(custom_name or custom_diagnosis_id)
-            if has_master == has_custom:
-                raise DjangoValidationError(
-                    "Each diagnosis must contain exactly one source: diagnosis_key or custom diagnosis."
-                )
-
-            is_primary = bool(item.get("is_primary"))
-            if is_primary:
-                primary_count += 1
-                if primary_count > 1:
-                    raise DjangoValidationError(
-                        "Only one primary diagnosis allowed per consultation."
-                    )
-
-            diagnosis_type = str(item.get("diagnosis_type") or "provisional").strip().lower()
-            if diagnosis_type not in ("provisional", "confirmed"):
-                diagnosis_type = "provisional"
-
-            severity = item.get("severity")
-            if severity in ("", None):
-                severity = None
-            else:
-                severity = str(severity).strip().lower()
-                if severity not in ("mild", "moderate", "severe", "critical"):
-                    severity = None
-
-            doctor_note = item.get("doctor_note")
-            if isinstance(doctor_note, str):
-                doctor_note = doctor_note.strip() or None
-            elif doctor_note is None:
-                doctor_note = None
-            else:
-                doctor_note = str(doctor_note).strip() or None
-
-            is_chronic = bool(item.get("is_chronic"))
-
-            if is_custom:
-                custom_obj = None
-                if custom_diagnosis_id:
-                    try:
-                        custom_obj = CustomDiagnosis.objects.filter(
-                            id=uuid.UUID(custom_diagnosis_id),
-                            consultation=consultation,
-                        ).first()
-                    except (ValueError, TypeError):
-                        custom_obj = None
-                if custom_obj is None:
-                    if not custom_name:
-                        raise DjangoValidationError(
-                            "Custom diagnosis requires custom_name."
-                        )
-                    custom_obj = CustomDiagnosis.objects.create(
-                        consultation=consultation,
-                        name=custom_name,
-                        created_by=user,
-                    )
-
-                dedup_key = (custom_obj.name or "").strip().lower()
-                if dedup_key in seen_custom:
-                    continue
-                seen_custom.add(dedup_key)
-
-                row = ConsultationDiagnosis(
-                    consultation=consultation,
-                    master=None,
-                    custom_diagnosis=custom_obj,
-                    is_primary=is_primary,
-                    diagnosis_type=diagnosis_type,
-                    severity=severity,
-                    doctor_note=doctor_note,
-                    is_chronic=is_chronic,
-                    created_by=user,
-                    updated_by=user,
-                    is_active=True,
-                )
-                row.save()
-                keeper_ids.add(row.id)
-                continue
-
-            master = DiagnosisMaster.objects.filter(
-                key=diagnosis_key,
-                is_active=True,
-            ).first()
-            if master is None and diagnosis_icd_code:
-                master = DiagnosisMaster.objects.filter(
-                    icd10_code__iexact=diagnosis_icd_code,
-                    is_active=True,
-                ).first()
-            if master is None and diagnosis_label:
-                master = DiagnosisMaster.objects.filter(
-                    label__iexact=diagnosis_label,
-                    is_active=True,
-                ).first()
-            if master is None:
-                base_key = diagnosis_key or slugify(diagnosis_label) or slugify(diagnosis_icd_code)
-                if not base_key:
-                    raise DjangoValidationError(
-                        f"Could not resolve diagnosis master for key '{diagnosis_key}' and label '{diagnosis_label}'."
-                    )
-                candidate_key = base_key[:150]
-                if DiagnosisMaster.objects.filter(key=candidate_key).exists():
-                    candidate_key = f"{base_key[:140]}-{uuid.uuid4().hex[:8]}"
-                master = DiagnosisMaster.objects.create(
-                    key=candidate_key,
-                    label=diagnosis_label or diagnosis_key or diagnosis_icd_code,
-                    clinical_term=diagnosis_label or None,
-                    icd10_code=diagnosis_icd_code or None,
-                    category="general",
-                    is_active=True,
-                    version=1,
-                )
-                logger.info(
-                    "EndConsultation diagnoses created fallback master key=%s label=%s icd=%s",
-                    master.key,
-                    master.label,
-                    master.icd10_code,
-                )
-
-            dedup_master_key = str(master.id)
-            if dedup_master_key in seen_master:
-                continue
-            seen_master.add(dedup_master_key)
-
-            row = ConsultationDiagnosis.objects.filter(
-                consultation=consultation,
-                master=master,
-            ).first()
-            if row is None:
-                row = ConsultationDiagnosis(
-                    consultation=consultation,
-                    master=master,
-                    custom_diagnosis=None,
-                    created_by=user,
-                )
-            row.custom_diagnosis = None
-            row.is_primary = is_primary
-            row.diagnosis_type = diagnosis_type
-            row.severity = severity
-            row.doctor_note = doctor_note
-            row.is_chronic = is_chronic
-            row.updated_by = user
-            row.is_active = True
-            row.save()
-            keeper_ids.add(row.id)
-
-        stale_qs = ConsultationDiagnosis.objects.filter(
-            consultation=consultation, is_active=True
-        ).exclude(pk__in=keeper_ids)
-        stale_qs.update(is_active=False, updated_at=timezone.now())
 
     @transaction.atomic
     def post(self, request, encounter_id):
         encounter = get_object_or_404(ClinicalEncounter, id=encounter_id)
         if encounter.status in ("cancelled", "no_show"):
-            return Response(
-                {"detail": MSG_VISIT_CANCELLED},
-                status=status.HTTP_400_BAD_REQUEST,
+            return self._error_response(
+                MSG_VISIT_CANCELLED,
+                errors={"encounter": [MSG_VISIT_CANCELLED]},
+                status_code=status.HTTP_400_BAD_REQUEST,
             )
         if encounter.status != "consultation_in_progress":
-            return Response(
-                {
-                    "detail": f"Cannot end consultation. Encounter must be in CONSULTATION_IN_PROGRESS. Current: {encounter.status}.",
-                },
-                status=status.HTTP_400_BAD_REQUEST,
+            msg = f"Cannot end consultation. Encounter must be in CONSULTATION_IN_PROGRESS. Current: {encounter.status}."
+            return self._error_response(
+                msg,
+                errors={"encounter": [msg]},
+                status_code=status.HTTP_400_BAD_REQUEST,
             )
         try:
             consultation = encounter.consultation
         except Consultation.DoesNotExist:
-            return Response(
-                {"detail": "Consultation record not found for this encounter."},
-                status=status.HTTP_404_NOT_FOUND,
+            msg = "Consultation record not found for this encounter."
+            return self._error_response(
+                msg,
+                errors={"consultation": [msg]},
+                status_code=status.HTTP_404_NOT_FOUND,
             )
         if consultation.is_finalized:
-            return Response(
-                {
-                    "status": _status_for_api(encounter.status),
-                    "redirect_url": "/doctor-dashboard",
-                    "message": "Consultation already ended.",
-                },
-                status=status.HTTP_200_OK,
+            msg = "Consultation already ended."
+            return self._error_response(
+                msg,
+                errors={"consultation": [msg]},
+                status_code=status.HTTP_400_BAD_REQUEST,
             )
         if not consultation.ended_at:
             consultation.ended_at = timezone.now()
             consultation.save(update_fields=["ended_at"])
 
         try:
-            self._persist_consultation_symptoms(
+            persist_consultation_end_state(
                 consultation=consultation,
+                payload=request.data,
                 user=request.user,
-                raw_symptoms=request.data.get("symptoms", []),
-            )
-            self._persist_consultation_findings(
-                consultation=consultation,
-                user=request.user,
-                raw_findings=request.data.get("findings", []),
-            )
-            self._persist_consultation_diagnoses(
-                consultation=consultation,
-                user=request.user,
-                raw_diagnoses=request.data.get("diagnoses", []),
             )
         except DjangoValidationError as e:
             msgs = list(getattr(e, "messages", []) or [])
+            errors = {}
             if not msgs and hasattr(e, "message_dict"):
                 for _, values in getattr(e, "message_dict", {}).items():
                     if isinstance(values, (list, tuple)):
                         msgs.extend([str(v) for v in values if str(v).strip()])
                     elif values:
                         msgs.append(str(values))
+            if hasattr(e, "message_dict"):
+                for key, values in getattr(e, "message_dict", {}).items():
+                    if isinstance(values, (list, tuple)):
+                        errors[key] = [str(v) for v in values if str(v).strip()]
+                    elif values:
+                        errors[key] = [str(values)]
             if not msgs:
                 raw = str(e).strip()
                 if raw:
@@ -1805,14 +1350,17 @@ class EndConsultationAPIView(APIView):
                 detail,
                 request.data.get("diagnoses", []),
             )
-            return Response(
-                {"detail": detail},
-                status=status.HTTP_400_BAD_REQUEST,
+            return self._error_response(
+                "Validation failed",
+                errors=errors or {"non_field_errors": [detail]},
+                status_code=status.HTTP_400_BAD_REQUEST,
             )
         except IntegrityError:
-            return Response(
-                {"detail": "Duplicate symptom conflict while saving consultation. Please retry once."},
-                status=status.HTTP_409_CONFLICT,
+            msg = "Duplicate symptom conflict while saving consultation. Please retry once."
+            return self._error_response(
+                "Validation failed",
+                errors={"symptoms": [msg]},
+                status_code=status.HTTP_409_CONFLICT,
             )
 
         EncounterStateMachine.complete_consultation(encounter, user=request.user)
@@ -1829,34 +1377,13 @@ class EndConsultationAPIView(APIView):
             consultation.is_finalized = True
             consultation.save(update_fields=["is_finalized"])
 
-        # Include pre_consultation in response for testing (same encounter_id mapping)
-        response_payload = {
-            "status": _status_for_api(encounter.status),
-            "redirect_url": "/doctor-dashboard",
-        }
-        try:
-            pc = encounter.pre_consultation
-            pre_consult_payload = {"encounter_id": str(encounter_id)}
-            for section_code, section_model in SECTION_MODEL_MAP.items():
-                try:
-                    section_obj = section_model.objects.get(pre_consultation=pc)
-                    pre_consult_payload[section_code] = section_obj.data
-                except section_model.DoesNotExist:
-                    pre_consult_payload[section_code] = None
-            response_payload["pre_consultation"] = pre_consult_payload
-        except PreConsultation.DoesNotExist:
-            response_payload["pre_consultation"] = None
-
-        findings_qs = (
-            ConsultationFinding.objects.filter(consultation=consultation)
-            .select_related("finding", "custom_finding")
-            .order_by("-created_at")
+        return Response(
+            {
+                "status": "success",
+                "redirect_url": "/doctor-dashboard",
+            },
+            status=status.HTTP_200_OK,
         )
-        response_payload["findings"] = ConsultationFindingSerializer(
-            findings_qs, many=True
-        ).data
-
-        return Response(response_payload, status=status.HTTP_200_OK)
 
 
 class CancelEncounterAPIView(APIView):
