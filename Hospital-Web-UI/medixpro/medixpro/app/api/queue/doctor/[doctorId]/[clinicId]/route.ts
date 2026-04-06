@@ -5,11 +5,11 @@ const DJANGO_API_URL = process.env.DJANGO_API_URL || process.env.NEXT_PUBLIC_API
 // GET - Get today's queue for a doctor at a clinic
 export async function GET(
   request: NextRequest,
-  { params }: { params: { doctorId: string; clinicId: string } }
+  context: { params: Promise<{ doctorId: string; clinicId: string }> }
 ) {
   try {
     const authHeader = request.headers.get("authorization") || request.headers.get("Authorization");
-    const { doctorId, clinicId } = params;
+    const { doctorId, clinicId } = await context.params;
 
     if (!doctorId || !clinicId) {
       return NextResponse.json(

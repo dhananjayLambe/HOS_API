@@ -353,6 +353,7 @@ export function DynamicSectionForm({
         const topRow = {
           code: "_allergies_top_",
           label: "",
+          fields: [],
           processedFields: [{
             type: "basic_row",
             fields: [

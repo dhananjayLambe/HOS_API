@@ -54,7 +54,7 @@ export default function RootLayout({
         <AuthProvider>
           <ThemeProvider>{children}</ThemeProvider>
           <GlobalLoader /> {/* ⬅ loader always available */}
-          <Toaster position="center" />
+          <Toaster position="top-center" />
         </AuthProvider>
       </body>
     </html>

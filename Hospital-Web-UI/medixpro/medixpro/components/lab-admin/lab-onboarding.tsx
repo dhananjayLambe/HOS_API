@@ -27,7 +27,7 @@ export interface OnboardingData {
     certifications?: string
     service_categories: string[]
     home_sample_collection: boolean
-    pricing_tier: string
+    pricing_tier: "Low" | "Medium" | "Premium"
     turnaround_time_hours: number
   }
   address_details: {

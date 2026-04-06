@@ -159,6 +159,8 @@ export interface SectionItemDetail {
   notes?: string;
   duration?: string; // e.g. "1 Day", "2 Weeks"
   severity?: "mild" | "moderate" | "severe";
+  /** Diagnosis section: mark one item as primary for display / print. */
+  primary?: boolean;
   /** Multi-select attribute chips (section-specific). */
   attributes?: string[];
   /** User-added tags. */

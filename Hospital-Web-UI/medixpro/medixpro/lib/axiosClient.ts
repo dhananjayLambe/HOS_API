@@ -171,6 +171,17 @@ const backendAxiosClient: AxiosInstance = axios.create({
   },
 });
 
+/** Resolved URL the same way axios sends the request (baseURL + path must not be concatenated naively). */
+function backendRequestUrl(config: InternalAxiosRequestConfig): string {
+  try {
+    return backendAxiosClient.getUri(config);
+  } catch {
+    const base = (config.baseURL || "").replace(/\/+$/, "");
+    const path = (config.url || "").replace(/^\/+/, "");
+    return path ? `${base}/${path}` : base;
+  }
+}
+
 // Request interceptor: Auto-attach JWT token for backend calls
 backendAxiosClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
@@ -178,20 +189,8 @@ backendAxiosClient.interceptors.request.use(
     if (accessToken && config.headers) {
       config.headers.Authorization = `Bearer ${accessToken}`;
     }
-    // Log a best-effort full URL (including params) for debugging
     if (config.url) {
-      const base = `${config.baseURL || ""}${config.url}`;
-      const params =
-        config.params && typeof config.params === "object"
-          ? `?${new URLSearchParams(
-              Object.entries(config.params).reduce<Record<string, string>>((acc, [k, v]) => {
-                if (v === undefined || v === null) return acc;
-                acc[k] = String(v);
-                return acc;
-              }, {}),
-            ).toString()}`
-          : "";
-      console.log(`[backendAxiosClient] ${config.method?.toUpperCase()} ${base}${params}`);
+      console.log(`[backendAxiosClient] ${config.method?.toUpperCase()} ${backendRequestUrl(config)}`);
     }
     return config;
   },
@@ -204,23 +203,13 @@ backendAxiosClient.interceptors.request.use(
 backendAxiosClient.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
+    // Aborted requests (e.g. React effect cleanup, strict mode double-mount) have no response — not a real network failure.
+    if (axios.isCancel(error) || error.code === AxiosError.ERR_CANCELED) {
+      return Promise.reject(error);
+    }
     // Log error details for debugging (skip 404s for section/template endpoints - they're expected when not configured)
     if (error.config) {
-      const baseAndPath = `${error.config.baseURL || ""}${error.config.url || ""}`;
-      const params =
-        error.config.params && typeof error.config.params === "object"
-          ? `?${new URLSearchParams(
-              Object.entries(error.config.params as Record<string, unknown>).reduce<Record<string, string>>(
-                (acc, [k, v]) => {
-                  if (v === undefined || v === null) return acc;
-                  acc[k] = String(v);
-                  return acc;
-                },
-                {},
-              ),
-            ).toString()}`
-          : "";
-      const fullUrl = `${baseAndPath}${params}`;
+      const fullUrl = backendRequestUrl(error.config);
 
       const isSectionEndpoint = fullUrl.includes("/section/");
       const isTemplateEndpoint = fullUrl.includes("/pre-consult/template");

@@ -1,0 +1,11 @@
+---
+description: Create implementation and planning documents under docs/
+alwaysApply: true
+---
+
+# Plans and planning documents
+
+For this repository (`HOS_API`), **create all plans, roadmaps, and planning-style write-ups** (implementation plans, design notes, phased rollouts) as Markdown files under **`docs/`** at the repo root.
+
+- Prefer descriptive filenames (e.g. `docs/FEATURE_X_PLAN.md`).
+- Do not add new planning documents at the repository root; use `docs/` instead.

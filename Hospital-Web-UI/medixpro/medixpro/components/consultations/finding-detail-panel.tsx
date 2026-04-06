@@ -171,6 +171,13 @@ function FindingFieldRenderer({
   const storeKey = field.key as keyof SectionItemDetail;
 
   if (field.type === "number") {
+    const rawNum = (detail as Record<string, unknown>)[storeKey as string];
+    const numberInputValue =
+      rawNum === null || rawNum === undefined || typeof rawNum === "object"
+        ? ""
+        : typeof rawNum === "number" || typeof rawNum === "string"
+          ? rawNum
+          : String(rawNum);
     return (
       <div className="space-y-2">
         <Label>{baseLabel}</Label>
@@ -178,7 +185,7 @@ function FindingFieldRenderer({
           <Input
             type="number"
             placeholder={field.placeholder}
-            value={(detail as Record<string, unknown>)[storeKey as string] ?? ""}
+            value={numberInputValue}
             onChange={(e) => set({ [storeKey]: e.target.value })}
             className={cn("rounded-md max-w-[140px]", importanceClass)}
           />

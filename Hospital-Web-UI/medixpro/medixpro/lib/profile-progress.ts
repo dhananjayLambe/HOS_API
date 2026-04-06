@@ -68,7 +68,9 @@ export function calculateProfileProgress(profileData: any): {
   PROFILE_SECTIONS.forEach((section) => {
     const completedFields = section.fields.filter((field) => {
       const value = profileData[field]
-      return value !== null && value !== undefined && value !== "" && value !== []
+      if (value === null || value === undefined || value === "") return false
+      if (Array.isArray(value)) return value.length > 0
+      return true
     })
 
     const sectionCompletion = (completedFields.length / section.fields.length) * 100

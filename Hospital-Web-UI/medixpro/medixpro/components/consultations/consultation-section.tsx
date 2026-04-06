@@ -20,8 +20,10 @@ import type {
 import { getSectionConfig } from "@/data/consultation-section-data";
 import {
   buildDefaultMedicinePrescription,
+  buildMedicinePrescriptionFromAutofill,
   buildMedicinePrescriptionFromSuggestion,
   getMedicineValidationMessages,
+  hasAutofillPayload,
   isMedicineItemComplete,
   withDefaultMedicineDetail,
   withMedicineDetailFromSuggestion,
@@ -389,19 +391,19 @@ export function ConsultationSection({
     }
     if (type === "medicines" && medicineApiContext) {
       const drug = effectiveSuggestionById[item.id];
-      addSectionItem(type, { id: item.id, label: item.label });
+      const medicine = drug
+        ? hasAutofillPayload(drug)
+          ? buildMedicinePrescriptionFromAutofill(drug)
+          : buildMedicinePrescriptionFromSuggestion(item.id, drug)
+        : buildDefaultMedicinePrescription(item.id, item.label);
+      addSectionItem(type, {
+        id: item.id,
+        label: item.label,
+        detail: { medicine },
+      });
       setSelectedDetail({ section: type, itemId: item.id });
       sectionCardRef.current?.expand();
       activateSection(type);
-      if (drug) {
-        updateSectionItemDetail(type, item.id, {
-          medicine: buildMedicinePrescriptionFromSuggestion(item.id, drug),
-        });
-      } else {
-        updateSectionItemDetail(type, item.id, {
-          medicine: buildDefaultMedicinePrescription(item.id, item.label),
-        });
-      }
       setInlineSearch("");
       setHighlightedSuggestionIndex(-1);
       return;

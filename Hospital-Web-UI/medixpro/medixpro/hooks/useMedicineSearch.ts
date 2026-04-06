@@ -100,6 +100,7 @@ function hybridRowToSuggestionDrug(row: MedicineHybridResultRow): MedicineSugges
     last_used: row.last_used ?? null,
     last_used_ago: null,
     dominant_signal: row.source,
+    autofill: row.autofill ?? undefined,
   };
 }
 

@@ -5,18 +5,48 @@ import type {
   MedicineTiming,
 } from "@/lib/consultation-types";
 import type { MedicineSuggestionDrug } from "@/lib/medicineSuggestionsApi";
+import type { MedicineAutofill, MedicineHybridResultRow } from "@/types/medicine";
+
+/** All dose form / unit options shown in the prescription UI (order: solids → liquids → injectables → topical → other). */
+export const DOSE_UNIT_OPTIONS = [
+  { id: "tablet", label: "Tablet" },
+  { id: "capsule", label: "Capsule" },
+  { id: "sachet", label: "Sachet" },
+  { id: "syrup", label: "Syrup" },
+  { id: "ml", label: "mL" },
+  { id: "gm", label: "g" },
+  { id: "drops", label: "Drops" },
+  { id: "injection", label: "Injection" },
+  { id: "ampoule", label: "Ampoule" },
+  { id: "vial", label: "Vial" },
+  { id: "insulin", label: "Insulin" },
+  { id: "units", label: "Units" },
+  { id: "cream", label: "Cream" },
+  { id: "ointment", label: "Ointment" },
+  { id: "gel", label: "Gel" },
+  { id: "spray", label: "Spray" },
+  { id: "patch", label: "Patch" },
+  { id: "suppository", label: "Suppository" },
+  { id: "inhaler", label: "Inhaler (puff)" },
+  { id: "nebulizer", label: "Nebulizer" },
+  { id: "powder", label: "Powder" },
+  { id: "other", label: "Other" },
+] as const;
+
+export type DoseUnitId = (typeof DOSE_UNIT_OPTIONS)[number]["id"];
 
 /**
  * Quick-select presets per dose unit (tap-first; custom input always available).
- * Unknown / legacy ids fall back to tablet presets.
+ * Keys must cover every {@link DoseUnitId}; unknown ids fall back to tablet presets.
  */
-const DOSE_PRESETS_BY_UNIT: Record<string, number[]> = {
+const DOSE_PRESETS_BY_UNIT: Record<DoseUnitId, number[]> = {
   /** Tablet: common fractions + whole/half steps (single-line scroll row in the panel). */
   tablet: [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3],
   capsule: [0.5, 1, 1.5, 2, 3, 4],
   sachet: [1, 2],
   syrup: [2.5, 5, 10],
   ml: [2.5, 5, 10],
+  gm: [1, 2, 3],
   drops: [1, 2, 5],
   injection: [1, 2],
   ampoule: [1, 2],
@@ -38,33 +68,9 @@ const DOSE_PRESETS_BY_UNIT: Record<string, number[]> = {
 
 export function getDosePresetChips(doseUnitId: string): number[] {
   const key = doseUnitId?.trim().toLowerCase() ?? "";
-  return DOSE_PRESETS_BY_UNIT[key] ?? DOSE_PRESETS_BY_UNIT.tablet;
+  const presets = DOSE_PRESETS_BY_UNIT[key as DoseUnitId];
+  return presets ?? DOSE_PRESETS_BY_UNIT.tablet;
 }
-
-/** All dose form / unit options shown in the prescription UI (order: solids → liquids → injectables → topical → other). */
-export const DOSE_UNIT_OPTIONS: readonly { id: string; label: string }[] = [
-  { id: "tablet", label: "Tablet" },
-  { id: "capsule", label: "Capsule" },
-  { id: "sachet", label: "Sachet" },
-  { id: "syrup", label: "Syrup" },
-  { id: "ml", label: "mL" },
-  { id: "drops", label: "Drops" },
-  { id: "injection", label: "Injection" },
-  { id: "ampoule", label: "Ampoule" },
-  { id: "vial", label: "Vial" },
-  { id: "insulin", label: "Insulin" },
-  { id: "units", label: "Units" },
-  { id: "cream", label: "Cream" },
-  { id: "ointment", label: "Ointment" },
-  { id: "gel", label: "Gel" },
-  { id: "spray", label: "Spray" },
-  { id: "patch", label: "Patch" },
-  { id: "suppository", label: "Suppository" },
-  { id: "inhaler", label: "Inhaler (puff)" },
-  { id: "nebulizer", label: "Nebulizer" },
-  { id: "powder", label: "Powder" },
-  { id: "other", label: "Other" },
-] as const;
 
 export function formatDoseDisplay(value: number | undefined): string {
   if (value === undefined || value === null || Number.isNaN(Number(value))) {
@@ -351,6 +357,60 @@ export const ROUTE_OPTIONS = [
   { id: "inhalation", label: "Inhalation" },
   { id: "other", label: "Other" },
 ] as const;
+
+/** Django `autofill.route.name` → UI `route_id` (API does not echo route.code yet). */
+const ROUTE_NAME_TO_ID: Record<string, string> = {
+  Oral: "oral",
+  Topical: "topical",
+  "IV/IM": "iv",
+  Drops: "topical",
+  Inhalation: "inhalation",
+  IM: "im",
+  Subcutaneous: "other",
+  Rectal: "other",
+};
+
+export function mapRouteNameToId(name: string | undefined): string {
+  const n = (name ?? "").trim();
+  if (!n) return "oral";
+  if (ROUTE_NAME_TO_ID[n]) return ROUTE_NAME_TO_ID[n];
+  const lower = n.toLowerCase();
+  if (lower.includes("topical")) return "topical";
+  if (lower.includes("inhal")) return "inhalation";
+  if (lower.includes("subcutaneous") || lower === "sc") return "other";
+  if (lower.includes("rectal")) return "other";
+  if (lower === "im" || /\bim\b/.test(lower)) return "im";
+  if (lower.includes("iv") || lower.includes("intravenous")) return "iv";
+  if (lower.includes("drop")) return "topical";
+  return "oral";
+}
+
+const DOSE_UNIT_IDS = new Set(DOSE_UNIT_OPTIONS.map((o) => o.id));
+
+/** Normalize Django `dose.unit` string to a `dose_unit_id` present in `DOSE_UNIT_OPTIONS`. */
+export function normalizeDoseUnit(raw: string | undefined): DoseUnitId {
+  let s: string = (raw ?? "tablet").trim().toLowerCase();
+  if (s === "g" || s === "gram" || s === "grams") s = "gm";
+  if (
+    s === "milliliter" ||
+    s === "millilitre" ||
+    s === "milliliters" ||
+    s === "millilitres"
+  ) {
+    s = "ml";
+  }
+  if (s === "tablets" || s === "tab" || s === "tabs") s = "tablet";
+  if (s === "capsules" || s === "cap" || s === "caps") s = "capsule";
+  if (s === "drop") s = "drops";
+  if (DOSE_UNIT_IDS.has(s as DoseUnitId)) return s as DoseUnitId;
+  return "tablet";
+}
+
+export function hasAutofillPayload(row: {
+  autofill?: MedicineAutofill | null;
+}): boolean {
+  return Boolean(row.autofill?.dose);
+}
 
 /** Quick picks for Body Site (Topical / Other); route stays separate. */
 export const ROUTE_BODY_SITE_SUGGESTIONS = [
@@ -911,13 +971,25 @@ export function withDefaultMedicineDetail(item: ConsultationSectionItem): Consul
 export function mapFormulationToDoseUnitId(drug: MedicineSuggestionDrug): string {
   const name = (drug.formulation?.name ?? "").toLowerCase();
   const dtype = (drug.drug_type ?? "").toLowerCase();
-  const combined = `${name} ${dtype}`;
+  const brand = (drug.brand_name ?? "").toLowerCase();
+  const display = (drug.display_name ?? "").toLowerCase();
+  const generic = (drug.generic_name ?? "").toLowerCase();
+  const strength = (drug.strength ?? "").toLowerCase();
+  const combined = `${name} ${dtype} ${brand} ${display} ${generic} ${strength}`;
+
+  if (
+    !combined.includes("cream of") &&
+    /\bcream\b/.test(combined)
+  ) {
+    return "cream";
+  }
+  if (/\bointment\b/.test(combined)) return "ointment";
+  if (/\bgel\b/.test(combined) && !/\bangel\b/.test(combined)) return "gel";
+  if (/\bsyrup\b|\belixir\b/.test(combined)) return "ml";
+  if (/injection|inject|vial|ampoule|infusion/.test(combined)) return "ml";
+  if (/drop/.test(combined)) return "drops";
   if (/\btablet\b|\btab\b/.test(combined)) return "tablet";
   if (/capsule|\bcap\b/.test(combined)) return "capsule";
-  if (/syrup|elixir/.test(combined)) return "ml";
-  if (/injection|inject|vial|ampoule|infusion/.test(combined)) return "ml";
-  if (/cream|ointment|gel/.test(combined)) return "cream";
-  if (/drop/.test(combined)) return "drops";
   if (/powder|sachet/.test(combined)) return "powder";
   if (/inhaler|puff|dpi|mdi/.test(combined)) return "inhaler";
   if (/nebul/.test(combined)) return "nebulizer";
@@ -938,6 +1010,113 @@ function routeIdForDoseUnitId(doseUnitId: string): string {
     return "topical";
   }
   return "oral";
+}
+
+function timingFromAutofillRelation(relation: string | undefined): MedicineTiming[] {
+  const r = (relation ?? "after_food").trim();
+  if (
+    r === "before_food" ||
+    r === "after_food" ||
+    r === "empty_stomach" ||
+    r === "bedtime"
+  ) {
+    return [r as MedicineTiming];
+  }
+  return ["after_food"];
+}
+
+/**
+ * Build prescription from embedded Django `autofill` (hybrid or suggestions row).
+ * Falls back to {@link buildMedicinePrescriptionFromSuggestion} when autofill is absent.
+ */
+export function buildMedicinePrescriptionFromAutofill(
+  apiRow: MedicineHybridResultRow | MedicineSuggestionDrug
+): MedicinePrescriptionDetail {
+  const drugId = apiRow.id;
+  if (!hasAutofillPayload(apiRow)) {
+    return buildMedicinePrescriptionFromSuggestion(drugId, apiRow as MedicineSuggestionDrug);
+  }
+  const af = apiRow.autofill!;
+  const drug = apiRow as MedicineSuggestionDrug;
+  const displayName = drug.display_name?.trim() || drug.brand_name?.trim() || "Medicine";
+  const strength =
+    drug.strength?.trim() || strengthFromLabel(displayName) || undefined;
+  const nameOnly = drug.generic_name?.trim() || drug.brand_name?.trim() || displayName;
+  const composition =
+    [drug.brand_name, drug.strength].filter(Boolean).join(" ").trim() || displayName || nameOnly;
+
+  const dose_unit_id = normalizeDoseUnit(af.dose?.unit);
+  const codeHint = (af.frequency?.code ?? "BD").toUpperCase();
+  const ts = af.timing?.time_slots;
+  let m: boolean;
+  let a: boolean;
+  let n: boolean;
+  if (ts && ts.length > 0) {
+    m = ts.includes("morning");
+    a = ts.includes("afternoon");
+    n = ts.includes("night");
+  } else {
+    const s = slotsFromPrimaryChipId(
+      codeHint === "OD" || codeHint === "BD" || codeHint === "TDS" ? codeHint : "BD"
+    );
+    m = s.morning;
+    a = s.afternoon;
+    n = s.night;
+  }
+
+  const derived = deriveFrequencyIdFromPatternSlots(m, a, n);
+  const frequency_id =
+    derived === "PATTERN" ? FREQUENCY_PATTERN_ID : derived;
+
+  const du = (af.duration?.unit ?? "days").toLowerCase();
+  let duration_value: number | undefined = af.duration?.value ?? 5;
+  let duration_unit: "days" | "weeks" | "months" | undefined = "days";
+  let duration_special: MedicineDurationSpecial | undefined;
+
+  if (du === "days" || du === "weeks" || du === "months") {
+    duration_unit = du as "days" | "weeks" | "months";
+    duration_special = undefined;
+  } else if (du === "continue") {
+    duration_special = "continue";
+    duration_value = undefined;
+    duration_unit = undefined;
+  } else if (du === "sos") {
+    duration_special = "sos";
+    duration_value = undefined;
+    duration_unit = undefined;
+  }
+
+  const route_id = mapRouteNameToId(af.route?.name);
+  const instructions = (af.instructions ?? []).map((x) => x.text.trim()).filter(Boolean).join("\n");
+
+  return {
+    drug_id: drugId,
+    strength_label: strength,
+    generic_name: nameOnly,
+    composition,
+    dose_value: af.dose?.value ?? 1,
+    dose_unit_id,
+    dose_is_custom: false,
+    dose_custom_text: "",
+    route_id,
+    route_body_site: "",
+    frequency_id,
+    frequency_ui_mode: frequency_id === FREQUENCY_PATTERN_ID ? "pattern" : "standard",
+    frequency_pattern_morning: m,
+    frequency_pattern_afternoon: a,
+    frequency_pattern_night: n,
+    frequency_custom_text: patternStringFromSlots(m, a, n),
+    duration_value: duration_special ? undefined : (duration_value ?? 5),
+    duration_unit: duration_special ? undefined : (duration_unit ?? "days"),
+    duration_special,
+    duration_is_custom: false,
+    duration_custom_text: "",
+    timing: timingFromAutofillRelation(af.timing?.relation),
+    instructions,
+    is_prn: false,
+    is_stat: false,
+    is_chronic: false,
+  };
 }
 
 /**
@@ -1012,7 +1191,9 @@ export function withMedicineDetailFromSuggestion(
     ...item,
     detail: {
       ...item.detail,
-      medicine: buildMedicinePrescriptionFromSuggestion(item.id, drug),
+      medicine: hasAutofillPayload(drug)
+        ? buildMedicinePrescriptionFromAutofill(drug)
+        : buildMedicinePrescriptionFromSuggestion(item.id, drug),
     },
   };
 }

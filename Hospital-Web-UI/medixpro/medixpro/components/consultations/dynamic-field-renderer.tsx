@@ -231,7 +231,8 @@ export const DynamicFieldRenderer = memo<DynamicFieldRendererProps>(
         const min = displayMin;
         const max = displayMax;
         
-        const hasUnitSwitcher = field.supported_units && field.supported_units.length > 1;
+        const supportedUnits = field.supported_units ?? [];
+        const hasUnitSwitcher = supportedUnits.length > 1;
         
         // Round to match step so browser never shows "nearest valid values" (HTML5 step validation)
         const roundToStep = (num: number, stepVal: number): number => {
@@ -333,7 +334,7 @@ export const DynamicFieldRenderer = memo<DynamicFieldRendererProps>(
                   {isMobile ? (
                     // Mobile: unit toggle below input
                     <div className="flex items-center gap-1 mt-2">
-                      {field.supported_units.map((unit) => {
+                      {supportedUnits.map((unit) => {
                         const unitLabels: Record<string, string> = {
                           cm: "cm",
                           ft: "ft",
@@ -368,7 +369,7 @@ export const DynamicFieldRenderer = memo<DynamicFieldRendererProps>(
                   ) : (
                     // Desktop: unit toggle inline
                     <div className="absolute right-2 flex items-center gap-1 bg-muted rounded-md px-2 py-1">
-                      {field.supported_units.map((unit) => {
+                      {supportedUnits.map((unit) => {
                         const unitLabels: Record<string, string> = {
                           cm: "cm",
                           ft: "ft",

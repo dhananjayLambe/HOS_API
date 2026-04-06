@@ -1,4 +1,5 @@
 import { backendAxiosClient } from "@/lib/axiosClient";
+import type { MedicineAutofill } from "@/types/medicine";
 
 /** Matches Django `drug_to_payload` in medicines/api/serializers.py */
 export interface MedicineSuggestionDrug {
@@ -16,6 +17,8 @@ export interface MedicineSuggestionDrug {
   final_score?: number;
   components?: Record<string, number>;
   dominant_signal?: string | null;
+  /** Embedded autofill from Django (same shape as hybrid). */
+  autofill?: MedicineAutofill | null;
 }
 
 export type MedicineSuggestionsResponse = {

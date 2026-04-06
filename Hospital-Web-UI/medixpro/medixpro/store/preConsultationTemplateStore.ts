@@ -26,6 +26,8 @@ export interface FieldConfig {
     pattern?: string; // Regex pattern
     message?: string; // Custom error message
     custom?: string; // Custom validation rule name
+    min?: number;
+    max?: number;
   };
   options?: Array<{ value: string; label: string }>;
   multiline?: boolean;
