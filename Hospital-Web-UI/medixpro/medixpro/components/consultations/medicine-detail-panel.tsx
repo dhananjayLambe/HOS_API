@@ -461,9 +461,9 @@ export function MedicineDetailPanel() {
                 <span className="min-w-0 truncate">{completion.message}</span>
               </button>
             )}
-            {item.isCustom && (
+            {(item.is_custom ?? item.isCustom) && (
               <span className="rounded-full border border-amber-500/45 bg-amber-500/10 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-900 dark:text-amber-200">
-                Custom drug
+                CUSTOM
               </span>
             )}
             {(medicine.generic_name || medicine.composition) && (
@@ -492,6 +492,11 @@ export function MedicineDetailPanel() {
               </Tooltip>
             )}
           </div>
+          {completion.level !== "complete" && completion.missing.length > 0 && (
+            <p className="text-xs text-amber-700 dark:text-amber-400">
+              Fill next: {completion.missing.join(" • ")}
+            </p>
+          )}
         </CardHeader>
 
         <CardContent className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-3 pt-3">

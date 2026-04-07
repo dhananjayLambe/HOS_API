@@ -26,6 +26,7 @@ import { useConsultationStore } from "@/store/consultationStore";
 import { getSectionConfig } from "@/data/consultation-section-data";
 import type { SectionItemDetail } from "@/lib/consultation-types";
 import { cn } from "@/lib/utils";
+import { evaluateSectionItemComplete, normalizeItem } from "@/lib/consultation-completion";
 
 function toggleAttribute(current: string[] | undefined, val: string): string[] {
   const set = new Set(current ?? []);
@@ -58,9 +59,10 @@ export function ConsultationDetailPanel() {
     !(detail.attributes?.length) &&
     !(detail.customTags?.length);
 
-  const isIncomplete =
-    item != null &&
-    ((section != null && getSectionConfig(section).durationOptions.length > 0 && !detail.duration) || !detail.severity);
+  const completionStatus =
+    item != null && section != null
+      ? evaluateSectionItemComplete(section, normalizeItem(item))
+      : false;
 
   useEffect(() => {
     if (!item || section == null) return;
@@ -120,7 +122,26 @@ export function ConsultationDetailPanel() {
   return (
     <Card className="h-fit w-full max-w-full min-w-0 max-w-md shrink-0 self-start rounded-2xl border border-border/80 bg-card shadow-sm transition-shadow hover:shadow-md">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 py-4 pb-3">
-        <h3 className="font-bold truncate pr-2">{item.label}</h3>
+        <div className="flex min-w-0 flex-col gap-2">
+          <h3 className="font-bold truncate pr-2">{item.label}</h3>
+          <div aria-live="polite" aria-atomic="true">
+            {completionStatus ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/35 bg-emerald-500/[0.1] px-3 py-1 text-xs font-medium text-emerald-900 dark:text-emerald-100">
+                <span className="text-[10px]" aria-hidden>
+                  ●
+                </span>
+                Complete
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/45 bg-amber-500/12 px-3 py-1 text-xs font-medium text-amber-950 dark:text-amber-50">
+                <span className="text-[10px]" aria-hidden>
+                  ●
+                </span>
+                Incomplete
+              </span>
+            )}
+          </div>
+        </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button

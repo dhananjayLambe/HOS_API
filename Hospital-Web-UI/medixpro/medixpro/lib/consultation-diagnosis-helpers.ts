@@ -1,4 +1,5 @@
 import type { ConsultationSectionItem, SectionItemDetail } from "@/lib/consultation-types";
+import { evaluateSectionItemComplete, normalizeItem } from "@/lib/consultation-completion";
 
 type DiagnosisDetail = SectionItemDetail & {
   status?: "provisional" | "confirmed";
@@ -22,19 +23,23 @@ export function sectionItemsToEndConsultationDiagnosisPayload(
   items: ConsultationSectionItem[]
 ) {
   return items.map((item) => {
+    const normalized = normalizeItem(item);
     const detail = (item.detail ?? {}) as DiagnosisDetail;
     return {
-      is_custom: item.isCustom === true,
-      diagnosis_key: item.isCustom ? null : (item.diagnosisKey ?? null),
-      diagnosis_icd_code: item.isCustom ? null : (item.diagnosisIcdCode ?? null),
+      name: normalized.name,
+      is_custom: normalized.is_custom,
+      is_complete: evaluateSectionItemComplete("diagnosis", normalized),
+      diagnosis_key: normalized.is_custom ? null : (item.diagnosisKey ?? null),
+      diagnosis_icd_code: normalized.is_custom ? null : (item.diagnosisIcdCode ?? null),
       diagnosis_label: item.label,
-      custom_name: item.isCustom ? item.label : null,
-      custom_diagnosis_id: item.isCustom ? (item.customDiagnosisId ?? null) : null,
+      custom_name: normalized.is_custom ? item.label : null,
+      custom_diagnosis_id: normalized.is_custom ? (item.customDiagnosisId ?? null) : null,
       is_primary: detail.primary === true,
       diagnosis_type: normalizeDiagnosisType(detail.status),
       severity: normalizeSeverity(detail.severity),
       doctor_note: typeof detail.notes === "string" ? detail.notes : "",
       is_chronic: detail.chronic === true,
+      meta: normalized.meta,
     };
   });
 }

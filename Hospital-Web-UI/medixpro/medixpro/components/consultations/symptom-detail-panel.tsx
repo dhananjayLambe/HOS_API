@@ -24,6 +24,11 @@ import { useConsultationStore } from "@/store/consultationStore";
 import type { SymptomDetail } from "@/lib/consultation-types";
 import type { SymptomFieldSchema } from "@/lib/consultation-schema-types";
 import { cn } from "@/lib/utils";
+import {
+  evaluateSectionItemComplete,
+  getSectionCompletionHints,
+  normalizeItem,
+} from "@/lib/consultation-completion";
 
 export function SymptomDetailPanel() {
   const {
@@ -57,6 +62,26 @@ export function SymptomDetailPanel() {
   }
 
   const detail = symptom.detail ?? {};
+  const completionStatus = evaluateSectionItemComplete(
+    "symptoms",
+    normalizeItem({
+      id: symptom.id,
+      label: symptom.name,
+      is_custom: Boolean(symptom.is_custom ?? symptom.isCustom),
+      isCustom: Boolean(symptom.is_custom ?? symptom.isCustom),
+      detail: symptom.detail ?? {},
+    })
+  );
+  const completionHints = getSectionCompletionHints(
+    "symptoms",
+    normalizeItem({
+      id: symptom.id,
+      label: symptom.name,
+      is_custom: Boolean(symptom.is_custom ?? symptom.isCustom),
+      isCustom: Boolean(symptom.is_custom ?? symptom.isCustom),
+      detail: symptom.detail ?? {},
+    })
+  );
   const set = (patch: Partial<SymptomDetail>) => updateSymptomDetail(symptom.id, patch);
 
   return (
@@ -66,7 +91,32 @@ export function SymptomDetailPanel() {
       )}
     >
       <CardHeader className="flex flex-row items-center justify-between space-y-0 py-4 pb-3">
-        <h3 className="font-bold">{symptom.name}</h3>
+        <div className="flex min-w-0 flex-col gap-2">
+          <h3 className="font-bold">{symptom.name}</h3>
+          <div className="flex flex-wrap items-center gap-2" aria-live="polite" aria-atomic="true">
+            {completionStatus ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/35 bg-emerald-500/[0.1] px-3 py-1 text-xs font-medium text-emerald-900 dark:text-emerald-100">
+                <span className="text-[10px]" aria-hidden>●</span>
+                Complete
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/45 bg-amber-500/12 px-3 py-1 text-xs font-medium text-amber-950 dark:text-amber-50">
+                <span className="text-[10px]" aria-hidden>●</span>
+                Incomplete
+              </span>
+            )}
+            {(symptom.is_custom ?? symptom.isCustom) && (
+              <span className="rounded-full border border-amber-500/45 bg-amber-500/10 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-900 dark:text-amber-200">
+                CUSTOM
+              </span>
+            )}
+          </div>
+          {!completionStatus && completionHints.length > 0 && (
+            <p className="text-xs text-amber-700 dark:text-amber-400">
+              Fill next: {completionHints.join(" • ")}
+            </p>
+          )}
+        </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Options">

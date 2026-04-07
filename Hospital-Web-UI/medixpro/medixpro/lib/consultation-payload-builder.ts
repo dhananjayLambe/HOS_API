@@ -1,5 +1,6 @@
 import { draftFindingsToEndConsultationPayload } from "@/lib/consultation-findings-helpers";
 import { sectionItemsToEndConsultationDiagnosisPayload } from "@/lib/consultation-diagnosis-helpers";
+import { evaluateSectionItemComplete, normalizeItem } from "@/lib/consultation-completion";
 import { useConsultationStore } from "@/store/consultationStore";
 
 export function buildEndConsultationPayload(
@@ -10,18 +11,33 @@ export function buildEndConsultationPayload(
     Array.isArray(symptomsFromSection) && symptomsFromSection.length > 0
       ? symptomsFromSection
       : store.symptoms ?? [];
-  const symptoms = (Array.isArray(symptomsRaw) ? symptomsRaw : []).map((s: any) => ({
-    id: s?.id,
-    name: s?.name ?? s?.label ?? "",
-    detail: s?.detail,
-    is_custom: Boolean(s?.isCustom ?? s?.is_custom ?? false),
-  }));
+  const symptoms = (Array.isArray(symptomsRaw) ? symptomsRaw : []).map((s: any) => {
+    const normalized = normalizeItem(s);
+    return {
+      id: normalized.id,
+      name: normalized.name,
+      is_custom: normalized.is_custom,
+      is_complete: evaluateSectionItemComplete("symptoms", normalized),
+      meta: normalized.meta,
+      detail: s?.detail,
+    };
+  });
 
   const medicinesFromSection = store.sectionItems["medicines"];
-  const medicines =
+  const medicines = (
     Array.isArray(medicinesFromSection) && medicinesFromSection.length > 0
       ? medicinesFromSection
-      : store.medicines ?? [];
+      : store.medicines ?? []
+  ).map((m: any) => {
+    const normalized = normalizeItem(m);
+    return {
+      ...m,
+      name: normalized.name,
+      is_custom: normalized.is_custom,
+      is_complete: evaluateSectionItemComplete("medicines", normalized),
+      meta: normalized.meta,
+    };
+  });
 
   const investigationsFromSection = store.sectionItems["investigations"];
   const investigations =

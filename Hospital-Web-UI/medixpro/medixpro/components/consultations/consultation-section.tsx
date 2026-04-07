@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useRef, useCallback, useEffect } from "react";
-import { Plus, Search, AlertTriangle } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import {
   ConsultationSectionCard,
   type ConsultationSectionCardHandle,
@@ -22,7 +22,6 @@ import {
   buildDefaultMedicinePrescription,
   buildMedicinePrescriptionFromAutofill,
   buildMedicinePrescriptionFromSuggestion,
-  getMedicineValidationMessages,
   hasAutofillPayload,
   isMedicineItemComplete,
   withDefaultMedicineDetail,
@@ -207,6 +206,15 @@ export function ConsultationSection({
     [items, selectedId]
   );
 
+  useEffect(() => {
+    if (activeSectionKey !== type) return;
+    if (selectedId) return;
+    const firstIncomplete = orderedItems.find((i) => isItemIncomplete(i, config));
+    if (firstIncomplete) {
+      setSelectedDetail({ section: type, itemId: firstIncomplete.id });
+    }
+  }, [activeSectionKey, type, selectedId, orderedItems, config, setSelectedDetail]);
+
   const allOptions = useMemo(
     () => [
       ...config.staticOptions,
@@ -343,6 +351,9 @@ export function ConsultationSection({
             }
           : item.detail;
       const newItem: ConsultationSectionItem = { ...item, id, detail };
+      newItem.name = newItem.name ?? newItem.label;
+      newItem.is_custom = Boolean(newItem.is_custom ?? newItem.isCustom ?? true);
+      newItem.is_complete = false;
       const toAdd = type === "medicines" ? withDefaultMedicineDetail(newItem) : newItem;
       addSectionItem(type, toAdd);
       return toAdd;
@@ -399,6 +410,9 @@ export function ConsultationSection({
       addSectionItem(type, {
         id: item.id,
         label: item.label,
+        name: item.label,
+        is_custom: Boolean(item.is_custom ?? item.isCustom ?? false),
+        is_complete: false,
         detail: { medicine },
       });
       setSelectedDetail({ section: type, itemId: item.id });
@@ -569,7 +583,7 @@ export function ConsultationSection({
 
           {/* Selected chips: active first, indigo highlight, × to remove */}
           {items.length > 0 && (
-            <div className="flex flex-wrap gap-2">
+            <div className="mt-2 flex flex-wrap gap-2">
               {orderedItems.map((item) => (
                 <Chip
                   key={item.id}
@@ -577,18 +591,8 @@ export function ConsultationSection({
                   selected={selectedId === item.id}
                   isIncomplete={isItemIncomplete(item, config)}
                   tags={
-                    type === "medicines"
-                      ? [
-                          ...(item.isCustom ? [{ key: "custom", label: "Custom" }] : []),
-                          ...(item.detail?.medicine?.is_chronic
-                            ? [{ key: "chronic", label: "Chronic" }]
-                            : []),
-                        ]
-                      : undefined
-                  }
-                  validationLines={
-                    type === "medicines"
-                      ? getMedicineValidationMessages(item).map((m) => `⚠ ${m}`)
+                    (item.is_custom ?? item.isCustom)
+                      ? [{ key: "custom", label: "CUSTOM" }]
                       : undefined
                   }
                   onSelect={() => selectItemAndScroll(item.id)}
@@ -612,7 +616,7 @@ export function ConsultationSection({
           {type === "medicines" && isHybridLoadingUi ? (
             <div className="space-y-2" aria-busy="true" aria-live="polite">
               <p className="text-xs text-muted-foreground">Searching…</p>
-              <div className="flex flex-wrap gap-2">
+              <div className="mt-2 flex flex-wrap gap-2">
                 {Array.from({ length: 8 }).map((_, i) => (
                   <div
                     key={i}
@@ -626,7 +630,7 @@ export function ConsultationSection({
             !inlineSearchDebounced &&
             !hasInlineResults &&
             !canAddInline ? (
-            <div className="flex flex-wrap gap-2" aria-busy="true">
+            <div className="mt-2 flex flex-wrap gap-2" aria-busy="true">
               {Array.from({ length: 6 }).map((_, i) => (
                 <div
                   key={i}
@@ -656,7 +660,7 @@ export function ConsultationSection({
               </button>
             </div>
           ) : hasInlineResults ? (
-            <div className="flex flex-wrap gap-2">
+            <div className="mt-2 flex flex-wrap gap-2">
               {filteredInline
                 .filter((opt) =>
                   type === "medicines"
@@ -713,7 +717,7 @@ export function ConsultationSection({
               </p>
             )
           ) : !inlineSearchDebounced && mergedInlineOptions.length > 0 ? (
-            <div className="flex flex-wrap gap-2">
+            <div className="mt-2 flex flex-wrap gap-2">
               {mergedInlineOptions
                 .filter((opt) =>
                   type === "medicines"
@@ -772,7 +776,6 @@ function Chip({
   selected,
   isIncomplete,
   tags,
-  validationLines,
   onSelect,
   onRemove,
 }: {
@@ -781,49 +784,30 @@ function Chip({
   isIncomplete?: boolean;
   /** Small labels under the chip (e.g. Custom drug, Chronic for medicines). */
   tags?: { key: string; label: string }[];
-  /** Inline validation (e.g. medicines); no blocking dialogs. */
-  validationLines?: string[];
   onSelect: () => void;
   onRemove: () => void;
 }) {
-  const titleHint =
-    validationLines && validationLines.length > 0
-      ? validationLines.join("\n")
-      : isIncomplete
-        ? "Duration or severity not filled"
-        : undefined;
-
   return (
     <span className="inline-flex max-w-full flex-col gap-1">
       <span
         className={cn(
-          "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-all duration-200 ease-out",
+          "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[13px] font-medium transition-all duration-200 ease-in-out",
           selected
-            ? "bg-indigo-600 text-white shadow-sm dark:bg-indigo-600 animate-consultation-chip-pop font-medium"
-            : "border border-border bg-muted/50 text-foreground hover:bg-muted hover:border-muted-foreground/40"
+            ? "border-blue-300 bg-blue-100 text-blue-800 hover:bg-blue-200"
+            : isIncomplete
+              ? "border-orange-50 bg-orange-50 text-gray-800 hover:bg-orange-100"
+              : "border-border/40 bg-gray-100 text-gray-800 hover:bg-gray-200"
         )}
-        title={titleHint}
       >
         <button
           type="button"
           onClick={onSelect}
-          className="min-w-0 truncate text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded"
+          className="min-w-0 truncate text-left cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-full"
         >
           {label}
         </button>
         {selected && (
           <ConsultationEditingBadge onDarkChip className="ml-1 shrink-0" />
-        )}
-        {isIncomplete && !(validationLines && validationLines.length > 0) && (
-          <span
-            className={cn(
-              "shrink-0",
-              selected ? "text-amber-200 dark:text-amber-100" : "text-amber-700 dark:text-amber-600"
-            )}
-            aria-hidden
-          >
-            <AlertTriangle className="h-3.5 w-3.5" />
-          </span>
         )}
         <button
           type="button"
@@ -848,20 +832,11 @@ function Chip({
               className={cn(
                 "rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
                 t.key === "custom"
-                  ? "border-0 bg-[#FEF3C7] font-medium normal-case tracking-normal text-[#92400E] dark:bg-[#FEF3C7]/90 dark:text-[#92400E]"
+                  ? "border-0 bg-gray-200 text-gray-600 text-xs px-1.5 py-0.5"
                   : "border border-violet-500/35 bg-violet-500/10 text-violet-800 dark:text-violet-200"
               )}
             >
               {t.label}
-            </span>
-          ))}
-        </span>
-      )}
-      {validationLines && validationLines.length > 0 && (
-        <span className="pl-1 text-[11px] leading-snug text-amber-700 dark:text-amber-500 max-w-[220px]">
-          {validationLines.map((line) => (
-            <span key={line} className="block">
-              {line}
             </span>
           ))}
         </span>

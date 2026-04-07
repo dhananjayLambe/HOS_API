@@ -25,6 +25,7 @@ import type {
   EncounterInstructionRow,
 } from "@/lib/consultation-schema-types";
 import { DEFAULT_CONSULTATION_STATE } from "@/lib/consultation-types";
+import { evaluateSectionItemComplete } from "@/lib/consultation-completion";
 
 type DraftStatus = {
   savedAt: Date | null;
@@ -341,10 +342,17 @@ export const useConsultationStore = create<ConsultationStore>((set, get) => ({
     set((s) => {
       const current = s.sectionItems[section] ?? [];
       if (current.some((i) => i.id === item.id)) return s;
+      const normalizedItem: ConsultationSectionItem = {
+        ...item,
+        name: item.name ?? item.label,
+        is_custom: Boolean(item.is_custom ?? item.isCustom ?? false),
+        isCustom: Boolean(item.is_custom ?? item.isCustom ?? false),
+        is_complete: false,
+      };
       return {
         sectionItems: {
           ...s.sectionItems,
-          [section]: [item, ...current],
+          [section]: [normalizedItem, ...current],
         },
       };
     }),
@@ -373,7 +381,16 @@ export const useConsultationStore = create<ConsultationStore>((set, get) => ({
         ...s.sectionItems,
         [section]: (s.sectionItems[section] ?? []).map((i) =>
           i.id === id
-            ? { ...i, detail: { ...(i.detail ?? {}), ...detail } }
+            ? (() => {
+                const next = {
+                  ...i,
+                  detail: { ...(i.detail ?? {}), ...detail },
+                };
+                return {
+                  ...next,
+                  is_complete: evaluateSectionItemComplete(section, next),
+                };
+              })()
             : i
         ),
       },

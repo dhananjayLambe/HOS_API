@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import { Stethoscope, Search, Plus, AlertTriangle } from "lucide-react";
+import { Stethoscope, Search, Plus } from "lucide-react";
 import {
   ConsultationSectionCard,
   type ConsultationSectionCardHandle,
@@ -84,6 +84,23 @@ export function FindingsSection() {
   useEffect(() => {
     return registerTabSectionExpander("findings", () => sectionCardRef.current?.expand());
   }, [registerTabSectionExpander]);
+
+  useEffect(() => {
+    if (activeSectionKey !== "findings") return;
+    const currentSelectedId =
+      selectedDetail?.section === "findings" ? selectedDetail.itemId ?? null : null;
+    if (currentSelectedId) return;
+    const firstIncomplete = visible.find((d) => {
+      const schemaItem = findingsSchema?.items.find(
+        (s) => s.key === d.finding_code || s.display_name === d.display_label
+      );
+      const schemaFieldsEmpty = !schemaItem?.fields?.length;
+      return isDraftFindingIncomplete(d, schemaFieldsEmpty);
+    });
+    if (firstIncomplete) {
+      setSelectedDetail({ section: "findings", itemId: firstIncomplete.id });
+    }
+  }, [activeSectionKey, selectedDetail, visible, findingsSchema, setSelectedDetail]);
 
   const searchDebounced = useDebouncedValue(search, 300);
 
@@ -365,7 +382,7 @@ export function FindingsSection() {
         </div>
 
         {visible.length > 0 && (
-          <div className="flex flex-wrap gap-2">
+          <div className="mt-2 flex flex-wrap gap-2">
             {orderedVisible.map((item) => {
               const schemaItem = findingsSchema?.items.find(
                 (s) => s.key === item.finding_code || s.display_name === item.display_label
@@ -377,33 +394,27 @@ export function FindingsSection() {
                 <span
                   key={item.id}
                   className={cn(
-                    "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-all duration-200 ease-out",
+                    "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[13px] font-medium transition-all duration-200 ease-in-out",
                     selected
-                      ? "bg-indigo-600 text-white shadow-sm dark:bg-indigo-600 animate-consultation-chip-pop font-medium"
-                      : "border border-border bg-muted/50 text-foreground hover:bg-muted hover:border-muted-foreground/40"
+                      ? "border-blue-300 bg-blue-100 text-blue-800 hover:bg-blue-200"
+                      : incomplete
+                        ? "border-orange-50 bg-orange-50 text-gray-800 hover:bg-orange-100"
+                        : "border-border/40 bg-gray-100 text-gray-800 hover:bg-gray-200"
                   )}
                 >
                   <button
                     type="button"
                     onClick={() => selectFindingAndScroll(item.id)}
-                    className="focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded min-w-0 truncate text-left"
+                    className="cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-full min-w-0 truncate text-left"
                   >
                     {item.display_label}
                   </button>
                   {selected && (
                     <ConsultationEditingBadge onDarkChip className="ml-1 shrink-0" />
                   )}
-                  {incomplete && (
-                    <span
-                      className={cn(
-                        "shrink-0",
-                        selected
-                          ? "text-amber-200 dark:text-amber-100"
-                          : "text-amber-700 dark:text-amber-600"
-                      )}
-                      aria-hidden
-                    >
-                      <AlertTriangle className="h-3.5 w-3.5" />
+                  {item.is_custom && (
+                    <span className="rounded-full border-0 bg-gray-200 px-1.5 py-0.5 text-xs font-medium text-gray-600">
+                      CUSTOM
                     </span>
                   )}
                   <button

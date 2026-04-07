@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import { AlertTriangle, ClipboardList, Plus, Search } from "lucide-react";
+import { ClipboardList, Plus, Search } from "lucide-react";
 import {
   ConsultationSectionCard,
   type ConsultationSectionCardHandle,
@@ -75,6 +75,17 @@ export function DiagnosisSection() {
   }, [registerTabSectionExpander]);
 
   const diagnosisItems = sectionItems["diagnosis"] ?? [];
+
+  useEffect(() => {
+    if (activeSectionKey !== "diagnosis") return;
+    const currentSelectedId =
+      selectedDetail?.section === "diagnosis" ? selectedDetail.itemId ?? null : null;
+    if (currentSelectedId) return;
+    const firstIncomplete = diagnosisItems.find((item) => isDiagnosisIncomplete(item));
+    if (firstIncomplete) {
+      setSelectedDetail({ section: "diagnosis", itemId: firstIncomplete.id });
+    }
+  }, [activeSectionKey, selectedDetail, diagnosisItems, setSelectedDetail]);
 
   useEffect(() => {
     if (diagnosisSchema) return;
@@ -178,6 +189,9 @@ export function DiagnosisSection() {
       const item: ConsultationSectionItem = {
         id: `diag-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
         label,
+        name: label,
+        is_custom: false,
+        is_complete: false,
         isCustom: false,
         diagnosisKey: key,
         diagnosisIcdCode: icdCode,
@@ -216,6 +230,9 @@ export function DiagnosisSection() {
       const item: ConsultationSectionItem = {
         id: `diag-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
         label: res.data?.name ?? trimmed,
+        name: res.data?.name ?? trimmed,
+        is_custom: true,
+        is_complete: false,
         isCustom: true,
         customDiagnosisId: res.data?.id,
       };
@@ -308,7 +325,7 @@ export function DiagnosisSection() {
         </div>
 
         {diagnosisItems.length > 0 && (
-          <div className="flex flex-wrap gap-2">
+          <div className="mt-2 flex flex-wrap gap-2">
             {orderedDiagnosis.map((item) => {
               const selected = selectedId === item.id;
               const incomplete = isDiagnosisIncomplete(item);
@@ -316,33 +333,27 @@ export function DiagnosisSection() {
                 <span
                   key={item.id}
                   className={cn(
-                    "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-all duration-200 ease-out",
+                    "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[13px] font-medium transition-all duration-200 ease-in-out",
                     selected
-                      ? "bg-indigo-600 text-white shadow-sm dark:bg-indigo-600 animate-consultation-chip-pop font-medium"
-                      : "border border-border bg-muted/50 text-foreground hover:bg-muted hover:border-muted-foreground/40"
+                      ? "border-blue-300 bg-blue-100 text-blue-800 hover:bg-blue-200"
+                      : incomplete
+                        ? "border-orange-50 bg-orange-50 text-gray-800 hover:bg-orange-100"
+                        : "border-border/40 bg-gray-100 text-gray-800 hover:bg-gray-200"
                   )}
                 >
                 <button
                   type="button"
                   onClick={() => selectDiagnosisAndScroll(item.id)}
-                  className="min-w-0 truncate text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded"
+                  className="min-w-0 truncate text-left cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-full"
                 >
                   {item.label}
                 </button>
                 {selected && (
                   <ConsultationEditingBadge onDarkChip className="ml-1 shrink-0" />
                 )}
-                {incomplete && (
-                  <span
-                    className={cn(
-                      "shrink-0",
-                      selected
-                        ? "text-amber-200 dark:text-amber-100"
-                        : "text-amber-700 dark:text-amber-600"
-                    )}
-                    aria-hidden
-                  >
-                    <AlertTriangle className="h-3.5 w-3.5" />
+                {(item.is_custom ?? item.isCustom) && (
+                  <span className="rounded-full border-0 bg-gray-200 px-1.5 py-0.5 text-xs font-medium text-gray-600">
+                    CUSTOM
                   </span>
                 )}
                 <button

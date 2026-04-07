@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useId, useEffect, useMemo, useRef } from "react";
-import { Thermometer, Plus, AlertTriangle, Search } from "lucide-react";
+import { Thermometer, Plus, Search } from "lucide-react";
 import {
   ConsultationSectionCard,
   type ConsultationSectionCardHandle,
@@ -54,6 +54,15 @@ export function SymptomsSection() {
     return registerTabSectionExpander("symptoms", () => sectionCardRef.current?.expand());
   }, [registerTabSectionExpander]);
 
+  useEffect(() => {
+    if (activeSectionKey !== "symptoms") return;
+    if (selectedSymptomId) return;
+    const firstIncomplete = symptoms.find((s) => isSymptomIncomplete(s.detail));
+    if (firstIncomplete) {
+      setSelectedSymptomId(firstIncomplete.id);
+    }
+  }, [activeSectionKey, selectedSymptomId, symptoms, setSelectedSymptomId]);
+
   // Load backend-driven schema for symptoms (Phase 1: physician only).
   useEffect(() => {
     if (symptomsSchema) return;
@@ -104,7 +113,7 @@ export function SymptomsSection() {
     }
 
     const id = symptomId();
-    addSymptom({ id, name: trimmed, isCustom });
+    addSymptom({ id, name: trimmed, isCustom, is_custom: isCustom, is_complete: false });
     selectSymptomAndScroll(id);
     setSearch("");
   };
@@ -163,7 +172,7 @@ export function SymptomsSection() {
       symptoms.map((s) => ({
         id: s.id,
         label: s.name,
-        isCustom: true,
+        isCustom: Boolean(s.isCustom ?? s.is_custom),
       })),
     [symptoms]
   );
@@ -271,7 +280,7 @@ export function SymptomsSection() {
         </div>
 
         {symptoms.length > 0 && (
-          <div className="flex flex-wrap gap-2">
+          <div className="mt-2 flex flex-wrap gap-2">
             {orderedSymptoms.map((s) => {
               const incomplete = isSymptomIncomplete(s.detail);
               const selected = selectedSymptomId === s.id;
@@ -279,36 +288,27 @@ export function SymptomsSection() {
                 <span
                   key={s.id}
                   className={cn(
-                    "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-all duration-200 ease-out",
+                    "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[13px] font-medium transition-all duration-200 ease-in-out",
                     selected
-                      ? "bg-indigo-600 text-white shadow-sm dark:bg-indigo-600 animate-consultation-chip-pop font-medium"
-                      : "border border-border bg-muted/50 text-foreground hover:bg-muted hover:border-muted-foreground/40"
+                      ? "border-blue-300 bg-blue-100 text-blue-800 hover:bg-blue-200"
+                      : incomplete
+                        ? "border-orange-50 bg-orange-50 text-gray-800 hover:bg-orange-100"
+                        : "border-border/40 bg-gray-100 text-gray-800 hover:bg-gray-200"
                   )}
-                  title={
-                    incomplete ? "No details filled for this symptom yet" : undefined
-                  }
                 >
                   <button
                     type="button"
                     onClick={() => selectSymptomAndScroll(s.id)}
-                    className="focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded min-w-0 truncate text-left"
+                    className="cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-full min-w-0 truncate text-left"
                   >
                     {s.name}
                   </button>
                   {selected && (
                     <ConsultationEditingBadge onDarkChip className="ml-1 shrink-0" />
                   )}
-                  {incomplete && (
-                    <span
-                      className={cn(
-                        "shrink-0",
-                        selected
-                          ? "text-amber-200 dark:text-amber-100"
-                          : "text-amber-700 dark:text-amber-600"
-                      )}
-                      aria-hidden
-                    >
-                      <AlertTriangle className="h-3.5 w-3.5" />
+                  {(s.is_custom ?? s.isCustom) && (
+                    <span className="rounded-full border-0 bg-gray-200 px-1.5 py-0.5 text-xs font-medium text-gray-600">
+                      CUSTOM
                     </span>
                   )}
                   <button

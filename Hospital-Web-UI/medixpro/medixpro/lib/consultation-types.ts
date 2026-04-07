@@ -190,7 +190,13 @@ export interface DraftConsultationFinding {
 
 export interface ConsultationSectionItem {
   id: string;
+  /** Canonical display name for normalized payloads. */
+  name?: string;
   label: string;
+  /** Canonical flags (snake_case for payload parity). */
+  is_custom?: boolean;
+  is_complete?: boolean;
+  /** Legacy UI field retained during migration. */
   isCustom?: boolean;
   /** DiagnosisMaster key from render-schema (diagnosis section). */
   diagnosisKey?: string;

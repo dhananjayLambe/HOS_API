@@ -26,6 +26,11 @@ import type { DraftConsultationFinding, SectionItemDetail } from "@/lib/consulta
 import type { FindingFieldSchema, FindingItemSchema } from "@/lib/consultation-schema-types";
 import { cn } from "@/lib/utils";
 import { mergeDetailPatchIntoDraft } from "@/lib/consultation-findings-helpers";
+import {
+  evaluateSectionItemComplete,
+  getSectionCompletionHints,
+  normalizeItem,
+} from "@/lib/consultation-completion";
 
 function FindingDetailPanelBody({
   draft,
@@ -55,6 +60,30 @@ function FindingDetailPanelBody({
   const set = (patch: Partial<SectionItemDetail> & Record<string, unknown>) => {
     updateDraftFinding(draft.id, mergeDetailPatchIntoDraft(draft, patch));
   };
+  const completionStatus = evaluateSectionItemComplete(
+    "findings",
+    normalizeItem({
+      id: draft.id,
+      label: draft.display_label,
+      is_custom: draft.is_custom,
+      detail: {
+        notes: draft.note ?? "",
+        ...(draft.extension_data ?? {}),
+      },
+    })
+  );
+  const completionHints = getSectionCompletionHints(
+    "findings",
+    normalizeItem({
+      id: draft.id,
+      label: draft.display_label,
+      is_custom: draft.is_custom,
+      detail: {
+        notes: draft.note ?? "",
+        ...(draft.extension_data ?? {}),
+      },
+    })
+  );
 
   return (
     <Card
@@ -63,7 +92,32 @@ function FindingDetailPanelBody({
       )}
     >
       <CardHeader className="flex flex-row items-center justify-between space-y-0 py-4 pb-3">
-        <h3 className="font-bold truncate pr-2">{draft.display_label}</h3>
+        <div className="flex min-w-0 flex-col gap-2">
+          <h3 className="font-bold truncate pr-2">{draft.display_label}</h3>
+          <div className="flex flex-wrap items-center gap-2" aria-live="polite" aria-atomic="true">
+            {completionStatus ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/35 bg-emerald-500/[0.1] px-3 py-1 text-xs font-medium text-emerald-900 dark:text-emerald-100">
+                <span className="text-[10px]" aria-hidden>●</span>
+                Complete
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/45 bg-amber-500/12 px-3 py-1 text-xs font-medium text-amber-950 dark:text-amber-50">
+                <span className="text-[10px]" aria-hidden>●</span>
+                Incomplete
+              </span>
+            )}
+            {draft.is_custom && (
+              <span className="rounded-full border border-amber-500/45 bg-amber-500/10 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-900 dark:text-amber-200">
+                CUSTOM
+              </span>
+            )}
+          </div>
+          {!completionStatus && completionHints.length > 0 && (
+            <p className="text-xs text-amber-700 dark:text-amber-400">
+              Fill next: {completionHints.join(" • ")}
+            </p>
+          )}
+        </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Options">

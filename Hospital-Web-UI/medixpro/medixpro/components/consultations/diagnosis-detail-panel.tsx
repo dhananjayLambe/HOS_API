@@ -10,6 +10,11 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useConsultationStore } from "@/store/consultationStore";
 import type { SectionItemDetail } from "@/lib/consultation-types";
 import { cn } from "@/lib/utils";
+import {
+  evaluateSectionItemComplete,
+  getSectionCompletionHints,
+  normalizeItem,
+} from "@/lib/consultation-completion";
 
 type DiagnosisDetail = SectionItemDetail & {
   status?: "provisional" | "confirmed";
@@ -56,22 +61,49 @@ export function DiagnosisDetailPanel() {
   const isPrimary = detail.primary === true;
   const chronicFromSchema = schemaItem?.chronic === true;
   const chronic = detail.chronic ?? chronicFromSchema ?? false;
+  const completionStatus = evaluateSectionItemComplete("diagnosis", normalizeItem(item));
+  const completionHints = getSectionCompletionHints("diagnosis", normalizeItem(item));
 
   return (
     <Card className="h-fit w-full max-w-full min-w-0 max-w-md shrink-0 self-start rounded-2xl border border-border/80 bg-card shadow-sm transition-shadow hover:shadow-md">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 py-4 pb-3">
-        <div className="flex items-center gap-2">
-          <h3 className="font-bold truncate pr-2">{item.label}</h3>
-          {isPrimary && (
-            <span className="inline-flex items-center gap-1 rounded-full border border-amber-400 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800">
-              <Star className="h-3 w-3 fill-amber-400 text-amber-500" />
-              Primary
-            </span>
-          )}
-          {chronicFromSchema && (
-            <span className="inline-flex items-center gap-1 rounded-full border border-blue-400 bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-800">
-              Chronic
-            </span>
+        <div className="flex min-w-0 flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <h3 className="font-bold truncate pr-2">{item.label}</h3>
+            {isPrimary && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-amber-400 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800">
+                <Star className="h-3 w-3 fill-amber-400 text-amber-500" />
+                Primary
+              </span>
+            )}
+            {chronicFromSchema && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-blue-400 bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-800">
+                Chronic
+              </span>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2" aria-live="polite" aria-atomic="true">
+            {completionStatus ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/35 bg-emerald-500/[0.1] px-3 py-1 text-xs font-medium text-emerald-900 dark:text-emerald-100">
+                <span className="text-[10px]" aria-hidden>●</span>
+                Complete
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/45 bg-amber-500/12 px-3 py-1 text-xs font-medium text-amber-950 dark:text-amber-50">
+                <span className="text-[10px]" aria-hidden>●</span>
+                Incomplete
+              </span>
+            )}
+            {(item.is_custom ?? item.isCustom) && (
+              <span className="rounded-full border border-amber-500/45 bg-amber-500/10 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-900 dark:text-amber-200">
+                CUSTOM
+              </span>
+            )}
+          </div>
+          {!completionStatus && completionHints.length > 0 && (
+            <p className="text-xs text-amber-700 dark:text-amber-400">
+              Fill next: {completionHints.join(" • ")}
+            </p>
           )}
         </div>
         <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Options">

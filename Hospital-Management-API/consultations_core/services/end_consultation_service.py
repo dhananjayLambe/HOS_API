@@ -34,6 +34,58 @@ def _medicine_validation_error(message):
     raise DjangoValidationError({"medicines": [message]})
 
 
+def _validate_symptom(item):
+    name = str(item.get("name") or item.get("label") or "").strip()
+    if not name:
+        raise DjangoValidationError({"symptoms": ["Symptom name is required."]})
+
+
+def _validate_finding(item):
+    custom_name = str(item.get("custom_name") or "").strip()
+    finding_code = str(item.get("finding_code") or "").strip()
+    finding_id = str(item.get("finding_id") or "").strip()
+    note = str(item.get("note") or "").strip()
+    ext = item.get("extension_data") if isinstance(item.get("extension_data"), dict) else {}
+    value = str(ext.get("value") or "").strip() if isinstance(ext, dict) else ""
+    is_custom = bool(item.get("is_custom"))
+    if is_custom and not custom_name:
+        raise DjangoValidationError({"findings": ["Custom finding name is required."]})
+    if not is_custom and not (finding_code or finding_id):
+        raise DjangoValidationError({"findings": ["Finding code or finding_id is required."]})
+    if not (value or note):
+        raise DjangoValidationError({"findings": ["Finding value or observation is required."]})
+
+
+def _validate_diagnosis(item):
+    diagnosis_label = str(item.get("diagnosis_label") or "").strip()
+    diagnosis_key = str(item.get("diagnosis_key") or "").strip()
+    diagnosis_icd_code = str(item.get("diagnosis_icd_code") or "").strip()
+    custom_name = str(item.get("custom_name") or "").strip()
+    is_custom = bool(item.get("is_custom"))
+    if is_custom and not custom_name:
+        raise DjangoValidationError({"diagnosis": ["Custom diagnosis name is required."]})
+    if not is_custom and not (diagnosis_label or diagnosis_key or diagnosis_icd_code):
+        raise DjangoValidationError({"diagnosis": ["Diagnosis label or valid ICD/code is required."]})
+
+
+def _validate_medicine(item, med):
+    dose_value = med.get("dose_value")
+    frequency_id = med.get("frequency_id")
+    duration_value = med.get("duration_value")
+    duration_unit = med.get("duration_unit")
+    duration_special = med.get("duration_special")
+    if dose_value in (None, ""):
+        _medicine_validation_error("Medicine dose_value is required.")
+    if frequency_id in (None, ""):
+        _medicine_validation_error("Medicine frequency_id is required.")
+    has_duration_value = duration_value not in (None, "")
+    has_duration_special = duration_special not in (None, "")
+    if not (has_duration_value or has_duration_special):
+        _medicine_validation_error("Medicine duration is required.")
+    if has_duration_value and duration_unit in (None, ""):
+        _medicine_validation_error("Medicine duration_unit is required when duration_value is set.")
+
+
 def _as_uuid_or_none(raw_value):
     token = str(raw_value or "").strip()
     if not token:
@@ -242,6 +294,7 @@ def _persist_medicines(consultation, user, raw_medicines):
             med = item.get("medicine", item)
         if not isinstance(med, dict):
             continue
+        _validate_medicine(item, med)
 
         dose_value = med.get("dose_value")
         if dose_value in (None, ""):
@@ -323,6 +376,7 @@ def _persist_symptoms(consultation, user, raw_symptoms):
     for item in raw_symptoms:
         if not isinstance(item, dict):
             continue
+        _validate_symptom(item)
         name = str(item.get("name", "")).strip()
         if not name:
             continue
@@ -402,6 +456,7 @@ def _persist_findings(consultation, user, raw_findings):
             continue
         if item.get("is_deleted"):
             continue
+        _validate_finding(item)
 
         raw_fid = item.get("finding_id")
         finding_code = (item.get("finding_code") or "").strip()
@@ -577,6 +632,7 @@ def _persist_diagnoses(consultation, user, raw_diagnoses):
     for item in raw_diagnoses:
         if not isinstance(item, dict):
             continue
+        _validate_diagnosis(item)
 
         is_custom = bool(item.get("is_custom"))
         diagnosis_key = str(item.get("diagnosis_key") or "").strip()
