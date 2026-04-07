@@ -21,6 +21,10 @@ import {
   CONSULTATION_TAB_SECTION_DATA_ATTR,
   reorderItemsByActiveId,
 } from "@/lib/consultation-chip-ux";
+import {
+  pickDefaultSectionItemId,
+  shouldIgnoreSectionActivationClick,
+} from "@/lib/consultation-section-activation";
 import { flushConsultationAutosave } from "@/lib/consultation-autosave";
 
 function isDiagnosisIncomplete(item: ConsultationSectionItem): boolean {
@@ -172,6 +176,38 @@ export function DiagnosisSection() {
     setDrawerOpen(true);
   }, [activateSection, search]);
 
+  const handleSectionCardActivate = useCallback(() => {
+    activateSection("diagnosis");
+    sectionCardRef.current?.expand();
+    if (selectedId) return;
+    const defaultItemId = pickDefaultSectionItemId(
+      diagnosisItems,
+      (item) => isDiagnosisIncomplete(item)
+    );
+    if (defaultItemId) {
+      setSelectedDetail({ section: "diagnosis", itemId: defaultItemId });
+    }
+  }, [activateSection, selectedId, diagnosisItems, setSelectedDetail]);
+
+  const handleSectionContainerClick = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      if (shouldIgnoreSectionActivationClick(event.target, event.currentTarget)) {
+        return;
+      }
+      handleSectionCardActivate();
+    },
+    [handleSectionCardActivate]
+  );
+
+  const handleSectionContainerKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      handleSectionCardActivate();
+    },
+    [handleSectionCardActivate]
+  );
+
   const incompleteCount = useMemo(
     () => diagnosisItems.filter((item) => isDiagnosisIncomplete(item)).length,
     [diagnosisItems]
@@ -251,8 +287,12 @@ export function DiagnosisSection() {
     <div
       ref={(el) => registerSectionRef("diagnosis", el)}
       id="diagnosis-section"
+      role="button"
+      tabIndex={0}
+      onClick={handleSectionContainerClick}
+      onKeyDown={handleSectionContainerKeyDown}
       className={cn(
-        "ccp-mid-section scroll-mt-2 rounded-2xl",
+        "ccp-mid-section scroll-mt-2 rounded-2xl cursor-pointer transition-colors hover:border-blue-300/70 hover:bg-blue-50/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/40",
         activeSectionKey === "diagnosis" && "ccp-mid-section--active"
       )}
     >

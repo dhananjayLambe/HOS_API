@@ -19,6 +19,10 @@ import {
   CONSULTATION_TAB_SECTION_DATA_ATTR,
   reorderItemsByActiveId,
 } from "@/lib/consultation-chip-ux";
+import {
+  pickDefaultSectionItemId,
+  shouldIgnoreSectionActivationClick,
+} from "@/lib/consultation-section-activation";
 import { flushConsultationAutosave } from "@/lib/consultation-autosave";
 import type {
   SymptomDetail,
@@ -185,6 +189,32 @@ export function SymptomsSection() {
     setDrawerOpen(true);
   };
 
+  const handleSectionCardActivate = () => {
+    activateSection("symptoms");
+    sectionCardRef.current?.expand();
+    if (selectedSymptomId) return;
+    const defaultItemId = pickDefaultSectionItemId(
+      symptoms,
+      (item) => isSymptomIncomplete(item.detail)
+    );
+    if (defaultItemId) {
+      setSelectedSymptomId(defaultItemId);
+    }
+  };
+
+  const handleSectionContainerClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (shouldIgnoreSectionActivationClick(event.target, event.currentTarget)) {
+      return;
+    }
+    handleSectionCardActivate();
+  };
+
+  const handleSectionContainerKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    handleSectionCardActivate();
+  };
+
   const handleDrawerSelect = (item: ConsultationSectionItem) => {
     add(item.label, Boolean(item.isCustom));
   };
@@ -202,8 +232,12 @@ export function SymptomsSection() {
     <div
       ref={(el) => registerSectionRef("symptoms", el)}
       id="symptoms-section"
+      role="button"
+      tabIndex={0}
+      onClick={handleSectionContainerClick}
+      onKeyDown={handleSectionContainerKeyDown}
       className={cn(
-        "ccp-mid-section scroll-mt-2 rounded-2xl",
+        "ccp-mid-section scroll-mt-2 rounded-2xl cursor-pointer transition-colors hover:border-blue-300/70 hover:bg-blue-50/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/40",
         activeSectionKey === "symptoms" && "ccp-mid-section--active"
       )}
     >

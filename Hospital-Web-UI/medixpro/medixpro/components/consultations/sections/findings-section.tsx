@@ -24,6 +24,10 @@ import {
   CONSULTATION_TAB_SECTION_DATA_ATTR,
   reorderItemsByActiveId,
 } from "@/lib/consultation-chip-ux";
+import {
+  pickDefaultSectionItemId,
+  shouldIgnoreSectionActivationClick,
+} from "@/lib/consultation-section-activation";
 import { flushConsultationAutosave } from "@/lib/consultation-autosave";
 
 function useDebouncedValue<T>(value: T, delay: number): T {
@@ -303,13 +307,46 @@ export function FindingsSection() {
     setDrawerOpen(true);
   };
 
+  const handleSectionCardActivate = () => {
+    activateSection("findings");
+    sectionCardRef.current?.expand();
+    if (selectedId) return;
+    const defaultItemId = pickDefaultSectionItemId(visible, (item) => {
+      const schemaItem = findingsSchema?.items.find(
+        (s) => s.key === item.finding_code || s.display_name === item.display_label
+      );
+      const schemaFieldsEmpty = !schemaItem?.fields?.length;
+      return isDraftFindingIncomplete(item, schemaFieldsEmpty);
+    });
+    if (defaultItemId) {
+      setSelectedDetail({ section: "findings", itemId: defaultItemId });
+    }
+  };
+
+  const handleSectionContainerClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (shouldIgnoreSectionActivationClick(event.target, event.currentTarget)) {
+      return;
+    }
+    handleSectionCardActivate();
+  };
+
+  const handleSectionContainerKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    handleSectionCardActivate();
+  };
+
   return (
     <>
     <div
       ref={(el) => registerSectionRef("findings", el)}
       id="findings-section"
+      role="button"
+      tabIndex={0}
+      onClick={handleSectionContainerClick}
+      onKeyDown={handleSectionContainerKeyDown}
       className={cn(
-        "ccp-mid-section scroll-mt-2 rounded-2xl",
+        "ccp-mid-section scroll-mt-2 rounded-2xl cursor-pointer transition-colors hover:border-blue-300/70 hover:bg-blue-50/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/40",
         activeSectionKey === "findings" && "ccp-mid-section--active"
       )}
     >

@@ -14,6 +14,10 @@ import { useConsultationStore } from "@/store/consultationStore";
 import type { InstructionsSectionSchema, InstructionItemSchema } from "@/lib/consultation-schema-types";
 import { cn } from "@/lib/utils";
 import { reorderItemsByActiveId } from "@/lib/consultation-chip-ux";
+import {
+  pickDefaultSectionItemId,
+  shouldIgnoreSectionActivationClick,
+} from "@/lib/consultation-section-activation";
 
 const INSTRUCTION_TEMPLATE_PREFIX = "tpl:";
 
@@ -287,12 +291,48 @@ export function InstructionsSection() {
 
   const locked = consultationFinalized;
 
+  const handleSectionCardActivate = useCallback(() => {
+    activateSection("instructions");
+    sectionCardRef.current?.expand();
+    if (selectedDetail?.section === "instructions" && selectedDetail.itemId) return;
+    const defaultItemId = pickDefaultSectionItemId(
+      orderedInstructions,
+      (item) => isInstructionIncomplete(item)
+    );
+    if (defaultItemId) {
+      setSelectedDetail({ section: "instructions", itemId: defaultItemId });
+      return;
+    }
+    setSelectedDetail({ section: "instructions" });
+  }, [activateSection, orderedInstructions, selectedDetail, setSelectedDetail]);
+
+  const handleSectionContainerClick = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      if (shouldIgnoreSectionActivationClick(event.target, event.currentTarget)) return;
+      handleSectionCardActivate();
+    },
+    [handleSectionCardActivate]
+  );
+
+  const handleSectionContainerKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      handleSectionCardActivate();
+    },
+    [handleSectionCardActivate]
+  );
+
   return (
     <div
       ref={(el) => registerSectionRef("instructions", el)}
       id="instructions-section"
+      role="button"
+      tabIndex={0}
+      onClick={handleSectionContainerClick}
+      onKeyDown={handleSectionContainerKeyDown}
       className={cn(
-        "ccp-mid-section scroll-mt-2 rounded-2xl",
+        "ccp-mid-section scroll-mt-2 rounded-2xl cursor-pointer transition-colors hover:border-blue-300/70 hover:bg-blue-50/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/40",
         activeSectionKey === "instructions" && "ccp-mid-section--active"
       )}
     >

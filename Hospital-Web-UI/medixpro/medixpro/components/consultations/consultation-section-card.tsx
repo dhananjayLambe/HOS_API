@@ -61,9 +61,9 @@ export const ConsultationSectionCard = forwardRef<
           <button
             type="button"
             className="flex flex-1 items-center gap-2 text-left outline-none hover:opacity-80 cursor-pointer min-h-[44px] -mx-1 px-1 rounded-lg touch-manipulation active:opacity-90"
-            onClick={() => setOpen(!open)}
+            onClick={() => setOpen(true)}
             aria-expanded={open}
-            aria-label={open ? `Collapse ${title}` : `Expand ${title}`}
+            aria-label={`Open ${title}`}
           >
             <span className="flex shrink-0 text-muted-foreground [&_svg]:size-4">
               {icon}
