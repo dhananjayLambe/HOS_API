@@ -191,8 +191,17 @@ function StartConsultationContent() {
         });
         setVitalsLoaded(true);
       })
-      .catch(() => {
+      .catch((err: unknown) => {
         if (cancelled) return;
+        const ax = err as { response?: { status?: number; data?: { detail?: string } } };
+        const detail = String(ax.response?.data?.detail || "").toLowerCase();
+        const isExpectedPreview400 =
+          ax.response?.status === 400 &&
+          (detail.includes("cancelled") || detail.includes("no show") || detail.includes("no_show"));
+        if (isExpectedPreview400) {
+          setVitalsLoaded(true);
+          return;
+        }
         // Soft-fail: keep consultation usable but let the doctor know vitals could not be loaded.
         toast.error("Unable to load vitals from pre-consultation.");
         setVitalsLoaded(true);

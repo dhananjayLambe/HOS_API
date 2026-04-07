@@ -213,10 +213,20 @@ backendAxiosClient.interceptors.response.use(
 
       const isSectionEndpoint = fullUrl.includes("/section/");
       const isTemplateEndpoint = fullUrl.includes("/pre-consult/template");
+      const isPreviewEndpoint = fullUrl.includes("/pre-consultation/preview/");
       const is404 = error.response?.status === 404;
+      const isExpectedPreview400 = isPreviewEndpoint && error.response?.status === 400;
+      if (isExpectedPreview400 && process.env.NODE_ENV !== "production") {
+        console.info(
+          `[backendAxiosClient] Suppressed expected 400 on ${error.config.method?.toUpperCase()} ${fullUrl}`,
+          error.response?.data,
+        );
+      }
       
-      // Only log non-404 errors, or 404s that aren't section/template endpoints
-      if (!is404 || (!isSectionEndpoint && !isTemplateEndpoint)) {
+      // Only log actionable errors:
+      // - skip expected 404s on section/template endpoints
+      // - skip expected 400s on preview endpoint (e.g. cancelled/no-show encounters)
+      if ((!is404 || (!isSectionEndpoint && !isTemplateEndpoint)) && !isExpectedPreview400) {
         console.error(
           `[backendAxiosClient] Error ${error.response?.status || "Network"} on ${error.config.method?.toUpperCase()} ${fullUrl}`,
         );
