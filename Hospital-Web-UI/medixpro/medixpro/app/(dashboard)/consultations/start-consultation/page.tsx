@@ -15,21 +15,28 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { AlertCircle, Search, Thermometer, Stethoscope, ClipboardList, Pill, FlaskConical, FileText, Loader2 } from "lucide-react";
+import { AlertCircle, Search, Thermometer, Stethoscope, ClipboardList, Pill, FileText, Loader2 } from "lucide-react";
 import { ConsultationActionBar } from "@/components/consultations/consultation-action-bar";
 import { ConsultationRightMenu } from "@/components/consultations/consultation-right-menu";
 import { ConsultationDynamicDetailPanel } from "@/components/consultations/consultation-dynamic-detail-panel";
 import { ConsultationSection } from "@/components/consultations/consultation-section";
 import { ConsultationErrorBoundary } from "@/components/consultations/consultation-error-boundary";
 import { ConsultationSectionScrollProvider } from "@/components/consultations/consultation-section-scroll-context";
-import { FollowUpSection, ProceduresSection, SymptomsSection, FindingsSection, DiagnosisSection, InstructionsSection } from "@/components/consultations/sections";
+import {
+  FollowUpSection,
+  ProceduresSection,
+  SymptomsSection,
+  FindingsSection,
+  DiagnosisSection,
+  InstructionsSection,
+  InvestigationsSection,
+} from "@/components/consultations/sections";
 import { useConsultationStore } from "@/store/consultationStore";
 import { useShallow } from "zustand/react/shallow";
 import {
   isLeftPanelVisible,
   isSectionVisible,
   isMedicinesSectionExpandedByDefault,
-  isInvestigationsSectionExpandedByDefault,
 } from "@/lib/consultation-workflow";
 
 function isUuidLike(value: string) {
@@ -340,11 +347,6 @@ function StartConsultationContent() {
     () => isMedicinesSectionExpandedByDefault(consultationType),
     [consultationType]
   );
-  const investigationsDefaultOpen = useMemo(
-    () => isInvestigationsSectionExpandedByDefault(consultationType),
-    [consultationType]
-  );
-
   useEffect(() => {
     if (!selectedPatient) {
       setShowAlert(true);
@@ -470,12 +472,7 @@ function StartConsultationContent() {
                   />
                 )}
                 {isSectionVisible(consultationType, "investigations") && (
-                  <ConsultationSection
-                    type="investigations"
-                    title="Investigations"
-                    icon={<FlaskConical className="text-muted-foreground" />}
-                    defaultOpen={investigationsDefaultOpen}
-                  />
+                  <InvestigationsSection />
                 )}
                 {isSectionVisible(consultationType, "instructions") && (
                   <InstructionsSection />

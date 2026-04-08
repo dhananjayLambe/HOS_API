@@ -168,6 +168,19 @@ export interface SectionItemDetail {
   customTags?: string[];
   /** When section is `medicines`, structured prescription draft. */
   medicine?: MedicinePrescriptionDetail;
+  /** Investigation payload-ready fields. */
+  service_id?: string;
+  diagnosis_id?: string;
+  price_snapshot?: number | null;
+  recommendation_source?: "manual" | "diagnosis_map" | "bundle";
+  bundle_id?: string;
+  urgency?: "routine" | "urgent";
+  instructions?: string[];
+  /** Static master metadata used in right panel autofill. */
+  investigation_category?: string;
+  investigation_sample?: string;
+  investigation_tat?: string;
+  investigation_preparation?: string;
 }
 
 /** Single item in any section (symptom, finding, diagnosis, etc.). */

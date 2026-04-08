@@ -5,6 +5,7 @@ import { FindingDetailPanel } from "@/components/consultations/finding-detail-pa
 import { DiagnosisDetailPanel } from "@/components/consultations/diagnosis-detail-panel";
 import { InstructionDetailPanel } from "@/components/consultations/instruction-detail-panel";
 import { MedicineDetailPanel } from "@/components/consultations/medicine-detail-panel";
+import { InvestigationDetailPanel } from "@/components/consultations/investigation-detail-panel";
 import { useConsultationStore } from "@/store/consultationStore";
 
 export function ConsultationDynamicDetailPanel() {
@@ -23,6 +24,9 @@ export function ConsultationDynamicDetailPanel() {
   }
   if (selectedDetail?.section === "instructions") {
     return <InstructionDetailPanel />;
+  }
+  if (selectedDetail?.section === "investigations") {
+    return <InvestigationDetailPanel />;
   }
 
   if (selectedSymptomId) {

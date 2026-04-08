@@ -40,10 +40,31 @@ export function buildEndConsultationPayload(
   });
 
   const investigationsFromSection = store.sectionItems["investigations"];
-  const investigations =
+  const investigationsRaw =
     Array.isArray(investigationsFromSection) && investigationsFromSection.length > 0
       ? investigationsFromSection
-      : store.investigations ?? [];
+      : [];
+  const investigations = investigationsRaw.map((inv: any) => {
+    const detail = inv?.detail ?? {};
+    const source =
+      detail.recommendation_source === "diagnosis_map" ||
+      detail.recommendation_source === "bundle"
+        ? detail.recommendation_source
+        : "manual";
+    return {
+      service_id: String(detail.service_id ?? inv.id ?? ""),
+      name: String(inv.label ?? inv.name ?? ""),
+      price_snapshot: detail.price_snapshot ?? null,
+      recommendation_source: source,
+      ...(detail.bundle_id ? { bundle_id: String(detail.bundle_id) } : {}),
+      urgency: detail.urgency === "urgent" ? "urgent" : "routine",
+      instructions: Array.isArray(detail.instructions) ? detail.instructions : [],
+      notes: String(detail.notes ?? ""),
+      ...(source === "diagnosis_map" && detail.diagnosis_id
+        ? { diagnosis_id: String(detail.diagnosis_id) }
+        : {}),
+    };
+  });
 
   const instructionsFromSection = store.sectionItems["instructions"];
   const instructions =

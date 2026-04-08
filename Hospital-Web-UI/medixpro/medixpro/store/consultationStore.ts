@@ -71,6 +71,8 @@ type ConsultationStore = ConsultationState & {
   consultationFinalized: boolean;
   /** Incremented to focus medicines search input (e.g. after "Change" on medicine panel). */
   medicinesSearchFocusNonce: number;
+  /** Package to tests mapping for investigations package context and analytics. */
+  appliedPackages: Record<string, { test_ids: string[] }>;
   selectedDetail: SelectedDetailPayload;
   setSymptoms: (symptoms: ConsultationSymptom[]) => void;
   addSymptom: (symptom: ConsultationSymptom) => void;
@@ -126,6 +128,8 @@ type ConsultationStore = ConsultationState & {
   ) => void;
   setSelectedDetail: (payload: SelectedDetailPayload) => void;
   requestMedicinesSearchFocus: () => void;
+  setAppliedPackage: (bundleId: string, testIds: string[]) => void;
+  clearAppliedPackage: (bundleId: string) => void;
   addDraftFindingMaster: (finding_code: string, display_label: string) => void;
   addDraftFindingCustom: (custom_name: string) => void;
   updateDraftFinding: (
@@ -161,6 +165,7 @@ export const useConsultationStore = create<ConsultationStore>((set, get) => ({
   sectionItems: emptySectionItems(),
   vitalsLoaded: false,
   medicinesSearchFocusNonce: 0,
+  appliedPackages: {},
   selectedDetail: null,
   symptomsSchema: null,
   symptomSchemaByKey: {},
@@ -397,6 +402,19 @@ export const useConsultationStore = create<ConsultationStore>((set, get) => ({
     })),
   requestMedicinesSearchFocus: () =>
     set((s) => ({ medicinesSearchFocusNonce: s.medicinesSearchFocusNonce + 1 })),
+  setAppliedPackage: (bundleId, testIds) =>
+    set((s) => ({
+      appliedPackages: {
+        ...s.appliedPackages,
+        [bundleId]: { test_ids: testIds },
+      },
+    })),
+  clearAppliedPackage: (bundleId) =>
+    set((s) => {
+      const next = { ...s.appliedPackages };
+      delete next[bundleId];
+      return { appliedPackages: next };
+    }),
 
   setSelectedDetail: (payload) =>
     set((s) => ({
@@ -404,7 +422,9 @@ export const useConsultationStore = create<ConsultationStore>((set, get) => ({
       // Clear symptom selection when user selects findings/diagnosis/instructions/medicines so only one section is "active"
       selectedSymptomId:
         payload?.section &&
-        ["findings", "diagnosis", "instructions", "medicines"].includes(payload.section)
+        ["findings", "diagnosis", "instructions", "medicines", "investigations"].includes(
+          payload.section
+        )
           ? null
           : s.selectedSymptomId,
     })),
@@ -489,5 +509,6 @@ export const useConsultationStore = create<ConsultationStore>((set, get) => ({
       consultationFinalized: false,
       vitalsLoaded: false,
       medicinesSearchFocusNonce: 0,
+      appliedPackages: {},
     }),
 }));
