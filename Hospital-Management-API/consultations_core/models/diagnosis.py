@@ -1,3 +1,13 @@
+"""
+Consultations Core Models
+#
+This module contains the models for the consultations core.
+
+The consultations core is a system that manages the consultations and the consultations core.
+
+The consultations core is a system that manages the consultations and the consultations core.
+/consultations_core/models/diagnosis.py
+"""
 from django.db import models, transaction
 from django.core.exceptions import ValidationError
 from django.utils import timezone
@@ -37,11 +47,23 @@ class CustomDiagnosis(models.Model):
         ],
         default="pending"
     )
-
+    #AUdit
     created_at = models.DateTimeField(auto_now_add=True)
-
+    updated_at = models.DateTimeField(auto_now=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+    deleted_by = models.ForeignKey(
+        "account.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="custom_diagnoses_deleted"
+    )
     class Meta:
         ordering = ["name"]
+        unique_together = ("consultation", "name")
+        indexes = [
+            models.Index(fields=["consultation"]),
+        ]
 
     def __str__(self):
         return self.name
@@ -95,10 +117,17 @@ class DiagnosisMaster(models.Model):
     is_active = models.BooleanField(default=True, db_index=True)
 
     version = models.PositiveIntegerField(default=1)
-
+    #Audit
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-
+    deleted_at = models.DateTimeField(null=True, blank=True)
+    deleted_by = models.ForeignKey(
+        "account.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="diagnosis_masters_deleted"
+    )
     class Meta:
         ordering = ["label"]
         indexes = [
@@ -106,6 +135,8 @@ class DiagnosisMaster(models.Model):
             models.Index(fields=["icd10_code"]),
             models.Index(fields=["category"]),
             models.Index(fields=["is_active"]),
+            models.Index(fields=["parent"]),
+            models.Index(fields=["label"]),
         ]
 
     def clean(self):
@@ -141,13 +172,23 @@ class SpecialtyDiagnosisMap(models.Model):
     )
 
     is_default = models.BooleanField(default=False)
-
+    #Audit
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-
+    deleted_at = models.DateTimeField(null=True, blank=True)
+    deleted_by = models.ForeignKey(
+        "account.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="specialty_diagnosis_maps_deleted"
+    )
     class Meta:
         unique_together = ("specialty", "diagnosis")
-        indexes = [models.Index(fields=["specialty"])]
+        indexes = [
+            models.Index(fields=["specialty"]),
+            models.Index(fields=["diagnosis"]),
+        ]
 
     def __str__(self):
         return f"{self.specialty} → {self.diagnosis.label}"
@@ -252,7 +293,17 @@ class ConsultationDiagnosis(models.Model):
         blank=True,
         null=True
     )
-
+    source = models.CharField(
+        max_length=20,
+        choices=[
+            ("emr", "From EMR"),
+            ("app", "From Patient App"),
+            ("admin", "Manual/Admin"),
+            ("api", "External API"),
+        ],
+        default="emr",
+        db_index=True
+    )
     created_by = models.ForeignKey(
         "account.User",
         on_delete=models.SET_NULL,
@@ -271,7 +322,14 @@ class ConsultationDiagnosis(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-
+    deleted_at = models.DateTimeField(null=True, blank=True)
+    deleted_by = models.ForeignKey(
+        "account.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="diagnoses_deleted"
+    )
     is_active = models.BooleanField(default=True, db_index=True)
 
     class Meta:
@@ -280,6 +338,15 @@ class ConsultationDiagnosis(models.Model):
             models.Index(fields=["consultation", "is_primary"]),
             models.Index(fields=["consultation", "diagnosis_type"]),
             models.Index(fields=["consultation", "is_active"]),
+            models.Index(fields=["source"]),
+            models.Index(fields=["consultation", "is_active", "is_primary"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["consultation"],
+                condition=models.Q(is_primary=True, is_active=True),
+                name="unique_active_primary_diagnosis_per_consultation"
+            )
         ]
 
     # ==============================
@@ -321,6 +388,8 @@ class ConsultationDiagnosis(models.Model):
                 raise ValidationError(
                     "Only one primary diagnosis allowed per consultation."
                 )
+            if self.master and not self.master.is_primary_allowed:
+                raise ValidationError("This diagnosis cannot be marked as primary.")
 
         # Date validation
         if self.resolved_date and self.onset_date:
@@ -359,6 +428,9 @@ class ConsultationDiagnosis(models.Model):
                         "Diagnosis cannot be reassigned to another consultation."
                     )
 
+            if not self.display_name:
+                self.display_name = self.label
+
             self.full_clean()
             super().save(*args, **kwargs)
 
@@ -369,7 +441,9 @@ class ConsultationDiagnosis(models.Model):
     def deactivate(self):
         EncounterLockValidator.validate(self.consultation)
         self.is_active = False
-        self.save(update_fields=["is_active", "updated_at"])
+        self.deleted_at = timezone.now()
+        self.deleted_by = None
+        self.save(update_fields=["is_active", "updated_at", "deleted_at", "deleted_by"])
 
     def delete(self, *args, **kwargs):
         raise ValidationError(
