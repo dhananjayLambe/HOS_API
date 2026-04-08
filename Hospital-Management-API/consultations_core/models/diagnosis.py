@@ -15,7 +15,7 @@ import uuid
 from consultations_core.domain.locks import EncounterLockValidator
 
 
-
+#need to redsign as per the custom diagnosis model in the diagnostics engine
 class CustomDiagnosis(models.Model):
     """
     Custom diagnosis created during consultation.

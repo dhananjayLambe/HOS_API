@@ -36,6 +36,7 @@ class DiagnosticReport(models.Model):
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
+        related_name="diagnostic_reports_uploaded",
     )
 
     is_editable = models.BooleanField(default=True)
@@ -47,6 +48,7 @@ class DiagnosticReport(models.Model):
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
+        related_name="diagnostic_reports_delivered",
     )
     delivered_reason = models.TextField(blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)

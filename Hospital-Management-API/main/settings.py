@@ -62,6 +62,7 @@ INSTALLED_APPS = [
     'caleder_events.apps.CalederEventsConfig',
     'medicines.apps.MedicinesConfig',
     'analytics.apps.AnalyticsConfig',
+    'diagnostics_engine.apps.DiagnosticsEngineConfig',
     # rest_framework
     'rest_framework',
     'rest_framework.authtoken',

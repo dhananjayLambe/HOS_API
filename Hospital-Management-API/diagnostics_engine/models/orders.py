@@ -14,7 +14,7 @@ class DiagnosticOrder(models.Model):
     order_number = models.CharField(max_length=20, unique=True)
 
     encounter = models.ForeignKey(
-        "consultations.ClinicalEncounter",
+        "consultations_core.ClinicalEncounter",
         on_delete=models.PROTECT,
         related_name="diagnostic_orders",
     )
