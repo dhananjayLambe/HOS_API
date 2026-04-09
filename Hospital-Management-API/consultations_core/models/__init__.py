@@ -6,5 +6,6 @@ from .findings import *
 from .diagnosis import *
 from .instruction import *
 from .prescription import *
+from .investigation import *
 from .recommendations import *
 from .audit import *

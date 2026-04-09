@@ -2,10 +2,17 @@ annotated-types==0.7.0
 anyio==4.4.0
 asgiref==3.8.1
 certifi==2024.7.4
+celery>=5.4.0
+channels>=4.1.0
 distro==1.9.0
 Django==5.0.7
+channels-redis>=4.2.0
 django-cors-headers==4.4.0
+django-celery-results>=2.5.1
+django-ratelimit>=4.1.0
+django-redis>=5.4.0
 django-filter==24.3
+drf-yasg>=1.21.7
 djangorestframework==3.15.2
 djangorestframework-simplejwt==5.3.1
 h11==0.14.0
@@ -16,7 +23,8 @@ jiter==0.5.0
 Markdown==3.7
 openai==1.40.6
 openpyxl==3.1.5
-psycopg2==2.9.9
+Pillow>=10.4.0
+psycopg2-binary>=2.9.10
 pydantic==2.8.2
 pydantic_core==2.20.1
 PyJWT==2.9.0

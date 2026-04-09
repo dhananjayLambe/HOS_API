@@ -1,11 +1,24 @@
 ---
-description: Create implementation and planning documents under docs/
+description: Store plan documents in the correct docs subfolder
 alwaysApply: true
 ---
 
 # Plans and planning documents
 
-For this repository (`HOS_API`), **create all plans, roadmaps, and planning-style write-ups** (implementation plans, design notes, phased rollouts) as Markdown files under **`docs/`** at the repo root.
+For this repository (`HOS_API`), create all planning-style documents inside `docs/` and place them in the right subfolder:
 
-- Prefer descriptive filenames (e.g. `docs/FEATURE_X_PLAN.md`).
-- Do not add new planning documents at the repository root; use `docs/` instead.
+- `docs/backend/Hospital-Management-API`: backend API plans and backend implementation docs.
+- `docs/backend/test`: backend test plans, backend test strategy, backend validation reports.
+- `docs/frontend/Hospital-Web-UI`: frontend UI plans and frontend implementation docs.
+- `docs/frontend/test`: frontend test plans, UI/E2E test docs and reports.
+- `docs/integration`: frontend-backend integration plans and integration checklists.
+- `docs/other`: documents that do not clearly fit the folders above.
+
+Rules:
+
+- Do not create new plan documents at repository root or directly under `docs/`.
+- If scope is unclear, ask whether it is backend, frontend, integration, test, or other before creating the file.
+- Use descriptive uppercase underscore filenames, for example:
+  - `FEATURE_X_IMPLEMENTATION_PLAN.md`
+  - `FEATURE_X_INTEGRATION_CHECKLIST.md`
+  - `FEATURE_X_TEST_REPORT.md`
