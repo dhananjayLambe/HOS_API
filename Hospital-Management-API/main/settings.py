@@ -32,6 +32,21 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # Diagnostics commerce: allow sum-of-service fallback when BranchPackagePricing missing (default off).
 DIAGNOSTICS_ALLOW_DERIVED_PACKAGE_PRICING = False
 
+# Investigation suggestions (explicit feature flags and limits)
+ENABLE_SUGGESTIONS = os.getenv("ENABLE_SUGGESTIONS", "true").lower() in ("1", "true", "yes", "on")
+ENABLE_PACKAGE_SUGGESTIONS = os.getenv("ENABLE_PACKAGE_SUGGESTIONS", "true").lower() in (
+    "1",
+    "true",
+    "yes",
+    "on",
+)
+INV_SUGGEST_MAX_COMMON = int(os.getenv("INV_SUGGEST_MAX_COMMON", "8"))
+INV_SUGGEST_MAX_RECOMMENDED = int(os.getenv("INV_SUGGEST_MAX_RECOMMENDED", "12"))
+INV_SUGGEST_MAX_PACKAGES = int(os.getenv("INV_SUGGEST_MAX_PACKAGES", "4"))
+INV_SUGGEST_MAX_PER_CATEGORY = int(os.getenv("INV_SUGGEST_MAX_PER_CATEGORY", "3"))
+INV_SUGGEST_MAX_PACKAGE_SIZE = int(os.getenv("INV_SUGGEST_MAX_PACKAGE_SIZE", "25"))
+INV_SUGGEST_CACHE_TTL_SECONDS = int(os.getenv("INV_SUGGEST_CACHE_TTL_SECONDS", "120"))
+
 
 
 # Application definition

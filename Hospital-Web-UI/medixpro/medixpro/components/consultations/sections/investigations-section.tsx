@@ -12,6 +12,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToastNotification } from "@/hooks/use-toast-notification";
 import {
+  fetchInvestigationSuggestions,
+  type InvestigationSuggestionsResponse,
+  type InvestigationSuggestionPackage,
+  type InvestigationSuggestionTest,
+} from "@/lib/diagnosticSuggestionsApi";
+import {
   INVESTIGATION_DIAGNOSIS_PACKAGE_MAP,
   INVESTIGATION_DIAGNOSIS_TEST_MAP,
   INVESTIGATION_MASTER_ITEMS,
@@ -31,12 +37,17 @@ const SEARCH_DEBOUNCE_MS = 200;
 const MAX_SEARCH_RESULTS = 10;
 const MAX_RECOMMENDATIONS = 6;
 const MAX_PACKAGES = 4;
+const SUGGESTION_REFETCH_DEBOUNCE_MS = 350;
 
 type SearchResult = {
   kind: "test" | "package";
   id: string;
   label: string;
 };
+
+function normalizePackageKey(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
 
 function slugify(input: string): string {
   return input
@@ -58,6 +69,8 @@ export function InvestigationsSection() {
   const toast = useToastNotification();
   const sectionCardRef = useRef<ConsultationSectionCardHandle>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const didLoadSuggestionsRef = useRef(false);
+  const didShowSuggestionsErrorRef = useRef(false);
   const {
     sectionItems,
     selectedDetail,
@@ -67,6 +80,7 @@ export function InvestigationsSection() {
     appliedPackages,
     setAppliedPackage,
     clearAppliedPackage,
+    encounterId,
   } = useConsultationStore();
   const { registerSectionRef, activateSection, activeSectionKey } = useConsultationSectionScroll();
 
@@ -75,6 +89,10 @@ export function InvestigationsSection() {
   const [recentlyAddedLabel, setRecentlyAddedLabel] = useState<string | null>(null);
   const [recentlyAddedItemId, setRecentlyAddedItemId] = useState<string | null>(null);
   const [lastRemovedItem, setLastRemovedItem] = useState<ConsultationSectionItem | null>(null);
+  const [suggestions, setSuggestions] = useState<InvestigationSuggestionsResponse | null>(null);
+  const [isSuggestionsLoading, setIsSuggestionsLoading] = useState(false);
+  const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
+  const [useSuggestionsFallback, setUseSuggestionsFallback] = useState(false);
   const debouncedQuery = useDebouncedValue(query, SEARCH_DEBOUNCE_MS).trim();
   const selectedItems = sectionItems.investigations ?? [];
   const selectedServiceIds = useMemo(
@@ -82,6 +100,12 @@ export function InvestigationsSection() {
     [selectedItems]
   );
   const selectedDiagnosis = sectionItems.diagnosis ?? [];
+  const suggestionsRefetchSignal = useDebouncedValue(
+    JSON.stringify({
+      diagnosis: selectedDiagnosis.map((item) => item.diagnosisKey ?? item.label).sort(),
+    }),
+    SUGGESTION_REFETCH_DEBOUNCE_MS
+  );
 
   useEffect(() => {
     if (activeSectionKey !== "investigations") return;
@@ -135,6 +159,53 @@ export function InvestigationsSection() {
     () => Object.fromEntries(INVESTIGATION_PACKAGES.map((item) => [item.bundle_id, item])),
     []
   );
+  const packageIdByNormalizedName = useMemo(
+    () =>
+      Object.fromEntries(
+        INVESTIGATION_PACKAGES.map((item) => [normalizePackageKey(item.name), item.bundle_id])
+      ),
+    []
+  );
+  const packageIdByAlias = useMemo(() => {
+    const aliases: Record<string, string> = {};
+    INVESTIGATION_PACKAGES.forEach((pkg) => {
+      aliases[normalizePackageKey(pkg.bundle_id)] = pkg.bundle_id;
+      aliases[normalizePackageKey(pkg.name)] = pkg.bundle_id;
+    });
+    return aliases;
+  }, []);
+
+  useEffect(() => {
+    if (!encounterId) return;
+    let cancelled = false;
+    setIsSuggestionsLoading(!didLoadSuggestionsRef.current);
+    setSuggestionsError(null);
+
+    fetchInvestigationSuggestions(encounterId)
+      .then((payload) => {
+        if (cancelled) return;
+        setSuggestions(payload);
+        setUseSuggestionsFallback(false);
+        didLoadSuggestionsRef.current = true;
+        didShowSuggestionsErrorRef.current = false;
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setUseSuggestionsFallback(true);
+        setSuggestionsError("Could not load live suggestions. Showing fallback recommendations.");
+        if (!didShowSuggestionsErrorRef.current) {
+          toast.info("Live suggestions unavailable. Showing fallback recommendations.");
+          didShowSuggestionsErrorRef.current = true;
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setIsSuggestionsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [encounterId, suggestionsRefetchSignal]);
 
   const diagnosisKeys = useMemo(() => {
     return selectedDiagnosis.map((dx) => (dx.diagnosisKey ?? dx.label).toLowerCase());
@@ -157,7 +228,7 @@ export function InvestigationsSection() {
     return mapping;
   }, [selectedDiagnosis, diagnosisSchemaByKey]);
 
-  const recommendedTests = useMemo(() => {
+  const fallbackRecommendedTests = useMemo(() => {
     const out: string[] = [];
     diagnosisKeys.forEach((key) => {
       (INVESTIGATION_DIAGNOSIS_TEST_MAP[key] ?? []).forEach((serviceId) => {
@@ -167,7 +238,7 @@ export function InvestigationsSection() {
     return out.slice(0, MAX_RECOMMENDATIONS);
   }, [diagnosisKeys, selectedServiceIds]);
 
-  const recommendedPackages = useMemo(() => {
+  const fallbackRecommendedPackages = useMemo(() => {
     const seen = new Set<string>();
     const out: string[] = [];
 
@@ -194,9 +265,96 @@ export function InvestigationsSection() {
     return out.slice(0, MAX_PACKAGES);
   }, [diagnosisKeys, selectedServiceIds]);
 
-  const popularPackages = useMemo(() => {
-    return INVESTIGATION_POPULAR_PACKAGE_IDS.filter((id) => !recommendedPackages.includes(id));
-  }, [recommendedPackages]);
+  const fallbackPopularPackages = useMemo(() => {
+    return INVESTIGATION_POPULAR_PACKAGE_IDS.filter((id) => !fallbackRecommendedPackages.includes(id));
+  }, [fallbackRecommendedPackages]);
+
+  const commonTestSuggestions = useMemo(() => {
+    if (!useSuggestionsFallback && suggestions?.common_tests?.length) {
+      return suggestions.common_tests.slice(0, MAX_SEARCH_RESULTS);
+    }
+    return INVESTIGATION_QUICK_PICKS.map((serviceId) => ({
+      id: serviceId,
+      name: masterById[serviceId]?.name ?? serviceId,
+      score: 0,
+      confidence: 0,
+      confidence_label: "Suggested",
+      reason: "Commonly used",
+      badges: [],
+    })) as InvestigationSuggestionTest[];
+  }, [masterById, suggestions, useSuggestionsFallback]);
+
+  const recommendedTestSuggestions = useMemo(() => {
+    if (!useSuggestionsFallback && suggestions?.recommended_tests?.length) {
+      return suggestions.recommended_tests.slice(0, MAX_RECOMMENDATIONS);
+    }
+    if (!useSuggestionsFallback && suggestions && !suggestions.recommended_tests?.length) {
+      return commonTestSuggestions.slice(0, MAX_RECOMMENDATIONS);
+    }
+    return fallbackRecommendedTests.map((serviceId) => ({
+      id: serviceId,
+      name: masterById[serviceId]?.name ?? serviceId,
+      score: 0,
+      confidence: 0,
+      confidence_label: "Recommended",
+      reason: "Mapped from diagnosis",
+      badges: [],
+    })) as InvestigationSuggestionTest[];
+  }, [commonTestSuggestions, fallbackRecommendedTests, masterById, suggestions, useSuggestionsFallback]);
+
+  const normalizedRecommendedPackages = useMemo(() => {
+    const source: InvestigationSuggestionPackage[] =
+      !useSuggestionsFallback && suggestions?.recommended_packages?.length
+        ? suggestions.recommended_packages.slice(0, MAX_PACKAGES)
+        : fallbackRecommendedPackages.map((bundleId) => ({
+            id: bundleId,
+            name: packageById[bundleId]?.name ?? bundleId,
+          }));
+    return source
+      .map((pkg) => {
+        const bundleId =
+          (packageById[pkg.id] ? pkg.id : null) ??
+          packageIdByNormalizedName[normalizePackageKey(pkg.name)] ??
+          packageIdByAlias[normalizePackageKey(pkg.id)] ??
+          null;
+        return { source: pkg, bundleId };
+      })
+      .filter((row) => Boolean(row.bundleId) || useSuggestionsFallback);
+  }, [
+    fallbackRecommendedPackages,
+    packageById,
+    packageIdByAlias,
+    packageIdByNormalizedName,
+    suggestions,
+    useSuggestionsFallback,
+  ]);
+
+  const normalizedPopularPackages = useMemo(() => {
+    const source: InvestigationSuggestionPackage[] =
+      !useSuggestionsFallback && suggestions?.popular_packages?.length
+        ? suggestions.popular_packages.slice(0, MAX_PACKAGES)
+        : fallbackPopularPackages.map((bundleId) => ({
+            id: bundleId,
+            name: packageById[bundleId]?.name ?? bundleId,
+          }));
+    return source
+      .map((pkg) => {
+        const bundleId =
+          (packageById[pkg.id] ? pkg.id : null) ??
+          packageIdByNormalizedName[normalizePackageKey(pkg.name)] ??
+          packageIdByAlias[normalizePackageKey(pkg.id)] ??
+          null;
+        return { source: pkg, bundleId };
+      })
+      .filter((row) => Boolean(row.bundleId) || useSuggestionsFallback);
+  }, [
+    fallbackPopularPackages,
+    packageById,
+    packageIdByAlias,
+    packageIdByNormalizedName,
+    suggestions,
+    useSuggestionsFallback,
+  ]);
 
   const searchResults = useMemo(() => {
     if (!debouncedQuery) return { tests: [] as SearchResult[], packages: [] as SearchResult[] };
@@ -259,12 +417,19 @@ export function InvestigationsSection() {
     (
       serviceId: string,
       source: "manual" | "diagnosis_map" | "bundle",
-      opts?: { bundleId?: string; diagnosisId?: string }
+      opts?: {
+        bundleId?: string;
+        diagnosisId?: string;
+        displayName?: string;
+        recommendationReason?: string;
+        recommendationScore?: number;
+        confidenceLabel?: string;
+      }
     ) => {
       if (selectedServiceIds.has(serviceId)) return false;
       const master = masterById[serviceId] ?? {
         service_id: serviceId,
-        name: serviceId,
+        name: opts?.displayName ?? serviceId,
         category: "Investigation",
         sample: "NA",
         tat: "NA",
@@ -283,6 +448,11 @@ export function InvestigationsSection() {
           ...(source === "diagnosis_map" && opts?.diagnosisId
             ? { diagnosis_id: opts.diagnosisId }
             : {}),
+          ...(opts?.recommendationReason ? { recommendation_reason: opts.recommendationReason } : {}),
+          ...(typeof opts?.recommendationScore === "number"
+            ? { recommendation_score: opts.recommendationScore }
+            : {}),
+          ...(opts?.confidenceLabel ? { confidence_label: opts.confidenceLabel } : {}),
           price_snapshot: null,
           urgency: "routine",
           instructions: [],
@@ -429,7 +599,6 @@ export function InvestigationsSection() {
                 <Input
                   ref={searchInputRef}
                   type="search"
-                  placeholder="Search investigations, scans, packages..."
                   placeholder="Search investigations, scans, packages... (Enter to add)"
                   value={query}
                   onFocus={() => {
@@ -691,15 +860,31 @@ export function InvestigationsSection() {
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Common Tests
             </p>
+            <p className="mb-2 text-[11px] text-muted-foreground">
+              {useSuggestionsFallback ? "Fallback recommendations" : "Live suggestions"}
+            </p>
+            {isSuggestionsLoading && (
+              <p className="mb-2 text-xs text-muted-foreground">Loading live suggestions…</p>
+            )}
+            {suggestionsError && (
+              <p className="mb-2 text-xs text-amber-700">{suggestionsError}</p>
+            )}
             <div className="flex flex-wrap gap-2">
-              {INVESTIGATION_QUICK_PICKS.map((serviceId) => (
+              {commonTestSuggestions.map((test) => (
                 <button
-                  key={serviceId}
+                  key={test.id}
                   type="button"
                   className="rounded-full border border-border bg-muted/40 px-3 py-1.5 text-sm hover:bg-muted/60"
-                  onClick={() => addTest(serviceId, "manual")}
+                  onClick={() =>
+                    addTest(test.id, "manual", {
+                      displayName: test.name,
+                      recommendationReason: test.reason,
+                      recommendationScore: test.score,
+                      confidenceLabel: test.confidence_label,
+                    })
+                  }
                 >
-                  {masterById[serviceId]?.name ?? serviceId}
+                  {test.name}
                 </button>
               ))}
             </div>
@@ -709,22 +894,27 @@ export function InvestigationsSection() {
 
           <div>
             <p className="mb-2 text-sm font-semibold text-foreground">Recommended Tests</p>
-            {recommendedTests.length === 0 ? (
+            {recommendedTestSuggestions.length === 0 ? (
               <p className="text-sm italic text-muted-foreground/80">No recommendations available</p>
             ) : (
               <div className="flex flex-wrap gap-2">
-                {recommendedTests.map((serviceId) => (
+                {recommendedTestSuggestions.map((test) => (
                   <button
-                    key={serviceId}
+                    key={test.id}
                     type="button"
                     className="rounded-full border border-border bg-transparent px-3 py-1.5 text-sm hover:bg-muted/40"
                     onClick={() =>
-                      addTest(serviceId, "diagnosis_map", {
-                        diagnosisId: diagnosisIdByService[serviceId],
+                      addTest(test.id, "diagnosis_map", {
+                        diagnosisId: diagnosisIdByService[test.id],
+                        displayName: test.name,
+                        recommendationReason: test.reason,
+                        recommendationScore: test.score,
+                        confidenceLabel: test.confidence_label,
                       })
                     }
+                    title={test.reason}
                   >
-                    {masterById[serviceId]?.name ?? serviceId}
+                    {test.name}
                   </button>
                 ))}
               </div>
@@ -733,18 +923,19 @@ export function InvestigationsSection() {
 
           <div>
             <p className="mb-2 text-sm font-semibold text-foreground">Recommended Packages</p>
-            {recommendedPackages.length === 0 ? (
+            {normalizedRecommendedPackages.length === 0 ? (
               <p className="text-sm italic text-muted-foreground/80">No recommendations available</p>
             ) : (
               <div className="flex flex-wrap gap-2">
-                {recommendedPackages.map((bundleId) => {
+                {normalizedRecommendedPackages.map(({ source: suggestedPackage, bundleId }) => {
+                  if (!bundleId) return null;
                   const pkg = packageById[bundleId];
                   if (!pkg) return null;
                   const matched = pkg.service_ids.filter((id) => selectedServiceIds.has(id)).length;
                   const fullyAdded = matched === pkg.service_ids.length;
                   return (
                     <button
-                      key={bundleId}
+                      key={suggestedPackage.id}
                       type="button"
                       disabled={fullyAdded}
                       onClick={() => handleApplyPackage(bundleId)}
@@ -768,14 +959,15 @@ export function InvestigationsSection() {
           <div>
             <p className="mb-2 text-sm font-semibold text-foreground">Popular Packages</p>
             <div className="flex flex-wrap gap-2">
-              {popularPackages.map((bundleId) => {
+              {normalizedPopularPackages.map(({ source: suggestedPackage, bundleId }) => {
+                if (!bundleId) return null;
                 const pkg = packageById[bundleId];
                 if (!pkg) return null;
                 const matched = pkg.service_ids.filter((id) => selectedServiceIds.has(id)).length;
                 const fullyAdded = matched === pkg.service_ids.length;
                 return (
                   <button
-                    key={bundleId}
+                    key={suggestedPackage.id}
                     type="button"
                     disabled={fullyAdded}
                     onClick={() => handleApplyPackage(bundleId)}
