@@ -277,9 +277,142 @@ class DiagnosticPackageItem(models.Model):
         return f"{self.package_id} → {self.service_id}"
 
 
+class ClinicalRuleType(models.TextChoices):
+    REQUIRED = "required", "Required"
+    RECOMMENDED = "recommended", "Recommended"
+    OPTIONAL = "optional", "Optional"
+
+
+class DiagnosisTestMapping(models.Model):
+    """
+    Deterministic clinical mapping from diagnosis to tests.
+    Used by rule engine before statistical ranking.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    diagnosis = models.ForeignKey(
+        "consultations_core.DiagnosisMaster",
+        on_delete=models.CASCADE,
+        related_name="test_mappings",
+    )
+    service = models.ForeignKey(
+        DiagnosticServiceMaster,
+        on_delete=models.PROTECT,
+        related_name="diagnosis_mappings",
+    )
+    rule_type = models.CharField(
+        max_length=20,
+        choices=ClinicalRuleType.choices,
+        default=ClinicalRuleType.RECOMMENDED,
+        db_index=True,
+    )
+    weight = models.DecimalField(max_digits=5, decimal_places=2, default=1.00)
+    reason_template = models.CharField(max_length=255, blank=True, null=True)
+    ordering = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True, db_index=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(
+        "account.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="diagnosis_test_mappings_created",
+    )
+    updated_by = models.ForeignKey(
+        "account.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="diagnosis_test_mappings_updated",
+    )
+
+    class Meta:
+        ordering = ["ordering", "-weight"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["diagnosis", "service"],
+                name="uniq_diagnosis_service_mapping",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["diagnosis", "is_active"]),
+            models.Index(fields=["service", "is_active"]),
+        ]
+
+    def __str__(self):
+        return f"{self.diagnosis_id} -> {self.service_id} ({self.rule_type})"
+
+
+class SymptomTestMapping(models.Model):
+    """
+    Deterministic clinical mapping from symptoms to tests.
+    Used by rule engine before statistical ranking.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    symptom = models.ForeignKey(
+        "consultations_core.SymptomMaster",
+        on_delete=models.CASCADE,
+        related_name="test_mappings",
+    )
+    service = models.ForeignKey(
+        DiagnosticServiceMaster,
+        on_delete=models.PROTECT,
+        related_name="symptom_mappings",
+    )
+    rule_type = models.CharField(
+        max_length=20,
+        choices=ClinicalRuleType.choices,
+        default=ClinicalRuleType.RECOMMENDED,
+        db_index=True,
+    )
+    weight = models.DecimalField(max_digits=5, decimal_places=2, default=1.00)
+    reason_template = models.CharField(max_length=255, blank=True, null=True)
+    ordering = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True, db_index=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(
+        "account.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="symptom_test_mappings_created",
+    )
+    updated_by = models.ForeignKey(
+        "account.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="symptom_test_mappings_updated",
+    )
+
+    class Meta:
+        ordering = ["ordering", "-weight"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["symptom", "service"],
+                name="uniq_symptom_service_mapping",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["symptom", "is_active"]),
+            models.Index(fields=["service", "is_active"]),
+        ]
+
+    def __str__(self):
+        return f"{self.symptom_id} -> {self.service_id} ({self.rule_type})"
+
+
 __all__ = [
+    "ClinicalRuleType",
+    "DiagnosisTestMapping",
     "DiagnosticCategory",
     "DiagnosticPackage",
     "DiagnosticPackageItem",
     "DiagnosticServiceMaster",
+    "SymptomTestMapping",
 ]
