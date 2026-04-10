@@ -29,6 +29,9 @@ ALLOWED_HOSTS = []
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# Diagnostics commerce: allow sum-of-service fallback when BranchPackagePricing missing (default off).
+DIAGNOSTICS_ALLOW_DERIVED_PACKAGE_PRICING = False
+
 
 
 # Application definition

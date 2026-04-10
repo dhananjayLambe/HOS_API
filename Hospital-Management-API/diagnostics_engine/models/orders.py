@@ -3,8 +3,8 @@ import uuid
 from django.core.exceptions import ValidationError
 from django.db import models
 
-from .catalog import DiagnosticServiceMaster
-from .choices import OrderStatus
+from .catalog import DiagnosticPackage, DiagnosticServiceMaster
+from .choices import ExecutionType, OrderLineType, OrderStatus, OrderTestLineStatus
 from .providers import DiagnosticProviderBranch
 
 
@@ -16,6 +16,14 @@ class DiagnosticOrder(models.Model):
     encounter = models.ForeignKey(
         "consultations_core.ClinicalEncounter",
         on_delete=models.PROTECT,
+        related_name="diagnostic_orders",
+    )
+
+    consultation = models.ForeignKey(
+        "consultations_core.Consultation",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name="diagnostic_orders",
     )
 
@@ -55,6 +63,9 @@ class DiagnosticOrder(models.Model):
     )
 
     total_amount_snapshot = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    discount_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    final_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+
     accepted_by_lab = models.BooleanField(default=False)
     accepted_at = models.DateTimeField(null=True, blank=True)
 
@@ -105,6 +116,7 @@ class DiagnosticOrder(models.Model):
             models.Index(fields=["branch"]),
             models.Index(fields=["encounter"]),
             models.Index(fields=["source"]),
+            models.Index(fields=["consultation"]),
         ]
 
     def update_status(self, new_status, user=None, source="system", reason=None):
@@ -112,8 +124,16 @@ class DiagnosticOrder(models.Model):
             OrderStatus.CREATED: [OrderStatus.CONFIRMED, OrderStatus.CANCELLED],
             OrderStatus.CONFIRMED: [OrderStatus.SAMPLE_COLLECTED, OrderStatus.CANCELLED],
             OrderStatus.SAMPLE_COLLECTED: [OrderStatus.IN_PROCESSING],
-            OrderStatus.IN_PROCESSING: [OrderStatus.REPORT_READY],
-            OrderStatus.REPORT_READY: [OrderStatus.COMPLETED],
+            OrderStatus.IN_PROCESSING: [
+                OrderStatus.REPORT_READY,
+                OrderStatus.PARTIAL,
+                OrderStatus.CANCELLED,
+                OrderStatus.COMPLETED,
+            ],
+            OrderStatus.REPORT_READY: [OrderStatus.COMPLETED, OrderStatus.PARTIAL],
+            OrderStatus.PARTIAL: [OrderStatus.COMPLETED, OrderStatus.CANCELLED],
+            OrderStatus.COMPLETED: [],
+            OrderStatus.CANCELLED: [],
         }
 
         if new_status not in allowed_transitions.get(self.status, []):
@@ -135,6 +155,15 @@ class DiagnosticOrder(models.Model):
             reason=reason,
         )
 
+        if new_status == OrderStatus.CONFIRMED:
+            from diagnostics_engine.domain.package_orders import (
+                ensure_test_lines_for_test_items,
+                expand_confirmed_order_packages,
+            )
+
+            expand_confirmed_order_packages(self, user)
+            ensure_test_lines_for_test_items(self, user)
+
     def __str__(self):
         return self.order_number
 
@@ -148,10 +177,30 @@ class DiagnosticOrderItem(models.Model):
         related_name="items",
     )
 
+    line_type = models.CharField(
+        max_length=20,
+        choices=OrderLineType.choices,
+        default=OrderLineType.TEST,
+    )
+
     service = models.ForeignKey(
         DiagnosticServiceMaster,
         on_delete=models.PROTECT,
+        null=True,
+        blank=True,
     )
+
+    diagnostic_package = models.ForeignKey(
+        DiagnosticPackage,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="order_items",
+    )
+
+    package_version_snapshot = models.PositiveIntegerField(null=True, blank=True)
+    composition_snapshot = models.JSONField(blank=True, null=True)
+    is_price_derived = models.BooleanField(default=False)
 
     name_snapshot = models.CharField(max_length=255)
     price_snapshot = models.DecimalField(max_digits=10, decimal_places=2)
@@ -161,6 +210,20 @@ class DiagnosticOrderItem(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(
+        "account.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="diagnostic_order_items_created",
+    )
+    updated_by = models.ForeignKey(
+        "account.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="diagnostic_order_items_updated",
+    )
     deleted_at = models.DateTimeField(null=True, blank=True)
     deleted_by = models.ForeignKey(
         "account.User",
@@ -175,6 +238,7 @@ class DiagnosticOrderItem(models.Model):
             ("manual", "Doctor Manual"),
             ("diagnosis_map", "Diagnosis Suggested"),
             ("bundle", "Bundle Suggested"),
+            ("package", "Package Suggested"),
             ("ai", "AI Suggested"),
         ],
         default="manual",
@@ -186,29 +250,114 @@ class DiagnosticOrderItem(models.Model):
         blank=True,
     )
     diagnosis_snapshot = models.CharField(max_length=255, null=True, blank=True)
-    bundle = models.ForeignKey(
-        "diagnostics_engine.DiagnosticBundle",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-    )
-    bundle_snapshot = models.CharField(max_length=255, null=True, blank=True)
     ai_confidence_score = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     ai_reference = models.UUIDField(null=True, blank=True)
     ai_snapshot = models.CharField(max_length=255, null=True, blank=True)
     ai_generated = models.BooleanField(default=False)
 
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    models.Q(line_type=OrderLineType.TEST, service__isnull=False, diagnostic_package__isnull=True)
+                    | models.Q(
+                        line_type=OrderLineType.PACKAGE,
+                        diagnostic_package__isnull=False,
+                        service__isnull=True,
+                    )
+                ),
+                name="order_item_line_type_fk_valid",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["order"]),
+            models.Index(fields=["line_type"]),
+            models.Index(fields=["diagnostic_package"]),
+        ]
+
+    def clean(self):
+        if self.line_type == OrderLineType.TEST and not self.service_id:
+            raise ValidationError("Test lines require a service.")
+        if self.line_type == OrderLineType.PACKAGE and not self.diagnostic_package_id:
+            raise ValidationError("Package lines require diagnostic_package.")
+
     def save(self, *args, **kwargs):
         if self.pk:
             if self.order.status != OrderStatus.CREATED:
                 raise ValidationError("Cannot modify items after order confirmation.")
+        self.full_clean()
         super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.name_snapshot} - {self.order.order_number}"
 
 
+class DiagnosticOrderTestLine(models.Model):
+    """Queryable execution row per service (lab or imaging)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    order = models.ForeignKey(
+        DiagnosticOrder,
+        on_delete=models.CASCADE,
+        related_name="test_lines",
+    )
+    order_item = models.ForeignKey(
+        DiagnosticOrderItem,
+        on_delete=models.CASCADE,
+        related_name="test_lines",
+    )
+    service = models.ForeignKey(
+        DiagnosticServiceMaster,
+        on_delete=models.PROTECT,
+        related_name="order_test_lines",
+    )
+
+    status = models.CharField(
+        max_length=30,
+        choices=OrderTestLineStatus.choices,
+        default=OrderTestLineStatus.PENDING,
+    )
+
+    execution_type = models.CharField(
+        max_length=30,
+        choices=ExecutionType.choices,
+        default=ExecutionType.BRANCH_VISIT,
+    )
+
+    instructions = models.TextField(blank=True, null=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(
+        "account.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="diagnostic_order_test_lines_created",
+    )
+    updated_by = models.ForeignKey(
+        "account.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="diagnostic_order_test_lines_updated",
+    )
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["order"]),
+            models.Index(fields=["order_item"]),
+            models.Index(fields=["service"]),
+            models.Index(fields=["status"]),
+        ]
+
+    def __str__(self):
+        return f"{self.service} ({self.status})"
+
+
 __all__ = [
     "DiagnosticOrder",
     "DiagnosticOrderItem",
+    "DiagnosticOrderTestLine",
 ]

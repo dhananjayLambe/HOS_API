@@ -21,6 +21,13 @@ from consultations_core.domain.locks import EncounterLockValidator
 class InvestigationSource(models.TextChoices):
     CATALOG = "catalog", "Catalog"
     CUSTOM = "custom", "Custom"
+    PACKAGE = "package", "Package"
+
+
+class PrescriptionSource(models.TextChoices):
+    DOCTOR_SELECTED = "doctor_selected", "Doctor selected"
+    TEMPLATE = "template", "Template"
+    AI = "ai", "AI"
 
 
 class InvestigationType(models.TextChoices):
@@ -46,7 +53,12 @@ class InvestigationStatus(models.TextChoices):
 
 class InvestigationItemQuerySet(models.QuerySet):
     def ui_ready(self):
-        return self.select_related("catalog_item", "diagnostic_order_item", "custom_investigation")
+        return self.select_related(
+            "catalog_item",
+            "diagnostic_order_item",
+            "custom_investigation",
+            "diagnostic_package",
+        )
 
     def active_for_container(self, investigations):
         return self.filter(investigations=investigations, is_deleted=False).order_by("position", "-created_at")
@@ -172,6 +184,26 @@ class InvestigationItem(models.Model):
         related_name="consultation_items",
     )
 
+    diagnostic_package = models.ForeignKey(
+        "diagnostics_engine.DiagnosticPackage",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="consultation_investigation_items",
+    )
+
+    package_expansion_snapshot = models.JSONField(
+        blank=True,
+        null=True,
+        help_text="Per-service lines when doctor edits package contents (service_id, included, instructions, urgency).",
+    )
+
+    prescription_source = models.CharField(
+        max_length=30,
+        choices=PrescriptionSource.choices,
+        default=PrescriptionSource.DOCTOR_SELECTED,
+    )
+
     # -------------------------------------------------
     # Name (denormalized for performance)
     # -------------------------------------------------
@@ -251,22 +283,29 @@ class InvestigationItem(models.Model):
 
         has_catalog = bool(self.catalog_item)
         has_custom = bool(self.custom_investigation or (self.source == InvestigationSource.CUSTOM and self.name))
+        has_package = bool(self.diagnostic_package)
 
-        # Strict XOR between catalog and custom source paths.
-        if has_catalog == has_custom:
-            raise ValidationError("Exactly one source must be set (catalog XOR custom).")
+        paths = sum([has_catalog, has_custom, has_package])
+        if paths != 1:
+            raise ValidationError("Exactly one of catalog, custom, or package must be set.")
 
         if self.source == InvestigationSource.CATALOG:
             if not self.catalog_item:
                 raise ValidationError("Catalog item required for catalog source")
-            if self.custom_investigation:
-                raise ValidationError("Custom investigation is not allowed for catalog source")
+            if self.custom_investigation or self.diagnostic_package:
+                raise ValidationError("Only catalog_item allowed for catalog source")
 
         if self.source == InvestigationSource.CUSTOM:
             if not (self.custom_investigation or self.name):
                 raise ValidationError("Custom investigation requires name")
-            if self.catalog_item:
-                raise ValidationError("Catalog item is not allowed for custom source")
+            if self.catalog_item or self.diagnostic_package:
+                raise ValidationError("Catalog/package not allowed for custom source")
+
+        if self.source == InvestigationSource.PACKAGE:
+            if not self.diagnostic_package:
+                raise ValidationError("Package source requires diagnostic_package")
+            if self.catalog_item or self.custom_investigation:
+                raise ValidationError("Catalog/custom not allowed for package source")
 
         if not self.name:
             raise ValidationError("Name is required")
@@ -276,7 +315,11 @@ class InvestigationItem(models.Model):
     # =====================================================
     def save(self, *args, **kwargs):
         with transaction.atomic():
-            if self.catalog_item:
+            if self.diagnostic_package:
+                self.name = self.diagnostic_package.name
+                self.investigation_type = InvestigationType.PACKAGE
+                self.is_custom = False
+            elif self.catalog_item:
                 self.name = self.catalog_item.name
                 category_name = ""
                 if getattr(self.catalog_item, "category_id", None) and getattr(self.catalog_item, "category", None):
@@ -321,8 +364,23 @@ class InvestigationItem(models.Model):
         constraints = [
             models.CheckConstraint(
                 check=(
-                    models.Q(source=InvestigationSource.CATALOG, catalog_item__isnull=False, custom_investigation__isnull=True)
-                    | models.Q(source=InvestigationSource.CUSTOM, catalog_item__isnull=True)
+                    models.Q(
+                        source=InvestigationSource.CATALOG,
+                        catalog_item__isnull=False,
+                        custom_investigation__isnull=True,
+                        diagnostic_package__isnull=True,
+                    )
+                    | models.Q(
+                        source=InvestigationSource.CUSTOM,
+                        catalog_item__isnull=True,
+                        diagnostic_package__isnull=True,
+                    )
+                    | models.Q(
+                        source=InvestigationSource.PACKAGE,
+                        diagnostic_package__isnull=False,
+                        catalog_item__isnull=True,
+                        custom_investigation__isnull=True,
+                    )
                 ),
                 name="investigation_item_source_mapping_valid",
             ),
