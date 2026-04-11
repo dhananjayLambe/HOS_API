@@ -147,6 +147,25 @@ class InvestigationSearchAPITests(TestCase):
         self.assertEqual(pkgs[0]["type"], "package")
         self.assertEqual(pkgs[0]["test_count"], 1)
 
+    def test_package_includes_service_codes_prefetched_order(self):
+        r = self.client.get(self.url, {"q": "fever", "type": "package"})
+        self.assertEqual(r.status_code, 200)
+        pkgs = r.data["packages"]
+        self.assertTrue(pkgs)
+        codes = pkgs[0].get("service_codes")
+        self.assertIsInstance(codes, list)
+        self.assertEqual(codes, ["cbc"])
+
+    def test_test_includes_sample_tat_preparation(self):
+        r = self.client.get(self.url, {"q": "cbc", "type": "test"})
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.data["tests"])
+        row = r.data["tests"][0]
+        self.assertIn("sample_type", row)
+        self.assertIn("tat_hours_default", row)
+        self.assertIn("preparation_notes", row)
+        self.assertEqual(row["tat_hours_default"], 24)
+
     def test_limit_max_20_validation(self):
         r = self.client.get(self.url, {"q": "cbc", "limit": 99})
         self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST)

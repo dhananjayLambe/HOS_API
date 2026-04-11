@@ -52,7 +52,9 @@ def _test_candidates(normalized_q: str, cap: int) -> list[DiagnosticServiceMaste
 def _package_candidates(normalized_q: str, cap: int) -> list[DiagnosticPackage]:
     active_items = Prefetch(
         "items",
-        queryset=DiagnosticPackageItem.objects.filter(deleted_at__isnull=True),
+        queryset=DiagnosticPackageItem.objects.filter(deleted_at__isnull=True)
+        .select_related("service")
+        .order_by("display_order", "service__name"),
         to_attr="_prefetched_active_items",
     )
     base = DiagnosticPackage.objects.filter(
@@ -84,6 +86,22 @@ def _test_count(package: DiagnosticPackage) -> int:
     return package.items.filter(deleted_at__isnull=True).count()
 
 
+def _service_codes_for_package(package: DiagnosticPackage) -> list[str]:
+    items = getattr(package, "_prefetched_active_items", None)
+    if items is None:
+        items = list(
+            package.items.filter(deleted_at__isnull=True)
+            .select_related("service")
+            .order_by("display_order", "service__name")
+        )
+    codes: list[str] = []
+    for pi in items:
+        svc = getattr(pi, "service", None)
+        if svc and svc.code:
+            codes.append(svc.code)
+    return codes
+
+
 def _serialize_tests(services: list[DiagnosticServiceMaster], normalized_q: str) -> list[dict[str, Any]]:
     seen: set = set()
     scored: list[tuple[float, int, dict[str, Any]]] = []
@@ -93,6 +111,7 @@ def _serialize_tests(services: list[DiagnosticServiceMaster], normalized_q: str)
         seen.add(svc.id)
         trigram = float(getattr(svc, "sim", 0.0))
         sc = score_service(svc, normalized_q, trigram)
+        prep = (svc.preparation_notes or "").strip()
         payload = {
             "type": "test",
             "id": svc.code,
@@ -100,6 +119,9 @@ def _serialize_tests(services: list[DiagnosticServiceMaster], normalized_q: str)
             "match_score": round(sc, 4),
             "category": category_label(svc),
             "synopsis": service_synopsis(svc),
+            "sample_type": (svc.sample_type or "").strip(),
+            "tat_hours_default": int(svc.tat_hours_default),
+            "preparation_notes": prep,
         }
         scored.append((sc, 0, payload))
     scored.sort(key=lambda t: (-t[0], t[1]))
@@ -121,6 +143,7 @@ def _serialize_packages(packages: list[DiagnosticPackage], normalized_q: str) ->
             "name": pkg.name,
             "match_score": round(sc, 4),
             "test_count": _test_count(pkg),
+            "service_codes": _service_codes_for_package(pkg),
             "synopsis": package_synopsis(pkg),
         }
         scored.append((sc, 1, payload))

@@ -32,6 +32,11 @@ import {
   pickDefaultSectionItemId,
   shouldIgnoreSectionActivationClick,
 } from "@/lib/consultation-section-activation";
+import {
+  fetchInvestigationSearch,
+  type InvestigationSearchResponse,
+} from "@/lib/diagnosticInvestigationSearchApi";
+import { normalizePackageKey as normalizeBundleId } from "@/lib/diagnosticPackageIds";
 
 const SEARCH_DEBOUNCE_MS = 200;
 const MAX_SEARCH_RESULTS = 10;
@@ -39,13 +44,31 @@ const MAX_RECOMMENDATIONS = 6;
 const MAX_PACKAGES = 4;
 const SUGGESTION_REFETCH_DEBOUNCE_MS = 350;
 
+/** When `true`, skip live search API (e.g. local backend without PostgreSQL / pg_trgm). */
+const FORCE_INVESTIGATION_SEARCH_STATIC =
+  typeof process !== "undefined" &&
+  process.env.NEXT_PUBLIC_INVESTIGATION_SEARCH_FORCE_STATIC === "true";
+
 type SearchResult = {
   kind: "test" | "package";
   id: string;
   label: string;
+  /** API search ranking (higher is better). */
+  match_score?: number;
+  /** Offline static search rank (lower is better, 1 = best). */
+  score?: number;
+  service_codes?: string[];
+  investigationFromApi?: {
+    category: string;
+    synopsis: string;
+    sample_type: string;
+    tat_hours_default: number;
+    preparation_notes: string;
+  };
 };
 
-function normalizePackageKey(value: string): string {
+/** Fuzzy key for matching suggestion package names to static bundle ids (alphanumeric only). */
+function stripKeyForPackageLookup(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
@@ -93,6 +116,12 @@ export function InvestigationsSection() {
   const [isSuggestionsLoading, setIsSuggestionsLoading] = useState(false);
   const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
   const [useSuggestionsFallback, setUseSuggestionsFallback] = useState(false);
+  const [investigationSearchApi, setInvestigationSearchApi] = useState<InvestigationSearchResponse | null>(
+    null
+  );
+  const [isInvestigationSearchLoading, setIsInvestigationSearchLoading] = useState(false);
+  const [useInvestigationSearchFallback, setUseInvestigationSearchFallback] = useState(false);
+  const [bundleLabelOverrides, setBundleLabelOverrides] = useState<Record<string, string>>({});
   const debouncedQuery = useDebouncedValue(query, SEARCH_DEBOUNCE_MS).trim();
   const selectedItems = sectionItems.investigations ?? [];
   const selectedServiceIds = useMemo(
@@ -156,21 +185,28 @@ export function InvestigationsSection() {
     []
   );
   const packageById = useMemo(
-    () => Object.fromEntries(INVESTIGATION_PACKAGES.map((item) => [item.bundle_id, item])),
+    () =>
+      Object.fromEntries(
+        INVESTIGATION_PACKAGES.map((item) => [normalizeBundleId(item.bundle_id), item])
+      ),
     []
   );
   const packageIdByNormalizedName = useMemo(
     () =>
       Object.fromEntries(
-        INVESTIGATION_PACKAGES.map((item) => [normalizePackageKey(item.name), item.bundle_id])
+        INVESTIGATION_PACKAGES.map((item) => [
+          stripKeyForPackageLookup(item.name),
+          normalizeBundleId(item.bundle_id),
+        ])
       ),
     []
   );
   const packageIdByAlias = useMemo(() => {
     const aliases: Record<string, string> = {};
     INVESTIGATION_PACKAGES.forEach((pkg) => {
-      aliases[normalizePackageKey(pkg.bundle_id)] = pkg.bundle_id;
-      aliases[normalizePackageKey(pkg.name)] = pkg.bundle_id;
+      const canon = normalizeBundleId(pkg.bundle_id);
+      aliases[stripKeyForPackageLookup(pkg.bundle_id)] = canon;
+      aliases[stripKeyForPackageLookup(pkg.name)] = canon;
     });
     return aliases;
   }, []);
@@ -308,14 +344,14 @@ export function InvestigationsSection() {
         ? suggestions.recommended_packages.slice(0, MAX_PACKAGES)
         : fallbackRecommendedPackages.map((bundleId) => ({
             id: bundleId,
-            name: packageById[bundleId]?.name ?? bundleId,
+            name: packageById[normalizeBundleId(bundleId)]?.name ?? bundleId,
           }));
     return source
       .map((pkg) => {
         const bundleId =
-          (packageById[pkg.id] ? pkg.id : null) ??
-          packageIdByNormalizedName[normalizePackageKey(pkg.name)] ??
-          packageIdByAlias[normalizePackageKey(pkg.id)] ??
+          (packageById[normalizeBundleId(pkg.id)] ? normalizeBundleId(pkg.id) : null) ??
+          packageIdByNormalizedName[stripKeyForPackageLookup(pkg.name)] ??
+          packageIdByAlias[stripKeyForPackageLookup(pkg.id)] ??
           null;
         return { source: pkg, bundleId };
       })
@@ -335,14 +371,14 @@ export function InvestigationsSection() {
         ? suggestions.popular_packages.slice(0, MAX_PACKAGES)
         : fallbackPopularPackages.map((bundleId) => ({
             id: bundleId,
-            name: packageById[bundleId]?.name ?? bundleId,
+            name: packageById[normalizeBundleId(bundleId)]?.name ?? bundleId,
           }));
     return source
       .map((pkg) => {
         const bundleId =
-          (packageById[pkg.id] ? pkg.id : null) ??
-          packageIdByNormalizedName[normalizePackageKey(pkg.name)] ??
-          packageIdByAlias[normalizePackageKey(pkg.id)] ??
+          (packageById[normalizeBundleId(pkg.id)] ? normalizeBundleId(pkg.id) : null) ??
+          packageIdByNormalizedName[stripKeyForPackageLookup(pkg.name)] ??
+          packageIdByAlias[stripKeyForPackageLookup(pkg.id)] ??
           null;
         return { source: pkg, bundleId };
       })
@@ -356,20 +392,20 @@ export function InvestigationsSection() {
     useSuggestionsFallback,
   ]);
 
-  const searchResults = useMemo(() => {
+  const staticSearchResults = useMemo(() => {
     if (!debouncedQuery) return { tests: [] as SearchResult[], packages: [] as SearchResult[] };
     const q = debouncedQuery.toLowerCase();
-    const normalize = (value: string) => value.toLowerCase();
+    const lower = (value: string) => value.toLowerCase();
 
     const scoreTest = (name: string, aliases: string[] = []) => {
-      const bag = [normalize(name), ...aliases.map(normalize)];
+      const bag = [lower(name), ...aliases.map(lower)];
       if (bag.some((v) => v === q)) return 1;
       if (bag.some((v) => v.startsWith(q))) return 3;
       if (bag.some((v) => v.includes(q))) return 5;
       return 99;
     };
     const scorePackage = (name: string) => {
-      const n = normalize(name);
+      const n = lower(name);
       if (n === q) return 2;
       if (n.startsWith(q)) return 4;
       if (n.includes(q)) return 6;
@@ -387,7 +423,7 @@ export function InvestigationsSection() {
 
     const packageMatches = INVESTIGATION_PACKAGES.map((item) => ({
       kind: "package" as const,
-      id: item.bundle_id,
+      id: normalizeBundleId(item.bundle_id),
       label: item.name,
       score: scorePackage(item.name),
     }))
@@ -404,14 +440,119 @@ export function InvestigationsSection() {
     };
   }, [debouncedQuery]);
 
-  const flatResults = useMemo(
-    () => [...searchResults.tests, ...searchResults.packages],
-    [searchResults]
+  useEffect(() => {
+    if (FORCE_INVESTIGATION_SEARCH_STATIC || debouncedQuery.length < 2) {
+      setInvestigationSearchApi(null);
+      setIsInvestigationSearchLoading(false);
+      setUseInvestigationSearchFallback(false);
+      return;
+    }
+
+
+    const controller = new AbortController();
+    setInvestigationSearchApi(null);
+    setIsInvestigationSearchLoading(true);
+
+    fetchInvestigationSearch(
+      { q: debouncedQuery, type: "all", limit: MAX_SEARCH_RESULTS },
+      { signal: controller.signal }
+    )
+      .then((data) => {
+        setInvestigationSearchApi(data);
+        setUseInvestigationSearchFallback(false);
+      })
+      .catch((err: unknown) => {
+        if (controller.signal.aborted) return;
+        setInvestigationSearchApi(null);
+        setUseInvestigationSearchFallback(true);
+        if (process.env.NODE_ENV !== "production") {
+          console.warn("[investigation search]", err);
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setIsInvestigationSearchLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [debouncedQuery]);
+
+  const searchResults = useMemo(() => {
+    if (!debouncedQuery) return { tests: [] as SearchResult[], packages: [] as SearchResult[] };
+
+    const useStatic =
+      FORCE_INVESTIGATION_SEARCH_STATIC || useInvestigationSearchFallback;
+
+    if (useStatic) {
+      return staticSearchResults;
+    }
+
+    if (isInvestigationSearchLoading && !investigationSearchApi) {
+      return { tests: [] as SearchResult[], packages: [] as SearchResult[] };
+    }
+
+    if (!investigationSearchApi) {
+      return staticSearchResults;
+    }
+
+    const tests: SearchResult[] = investigationSearchApi.tests.map((t) => ({
+      kind: "test",
+      id: t.id,
+      label: t.name,
+      match_score: t.match_score,
+      investigationFromApi: {
+        category: t.category,
+        synopsis: t.synopsis,
+        sample_type: t.sample_type,
+        tat_hours_default: t.tat_hours_default,
+        preparation_notes: t.preparation_notes,
+      },
+    }));
+    const packages: SearchResult[] = investigationSearchApi.packages.map((p) => ({
+      kind: "package",
+      id: p.id,
+      label: p.name,
+      match_score: p.match_score,
+      service_codes: p.service_codes,
+    }));
+    tests.sort((a, b) => (b.match_score ?? 0) - (a.match_score ?? 0));
+    packages.sort((a, b) => (b.match_score ?? 0) - (a.match_score ?? 0));
+    return { tests, packages };
+  }, [
+    debouncedQuery,
+    investigationSearchApi,
+    isInvestigationSearchLoading,
+    staticSearchResults,
+    useInvestigationSearchFallback,
+  ]);
+
+  const searchDidYouMean = investigationSearchApi?.meta?.did_you_mean;
+  const showSearchDidYouMean =
+    !!debouncedQuery &&
+    debouncedQuery.length >= 2 &&
+    !FORCE_INVESTIGATION_SEARCH_STATIC &&
+    !useInvestigationSearchFallback &&
+    investigationSearchApi &&
+    investigationSearchApi.meta.total_results === 0 &&
+    !!searchDidYouMean;
+
+  const flatResults = useMemo(() => {
+    const rank = (r: SearchResult) =>
+      r.match_score ??
+      (typeof r.score === "number" && r.score < 99 ? (99 - r.score) / 99 : 0);
+    const merged = [...searchResults.tests, ...searchResults.packages].sort(
+      (a, b) => rank(b) - rank(a)
+    );
+    return merged.slice(0, MAX_SEARCH_RESULTS);
+  }, [searchResults]);
+
+  const flatResultsKey = useMemo(
+    () => flatResults.map((r) => `${r.kind}:${r.id}`).join("|"),
+    [flatResults]
   );
 
   useEffect(() => {
     setHighlightedResult(flatResults.length > 0 ? 0 : -1);
-  }, [flatResults.length]);
+  }, [flatResults.length, flatResultsKey]);
 
   const addTest = useCallback(
     (
@@ -424,6 +565,7 @@ export function InvestigationsSection() {
         recommendationReason?: string;
         recommendationScore?: number;
         confidenceLabel?: string;
+        investigationFromApi?: SearchResult["investigationFromApi"];
       }
     ) => {
       if (selectedServiceIds.has(serviceId)) return false;
@@ -435,6 +577,18 @@ export function InvestigationsSection() {
         tat: "NA",
         preparation: "NA",
       };
+      const api = opts?.investigationFromApi;
+      const preparationDisplay =
+        api?.preparation_notes?.trim() ||
+        api?.synopsis?.trim() ||
+        master.preparation;
+      const sampleDisplay = api?.sample_type?.trim() ? api.sample_type : master.sample;
+      const tatDisplay =
+        typeof api?.tat_hours_default === "number"
+          ? `${api.tat_hours_default} hours`
+          : master.tat;
+      const categoryDisplay = api?.category?.trim() ? api.category : master.category;
+
       const nextItem: ConsultationSectionItem = {
         id: `inv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         label: master.name,
@@ -457,10 +611,10 @@ export function InvestigationsSection() {
           urgency: "routine",
           instructions: [],
           notes: "",
-          investigation_category: master.category,
-          investigation_sample: master.sample,
-          investigation_tat: master.tat,
-          investigation_preparation: master.preparation,
+          investigation_category: categoryDisplay,
+          investigation_sample: sampleDisplay,
+          investigation_tat: tatDisplay,
+          investigation_preparation: preparationDisplay,
         },
       };
       replaceSectionItems("investigations", [nextItem, ...selectedItems]);
@@ -474,14 +628,19 @@ export function InvestigationsSection() {
   );
 
   const handleApplyPackage = useCallback(
-    (bundleId: string) => {
-      const pkg = packageById[bundleId];
-      if (!pkg) return;
+    (bundleId: string, opts?: { serviceCodes?: string[]; displayName?: string }) => {
+      const canonicalId = normalizeBundleId(bundleId);
+      const pkg = packageById[canonicalId];
+      const serviceCodes = opts?.serviceCodes?.length ? opts.serviceCodes : pkg?.service_ids;
+      if (!serviceCodes?.length) {
+        toast.info("Package has no tests");
+        return;
+      }
       const added: string[] = [];
-      pkg.service_ids.forEach((serviceId) => {
+      serviceCodes.forEach((serviceId) => {
         const firstDiagnosisId = diagnosisIdByService[serviceId];
         const didAdd = addTest(serviceId, "bundle", {
-          bundleId,
+          bundleId: canonicalId,
           diagnosisId: firstDiagnosisId,
         });
         if (didAdd) added.push(serviceId);
@@ -490,12 +649,16 @@ export function InvestigationsSection() {
         toast.info("Already added");
         return;
       }
-      setAppliedPackage(bundleId, pkg.service_ids);
+      setAppliedPackage(canonicalId, serviceCodes);
+      if (!pkg && opts?.displayName) {
+        setBundleLabelOverrides((prev) => ({ ...prev, [canonicalId]: opts.displayName! }));
+      }
+      const pkgName = pkg?.name ?? opts?.displayName ?? canonicalId;
       const addedNames = added
         .map((id) => masterById[id]?.name ?? id)
         .slice(0, 3)
         .map((label) => `+ ${label}`);
-      toast.success(`${pkg.name}: ${addedNames.join(", ")}${added.length > 3 ? "..." : ""}`);
+      toast.success(`${pkgName}: ${addedNames.join(", ")}${added.length > 3 ? "..." : ""}`);
       searchInputRef.current?.focus();
     },
     [addTest, diagnosisIdByService, masterById, packageById, setAppliedPackage, toast]
@@ -537,9 +700,16 @@ export function InvestigationsSection() {
   const handleSearchSelect = useCallback(
     (result: SearchResult) => {
       if (result.kind === "test") {
-        addTest(result.id, "manual");
+        addTest(result.id, "manual", {
+          displayName: result.label,
+          investigationFromApi: result.investigationFromApi,
+        });
       } else {
-        handleApplyPackage(result.id);
+        const codes = result.service_codes?.length ? result.service_codes : undefined;
+        handleApplyPackage(result.id, {
+          serviceCodes: codes,
+          displayName: result.label,
+        });
       }
       setQuery("");
       searchInputRef.current?.focus();
@@ -644,17 +814,38 @@ export function InvestigationsSection() {
                 Add New
               </Button>
             </div>
-            {!!debouncedQuery && (
+            {!!debouncedQuery && debouncedQuery.length >= 2 && (
               <div className="mt-2 space-y-2 rounded-lg border border-border/60 bg-card p-2">
+                {isInvestigationSearchLoading &&
+                  !FORCE_INVESTIGATION_SEARCH_STATIC &&
+                  debouncedQuery.length >= 2 && (
+                    <p className="text-xs text-muted-foreground">Searching catalog…</p>
+                  )}
+                {useInvestigationSearchFallback && debouncedQuery.length >= 2 && (
+                  <p className="text-xs text-amber-700">
+                    Live search unavailable. Using offline matches.
+                  </p>
+                )}
+                {showSearchDidYouMean && searchDidYouMean && (
+                  <button
+                    type="button"
+                    className="text-left text-xs text-blue-700 hover:underline"
+                    onClick={() => setQuery(searchDidYouMean)}
+                  >
+                    Did you mean &quot;{searchDidYouMean}&quot;?
+                  </button>
+                )}
                 {searchResults.tests.length > 0 && (
                   <div>
                     <p className="mb-1 text-xs font-semibold text-muted-foreground">Tests</p>
                     <div className="flex flex-wrap gap-2">
                       {searchResults.tests.map((result) => {
-                        const idx = flatResults.findIndex((item) => item.id === result.id && item.kind === "test");
+                        const idx = flatResults.findIndex(
+                          (item) => item.id === result.id && item.kind === "test"
+                        );
                         return (
                           <button
-                            key={result.id}
+                            key={`test-${result.id}`}
                             type="button"
                             onClick={() => handleSearchSelect(result)}
                             className={cn(
@@ -681,7 +872,7 @@ export function InvestigationsSection() {
                         );
                         return (
                           <button
-                            key={result.id}
+                            key={`pkg-${result.id}`}
                             type="button"
                             onClick={() => handleSearchSelect(result)}
                             className={cn(
@@ -732,8 +923,9 @@ export function InvestigationsSection() {
                 {packageGroups
                   .filter((group) => group.state !== "none")
                   .map((group) => {
-                    const pkg = packageById[group.bundleId];
-                    if (!pkg) return null;
+                    const canon = normalizeBundleId(group.bundleId);
+                    const pkg = packageById[canon];
+                    const pkgTitle = pkg?.name ?? bundleLabelOverrides[canon] ?? group.bundleId;
                     return (
                       <div
                         key={group.bundleId}
@@ -742,7 +934,7 @@ export function InvestigationsSection() {
                         <div className="flex items-start justify-between gap-2">
                           <div className="space-y-0.5">
                             <p className="text-xs font-semibold text-violet-800">
-                              {pkg.name} ({group.state === "applied" ? "Applied" : "Modified"}) •{" "}
+                              {pkgTitle} ({group.state === "applied" ? "Applied" : "Modified"}) •{" "}
                               {group.matched}/{group.total} matched
                             </p>
                           </div>
