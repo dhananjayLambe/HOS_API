@@ -8,6 +8,7 @@ from diagnostics_engine.api.views.catalog import (
     ProvidersForPackageView,
     UnifiedCatalogSearchView,
 )
+from diagnostics_engine.api.views.search import InvestigationSearchView
 from diagnostics_engine.api.views.suggestions import InvestigationSuggestionsAPIView
 
 router = DefaultRouter()
@@ -15,6 +16,7 @@ router.register(r"catalog/services", DiagnosticServiceMasterViewSet, basename="d
 router.register(r"catalog/packages", DiagnosticPackageViewSet, basename="diagnostic-packages")
 
 urlpatterns = [
+    path("search/", InvestigationSearchView.as_view(), name="diagnostic-investigation-search"),
     path("", include(router.urls)),
     path(
         "investigations/suggestions/",

@@ -2,7 +2,7 @@ from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 
 from consultations_core.models import ConsultationDiagnosis, ConsultationSymptom, InvestigationItem
-from diagnostics_engine.models import DiagnosticOrderItem
+from diagnostics_engine.models import DiagnosticOrderItem, DiagnosticPackage, DiagnosticPackageItem
 from diagnostics_engine.services.investigation_suggestions.cache import invalidate_encounter_suggestions
 
 
@@ -38,3 +38,16 @@ def invalidate_on_investigation_change(sender, instance, **kwargs):
 def invalidate_on_order_item_change(sender, instance, **kwargs):
     order = getattr(instance, "order", None)
     _invalidate_for_encounter(getattr(order, "encounter_id", None))
+
+
+@receiver(post_save, sender=DiagnosticPackageItem)
+@receiver(post_delete, sender=DiagnosticPackageItem)
+def refresh_package_search_text_on_item_change(sender, instance, **kwargs):
+    pid = getattr(instance, "package_id", None)
+    if not pid:
+        return
+    try:
+        pkg = DiagnosticPackage.objects.get(pk=pid)
+    except DiagnosticPackage.DoesNotExist:
+        return
+    pkg.refresh_search_text()

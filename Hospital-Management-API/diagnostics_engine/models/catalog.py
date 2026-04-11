@@ -1,5 +1,7 @@
 import uuid
 
+from django.contrib.postgres.fields import ArrayField
+from django.contrib.postgres.indexes import GinIndex, OpClass
 from django.core.exceptions import ValidationError
 from django.db import models
 
@@ -78,6 +80,19 @@ class DiagnosticServiceMaster(models.Model):
 
     preparation_notes = models.TextField(blank=True, null=True)
 
+    short_name = models.CharField(max_length=100, blank=True, default="")
+    synonyms = ArrayField(models.CharField(max_length=200), default=list, blank=True)
+    tags = ArrayField(
+        models.CharField(max_length=200),
+        default=list,
+        blank=True,
+        help_text="Search tags for catalog search (Postgres ArrayField).",
+    )
+    search_text = models.TextField(blank=True, default="")
+    synopsis = models.CharField(max_length=500, blank=True, default="")
+    popularity_score = models.FloatField(default=0.0)
+    doctor_usage_score = models.FloatField(default=0.0)
+
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -95,8 +110,24 @@ class DiagnosticServiceMaster(models.Model):
             models.Index(fields=["code"]),
             models.Index(fields=["category"]),
             models.Index(fields=["is_active"]),
+            GinIndex(
+                OpClass("search_text", name="gin_trgm_ops"),
+                name="test_search_trgm",
+            ),
         ]
         ordering = ["name"]
+
+    def save(self, *args, **kwargs):
+        from diagnostics_engine.text_normalize import compose_service_search_text
+
+        self.search_text = compose_service_search_text(
+            self.name,
+            self.short_name or "",
+            self.code,
+            list(self.synonyms or []),
+            list(self.tags or []),
+        )
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.name
@@ -169,6 +200,7 @@ class DiagnosticPackage(models.Model):
     package_popularity_score = models.DecimalField(
         max_digits=10, decimal_places=4, default=0, blank=True
     )
+    search_text = models.TextField(blank=True, default="")
 
     created_by = models.ForeignKey(
         "account.User",
@@ -206,11 +238,40 @@ class DiagnosticPackage(models.Model):
         indexes = [
             models.Index(fields=["lineage_code"]),
             models.Index(fields=["is_active", "is_latest"]),
+            GinIndex(
+                OpClass("search_text", name="gin_trgm_ops"),
+                name="package_search_trgm",
+            ),
         ]
 
     def clean(self):
         if self.age_min is not None and self.age_max is not None and self.age_min > self.age_max:
             raise ValidationError("age_min cannot exceed age_max.")
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        self.refresh_search_text()
+
+    def refresh_search_text(self) -> None:
+        from diagnostics_engine.text_normalize import compose_package_search_text
+
+        item_parts: list[str] = []
+        if self.pk:
+            for it in DiagnosticPackageItem.objects.filter(
+                package_id=self.pk, deleted_at__isnull=True
+            ).select_related("service"):
+                s = it.service
+                item_parts.append(f"{s.name} {s.code} {s.short_name or ''}")
+        st = compose_package_search_text(
+            self.name,
+            self.lineage_code,
+            self.description or "",
+            self.tags,
+            item_parts,
+        )
+        if st != self.search_text:
+            type(self).objects.filter(pk=self.pk).update(search_text=st)
+            self.search_text = st
 
     def __str__(self):
         return f"{self.name} ({self.lineage_code} v{self.version})"
