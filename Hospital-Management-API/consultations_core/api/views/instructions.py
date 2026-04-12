@@ -186,6 +186,9 @@ class EncounterInstructionsListCreateAPIView(APIView):
             template_version=version,
             input_data=input_data,
             custom_note=custom_note,
+            text_snapshot=template.label[:255],
+            source="template",
+            is_custom=False,
             is_active=True,
             added_by=request.user,
         )

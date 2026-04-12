@@ -34,6 +34,10 @@ class InstructionCategory(models.Model):
     def __str__(self):
         return self.name
 
+# =====================================================
+# 2️⃣ InstructionTemplate — Global Templates
+# =====================================================
+
 class InstructionTemplate(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -50,19 +54,6 @@ class InstructionTemplate(models.Model):
     requires_input = models.BooleanField(default=False)
 
     input_schema = models.JSONField(null=True, blank=True)
-    """
-    Stores schema like:
-    {
-        "fields": [
-            {
-                "key": "frequency_per_day",
-                "type": "number",
-                "min": 1,
-                "max": 6
-            }
-        ]
-    }
-    """
 
     is_global = models.BooleanField(default=True)
 
@@ -88,6 +79,10 @@ class InstructionTemplate(models.Model):
             models.Index(fields=["key"]),
             models.Index(fields=["category"]),
         ]
+
+# =====================================================
+# 3️⃣ InstructionTemplateVersion — Snapshot Versioning
+# =====================================================
 
 class InstructionTemplateVersion(models.Model):
 
@@ -115,6 +110,10 @@ class InstructionTemplateVersion(models.Model):
     def __str__(self):
         return f"{self.template.label} - Version {self.version_number}"
 
+# =====================================================
+# 4️⃣ SpecialtyInstructionMapping
+# =====================================================
+
 class SpecialtyInstructionMapping(models.Model):
     """Maps instruction templates to specialty (by code string, e.g. physician, cardiologist)."""
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -139,6 +138,60 @@ class SpecialtyInstructionMapping(models.Model):
     def __str__(self):
         return f"{self.specialty} - {self.instruction.label}"
 
+
+# =====================================================
+# 5️⃣ CustomDoctorInstruction — Doctor Custom Layer
+# =====================================================
+
+class CustomDoctorInstruction(models.Model):
+    """
+    Custom reusable instructions created by doctors.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    doctor = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="custom_instructions"
+    )
+
+    text = models.CharField(max_length=255)
+
+    normalized_text = models.CharField(
+        max_length=255,
+        db_index=True
+    )
+
+    usage_count = models.PositiveIntegerField(default=0)
+
+    is_active = models.BooleanField(default=True)
+
+    is_promoted = models.BooleanField(default=False)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ("doctor", "normalized_text")
+        indexes = [
+            models.Index(fields=["doctor", "normalized_text"]),
+            models.Index(fields=["is_active"]),
+        ]
+
+    def save(self, *args, **kwargs):
+        self.normalized_text = self.text.strip().lower()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.text} ({self.doctor_id})"
+
+
+# =====================================================
+# 6️⃣ EncounterInstruction — Consultation Usage
+# =====================================================
+
+
 class EncounterInstruction(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     encounter = models.ForeignKey(
@@ -149,19 +202,37 @@ class EncounterInstruction(models.Model):
 
     instruction_template = models.ForeignKey(
         InstructionTemplate,
-        on_delete=models.PROTECT
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True
     )
 
     template_version = models.ForeignKey(
         InstructionTemplateVersion,
-        on_delete=models.PROTECT
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True
     )
 
     input_data = models.JSONField(null=True, blank=True)
+    # 🔥 NEW — snapshot for medico-legal safety
+    text_snapshot = models.CharField(max_length=255, default="", blank=True)
 
+    # 🔥 NEW — source tracking
+    source = models.CharField(
+        max_length=20,
+        choices=[
+            ("template", "Template"),
+            ("doctor", "Doctor"),
+            ("custom", "Custom"),
+        ],
+        default="template",
+        db_index=True
+    )
     custom_note = models.TextField(null=True, blank=True)
 
     is_active = models.BooleanField(default=True, db_index=True)
+    is_custom = models.BooleanField(default=False, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
     added_by = models.ForeignKey(
         User,
@@ -180,8 +251,8 @@ class EncounterInstruction(models.Model):
         ]
         constraints = [
             models.UniqueConstraint(
-                fields=["encounter", "instruction_template", "is_active"],
-                name="unique_active_instruction_per_encounter"
+                fields=["encounter", "instruction_template", "template_version", "is_active"],
+                name="unique_active_instruction_per_encounter_v2"
             )
         ]
         ordering = ["-created_at"]
@@ -195,7 +266,7 @@ class EncounterInstruction(models.Model):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"{self.encounter.visit_pnr} - {self.instruction_template.label}"
+        return f"{self.encounter.visit_pnr} - {self.text_snapshot}"
 
 class InstructionAuditLog(models.Model):
 

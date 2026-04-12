@@ -9,17 +9,39 @@ import {
 import { useConsultationSectionScroll } from "@/components/consultations/consultation-section-scroll-context";
 import { ConsultationEditingBadge } from "@/components/consultations/consultation-editing-badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { useConsultationStore } from "@/store/consultationStore";
+import { apiClient } from "@/lib/apiClient";
 import type { InstructionsSectionSchema, InstructionItemSchema } from "@/lib/consultation-schema-types";
-import { cn } from "@/lib/utils";
+import {
+  extractPrimarySpecializationFromProfile,
+  fetchInstructionSuggestions,
+  normalizeSpecialtySlug,
+  type InstructionSuggestionRow,
+} from "@/lib/instructionSuggestionsApi";
+import { getBearerAuthHeaders } from "@/lib/bearer-auth-headers";
+import { cn, isUuidLike } from "@/lib/utils";
 import { reorderItemsByActiveId } from "@/lib/consultation-chip-ux";
 import {
   pickDefaultSectionItemId,
   shouldIgnoreSectionActivationClick,
 } from "@/lib/consultation-section-activation";
+import { useToastNotification } from "@/hooks/use-toast-notification";
 
 const INSTRUCTION_TEMPLATE_PREFIX = "tpl:";
+const TOAST_DEDUPE_MS = 2000;
+const DEFAULT_SPECIALTY_SLUG = "physician";
+const SUGGESTIONS_LIMIT = 20;
+/** In-flow capsule strip: show first N; "View more" reveals the rest (same idea as Investigations). */
+const SUGGESTIONS_CAPSULE_CAP = 8;
 
 // Module-level cache: fetch instructions render-schema at most once per app session (avoids repeated GETs on re-render/remount)
 let instructionsRenderSchemaPromise: Promise<InstructionsSectionSchema | null> | null = null;
@@ -37,12 +59,6 @@ function fetchInstructionsRenderSchema(specialty: string): Promise<InstructionsS
   return instructionsRenderSchemaPromise;
 }
 
-function getAuthHeaders(): HeadersInit {
-  if (typeof window === "undefined") return {};
-  const token = localStorage.getItem("accessToken") || sessionStorage.getItem("accessToken");
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
-
 function useDebouncedValue<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value);
   useEffect(() => {
@@ -53,6 +69,17 @@ function useDebouncedValue<T>(value: T, delay: number): T {
 }
 
 export function InstructionsSection() {
+  const toast = useToastNotification();
+  const toastDedupeRef = useRef<Map<string, number>>(new Map());
+  /** Empty deps: `useToastNotification()` returns a new object every render; do not depend on it. */
+  const notify = useCallback((key: string, emit: () => void) => {
+    const now = Date.now();
+    const last = toastDedupeRef.current.get(key) ?? 0;
+    if (now - last < TOAST_DEDUPE_MS) return;
+    toastDedupeRef.current.set(key, now);
+    emit();
+  }, []);
+
   const {
     encounterId,
     instructionsSchema,
@@ -75,22 +102,59 @@ export function InstructionsSection() {
   const { registerSectionRef, activateSection, activeSectionKey } =
     useConsultationSectionScroll();
 
-  const specialty = "physician";
+  const [specialtySlug, setSpecialtySlug] = useState(DEFAULT_SPECIALTY_SLUG);
+  const [suggestionRows, setSuggestionRows] = useState<InstructionSuggestionRow[]>([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
+  const [customDialogOpen, setCustomDialogOpen] = useState(false);
+  const [customText, setCustomText] = useState("");
+  const [showAllInstructionSuggestions, setShowAllInstructionSuggestions] = useState(false);
+  const suggestionsAbortRef = useRef<AbortController | null>(null);
+  const suggestionsFetchGenRef = useRef(0);
 
   useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await apiClient.getProfile();
+        if (cancelled) return;
+        const profile =
+          data && typeof data === "object" && "doctor_profile" in data
+            ? (data as { doctor_profile?: unknown }).doctor_profile ?? data
+            : data;
+        const raw = extractPrimarySpecializationFromProfile(profile);
+        if (raw) setSpecialtySlug(normalizeSpecialtySlug(raw));
+      } catch {
+        /* keep default */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
     if (encounterId) {
       setLoading(true);
-      const headers = getAuthHeaders();
-      Promise.all([
-        fetch(`/api/consultation/encounter/${encounterId}/instructions/templates`, { headers }),
-        fetch(`/api/consultation/encounter/${encounterId}/instructions`, { headers }),
-      ])
-        .then(async ([tRes, listRes]) => {
+      const encId = encounterId;
+      const headers = getBearerAuthHeaders();
+      /** Templates only — instructions are draft in Zustand until End Consultation (persisted in complete payload). */
+      fetch(`/api/consultation/encounter/${encId}/instructions/templates`, {
+        headers,
+        credentials: "include",
+      })
+        .then(async (tRes) => {
+          if (cancelled) return;
+          if (useConsultationStore.getState().encounterId !== encId) return;
           if (!tRes.ok) {
             if (tRes.status === 403) setConsultationFinalized(true);
             return;
           }
           const tData = await tRes.json();
+          if (cancelled) return;
+          if (useConsultationStore.getState().encounterId !== encId) return;
           const categories = (tData.categories ?? []).map(
             (c: { id: string; code: string; name: string; display_order: number }) => ({
               id: c.id,
@@ -125,40 +189,107 @@ export function InstructionsSection() {
             categories,
             items: templates,
           });
-          if (listRes.ok) {
-            const list = await listRes.json();
-            setInstructionsList(Array.isArray(list) ? list : []);
-          }
         })
         .catch(() => {})
-        .finally(() => setLoading(false));
-    } else {
-      // No encounter: use module-level cached fetch (single request per session). Skip if store already has schema.
-      if (instructionsSchema?.section === "instructions" && (instructionsSchema?.items?.length ?? 0) > 0) {
-        setLoading(false);
-        return;
-      }
-      setLoading(true);
-      fetchInstructionsRenderSchema(specialty)
-        .then((data) => {
-          if (data) {
-            setInstructionsSchema({
-              ...data,
-              categories: data.categories ?? [],
-            });
-          }
-        })
-        .finally(() => setLoading(false));
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+      return () => {
+        cancelled = true;
+      };
     }
-  }, [encounterId, instructionsSchema, setInstructionsSchema, setInstructionsList, setConsultationFinalized]);
+
+    // No encounter: static render-schema (items use key as id — not valid for Django POST).
+    // Must not overwrite encounter-backed templates: see guard inside .then.
+    const existing = useConsultationStore.getState().instructionsSchema;
+    if (existing?.section === "instructions" && (existing?.items?.length ?? 0) > 0) {
+      return;
+    }
+    setLoading(true);
+    fetchInstructionsRenderSchema(specialtySlug)
+      .then((data) => {
+        if (cancelled) return;
+        if (useConsultationStore.getState().encounterId) return;
+        if (data) {
+          setInstructionsSchema({
+            ...data,
+            categories: data.categories ?? [],
+          });
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [encounterId, specialtySlug, setInstructionsSchema, setConsultationFinalized]);
 
   const allTemplates = instructionsSchema?.items ?? [];
 
-  const filteredTemplates = useMemo(() => {
-    const q = inlineSearchDebounced.trim().toLowerCase();
-    if (!q) return allTemplates;
-    return allTemplates.filter((t) => t.label.toLowerCase().includes(q));
-  }, [allTemplates, inlineSearchDebounced]);
+  const excludeTemplateKeys = useMemo(() => {
+    const keys: string[] = [];
+    for (const inst of instructionsList) {
+      const t = getInstructionTemplateByKeyOrId(inst.instruction_template_id);
+      if (t?.key) keys.push(t.key);
+    }
+    return keys;
+  }, [instructionsList, getInstructionTemplateByKeyOrId]);
+
+  useEffect(() => {
+    if (consultationFinalized) {
+      setSuggestionsLoading(false);
+      return;
+    }
+    // While encounter templates / schema load, do not leave a stuck suggestions spinner
+    // when a prior fetch was aborted (abort skips finally in older logic).
+    if (loading) {
+      suggestionsAbortRef.current?.abort();
+      setSuggestionsLoading(false);
+      setSuggestionsError(null);
+      return;
+    }
+
+    suggestionsAbortRef.current?.abort();
+    const ac = new AbortController();
+    suggestionsAbortRef.current = ac;
+    const gen = ++suggestionsFetchGenRef.current;
+    setSuggestionsLoading(true);
+    setSuggestionsError(null);
+    fetchInstructionSuggestions(
+      {
+        q: inlineSearchDebounced,
+        specialty: specialtySlug,
+        limit: SUGGESTIONS_LIMIT,
+        excludeKeys: excludeTemplateKeys,
+      },
+      { signal: ac.signal }
+    )
+      .then((res) => {
+        if (ac.signal.aborted || gen !== suggestionsFetchGenRef.current) return;
+        setSuggestionRows(res.data ?? []);
+      })
+      .catch((err: unknown) => {
+        if (err instanceof Error && err.name === "AbortError") return;
+        if (gen !== suggestionsFetchGenRef.current) return;
+        const msg = err instanceof Error ? err.message : "Failed to load instructions";
+        setSuggestionsError(msg);
+        setSuggestionRows([]);
+        notify("inst-suggestions-fail", () => toast.error("Failed to load instructions"));
+      })
+      .finally(() => {
+        if (gen === suggestionsFetchGenRef.current) {
+          setSuggestionsLoading(false);
+        }
+      });
+    return () => ac.abort();
+  }, [
+    inlineSearchDebounced,
+    specialtySlug,
+    excludeTemplateKeys,
+    consultationFinalized,
+    loading,
+  ]);
 
   const isSelected = (templateOrInstructionId: string) => {
     if (!selectedDetail || selectedDetail.section !== "instructions") return false;
@@ -191,51 +322,76 @@ export function InstructionsSection() {
     instructionsList.some((i) => i.instruction_template_id === templateId);
 
   /** Show ⚠ only when template requires input AND that input is missing or empty. */
-  const isInstructionIncomplete = (inst: { instruction_template_id: string; input_data?: Record<string, unknown> | null }) => {
-    const template = getInstructionTemplateByKeyOrId(inst.instruction_template_id);
-    if (!template || template.requires_input !== true) return false;
-    const data = inst.input_data;
-    if (data == null || typeof data !== "object") return true;
-    return Object.keys(data).length === 0;
-  };
+  const isInstructionIncomplete = useCallback(
+    (inst: { instruction_template_id: string; input_data?: Record<string, unknown> | null }) => {
+      const template = getInstructionTemplateByKeyOrId(inst.instruction_template_id);
+      if (!template || template.requires_input !== true) return false;
+      const data = inst.input_data;
+      if (data == null || typeof data !== "object") return true;
+      return Object.keys(data).length === 0;
+    },
+    [getInstructionTemplateByKeyOrId]
+  );
 
-  const handleTemplateClick = async (template: InstructionItemSchema) => {
+  const incompleteCount = useMemo(
+    () => instructionsList.filter((item) => isInstructionIncomplete(item)).length,
+    [instructionsList, isInstructionIncomplete]
+  );
+
+  /** Match diagnosis/investigations: when this section becomes active, select a default row for the detail panel. */
+  useEffect(() => {
+    if (activeSectionKey !== "instructions") return;
+    const currentSelectedId =
+      selectedDetail?.section === "instructions" ? selectedDetail.itemId ?? null : null;
+    if (currentSelectedId) return;
+    const firstIncomplete = instructionsList.find((item) => isInstructionIncomplete(item));
+    if (firstIncomplete) {
+      setSelectedDetail({ section: "instructions", itemId: firstIncomplete.id });
+    }
+  }, [
+    activeSectionKey,
+    selectedDetail,
+    instructionsList,
+    isInstructionIncomplete,
+    setSelectedDetail,
+  ]);
+
+  const suggestionRowsForCapsules = useMemo(() => {
+    if (showAllInstructionSuggestions) return suggestionRows;
+    return suggestionRows.slice(0, SUGGESTIONS_CAPSULE_CAP);
+  }, [suggestionRows, showAllInstructionSuggestions]);
+
+  const handleTemplateClick = (template: InstructionItemSchema) => {
     if (consultationFinalized) return;
     setSelectedSymptomId(null);
-    const templateId = (template as InstructionItemSchema & { id?: string }).id ?? template.key;
+    const templateKeyOrId =
+      (template as InstructionItemSchema & { id?: string }).id ?? template.key;
+    const apiTemplateId = (template as InstructionItemSchema & { id?: string }).id;
+    if (!apiTemplateId || !isUuidLike(String(apiTemplateId))) {
+      notify("inst-invalid-tpl", () =>
+        toast.error("Instruction template is missing a valid id. Reload the page or pick another item.")
+      );
+      return;
+    }
 
     if (!template.requires_input) {
-      if (isAdded(templateId)) {
-        const existing = instructionsList.find((i) => i.instruction_template_id === templateId);
+      if (isAdded(templateKeyOrId)) {
+        const existing = instructionsList.find(
+          (i) => i.instruction_template_id === templateKeyOrId
+        );
+        notify("inst-dup", () => toast.error("Instruction already added"));
         if (existing) selectInstructionAndScroll(existing.id);
         return;
       }
-      if (encounterId) {
-        try {
-          const res = await fetch(`/api/consultation/encounter/${encounterId}/instructions`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-            body: JSON.stringify({
-              instruction_template_id: templateId,
-              input_data: {},
-              custom_note: "",
-            }),
-          });
-          if (res.status === 403) setConsultationFinalized(true);
-          if (res.ok) {
-            const created = await res.json();
-            setInstructionsList([created, ...instructionsList]);
-            selectInstructionAndScroll(created.id);
-          }
-        } catch {
-          // ignore
-        }
-      } else {
-        const tempId = `inst-local-${templateId}-${Date.now()}`;
+      {
+        const tempId =
+          typeof crypto !== "undefined" && "randomUUID" in crypto
+            ? `inst-draft-${crypto.randomUUID()}`
+            : `inst-local-${templateKeyOrId}-${Date.now()}`;
         setInstructionsList([
           {
             id: tempId,
-            instruction_template_id: templateId,
+            instruction_template_id: templateKeyOrId,
             label: template.label,
             input_data: {},
             custom_note: null,
@@ -244,18 +400,76 @@ export function InstructionsSection() {
           ...instructionsList,
         ]);
         selectInstructionAndScroll(tempId);
+        notify(`inst-add:${tempId}`, () => toast.success("Instruction added"));
       }
       return;
     }
 
-    if (isAdded(templateId)) {
-      const existing = instructionsList.find((i) => i.instruction_template_id === templateId);
+    if (isAdded(templateKeyOrId)) {
+      const existing = instructionsList.find(
+        (i) => i.instruction_template_id === templateKeyOrId
+      );
+      notify("inst-dup", () => toast.error("Instruction already added"));
       if (existing) selectInstructionAndScroll(existing.id);
       return;
     }
-    setSelectedDetail({ section: "instructions", itemId: INSTRUCTION_TEMPLATE_PREFIX + templateId });
+    setSelectedDetail({
+      section: "instructions",
+      itemId: INSTRUCTION_TEMPLATE_PREFIX + apiTemplateId,
+    });
     sectionCardRef.current?.expand();
     activateSection("instructions");
+  };
+
+  const handleSuggestionPick = (row: InstructionSuggestionRow) => {
+    if (consultationFinalized) return;
+    const template =
+      getInstructionTemplateByKeyOrId(row.key) ??
+      allTemplates.find(
+        (t) => t.label.trim().toLowerCase() === row.label.trim().toLowerCase()
+      );
+    if (!template) {
+      notify("inst-sug-missing-tpl", () =>
+        toast.error("This instruction is not available for your specialty. Try reloading.")
+      );
+      return;
+    }
+    const templateKeyOrId =
+      (template as InstructionItemSchema & { id?: string }).id ?? template.key;
+    if (isAdded(templateKeyOrId)) {
+      const existing = instructionsList.find(
+        (i) => i.instruction_template_id === templateKeyOrId
+      );
+      notify("inst-dup", () => toast.error("Instruction already added"));
+      if (existing) selectInstructionAndScroll(existing.id);
+      setInlineSearch("");
+      return;
+    }
+    handleTemplateClick(template);
+    setInlineSearch("");
+  };
+
+  const handleCustomInstructionSubmit = () => {
+    const text = customText.trim();
+    if (!text) return;
+    const key = `custom_${Date.now()}`;
+    const tempId = `inst-local-${key}`;
+    setSelectedSymptomId(null);
+    setInstructionsList([
+      {
+        id: tempId,
+        instruction_template_id: key,
+        label: text,
+        input_data: {},
+        custom_note: null,
+        is_active: true,
+      },
+      ...instructionsList,
+    ]);
+    selectInstructionAndScroll(tempId);
+    setCustomDialogOpen(false);
+    setCustomText("");
+    notify(`inst-custom-local:${tempId}`, () => toast.success("Instruction added"));
   };
 
   const handleAddedInstructionClick = (instructionId: string) => {
@@ -263,30 +477,15 @@ export function InstructionsSection() {
     selectInstructionAndScroll(instructionId);
   };
 
-  const handleRemoveInstruction = async (instructionId: string) => {
+  const handleRemoveInstruction = (instructionId: string) => {
     if (consultationFinalized) return;
-    if (!encounterId) {
-      setInstructionsList(instructionsList.filter((i) => i.id !== instructionId));
-      if (selectedDetail?.section === "instructions" && selectedDetail?.itemId === instructionId) {
-        setSelectedDetail(null);
-      }
-      return;
+    const removedLabel =
+      instructionsList.find((i) => i.id === instructionId)?.label ?? "Instruction";
+    setInstructionsList(instructionsList.filter((i) => i.id !== instructionId));
+    if (selectedDetail?.section === "instructions" && selectedDetail?.itemId === instructionId) {
+      setSelectedDetail(null);
     }
-    try {
-      const res = await fetch(`/api/consultation/instructions/${instructionId}`, {
-        method: "DELETE",
-        headers: getAuthHeaders(),
-      });
-      if (res.status === 403) setConsultationFinalized(true);
-      if (res.ok) {
-        setInstructionsList(instructionsList.filter((i) => i.id !== instructionId));
-        if (selectedDetail?.section === "instructions" && selectedDetail?.itemId === instructionId) {
-          setSelectedDetail(null);
-        }
-      }
-    } catch {
-      // ignore
-    }
+    notify(`inst-rm:${instructionId}`, () => toast.success(`${removedLabel} removed`));
   };
 
   const locked = consultationFinalized;
@@ -304,7 +503,7 @@ export function InstructionsSection() {
       return;
     }
     setSelectedDetail({ section: "instructions" });
-  }, [activateSection, orderedInstructions, selectedDetail, setSelectedDetail]);
+  }, [activateSection, isInstructionIncomplete, orderedInstructions, selectedDetail, setSelectedDetail]);
 
   const handleSectionContainerClick = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
@@ -340,7 +539,13 @@ export function InstructionsSection() {
       ref={sectionCardRef}
       title="Instructions"
       icon={<FileText className="text-muted-foreground" />}
+      incompleteCount={incompleteCount}
       defaultOpen={false}
+      onOpenChange={(open) => {
+        if (open) {
+          window.requestAnimationFrame(() => searchInputRef.current?.focus());
+        }
+      }}
     >
       {loading ? (
         <div className="flex items-center justify-center py-8 gap-2 text-muted-foreground">
@@ -361,10 +566,12 @@ export function InstructionsSection() {
             <div className="relative flex-1 min-w-[180px]">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
               <Input
+                id="instructions-search-input"
                 ref={searchInputRef}
                 type="search"
                 placeholder="Search instructions"
                 value={inlineSearch}
+                autoComplete="off"
                 onFocus={() => {
                   activateSection("instructions");
                   sectionCardRef.current?.expand();
@@ -385,7 +592,7 @@ export function InstructionsSection() {
               onClick={() => {
                 activateSection("instructions");
                 sectionCardRef.current?.expand();
-                searchInputRef.current?.focus();
+                setCustomDialogOpen(true);
               }}
             >
               <Plus className="h-4 w-4" />
@@ -394,27 +601,70 @@ export function InstructionsSection() {
           </div>
           </div>
 
+          <Dialog open={customDialogOpen} onOpenChange={setCustomDialogOpen}>
+            <DialogContent className="sm:max-w-md" onOpenAutoFocus={(e) => e.preventDefault()}>
+              <DialogHeader>
+                <DialogTitle>Add custom instruction</DialogTitle>
+              </DialogHeader>
+              <Textarea
+                placeholder="Type the instruction for the patient…"
+                value={customText}
+                onChange={(e) => setCustomText(e.target.value)}
+                className="min-h-[100px] resize-y"
+                aria-label="Custom instruction text"
+              />
+              <p className="text-xs text-muted-foreground">
+                Stored in this consultation until you end the visit; then it is saved with the consultation record.
+              </p>
+              <DialogFooter className="gap-2 sm:gap-0">
+                <Button type="button" variant="outline" onClick={() => setCustomDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleCustomInstructionSubmit}
+                  disabled={!customText.trim()}
+                >
+                  Add
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
           {instructionsList.length > 0 && (
-            <div className="flex flex-wrap gap-2">
+            <div className="mt-2 flex flex-wrap gap-2">
               {orderedInstructions.map((inst) => {
                 const focused = isSelected(inst.id);
                 const incomplete = isInstructionIncomplete(inst);
                 return (
                   <span
                     key={inst.id}
+                    data-no-section-activate="true"
                     className={cn(
-                      "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-all duration-200 ease-out",
+                      "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[13px] font-medium transition-all duration-200 ease-in-out",
                       focused
-                        ? "bg-indigo-600 text-white shadow-sm dark:bg-indigo-600 animate-consultation-chip-pop font-medium"
-                        : "border border-border bg-muted/50 text-foreground hover:bg-muted hover:border-muted-foreground/40"
+                        ? "border-blue-300 bg-blue-100 text-blue-800 hover:bg-blue-200"
+                        : incomplete
+                          ? "border-orange-50 bg-orange-50 text-gray-800 hover:bg-orange-100"
+                          : "border-border/40 bg-gray-100 text-gray-800 hover:bg-gray-200"
                     )}
                     title={incomplete ? "Input required – fill details in the right panel" : undefined}
+                    onClick={(e) => {
+                      if (locked) return;
+                      const el = e.target as HTMLElement;
+                      if (el.closest('button[aria-label^="Remove"]')) return;
+                      if (el.closest("button")) return;
+                      handleAddedInstructionClick(inst.id);
+                    }}
                   >
                     <button
                       type="button"
-                      onClick={() => handleAddedInstructionClick(inst.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleAddedInstructionClick(inst.id);
+                      }}
                       disabled={locked}
-                      className="min-w-0 truncate text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded"
+                      className="min-w-0 cursor-pointer truncate rounded-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     >
                       {inst.label}
                     </button>
@@ -425,7 +675,7 @@ export function InstructionsSection() {
                       <span
                         className={cn(
                           "shrink-0",
-                          focused ? "text-amber-200 dark:text-amber-100" : "text-amber-700 dark:text-amber-600"
+                          focused ? "text-amber-700 dark:text-amber-600" : "text-amber-700 dark:text-amber-600"
                         )}
                         aria-hidden
                       >
@@ -441,7 +691,7 @@ export function InstructionsSection() {
                         }}
                         className={cn(
                           "ml-0.5 rounded-full p-0.5 hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                          focused ? "hover:bg-indigo-700 dark:hover:bg-indigo-700" : "hover:bg-muted"
+                          focused ? "hover:bg-blue-200 dark:hover:bg-blue-300/40" : "hover:bg-muted"
                         )}
                         aria-label={`Remove ${inst.label}`}
                       >
@@ -454,40 +704,64 @@ export function InstructionsSection() {
             </div>
           )}
 
-          {/* Separator line between selected and suggested – always show when there are selected items (same as Diagnosis) */}
-          {instructionsList.length > 0 && <hr className="border-border my-2" />}
+          {instructionsList.length > 0 &&
+            (suggestionRows.length > 0 || suggestionsLoading || suggestionsError) && (
+              <hr className="border-border my-2" />
+            )}
 
-          {/* Suggested items: light grey chips only (no blue), click to add – same as Diagnosis */}
-          {(() => {
-            const suggested = filteredTemplates.filter((tpl) => {
-              const tplId = (tpl as InstructionItemSchema & { id?: string }).id ?? tpl.key;
-              return !isAdded(tplId);
-            });
-            const toShow = inlineSearchDebounced.trim() ? suggested : suggested.slice(0, 20);
-            if (toShow.length > 0) {
-              return (
+          <div className="space-y-2" data-no-section-activate="true">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Suggested instructions
+            </p>
+            {suggestionsLoading && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+                Loading suggestions…
+              </div>
+            )}
+            {suggestionsError && !suggestionsLoading && (
+              <p className="text-sm text-amber-800 dark:text-amber-200">{suggestionsError}</p>
+            )}
+            {!suggestionsLoading && !suggestionsError && suggestionRows.length === 0 && (
+              <p className="text-sm text-muted-foreground">No instructions match your search.</p>
+            )}
+            {!suggestionsLoading && !suggestionsError && suggestionRows.length > 0 && (
+              <>
                 <div className="flex flex-wrap gap-2">
-                  {toShow.map((tpl) => {
-                    const tplId = (tpl as InstructionItemSchema & { id?: string }).id ?? tpl.key;
-                    return (
-                      <button
-                        key={tplId}
-                        type="button"
-                        onClick={() => handleTemplateClick(tpl)}
-                        disabled={locked}
-                        className="rounded-full border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground hover:bg-muted/60 hover:border-muted-foreground/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                      >
-                        {tpl.label}
-                      </button>
-                    );
-                  })}
+                  {suggestionRowsForCapsules.map((row) => (
+                    <button
+                      key={row.key}
+                      type="button"
+                      disabled={locked}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void handleSuggestionPick(row);
+                      }}
+                      className={cn(
+                        "rounded-full border border-muted-foreground/40 bg-muted/30 px-3 py-1.5 text-sm text-muted-foreground transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                        locked
+                          ? "cursor-not-allowed border-border/50 bg-muted/30 text-muted-foreground"
+                          : "hover:border-muted-foreground/60 hover:bg-muted/50 hover:text-foreground"
+                      )}
+                    >
+                      {row.label}
+                    </button>
+                  ))}
                 </div>
-              );
-            }
-            return inlineSearchDebounced.trim() ? (
-              <p className="text-sm text-muted-foreground">No results found. Press Enter or use Add New to add it.</p>
-            ) : null;
-          })()}
+                {suggestionRows.length > SUGGESTIONS_CAPSULE_CAP ? (
+                  <button
+                    type="button"
+                    className="text-xs font-medium text-primary hover:underline"
+                    onClick={() =>
+                      setShowAllInstructionSuggestions((v) => !v)
+                    }
+                  >
+                    {showAllInstructionSuggestions ? "View less" : "View more"}
+                  </button>
+                ) : null}
+              </>
+            )}
+          </div>
         </div>
       )}
     </ConsultationSectionCard>

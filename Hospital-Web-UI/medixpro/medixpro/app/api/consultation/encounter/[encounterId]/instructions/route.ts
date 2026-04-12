@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 
 const DJANGO_API_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
 function getAuthHeader(request: NextRequest): string | undefined {
   return (
@@ -9,6 +9,16 @@ function getAuthHeader(request: NextRequest): string | undefined {
     request.headers.get("Authorization") ||
     undefined
   );
+}
+
+function djangoProxyHeaders(request: NextRequest): HeadersInit {
+  const auth = getAuthHeader(request);
+  const cookie = request.headers.get("cookie");
+  return {
+    "Content-Type": "application/json",
+    ...(auth && { Authorization: auth }),
+    ...(cookie && { Cookie: cookie }),
+  };
 }
 
 export async function GET(
@@ -20,19 +30,17 @@ export async function GET(
     const url = `${DJANGO_API_URL}/api/consultations/encounter/${encounterId}/instructions/`;
     const response = await fetch(url, {
       method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-        ...(getAuthHeader(_request) && {
-          Authorization: getAuthHeader(_request)!,
-        }),
-      },
+      headers: djangoProxyHeaders(_request),
       credentials: "include",
     });
 
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
+      if (data && typeof data === "object" && Object.keys(data as object).length > 0) {
+        return NextResponse.json(data, { status: response.status });
+      }
       return NextResponse.json(
-        { error: data.detail || data.message || "Failed to fetch instructions" },
+        { detail: "Failed to fetch instructions" },
         { status: response.status }
       );
     }
@@ -56,20 +64,18 @@ export async function POST(
     const url = `${DJANGO_API_URL}/api/consultations/encounter/${encounterId}/instructions/`;
     const response = await fetch(url, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(getAuthHeader(request) && {
-          Authorization: getAuthHeader(request)!,
-        }),
-      },
+      headers: djangoProxyHeaders(request),
       credentials: "include",
       body: JSON.stringify(body),
     });
 
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
+      if (data && typeof data === "object" && Object.keys(data as object).length > 0) {
+        return NextResponse.json(data, { status: response.status });
+      }
       return NextResponse.json(
-        { error: data.detail || data.input_data || data.message || "Failed to add instruction" },
+        { detail: "Failed to add instruction" },
         { status: response.status }
       );
     }

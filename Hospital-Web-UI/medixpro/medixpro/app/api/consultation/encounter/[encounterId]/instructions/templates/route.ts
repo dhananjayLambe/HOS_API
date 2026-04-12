@@ -1,7 +1,18 @@
 import { type NextRequest, NextResponse } from "next/server";
 
 const DJANGO_API_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+
+function djangoProxyHeaders(request: NextRequest): HeadersInit {
+  const auth =
+    request.headers.get("authorization") || request.headers.get("Authorization");
+  const cookie = request.headers.get("cookie");
+  return {
+    "Content-Type": "application/json",
+    ...(auth && { Authorization: auth }),
+    ...(cookie && { Cookie: cookie }),
+  };
+}
 
 export async function GET(
   _request: NextRequest,
@@ -9,24 +20,21 @@ export async function GET(
 ) {
   try {
     const { encounterId } = await params;
-    const authHeader =
-      _request.headers.get("authorization") ||
-      _request.headers.get("Authorization");
 
     const url = `${DJANGO_API_URL}/api/consultations/encounter/${encounterId}/instructions/templates/`;
     const response = await fetch(url, {
       method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-        ...(authHeader && { Authorization: authHeader }),
-      },
+      headers: djangoProxyHeaders(_request),
       credentials: "include",
     });
 
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
+      if (data && typeof data === "object" && Object.keys(data as object).length > 0) {
+        return NextResponse.json(data, { status: response.status });
+      }
       return NextResponse.json(
-        { error: data.detail || data.message || "Failed to fetch templates" },
+        { detail: "Failed to fetch templates" },
         { status: response.status }
       );
     }

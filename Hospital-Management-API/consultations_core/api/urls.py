@@ -21,6 +21,7 @@ from consultations_core.api.views.instructions import (
     EncounterInstructionsListCreateAPIView,
     EncounterInstructionUpdateDeleteAPIView,
 )
+from consultations_core.api.views.instruction_suggestions import InstructionSuggestionsAPIView
 from consultations_core.api.views.findings import (
     EncounterFindingsListCreateAPIView,
     ConsultationFindingUpdateDeleteAPIView,
@@ -86,6 +87,12 @@ urlpatterns = [
         "encounter/<uuid:encounter_id>/cancel/",
         CancelEncounterAPIView.as_view(),
         name="encounter-cancel",
+    ),
+    # Instruction suggestions (JSON-backed, global)
+    path(
+        "instructions/suggestions/",
+        InstructionSuggestionsAPIView.as_view(),
+        name="instruction-suggestions",
     ),
     # Instruction templates and CRUD (encounter-scoped)
     path(

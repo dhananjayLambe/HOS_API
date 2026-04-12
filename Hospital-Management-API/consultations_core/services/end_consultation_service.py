@@ -22,6 +22,11 @@ from consultations_core.models.investigation import (
     InvestigationSource,
     InvestigationUrgency,
 )
+from consultations_core.models.instruction import (
+    EncounterInstruction,
+    InstructionTemplate,
+    InstructionTemplateVersion,
+)
 from consultations_core.models.prescription import CustomMedicine, Prescription, PrescriptionLine
 from consultations_core.models.symptoms import (
     ConsultationSymptom,
@@ -48,6 +53,10 @@ def _medicine_validation_error(message):
 
 def _investigations_validation_error(message):
     raise DjangoValidationError({"investigations": [message]})
+
+
+def _instructions_validation_error(message):
+    raise DjangoValidationError({"instructions": [message]})
 
 
 def _validate_symptom(item):
@@ -302,6 +311,18 @@ def _extract_investigations_payload(payload):
     if isinstance(store_inv, list):
         return store_inv
     return payload.get("investigations", [])
+
+
+def _extract_instructions_payload(payload):
+    store = payload.get("store", {}) if isinstance(payload, dict) else {}
+    section_items = store.get("sectionItems", {}) if isinstance(store, dict) else {}
+    instructions = section_items.get("instructions")
+    if isinstance(instructions, list):
+        return instructions
+    store_inst = store.get("instructionsList")
+    if isinstance(store_inst, list):
+        return store_inst
+    return payload.get("instructions", [])
 
 
 def _looks_like_uuid(token) -> bool:
@@ -1083,6 +1104,73 @@ def _persist_diagnoses(consultation, user, raw_diagnoses):
     stale_qs.update(is_active=False, updated_at=timezone.now())
 
 
+def _persist_encounter_instructions(consultation, user, raw_instructions):
+    """
+    Replace-set: deactivate existing active encounter instructions, then create rows from payload.
+    Items must reference InstructionTemplate by UUID (instruction_template_id). Free-text-only
+    draft rows without a template UUID are skipped.
+    """
+    encounter = consultation.encounter
+    EncounterInstruction.objects.filter(encounter=encounter, is_active=True).update(
+        is_active=False,
+        updated_at=timezone.now(),
+    )
+
+    if not isinstance(raw_instructions, list) or not raw_instructions:
+        return
+
+    seen_template_ids = set()
+
+    for idx, item in enumerate(raw_instructions):
+        if not isinstance(item, dict):
+            continue
+        tid = _as_uuid_or_none(item.get("instruction_template_id"))
+        if not tid:
+            continue
+        tid_str = str(tid)
+        if tid_str in seen_template_ids:
+            continue
+        seen_template_ids.add(tid_str)
+
+        template = InstructionTemplate.objects.filter(id=tid, is_active=True).first()
+        if template is None:
+            _instructions_validation_error(
+                f"Instruction {idx}: instruction template {tid_str} not found or inactive."
+            )
+
+        raw_input = item.get("input_data")
+        input_data = raw_input if isinstance(raw_input, dict) else {}
+        custom_note = (item.get("custom_note") or "").strip()
+        label_snapshot = str(item.get("label") or template.label).strip()[:255]
+
+        if template.requires_input and not input_data:
+            _instructions_validation_error(
+                f"Instruction {idx} ({template.label}): input_data is required for this template."
+            )
+
+        version, _ = InstructionTemplateVersion.objects.get_or_create(
+            template=template,
+            version_number=template.version,
+            defaults={
+                "label_snapshot": template.label,
+                "input_schema_snapshot": template.input_schema,
+            },
+        )
+
+        EncounterInstruction.objects.create(
+            encounter=encounter,
+            instruction_template=template,
+            template_version=version,
+            input_data=input_data,
+            custom_note=custom_note or None,
+            text_snapshot=label_snapshot or template.label[:255],
+            source="template",
+            is_custom=False,
+            is_active=True,
+            added_by=user,
+        )
+
+
 @transaction.atomic
 def persist_consultation_end_state(consultation, payload: dict, user):
     _persist_symptoms(
@@ -1109,4 +1197,9 @@ def persist_consultation_end_state(consultation, payload: dict, user):
         consultation=consultation,
         user=user,
         raw_investigations=_extract_investigations_payload(payload),
+    )
+    _persist_encounter_instructions(
+        consultation=consultation,
+        user=user,
+        raw_instructions=_extract_instructions_payload(payload),
     )

@@ -20,6 +20,11 @@ from clinic.models import Clinic
 from consultations_core.models.consultation import Consultation
 from consultations_core.models.diagnosis import ConsultationDiagnosis, CustomDiagnosis
 from consultations_core.models.encounter import ClinicalEncounter
+from consultations_core.models.instruction import (
+    EncounterInstruction,
+    InstructionCategory,
+    InstructionTemplate,
+)
 from consultations_core.models.investigation import (
     CustomInvestigation,
     InvestigationItem,
@@ -85,6 +90,7 @@ def _base_payload(**section_overrides):
             "diagnosis": [],
             "medicines": [],
             "investigations": [],
+            "instructions": [],
         },
         "draftFindings": [],
     }
@@ -121,6 +127,18 @@ class EndConsultationIntegrationTests(TestCase):
             formulation=cls.form,
             drug_type=DrugType.TABLET,
             is_active=True,
+        )
+        cls.inst_cat = InstructionCategory.objects.create(
+            code=f"INST-CAT-{uuid.uuid4().hex[:8]}",
+            name="General advice",
+            display_order=0,
+        )
+        cls.instruction_tpl = InstructionTemplate.objects.create(
+            key=f"eci_inst_{uuid.uuid4().hex[:8]}",
+            label="Take adequate rest",
+            category=cls.inst_cat,
+            requires_input=False,
+            input_schema={"fields": []},
         )
 
     def setUp(self):
@@ -306,3 +324,23 @@ class EndConsultationIntegrationTests(TestCase):
         self.assertEqual(r2.status_code, status.HTTP_400_BAD_REQUEST)
         err = r2.data.get("errors") or {}
         self.assertIn("encounter", err)
+
+    def test_11_encounter_instructions_persisted_on_complete(self):
+        payload = _base_payload(
+            instructions=[
+                {
+                    "id": str(uuid.uuid4()),
+                    "instruction_template_id": str(self.instruction_tpl.id),
+                    "label": self.instruction_tpl.label,
+                    "input_data": {},
+                    "custom_note": None,
+                    "is_active": True,
+                }
+            ],
+        )
+        r = self._post_complete(payload)
+        self.assertEqual(r.status_code, status.HTTP_200_OK, getattr(r, "data", r.content))
+        qs = EncounterInstruction.objects.filter(encounter=self.encounter, is_active=True)
+        self.assertEqual(qs.count(), 1)
+        row = qs.first()
+        self.assertEqual(row.instruction_template_id, self.instruction_tpl.id)

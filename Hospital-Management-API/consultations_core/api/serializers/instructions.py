@@ -69,3 +69,16 @@ class AddInstructionSerializer(serializers.Serializer):
 class UpdateInstructionSerializer(serializers.Serializer):
     input_data = serializers.JSONField(required=False)
     custom_note = serializers.CharField(required=False, allow_blank=True)
+
+
+class InstructionSuggestionQuerySerializer(serializers.Serializer):
+    """Query params for GET /instructions/suggestions/."""
+
+    q = serializers.CharField(required=False, allow_blank=True, default="")
+    specialty = serializers.CharField(required=False, allow_blank=True, default="")
+    category = serializers.CharField(required=False, allow_blank=True, default="")
+    limit = serializers.IntegerField(required=False, default=20, min_value=1, max_value=100)
+    exclude = serializers.ListField(
+        child=serializers.CharField(allow_blank=False),
+        required=False,
+    )

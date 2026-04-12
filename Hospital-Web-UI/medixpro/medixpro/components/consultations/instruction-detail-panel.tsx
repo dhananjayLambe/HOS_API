@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Lock, Loader2 } from "lucide-react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { Lock, AlertTriangle, CheckCircle2, AlertCircle } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -19,25 +19,33 @@ import { useConsultationStore } from "@/store/consultationStore";
 import type {
   InstructionFieldSchema,
   InstructionItemSchema,
-  EncounterInstructionRow,
 } from "@/lib/consultation-schema-types";
-import { cn } from "@/lib/utils";
+import { cn, isUuidLike } from "@/lib/utils";
+import { useToastNotification } from "@/hooks/use-toast-notification";
 
 const INSTRUCTION_TEMPLATE_PREFIX = "tpl:";
-
-function getAuthHeaders(): HeadersInit {
-  if (typeof window === "undefined") return {};
-  const token = localStorage.getItem("accessToken") || sessionStorage.getItem("accessToken");
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
+const TOAST_DEDUPE_MS = 2000;
 
 export function InstructionDetailPanel() {
+  const toast = useToastNotification();
+  const toastDedupeRef = useRef<Map<string, number>>(new Map());
+  const notify = useCallback(
+    (key: string, emit: () => void) => {
+      const now = Date.now();
+      const last = toastDedupeRef.current.get(key) ?? 0;
+      if (now - last < TOAST_DEDUPE_MS) return;
+      toastDedupeRef.current.set(key, now);
+      emit();
+    },
+    [toast]
+  );
+
+  const panelFocusRef = useRef<HTMLDivElement>(null);
+
   const {
     selectedDetail,
     setSelectedDetail,
-    instructionsSchema,
     instructionsList,
-    encounterId,
     consultationFinalized,
     setInstructionsList,
     getInstructionTemplateByKeyOrId,
@@ -45,7 +53,6 @@ export function InstructionDetailPanel() {
 
   const [formData, setFormData] = useState<Record<string, unknown>>({});
   const [customNote, setCustomNote] = useState("");
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const isInstructionSection = selectedDetail?.section === "instructions";
@@ -60,14 +67,13 @@ export function InstructionDetailPanel() {
   const template: InstructionItemSchema | undefined = templateId
     ? getInstructionTemplateByKeyOrId(templateId)
     : existingInstruction
-      ? getInstructionTemplateByKeyOrId(existingInstruction.instruction_template_id)
-        ?? {
-            key: existingInstruction.instruction_template_id,
-            label: existingInstruction.label,
-            category_code: "",
-            requires_input: true,
-            input_schema: { fields: [] },
-          }
+      ? getInstructionTemplateByKeyOrId(existingInstruction.instruction_template_id) ?? {
+          key: existingInstruction.instruction_template_id,
+          label: existingInstruction.label,
+          category_code: "",
+          requires_input: true,
+          input_schema: { fields: [] },
+        }
       : undefined;
 
   const fields = template?.input_schema?.fields ?? [];
@@ -81,82 +87,106 @@ export function InstructionDetailPanel() {
       setFormData({});
       setCustomNote("");
     }
-  }, [existingInstruction?.id, isNew]);
+  }, [existingInstruction?.id, isNew, templateId]);
 
-  const handleSave = async () => {
-    if (consultationFinalized || !encounterId) return;
-    setError(null);
-    setSaving(true);
-    try {
-      const base = "/api/consultation";
-      const headers: HeadersInit = {
-        "Content-Type": "application/json",
-        ...getAuthHeaders(),
-      };
+  useEffect(() => {
+    if (!itemId) return;
+    const t = window.requestAnimationFrame(() => {
+      panelFocusRef.current?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(t);
+  }, [itemId]);
 
-      if (existingInstruction) {
-        const res = await fetch(`${base}/instructions/${existingInstruction.id}`, {
-          method: "PATCH",
-          headers,
-          body: JSON.stringify({ input_data: formData, custom_note: customNote }),
-        });
-        if (!res.ok) {
-          const d = await res.json().catch(() => ({}));
-          if (res.status === 403) useConsultationStore.getState().setConsultationFinalized(true);
-          throw new Error(d.error || d.detail || "Update failed");
-        }
-        const updated = await res.json();
-        setInstructionsList(
-          instructionsList.map((i) => (i.id === updated.id ? updated : i))
-        );
-        setSelectedDetail({ section: "instructions", itemId: updated.id });
-      } else if (isNew && templateId && template) {
-        const templateUuid = (template as InstructionItemSchema & { id?: string }).id ?? templateId;
-        const res = await fetch(`${base}/encounter/${encounterId}/instructions`, {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
-            instruction_template_id: templateUuid,
-            input_data: formData,
-            custom_note: customNote,
-          }),
-        });
-        if (!res.ok) {
-          const d = await res.json().catch(() => ({}));
-          if (res.status === 403) useConsultationStore.getState().setConsultationFinalized(true);
-          throw new Error(d.error || d.detail || "Add failed");
-        }
-        const created = await res.json();
-        setInstructionsList([...instructionsList, created]);
-        setSelectedDetail({ section: "instructions", itemId: created.id });
+  const handleDoneEditing = useCallback(() => {
+    setSelectedDetail(null);
+    window.requestAnimationFrame(() => {
+      document.querySelector<HTMLInputElement>("#instructions-search-input")?.focus();
+    });
+  }, [setSelectedDetail]);
+
+  useEffect(() => {
+    if (!itemId) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        handleDoneEditing();
       }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Request failed");
-    } finally {
-      setSaving(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [itemId, handleDoneEditing]);
+
+  const isComplete = useMemo(() => {
+    if (!template) return true;
+    if (!template.requires_input) return true;
+    return Object.keys(formData).length > 0;
+  }, [template, formData]);
+
+  const completionHint = useMemo(() => {
+    if (isComplete || !template?.requires_input) return "";
+    return "Add required details below";
+  }, [isComplete, template?.requires_input]);
+
+  const handleSave = () => {
+    if (consultationFinalized) return;
+    setError(null);
+
+    if (existingInstruction) {
+      setInstructionsList(
+        instructionsList.map((i) =>
+          i.id === existingInstruction.id
+            ? {
+                ...i,
+                input_data: { ...formData },
+                custom_note: customNote.trim() ? customNote : null,
+              }
+            : i
+        )
+      );
+      notify(`inst-patch:${existingInstruction.id}`, () => toast.success("Instruction updated"));
+      return;
+    }
+
+    if (isNew && templateId) {
+      const fromTemplate =
+        template?.id && isUuidLike(String(template.id)) ? String(template.id) : null;
+      const fromSelection = isUuidLike(templateId) ? templateId : null;
+      const instructionTemplateUuid = fromTemplate ?? fromSelection;
+      if (!instructionTemplateUuid) {
+        setError(
+          template
+            ? "Invalid instruction template id. Reload the page and try again."
+            : "Instruction template not found. Select the instruction again from the list."
+        );
+        return;
+      }
+      const newId =
+        typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? `inst-draft-${crypto.randomUUID()}`
+          : `inst-local-${instructionTemplateUuid}-${Date.now()}`;
+      const row = {
+        id: newId,
+        instruction_template_id: instructionTemplateUuid,
+        label: template?.label ?? "Instruction",
+        input_data: { ...formData },
+        custom_note: customNote.trim() ? customNote : null,
+        is_active: true as const,
+      };
+      setInstructionsList([row, ...instructionsList]);
+      setSelectedDetail({ section: "instructions", itemId: newId });
+      notify(`inst-post:${newId}`, () => toast.success("Instruction added"));
     }
   };
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
     if (consultationFinalized || !existingInstruction) return;
-    setSaving(true);
     setError(null);
-    try {
-      const res = await fetch(`/api/consultation/instructions/${existingInstruction.id}`, {
-        method: "DELETE",
-        headers: getAuthHeaders(),
-      });
-      if (!res.ok) {
-        if (res.status === 403) useConsultationStore.getState().setConsultationFinalized(true);
-        throw new Error("Delete failed");
-      }
-      setInstructionsList(instructionsList.filter((i) => i.id !== existingInstruction.id));
-      setSelectedDetail(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Delete failed");
-    } finally {
-      setSaving(false);
-    }
+    const removedLabel = existingInstruction.label;
+    setInstructionsList(instructionsList.filter((i) => i.id !== existingInstruction.id));
+    setSelectedDetail(null);
+    notify(`inst-del:${existingInstruction.id}`, () =>
+      toast.success(`${removedLabel} removed`)
+    );
   };
 
   if (!isInstructionSection || !itemId) {
@@ -176,22 +206,69 @@ export function InstructionDetailPanel() {
 
   const label = existingInstruction?.label ?? template?.label ?? "Instruction";
   const locked = consultationFinalized;
-  const canSave = !locked && encounterId && (isNew || existingInstruction);
+  const canSave = !locked && (isNew || existingInstruction);
 
-  return (
-    <Card className="h-fit w-full max-w-full min-w-0 max-w-md shrink-0 self-start rounded-2xl border border-border/80 bg-card shadow-sm">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 py-4 pb-3">
-        <h3 className="font-bold">{label}</h3>
-        {locked && (
-          <span className="flex items-center gap-1 text-sm text-amber-600 dark:text-amber-400">
-            <Lock className="h-4 w-4" />
-            Consultation finalized
-          </span>
-        )}
-      </CardHeader>
-      <CardContent className="space-y-6 pb-6">
+  const inner = (
+    <>
+      <div
+        ref={panelFocusRef}
+        tabIndex={-1}
+        className="sticky top-0 z-[1] border-b border-border/60 bg-card px-6 pb-3 pt-4 outline-none"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <h3 className="min-w-0 flex-1 font-bold leading-tight">{label}</h3>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="shrink-0 rounded-lg"
+            onClick={handleDoneEditing}
+          >
+            Done editing
+          </Button>
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-2" aria-live="polite" aria-atomic="true">
+          {locked ? (
+            <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 dark:text-amber-300">
+              <Lock className="h-3.5 w-3.5 shrink-0" />
+              Consultation finalized
+            </span>
+          ) : template?.requires_input ? (
+            isComplete ? (
+              <div
+                className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-emerald-500/35 bg-emerald-500/[0.1] px-3 py-1 text-xs font-medium text-emerald-900 dark:text-emerald-100"
+                role="status"
+              >
+                <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden />
+                <span>Complete</span>
+              </div>
+            ) : (
+              <div
+                className="inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-full border border-amber-500/45 bg-amber-500/12 px-3 py-1 text-xs font-medium text-amber-950 dark:text-amber-50"
+                role="status"
+              >
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden />
+                <span className="min-w-0 truncate">{completionHint || "Incomplete"}</span>
+              </div>
+            )
+          ) : (
+            <div
+              className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-emerald-500/35 bg-emerald-500/[0.1] px-3 py-1 text-xs font-medium text-emerald-900 dark:text-emerald-100"
+              role="status"
+            >
+              <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden />
+              <span>Ready to add</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="space-y-6 px-6 pb-6 pt-4">
         {error && (
-          <p className="text-sm text-destructive">{error}</p>
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 flex items-start gap-2 dark:border-amber-800 dark:bg-amber-950/30">
+            <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0 dark:text-amber-400" />
+            <p className="text-xs text-amber-900 dark:text-amber-100">{error}</p>
+          </div>
         )}
 
         {fields.length > 0 && (
@@ -219,21 +296,9 @@ export function InstructionDetailPanel() {
           />
         </div>
 
-        {isNew && !encounterId && (
-          <p className="text-sm text-muted-foreground rounded-lg bg-muted/50 p-3">
-            Start a consultation with an encounter to save this instruction.
-          </p>
-        )}
-
         <div className="flex flex-wrap gap-2">
           {canSave && (
-            <Button
-              type="button"
-              onClick={handleSave}
-              disabled={saving}
-              className="gap-2"
-            >
-              {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+            <Button type="button" variant="default" onClick={handleSave} className="gap-2 rounded-lg">
               {existingInstruction ? "Update" : "Add instruction"}
             </Button>
           )}
@@ -242,13 +307,19 @@ export function InstructionDetailPanel() {
               type="button"
               variant="destructive"
               onClick={handleDelete}
-              disabled={saving}
+              className="rounded-lg"
             >
               Remove
             </Button>
           )}
         </div>
-      </CardContent>
+      </div>
+    </>
+  );
+
+  return (
+    <Card className="h-fit w-full max-w-full min-w-0 max-w-md shrink-0 self-start rounded-2xl border border-border/80 bg-card shadow-sm">
+      {inner}
     </Card>
   );
 }

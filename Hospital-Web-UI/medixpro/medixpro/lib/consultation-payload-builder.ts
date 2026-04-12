@@ -84,11 +84,26 @@ export function buildEndConsultationPayload(
     return row;
   });
 
+  /** Draft rows from Zustand; backend persists on POST .../consultation/complete/ only. */
   const instructionsFromSection = store.sectionItems["instructions"];
-  const instructions =
+  const instructionsRaw =
     Array.isArray(instructionsFromSection) && instructionsFromSection.length > 0
       ? instructionsFromSection
       : store.instructionsList ?? [];
+  const instructions = instructionsRaw.map((row: Record<string, unknown>) => ({
+    id: String(row.id ?? ""),
+    instruction_template_id: String(row.instruction_template_id ?? ""),
+    label: String(row.label ?? ""),
+    input_data:
+      row.input_data && typeof row.input_data === "object" && !Array.isArray(row.input_data)
+        ? (row.input_data as Record<string, unknown>)
+        : {},
+    custom_note:
+      row.custom_note === null || row.custom_note === undefined
+        ? null
+        : String(row.custom_note),
+    is_active: row.is_active !== false,
+  }));
 
   return {
     mode: "commit",
