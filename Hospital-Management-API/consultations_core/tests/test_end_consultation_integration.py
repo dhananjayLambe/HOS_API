@@ -21,6 +21,7 @@ from consultations_core.models.consultation import Consultation
 from consultations_core.models.diagnosis import ConsultationDiagnosis, CustomDiagnosis
 from consultations_core.models.encounter import ClinicalEncounter
 from consultations_core.models.instruction import (
+    CustomDoctorInstruction,
     EncounterInstruction,
     InstructionCategory,
     InstructionTemplate,
@@ -90,7 +91,10 @@ def _base_payload(**section_overrides):
             "diagnosis": [],
             "medicines": [],
             "investigations": [],
-            "instructions": [],
+            "instructions": {
+                "template_instructions": [],
+                "custom_instructions": [],
+            },
         },
         "draftFindings": [],
     }
@@ -326,6 +330,55 @@ class EndConsultationIntegrationTests(TestCase):
         self.assertIn("encounter", err)
 
     def test_11_encounter_instructions_persisted_on_complete(self):
+        payload = _base_payload(
+            instructions={
+                "template_instructions": [
+                    {
+                        "instruction_template_id": str(self.instruction_tpl.id),
+                        "input_data": {},
+                        "custom_note": None,
+                        "is_active": True,
+                    }
+                ],
+                "custom_instructions": [],
+            },
+        )
+        r = self._post_complete(payload)
+        self.assertEqual(r.status_code, status.HTTP_200_OK, getattr(r, "data", r.content))
+        qs = EncounterInstruction.objects.filter(encounter=self.encounter, is_active=True)
+        self.assertEqual(qs.count(), 1)
+        row = qs.first()
+        self.assertEqual(row.instruction_template_id, self.instruction_tpl.id)
+
+    def test_12_custom_encounter_instructions_persisted_on_complete(self):
+        payload = _base_payload(
+            instructions={
+                "template_instructions": [],
+                "custom_instructions": [
+                    {
+                        "label": "Drink warm water daily",
+                        "custom_note": None,
+                        "is_active": True,
+                    }
+                ],
+            },
+        )
+        r = self._post_complete(payload)
+        self.assertEqual(r.status_code, status.HTTP_200_OK, getattr(r, "data", r.content))
+        qs = EncounterInstruction.objects.filter(encounter=self.encounter, is_active=True)
+        self.assertEqual(qs.count(), 1)
+        row = qs.first()
+        self.assertIsNone(row.instruction_template_id)
+        self.assertTrue(row.is_custom)
+        self.assertEqual(row.source, "custom")
+        self.assertEqual(row.text_snapshot, "Drink warm water daily")
+        cdi = CustomDoctorInstruction.objects.filter(doctor=self.doctor_user).first()
+        self.assertIsNotNone(cdi)
+        self.assertEqual(cdi.text, "Drink warm water daily")
+        self.assertEqual(cdi.usage_count, 1)
+
+    def test_13_legacy_flat_instruction_list_still_persisted(self):
+        """Backward compatibility: sectionItems.instructions as a list of template rows."""
         payload = _base_payload(
             instructions=[
                 {

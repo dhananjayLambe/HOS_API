@@ -5,18 +5,6 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 import uuid
 
-# #region agent log
-def _consultation_dlog(msg, data, hid):
-    try:
-        import json
-        import time
-        path = "/Users/dhananjaylambe/Documents/code_repo/JWT_auth_setup_test/HOS_API/.cursor/debug-c425fc.log"
-        with open(path, "a") as f:
-            f.write(json.dumps({"sessionId": "c425fc", "message": msg, "data": dict(data) if data else {}, "hypothesisId": hid, "location": "consultation.py:save", "timestamp": round(time.time() * 1000)}) + "\n")
-    except Exception:
-        pass
-# #endregion
-
 
 class Consultation(models.Model):
     """
@@ -100,22 +88,10 @@ class Consultation(models.Model):
 
             # 🔒 Enforce strict OneToOne mapping
             if is_new:
-                # #region agent log
-                _consultation_dlog("Consultation.save is_new check existing", {"encounter_id": str(encounter.id)}, "H1")
-                # #endregion
-                try:
-                    existing = type(self).objects.filter(encounter=encounter).exists()
-                    if existing:
-                        raise ValidationError(
-                            "A consultation already exists for this encounter."
-                        )
-                except ValidationError:
-                    raise
-                except Exception as e:
-                    # #region agent log
-                    _consultation_dlog("Consultation.save existing check error", {"error": str(e), "type": type(e).__name__}, "H1")
-                    # #endregion
-                    raise
+                if type(self).objects.filter(encounter=encounter).exists():
+                    raise ValidationError(
+                        "A consultation already exists for this encounter."
+                    )
 
             if not encounter.clinic:
                 raise ValidationError("Encounter must have a clinic.")

@@ -35,6 +35,7 @@ import type { ConsultationWorkflowType } from "@/lib/consultation-types";
 import { ViewPreDrawer } from "./view-pre-drawer";
 import { ConsultationAutosaveIndicator } from "./consultation-autosave-indicator";
 import { buildEndConsultationPayload } from "@/lib/consultation-payload-builder";
+import { isEncounterInstructionIncomplete } from "@/lib/instruction-completion";
 
 const CONSULTATION_TYPE_LABELS: Record<ConsultationWorkflowType, string> = {
   FULL: "Full Consultation",
@@ -184,6 +185,15 @@ export function ConsultationActionBar() {
       toast.error("Encounter not found. Refresh the page or go back to the consultation.");
       return;
     }
+    const preStore = useConsultationStore.getState();
+    if (
+      preStore.instructionsList.some((row) =>
+        isEncounterInstructionIncomplete(row, preStore.getInstructionTemplateByKeyOrId)
+      )
+    ) {
+      toast.error("Please complete all instruction details before ending consultation");
+      return;
+    }
     setIsEndingConsultation(true);
     try {
       const store = useConsultationStore.getState();
@@ -196,22 +206,8 @@ export function ConsultationActionBar() {
       useConsultationStore.getState().reset();
       setShowEndConsultationConfirm(false);
       router.push(url);
-    } catch (err: any) {
-      const errorMap = err.response?.data?.errors;
-      const flattenedErrors =
-        errorMap && typeof errorMap === "object"
-          ? Object.values(errorMap)
-              .flat()
-              .filter((v) => typeof v === "string")
-              .join("; ")
-          : "";
-      const msg =
-        err.response?.data?.message ||
-        err.response?.data?.detail ||
-        flattenedErrors ||
-        err.message ||
-        "Failed to end consultation.";
-      toast.error(msg);
+    } catch {
+      toast.error("Failed to save consultation");
     } finally {
       setIsEndingConsultation(false);
     }

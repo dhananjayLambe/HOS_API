@@ -62,19 +62,6 @@ def _contract_error(message, errors=None):
         "errors": errors or {},
     }
 
-# #region agent log (disabled by default to avoid file I/O on every request)
-def _dlog(msg, data, hid, loc="preconsultation.py"):
-    if getattr(settings, "CONSULTATIONS_DEBUG_LOG", False):
-        try:
-            import json
-            import time
-            path = getattr(settings, "CONSULTATIONS_DEBUG_LOG_PATH", None) or ".cursor/debug-consultations.log"
-            with open(path, "a") as f:
-                f.write(json.dumps({"message": msg, "data": dict(data) if data else {}, "hid": hid, "loc": loc, "ts": round(time.time() * 1000)}) + "\n")
-        except Exception:
-            pass
-# #endregion
-
 # =====================================================
 # PRE-CONSULTATION SECTION APIs
 # =====================================================
@@ -624,15 +611,9 @@ class PreConsultationSectionAPIView(APIView):
 
     def get_preconsultation(self, encounter):
         """Get or create pre-consultation for encounter"""
-        # #region agent log
-        _dlog("get_preconsultation entry", {"encounter_id": str(encounter.id)}, "H2", "preconsultation.py:get_preconsultation")
-        # #endregion
         try:
             if hasattr(encounter, "pre_consultation"):
                 pc = encounter.pre_consultation
-                # #region agent log
-                _dlog("get_preconsultation found existing", {"encounter_id": str(encounter.id)}, "H2", "preconsultation.py:get_preconsultation")
-                # #endregion
                 return pc
         except PreConsultation.DoesNotExist:
             pass
@@ -1049,9 +1030,6 @@ class CompletePreConsultationAPIView(APIView):
                 {"detail": MSG_VISIT_CANCELLED},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        # #region agent log
-        _dlog("CompletePreConsultation post entry", {"encounter_id": str(encounter.id), "status": encounter.status}, "H4", "preconsultation.py:CompletePreConsultationAPIView")
-        # #endregion
         redirect_url = f"/consultations/consultation/{encounter.id}"
 
         # Idempotent: already completed, or created (doctor can go straight to consultation) → return 200 with redirect

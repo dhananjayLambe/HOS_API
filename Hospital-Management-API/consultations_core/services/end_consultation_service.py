@@ -3,6 +3,7 @@ import uuid
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, transaction
+from django.db.models import F
 from django.utils import timezone
 from django.utils.text import slugify
 
@@ -23,6 +24,7 @@ from consultations_core.models.investigation import (
     InvestigationUrgency,
 )
 from consultations_core.models.instruction import (
+    CustomDoctorInstruction,
     EncounterInstruction,
     InstructionTemplate,
     InstructionTemplateVersion,
@@ -317,12 +319,29 @@ def _extract_instructions_payload(payload):
     store = payload.get("store", {}) if isinstance(payload, dict) else {}
     section_items = store.get("sectionItems", {}) if isinstance(store, dict) else {}
     instructions = section_items.get("instructions")
+    if isinstance(instructions, dict):
+        ti = instructions.get("template_instructions")
+        ci = instructions.get("custom_instructions")
+        if isinstance(ti, list) and isinstance(ci, list):
+            return {
+                "template_instructions": ti,
+                "custom_instructions": ci,
+            }
     if isinstance(instructions, list):
         return instructions
     store_inst = store.get("instructionsList")
     if isinstance(store_inst, list):
         return store_inst
-    return payload.get("instructions", [])
+    root = payload.get("instructions") if isinstance(payload, dict) else None
+    if isinstance(root, dict):
+        ti = root.get("template_instructions")
+        ci = root.get("custom_instructions")
+        if isinstance(ti, list) and isinstance(ci, list):
+            return {
+                "template_instructions": ti,
+                "custom_instructions": ci,
+            }
+    return payload.get("instructions", []) if isinstance(payload, dict) else []
 
 
 def _looks_like_uuid(token) -> bool:
@@ -1104,25 +1123,17 @@ def _persist_diagnoses(consultation, user, raw_diagnoses):
     stale_qs.update(is_active=False, updated_at=timezone.now())
 
 
-def _persist_encounter_instructions(consultation, user, raw_instructions):
-    """
-    Replace-set: deactivate existing active encounter instructions, then create rows from payload.
-    Items must reference InstructionTemplate by UUID (instruction_template_id). Free-text-only
-    draft rows without a template UUID are skipped.
-    """
-    encounter = consultation.encounter
-    EncounterInstruction.objects.filter(encounter=encounter, is_active=True).update(
-        is_active=False,
-        updated_at=timezone.now(),
-    )
-
-    if not isinstance(raw_instructions, list) or not raw_instructions:
+def _persist_template_instruction_rows(encounter, user, raw_list):
+    """Create encounter rows from template-backed instruction dicts (UUID instruction_template_id)."""
+    if not isinstance(raw_list, list) or not raw_list:
         return
 
     seen_template_ids = set()
 
-    for idx, item in enumerate(raw_instructions):
+    for idx, item in enumerate(raw_list):
         if not isinstance(item, dict):
+            continue
+        if item.get("is_active") is False:
             continue
         tid = _as_uuid_or_none(item.get("instruction_template_id"))
         if not tid:
@@ -1169,6 +1180,86 @@ def _persist_encounter_instructions(consultation, user, raw_instructions):
             is_active=True,
             added_by=user,
         )
+
+
+def _bump_custom_doctor_instruction_catalog(user, label: str) -> None:
+    """Upsert doctor-scoped custom instruction text and increment usage_count."""
+    text = (label or "").strip()[:255]
+    if not text:
+        return
+    normalized = text.lower()
+    obj, _created = CustomDoctorInstruction.objects.get_or_create(
+        doctor=user,
+        normalized_text=normalized,
+        defaults={
+            "text": text,
+            "is_active": True,
+        },
+    )
+    CustomDoctorInstruction.objects.filter(pk=obj.pk).update(usage_count=F("usage_count") + 1)
+
+
+def _persist_custom_instruction_rows(encounter, user, raw_list):
+    """Free-text instructions (no InstructionTemplate FK)."""
+    if not isinstance(raw_list, list) or not raw_list:
+        return
+
+    for idx, item in enumerate(raw_list):
+        if not isinstance(item, dict):
+            continue
+        if item.get("is_active") is False:
+            continue
+        label = str(item.get("label") or "").strip()
+        if not label:
+            _instructions_validation_error(
+                f"Custom instruction {idx}: label is required."
+            )
+        custom_note = (item.get("custom_note") or "").strip()
+        EncounterInstruction.objects.create(
+            encounter=encounter,
+            instruction_template=None,
+            template_version=None,
+            input_data=None,
+            text_snapshot=label[:255],
+            custom_note=custom_note or None,
+            source="custom",
+            is_custom=True,
+            is_active=True,
+            added_by=user,
+        )
+        _bump_custom_doctor_instruction_catalog(user, label)
+
+
+def _persist_encounter_instructions(consultation, user, raw_instructions):
+    """
+    Replace-set: deactivate existing active encounter instructions, then create rows from payload.
+    Accepts either:
+    - dict with template_instructions and custom_instructions (MedixPro end consultation), or
+    - legacy list of template-shaped dicts (instruction_template_id UUID).
+    """
+    encounter = consultation.encounter
+    EncounterInstruction.objects.filter(encounter=encounter, is_active=True).update(
+        is_active=False,
+        updated_at=timezone.now(),
+    )
+
+    if raw_instructions is None:
+        return
+
+    if isinstance(raw_instructions, dict):
+        template_list = raw_instructions.get("template_instructions")
+        custom_list = raw_instructions.get("custom_instructions")
+        if not isinstance(template_list, list):
+            template_list = []
+        if not isinstance(custom_list, list):
+            custom_list = []
+        _persist_template_instruction_rows(encounter, user, template_list)
+        _persist_custom_instruction_rows(encounter, user, custom_list)
+        return
+
+    if isinstance(raw_instructions, list):
+        _persist_template_instruction_rows(encounter, user, raw_instructions)
+        return
 
 
 @transaction.atomic

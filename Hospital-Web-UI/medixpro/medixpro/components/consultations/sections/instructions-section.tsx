@@ -35,6 +35,7 @@ import {
   shouldIgnoreSectionActivationClick,
 } from "@/lib/consultation-section-activation";
 import { useToastNotification } from "@/hooks/use-toast-notification";
+import { isEncounterInstructionIncomplete } from "@/lib/instruction-completion";
 
 const INSTRUCTION_TEMPLATE_PREFIX = "tpl:";
 const TOAST_DEDUPE_MS = 2000;
@@ -321,15 +322,13 @@ export function InstructionsSection() {
   const isAdded = (templateId: string) =>
     instructionsList.some((i) => i.instruction_template_id === templateId);
 
-  /** Show ⚠ only when template requires input AND that input is missing or empty. */
+  /** Show ⚠ only when template has required schema fields that are not yet filled (aligned with detail panel). */
   const isInstructionIncomplete = useCallback(
-    (inst: { instruction_template_id: string; input_data?: Record<string, unknown> | null }) => {
-      const template = getInstructionTemplateByKeyOrId(inst.instruction_template_id);
-      if (!template || template.requires_input !== true) return false;
-      const data = inst.input_data;
-      if (data == null || typeof data !== "object") return true;
-      return Object.keys(data).length === 0;
-    },
+    (inst: {
+      instruction_template_id: string;
+      label: string;
+      input_data?: Record<string, unknown> | null;
+    }) => isEncounterInstructionIncomplete(inst, getInstructionTemplateByKeyOrId),
     [getInstructionTemplateByKeyOrId]
   );
 

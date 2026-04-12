@@ -3,7 +3,17 @@
 import axios, { AxiosInstance, InternalAxiosRequestConfig, AxiosError } from "axios";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.BACKEND_URL || "http://localhost:8000/api/";
+/** Base for Django REST paths. Prefer same-origin `/api/` + Next rewrites (see next.config.mjs) so the browser hits :3000, not :8000. Override with NEXT_PUBLIC_BACKEND_URL for direct-to-Django. */
+function resolveBackendBaseUrl(): string {
+  const fromEnv = (process.env.NEXT_PUBLIC_BACKEND_URL || process.env.BACKEND_URL || "").trim();
+  if (fromEnv) {
+    return fromEnv.replace(/\/+$/, "");
+  }
+  return "/api";
+}
+
+/** Strip trailing slashes — same as previous behavior for axios baseURL. */
+const BACKEND_AXIOS_BASE = resolveBackendBaseUrl().replace(/\/+$/, "");
 
 // Token storage keys
 const ACCESS_TOKEN_KEY = "access_token";
@@ -163,9 +173,9 @@ axiosClient.interceptors.response.use(
   }
 );
 
-// Create a separate axios instance for direct Django backend calls
+// Create a separate axios instance for Django REST (same-origin /api/… + Next rewrites by default)
 const backendAxiosClient: AxiosInstance = axios.create({
-  baseURL: BACKEND_URL.replace(/\/+$/, ""), // Remove trailing slashes
+  baseURL: BACKEND_AXIOS_BASE,
   headers: {
     "Content-Type": "application/json",
   },
@@ -188,9 +198,6 @@ backendAxiosClient.interceptors.request.use(
     const accessToken = localStorage.getItem(ACCESS_TOKEN_KEY);
     if (accessToken && config.headers) {
       config.headers.Authorization = `Bearer ${accessToken}`;
-    }
-    if (config.url) {
-      console.log(`[backendAxiosClient] ${config.method?.toUpperCase()} ${backendRequestUrl(config)}`);
     }
     return config;
   },
@@ -231,9 +238,9 @@ backendAxiosClient.interceptors.response.use(
           `[backendAxiosClient] Error ${error.response?.status || "Network"} on ${error.config.method?.toUpperCase()} ${fullUrl}`,
         );
         if (!error.response) {
-          // No HTTP response: unreachable host/port, CORS blocked before response, or timeout
+          // No HTTP response: Django down, wrong BACKEND_PROXY_TARGET, CORS (if using absolute BACKEND_URL), or timeout
           console.error(
-            "[backendAxiosClient] No response — check Django is running on BACKEND_URL (e.g. python manage.py runserver 0.0.0.0:8000).",
+            "[backendAxiosClient] No response — with default same-origin /api, ensure Django is running and Next rewrites match BACKEND_PROXY_TARGET (see next.config.mjs). Or set NEXT_PUBLIC_BACKEND_URL to your API.",
             { code: error.code, message: error.message },
           );
         }

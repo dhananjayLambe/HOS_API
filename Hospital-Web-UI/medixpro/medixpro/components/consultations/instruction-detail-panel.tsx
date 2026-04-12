@@ -22,6 +22,10 @@ import type {
 } from "@/lib/consultation-schema-types";
 import { cn, isUuidLike } from "@/lib/utils";
 import { useToastNotification } from "@/hooks/use-toast-notification";
+import {
+  isInstructionInputComplete,
+  resolveInstructionItemTemplate,
+} from "@/lib/instruction-completion";
 
 const INSTRUCTION_TEMPLATE_PREFIX = "tpl:";
 const TOAST_DEDUPE_MS = 2000;
@@ -67,16 +71,15 @@ export function InstructionDetailPanel() {
   const template: InstructionItemSchema | undefined = templateId
     ? getInstructionTemplateByKeyOrId(templateId)
     : existingInstruction
-      ? getInstructionTemplateByKeyOrId(existingInstruction.instruction_template_id) ?? {
-          key: existingInstruction.instruction_template_id,
-          label: existingInstruction.label,
-          category_code: "",
-          requires_input: true,
-          input_schema: { fields: [] },
-        }
+      ? resolveInstructionItemTemplate(
+          existingInstruction.instruction_template_id,
+          existingInstruction.label,
+          getInstructionTemplateByKeyOrId
+        )
       : undefined;
 
   const fields = template?.input_schema?.fields ?? [];
+  const needsSchemaInput = Boolean(template?.requires_input && fields.length > 0);
   const isNew = Boolean(isTemplateKey && templateId);
 
   useEffect(() => {
@@ -116,16 +119,15 @@ export function InstructionDetailPanel() {
     return () => window.removeEventListener("keydown", onKey);
   }, [itemId, handleDoneEditing]);
 
-  const isComplete = useMemo(() => {
-    if (!template) return true;
-    if (!template.requires_input) return true;
-    return Object.keys(formData).length > 0;
-  }, [template, formData]);
+  const isComplete = useMemo(
+    () => isInstructionInputComplete(template, formData),
+    [template, formData]
+  );
 
   const completionHint = useMemo(() => {
-    if (isComplete || !template?.requires_input) return "";
+    if (isComplete || !needsSchemaInput) return "";
     return "Add required details below";
-  }, [isComplete, template?.requires_input]);
+  }, [isComplete, needsSchemaInput]);
 
   const handleSave = () => {
     if (consultationFinalized) return;
@@ -233,7 +235,7 @@ export function InstructionDetailPanel() {
               <Lock className="h-3.5 w-3.5 shrink-0" />
               Consultation finalized
             </span>
-          ) : template?.requires_input ? (
+          ) : needsSchemaInput ? (
             isComplete ? (
               <div
                 className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-emerald-500/35 bg-emerald-500/[0.1] px-3 py-1 text-xs font-medium text-emerald-900 dark:text-emerald-100"

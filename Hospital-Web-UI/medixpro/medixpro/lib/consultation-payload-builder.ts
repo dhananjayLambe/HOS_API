@@ -5,6 +5,7 @@ import {
   normalizeItem,
   shouldShowInvestigationCustomTag,
 } from "@/lib/consultation-completion";
+import { buildInstructionsPayload } from "@/lib/consultation-instructions-helpers";
 import { useConsultationStore } from "@/store/consultationStore";
 
 export function buildEndConsultationPayload(
@@ -84,26 +85,8 @@ export function buildEndConsultationPayload(
     return row;
   });
 
-  /** Draft rows from Zustand; backend persists on POST .../consultation/complete/ only. */
-  const instructionsFromSection = store.sectionItems["instructions"];
-  const instructionsRaw =
-    Array.isArray(instructionsFromSection) && instructionsFromSection.length > 0
-      ? instructionsFromSection
-      : store.instructionsList ?? [];
-  const instructions = instructionsRaw.map((row: Record<string, unknown>) => ({
-    id: String(row.id ?? ""),
-    instruction_template_id: String(row.instruction_template_id ?? ""),
-    label: String(row.label ?? ""),
-    input_data:
-      row.input_data && typeof row.input_data === "object" && !Array.isArray(row.input_data)
-        ? (row.input_data as Record<string, unknown>)
-        : {},
-    custom_note:
-      row.custom_note === null || row.custom_note === undefined
-        ? null
-        : String(row.custom_note),
-    is_active: row.is_active !== false,
-  }));
+  /** Draft rows from Zustand only; backend persists on POST .../consultation/complete/ only. */
+  const instructions = buildInstructionsPayload(store.instructionsList ?? []);
 
   return {
     mode: "commit",
