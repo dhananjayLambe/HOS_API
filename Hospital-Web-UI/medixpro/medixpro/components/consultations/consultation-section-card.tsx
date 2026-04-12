@@ -3,6 +3,7 @@
 import {
   type ReactNode,
   forwardRef,
+  useCallback,
   useImperativeHandle,
   useState,
 } from "react";
@@ -24,6 +25,8 @@ export interface ConsultationSectionCardProps {
   className?: string;
   /** When ≥1, show "⚠️ N incomplete" in header. */
   incompleteCount?: number;
+  /** Fires when the collapsible opens or closes. */
+  onOpenChange?: (open: boolean) => void;
 }
 
 export type ConsultationSectionCardHandle = {
@@ -42,15 +45,24 @@ export const ConsultationSectionCard = forwardRef<
     headerRight,
     className,
     incompleteCount = 0,
+    onOpenChange,
   },
   ref
 ) {
   const [open, setOpen] = useState(defaultOpen);
 
-  useImperativeHandle(ref, () => ({ expand: () => setOpen(true) }), []);
+  const handleOpenChange = useCallback(
+    (next: boolean) => {
+      setOpen(next);
+      onOpenChange?.(next);
+    },
+    [onOpenChange]
+  );
+
+  useImperativeHandle(ref, () => ({ expand: () => handleOpenChange(true) }), [handleOpenChange]);
 
   return (
-    <Collapsible open={open} onOpenChange={setOpen}>
+    <Collapsible open={open} onOpenChange={handleOpenChange}>
       <Card
         className={cn(
           "mb-4 rounded-2xl border border-border/80 bg-card p-4 shadow-sm transition-shadow hover:shadow-md",
@@ -61,7 +73,7 @@ export const ConsultationSectionCard = forwardRef<
           <button
             type="button"
             className="flex flex-1 items-center gap-2 text-left outline-none hover:opacity-80 cursor-pointer min-h-[44px] -mx-1 px-1 rounded-lg touch-manipulation active:opacity-90"
-            onClick={() => setOpen(true)}
+            onClick={() => handleOpenChange(true)}
             aria-expanded={open}
             aria-label={`Open ${title}`}
           >
@@ -89,7 +101,7 @@ export const ConsultationSectionCard = forwardRef<
               size="icon"
               className="h-10 w-10 shrink-0 rounded-lg touch-manipulation sm:h-8 sm:w-8"
               aria-label={open ? "Collapse section" : "Expand section"}
-              onClick={() => setOpen(!open)}
+              onClick={() => handleOpenChange(!open)}
             >
               {open ? (
                 <Minus className="h-4 w-4" />

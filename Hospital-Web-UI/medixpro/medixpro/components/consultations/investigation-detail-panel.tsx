@@ -6,6 +6,9 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { useConsultationStore } from "@/store/consultationStore";
 import { INVESTIGATION_INSTRUCTION_CHIPS } from "@/data/consultation-section-data";
@@ -15,16 +18,16 @@ import {
   getSectionCompletionHints,
   shouldShowInvestigationCustomTag,
 } from "@/lib/consultation-completion";
-import { useToastNotification } from "@/hooks/use-toast-notification";
+import { useMediaQuery } from "@/hooks/use-media-query";
 
-const EDIT_TOAST_DEBOUNCE_MS = 650;
-const EDIT_TOAST_DEDUPE_MS = 2000;
+const NOTES_MAX_LENGTH = 1000;
 
 export function InvestigationDetailPanel() {
-  const toast = useToastNotification();
-  const editDedupeRef = useRef<Map<string, number>>(new Map());
+  const isLg = useMediaQuery("(min-width: 1024px)");
   const detailDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const { sectionItems, selectedDetail, updateSectionItemDetail } = useConsultationStore();
+  const panelFocusRef = useRef<HTMLDivElement>(null);
+  const { sectionItems, selectedDetail, updateSectionItemDetail, setSelectedDetail } =
+    useConsultationStore();
   const itemId = selectedDetail?.section === "investigations" ? selectedDetail.itemId ?? null : null;
   const items = sectionItems.investigations ?? [];
   const item = itemId ? items.find((i) => i.id === itemId) : null;
@@ -42,25 +45,43 @@ export function InvestigationDetailPanel() {
     }
   }, [itemId]);
 
+  useEffect(() => {
+    if (!itemId) return;
+    const t = window.requestAnimationFrame(() => {
+      panelFocusRef.current?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(t);
+  }, [itemId]);
+
   const setDetail = useCallback(
     (patch: Record<string, unknown>) => {
       if (!itemId) return;
       updateSectionItemDetail("investigations", itemId, patch);
-      if (detailDebounceRef.current) clearTimeout(detailDebounceRef.current);
-      detailDebounceRef.current = setTimeout(() => {
-        const list = useConsultationStore.getState().sectionItems.investigations ?? [];
-        const current = list.find((i) => i.id === itemId);
-        const label = current?.label ?? current?.name ?? "Test";
-        const now = Date.now();
-        const dedupeKey = `edit:${itemId}`;
-        const last = editDedupeRef.current.get(dedupeKey) ?? 0;
-        if (now - last < EDIT_TOAST_DEDUPE_MS) return;
-        editDedupeRef.current.set(dedupeKey, now);
-        toast.success(`${label} updated successfully`);
-      }, EDIT_TOAST_DEBOUNCE_MS);
     },
-    [itemId, toast, updateSectionItemDetail]
+    [itemId, updateSectionItemDetail]
   );
+
+  const handleDoneEditing = useCallback(() => {
+    setSelectedDetail(null);
+    window.requestAnimationFrame(() => {
+      const el = document.querySelector<HTMLInputElement>(
+        "#investigations-section input[type='search']"
+      );
+      el?.focus();
+    });
+  }, [setSelectedDetail]);
+
+  useEffect(() => {
+    if (!item) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        handleDoneEditing();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [item, handleDoneEditing]);
 
   const isComplete = useMemo(
     () => (item ? evaluateSectionItemComplete("investigations", item) : false),
@@ -71,27 +92,28 @@ export function InvestigationDetailPanel() {
     [item]
   );
 
+  const emptyState = (
+    <Card
+      className={cn(
+        "h-fit w-full max-w-full min-w-0 max-w-md shrink-0 self-start rounded-2xl border border-border/80 bg-card shadow-sm"
+      )}
+    >
+      <CardHeader className="py-4 pb-3">
+        <h3 className="font-bold text-muted-foreground">Investigation details</h3>
+      </CardHeader>
+      <CardContent className="flex min-h-[200px] flex-col items-center justify-center py-12 text-center">
+        <p className="text-sm text-muted-foreground">
+          Select a test from the list to view or edit details here.
+        </p>
+      </CardContent>
+    </Card>
+  );
+
   if (!item) {
-    return (
-      <Card
-        className={cn(
-          "h-fit w-full max-w-full min-w-0 max-w-md shrink-0 self-start rounded-2xl border border-border/80 bg-card shadow-sm"
-        )}
-      >
-        <CardHeader className="py-4 pb-3">
-          <h3 className="font-bold text-muted-foreground">Investigation details</h3>
-        </CardHeader>
-        <CardContent className="flex min-h-[200px] flex-col items-center justify-center py-12 text-center">
-          <p className="text-sm text-muted-foreground">
-            Select a test from the list to view or edit details here.
-          </p>
-        </CardContent>
-      </Card>
-    );
+    return emptyState;
   }
 
   const detail = item.detail ?? {};
-  /** Only the custom-investigation sheet uses `custom-…` ids and category "Custom". */
   const isSheetCustomInvestigation =
     String(detail.service_id ?? "").startsWith("custom-") ||
     detail.investigation_category === "Custom";
@@ -102,15 +124,28 @@ export function InvestigationDetailPanel() {
     detail.custom_investigation_type &&
     CUSTOM_INVESTIGATION_TYPE_OPTIONS.find((o) => o.id === detail.custom_investigation_type)?.label;
 
-  return (
-    <Card
-      className={cn(
-        "h-fit w-full max-w-full min-w-0 max-w-md shrink-0 self-start rounded-2xl border border-border/80 bg-card shadow-sm"
-      )}
-    >
-      <CardHeader className="space-y-2 border-b border-border/60 py-4 pb-3">
-        <h3 className="font-bold leading-tight">{item.label}</h3>
-        <div className="flex flex-wrap items-center gap-2" aria-live="polite" aria-atomic="true">
+  const noDetailsAdded = instructions.length === 0 && (!notes || !String(notes).trim());
+
+  const inner = (
+    <>
+      <div
+        ref={panelFocusRef}
+        tabIndex={-1}
+        className="sticky top-0 z-[1] border-b border-border/60 bg-card px-6 pb-3 pt-4 outline-none"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <h3 className="min-w-0 flex-1 font-bold leading-tight">{item.label}</h3>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="shrink-0 rounded-lg"
+            onClick={handleDoneEditing}
+          >
+            Done editing
+          </Button>
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-2" aria-live="polite" aria-atomic="true">
           {isComplete ? (
             <div
               className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-emerald-500/35 bg-emerald-500/[0.1] px-3 py-1 text-xs font-medium text-emerald-900 dark:text-emerald-100"
@@ -139,6 +174,9 @@ export function InvestigationDetailPanel() {
             </span>
           )}
         </div>
+      </div>
+
+      <div className="space-y-6 px-6 pb-6 pt-4">
         {isSheetCustomInvestigation ? (
           <div className="space-y-1 rounded-lg border border-dashed border-border/60 bg-muted/30 p-3 text-sm">
             <p>
@@ -171,17 +209,19 @@ export function InvestigationDetailPanel() {
             </p>
           </div>
         )}
-      </CardHeader>
-      <CardContent className="space-y-6 pb-6 pt-4">
-        <div className="space-y-2">
-          <Label>Instructions (optional)</Label>
-          <div className="flex flex-wrap gap-2">
+
+        <Separator className="bg-border/80" />
+
+        <div className="space-y-3">
+          <Label className="text-sm font-medium">Instructions (optional)</Label>
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Instruction toggles">
             {INVESTIGATION_INSTRUCTION_CHIPS.map((chip) => {
               const selected = instructions.includes(chip);
               return (
                 <button
                   key={chip}
                   type="button"
+                  aria-pressed={selected}
                   onClick={() => {
                     const next = selected
                       ? instructions.filter((value) => value !== chip)
@@ -189,10 +229,10 @@ export function InvestigationDetailPanel() {
                     setDetail({ instructions: next });
                   }}
                   className={cn(
-                    "rounded-full border px-3 py-1.5 text-sm transition-colors",
+                    "inline-flex min-h-10 items-center rounded-md border px-3 py-2 text-sm font-medium transition-colors",
                     selected
-                      ? "border-blue-600 bg-blue-600 text-white"
-                      : "border-border bg-muted/30 text-foreground hover:bg-muted/50"
+                      ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                      : "border-border bg-muted/40 text-foreground hover:bg-muted/60"
                   )}
                 >
                   {chip}
@@ -202,8 +242,10 @@ export function InvestigationDetailPanel() {
           </div>
         </div>
 
-        <div className="space-y-2">
-          <Label>Priority</Label>
+        <Separator className="bg-border/80" />
+
+        <div className="space-y-3">
+          <Label className="text-sm font-medium">Priority</Label>
           <RadioGroup
             value={urgency}
             onValueChange={(value) =>
@@ -214,32 +256,76 @@ export function InvestigationDetailPanel() {
             }
             className="flex flex-wrap gap-5"
           >
-            <label className="flex items-center gap-2">
+            <label className="flex min-h-10 cursor-pointer items-center gap-2">
               <RadioGroupItem value="routine" />
               <span>Routine</span>
             </label>
-            <label className="flex items-center gap-2">
+            <label className="flex min-h-10 cursor-pointer items-center gap-2">
               <RadioGroupItem value="urgent" />
               <span>Urgent</span>
             </label>
-            <label className="flex items-center gap-2">
+            <label className="flex min-h-10 cursor-pointer items-center gap-2">
               <RadioGroupItem value="stat" />
               <span>STAT</span>
             </label>
           </RadioGroup>
         </div>
 
-        <div className="space-y-2">
-          <Label>Notes (optional)</Label>
+        <Separator className="bg-border/80" />
+
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <Label htmlFor="inv-notes" className="text-sm font-medium">
+              Notes (optional)
+            </Label>
+            <span className="text-xs tabular-nums text-muted-foreground">
+              {notes.length}/{NOTES_MAX_LENGTH}
+            </span>
+          </div>
           <Textarea
+            id="inv-notes"
             placeholder="Enter note..."
             value={notes}
+            maxLength={NOTES_MAX_LENGTH}
             onChange={(event) => setDetail({ notes: event.target.value })}
             onBlur={(event) => setDetail({ notes: event.target.value })}
             className="min-h-[88px] resize-y rounded-md"
           />
+          {noDetailsAdded && (
+            <p className="text-xs text-muted-foreground">No details added yet.</p>
+          )}
         </div>
-      </CardContent>
+      </div>
+    </>
+  );
+
+  if (!isLg) {
+    return (
+      <Sheet
+        open
+        onOpenChange={(open) => {
+          if (!open) handleDoneEditing();
+        }}
+      >
+        <SheetContent
+          side="bottom"
+          className="flex max-h-[88vh] flex-col gap-0 overflow-hidden rounded-t-2xl p-0"
+        >
+          <div className="min-h-0 flex-1 overflow-y-auto rounded-t-2xl border border-border/80 bg-card shadow-sm">
+            {inner}
+          </div>
+        </SheetContent>
+      </Sheet>
+    );
+  }
+
+  return (
+    <Card
+      className={cn(
+        "h-fit w-full max-w-full min-w-0 max-w-md shrink-0 self-start rounded-2xl border border-border/80 bg-card shadow-sm"
+      )}
+    >
+      {inner}
     </Card>
   );
 }

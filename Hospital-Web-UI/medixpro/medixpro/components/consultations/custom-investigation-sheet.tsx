@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useToastNotification } from "@/hooks/use-toast-notification";
 import {
   Sheet,
   SheetContent,
@@ -50,6 +49,8 @@ export interface CustomInvestigationSheetProps {
   /** Prefill name when opening (e.g. from search box). */
   initialName?: string;
   onSave: (values: CustomInvestigationFormValues) => void;
+  /** When provided, blocks save and shows inline message instead of toast. */
+  isDuplicateName?: (trimmedName: string) => boolean;
 }
 
 export function CustomInvestigationSheet({
@@ -57,10 +58,11 @@ export function CustomInvestigationSheet({
   onOpenChange,
   initialName = "",
   onSave,
+  isDuplicateName,
 }: CustomInvestigationSheetProps) {
-  const toast = useToastNotification();
   const [values, setValues] = useState<CustomInvestigationFormValues>(DEFAULT_VALUES);
   const [nameError, setNameError] = useState(false);
+  const [duplicateError, setDuplicateError] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -69,16 +71,21 @@ export function CustomInvestigationSheet({
       name: initialName.trim(),
     });
     setNameError(false);
+    setDuplicateError(false);
   }, [open, initialName]);
 
   const handleSave = () => {
     const name = values.name.trim();
     if (!name) {
       setNameError(true);
-      toast.warning("Test name is required");
+      return;
+    }
+    if (isDuplicateName?.(name)) {
+      setDuplicateError(true);
       return;
     }
     setNameError(false);
+    setDuplicateError(false);
     onSave({
       ...values,
       name,
@@ -105,6 +112,7 @@ export function CustomInvestigationSheet({
               onChange={(e) => {
                 setValues((v) => ({ ...v, name: e.target.value }));
                 if (nameError && e.target.value.trim()) setNameError(false);
+                if (duplicateError) setDuplicateError(false);
               }}
               placeholder="e.g. Serum Ferritin, X-ray Left Knee"
               className="rounded-lg border-border/80 focus-visible:ring-2 focus-visible:ring-blue-500/30"
@@ -114,6 +122,11 @@ export function CustomInvestigationSheet({
             {nameError && (
               <p id="custom-inv-name-error" className="text-sm text-destructive">
                 Name is required
+              </p>
+            )}
+            {duplicateError && (
+              <p className="text-sm text-amber-800 dark:text-amber-200" role="status">
+                Already added — choose another name
               </p>
             )}
           </div>
