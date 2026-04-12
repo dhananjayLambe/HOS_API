@@ -77,6 +77,34 @@ export function isMedicineComplete(item: ConsultationSectionItem): boolean {
   return getMedicineCompletionStatus(med).level === "complete";
 }
 
+/** Investigation "complete" when any clinical detail is set beyond defaults (routine + empty). */
+/**
+ * CUSTOM chip/badge only for true user-defined rows (sheet or free-text slug),
+ * never for catalog UUID tests — even if `is_custom` was mis-set before `fromCatalogUi`.
+ */
+export function shouldShowInvestigationCustomTag(item: ConsultationSectionItem): boolean {
+  const d = item.detail ?? {};
+  const sid = String(d.service_id ?? "");
+  if (sid.startsWith("custom-")) return true;
+  if (d.investigation_category === "Custom") return true;
+  if (!(item.is_custom ?? item.isCustom)) return false;
+  const looksLikeUuid =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sid);
+  if (looksLikeUuid) return false;
+  return true;
+}
+
+export function isInvestigationComplete(item: ConsultationSectionItem): boolean {
+  const normalized = normalizeItem(item);
+  if (!normalized.name) return false;
+  const d = item.detail ?? {};
+  const instructions = Array.isArray(d.instructions) ? d.instructions : [];
+  const notes = typeof d.notes === "string" ? d.notes.trim() : "";
+  const urgency = d.urgency ?? "routine";
+  const hasNonRoutineUrgency = urgency === "urgent" || urgency === "stat";
+  return instructions.length > 0 || notes.length > 0 || hasNonRoutineUrgency;
+}
+
 export function evaluateSectionItemComplete(
   section: ConsultationSectionType,
   item: ConsultationSectionItem
@@ -85,6 +113,7 @@ export function evaluateSectionItemComplete(
   if (section === "findings") return isFindingComplete(item);
   if (section === "diagnosis") return isDiagnosisComplete(item);
   if (section === "medicines") return isMedicineComplete(item);
+  if (section === "investigations") return isInvestigationComplete(item);
   return !!itemName(item);
 }
 
@@ -123,6 +152,10 @@ export function getSectionCompletionHints(
   }
   if (section === "medicines") {
     return ["Fill dose, frequency, and duration"];
+  }
+  if (section === "investigations") {
+    if (isInvestigationComplete(item)) return [];
+    return ["Add instruction chips or notes, or set priority to Urgent/STAT"];
   }
   return [];
 }

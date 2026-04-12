@@ -1,6 +1,10 @@
 import { draftFindingsToEndConsultationPayload } from "@/lib/consultation-findings-helpers";
 import { sectionItemsToEndConsultationDiagnosisPayload } from "@/lib/consultation-diagnosis-helpers";
-import { evaluateSectionItemComplete, normalizeItem } from "@/lib/consultation-completion";
+import {
+  evaluateSectionItemComplete,
+  normalizeItem,
+  shouldShowInvestigationCustomTag,
+} from "@/lib/consultation-completion";
 import { useConsultationStore } from "@/store/consultationStore";
 
 export function buildEndConsultationPayload(
@@ -45,25 +49,39 @@ export function buildEndConsultationPayload(
       ? investigationsFromSection
       : [];
   const investigations = investigationsRaw.map((inv: any) => {
+    const normalized = normalizeItem(inv);
     const detail = inv?.detail ?? {};
     const source =
       detail.recommendation_source === "diagnosis_map" ||
       detail.recommendation_source === "bundle"
         ? detail.recommendation_source
         : "manual";
-    return {
+    const rawUrgency = detail.urgency ?? "routine";
+    const urgency =
+      rawUrgency === "urgent" || rawUrgency === "stat" ? rawUrgency : "routine";
+    const row: Record<string, unknown> = {
       service_id: String(detail.service_id ?? inv.id ?? ""),
       name: String(inv.label ?? inv.name ?? ""),
+      is_custom: shouldShowInvestigationCustomTag(normalized),
+      is_complete: evaluateSectionItemComplete("investigations", normalized),
       price_snapshot: detail.price_snapshot ?? null,
       recommendation_source: source,
       ...(detail.bundle_id ? { bundle_id: String(detail.bundle_id) } : {}),
-      urgency: detail.urgency === "urgent" ? "urgent" : "routine",
+      urgency,
+      priority: urgency,
       instructions: Array.isArray(detail.instructions) ? detail.instructions : [],
       notes: String(detail.notes ?? ""),
       ...(source === "diagnosis_map" && detail.diagnosis_id
         ? { diagnosis_id: String(detail.diagnosis_id) }
         : {}),
     };
+    if (detail.custom_investigation_type) {
+      row.type = detail.custom_investigation_type;
+    }
+    if (store.encounterId) {
+      row.encounter_id = store.encounterId;
+    }
+    return row;
   });
 
   const instructionsFromSection = store.sectionItems["instructions"];

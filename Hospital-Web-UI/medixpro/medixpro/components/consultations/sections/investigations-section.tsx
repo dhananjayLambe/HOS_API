@@ -10,6 +10,12 @@ import { ConsultationEditingBadge } from "@/components/consultations/consultatio
 import { useConsultationSectionScroll } from "@/components/consultations/consultation-section-scroll-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useToastNotification } from "@/hooks/use-toast-notification";
 import {
   fetchInvestigationSuggestions,
@@ -25,6 +31,10 @@ import {
   INVESTIGATION_POPULAR_PACKAGE_IDS,
   INVESTIGATION_QUICK_PICKS,
 } from "@/data/consultation-section-data";
+import {
+  CustomInvestigationSheet,
+  type CustomInvestigationFormValues,
+} from "@/components/consultations/custom-investigation-sheet";
 import type { ConsultationSectionItem } from "@/lib/consultation-types";
 import { cn } from "@/lib/utils";
 import { useConsultationStore } from "@/store/consultationStore";
@@ -37,12 +47,22 @@ import {
   type InvestigationSearchResponse,
 } from "@/lib/diagnosticInvestigationSearchApi";
 import { normalizePackageKey as normalizeBundleId } from "@/lib/diagnosticPackageIds";
+import {
+  evaluateSectionItemComplete,
+  shouldShowInvestigationCustomTag,
+} from "@/lib/consultation-completion";
+import {
+  canonicalInvestigationKey,
+  dedupeInvestigationSearchTests,
+  dedupeInvestigationSuggestionsByCanonical,
+} from "@/lib/investigation-canonical";
 
 const SEARCH_DEBOUNCE_MS = 200;
 const MAX_SEARCH_RESULTS = 10;
 const MAX_RECOMMENDATIONS = 6;
 const MAX_PACKAGES = 4;
 const SUGGESTION_REFETCH_DEBOUNCE_MS = 350;
+const TOAST_DEDUPE_MS = 2000;
 
 /** When `true`, skip live search API (e.g. local backend without PostgreSQL / pg_trgm). */
 const FORCE_INVESTIGATION_SEARCH_STATIC =
@@ -72,6 +92,32 @@ function stripKeyForPackageLookup(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
+/** Dedup fallback when comparing free-text / custom entries to existing rows. */
+function normalizeInvestigationName(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function isSearchPackageFullyAdded(
+  result: SearchResult,
+  packageById: Record<string, (typeof INVESTIGATION_PACKAGES)[number] | undefined>,
+  selectedServiceIds: Set<string>,
+  selectedCanonicalKeys: Set<string>,
+  masterById: Record<string, (typeof INVESTIGATION_MASTER_ITEMS)[number] | undefined>
+): boolean {
+  const canon = normalizeBundleId(result.id);
+  const pkg = packageById[canon];
+  const codes =
+    result.service_codes && result.service_codes.length > 0
+      ? result.service_codes
+      : pkg?.service_ids;
+  if (!codes?.length) return false;
+  return codes.every((id) => {
+    if (selectedServiceIds.has(id)) return true;
+    const label = masterById[id]?.name ?? id;
+    return selectedCanonicalKeys.has(canonicalInvestigationKey(id, label));
+  });
+}
+
 function slugify(input: string): string {
   return input
     .toLowerCase()
@@ -90,6 +136,14 @@ function useDebouncedValue<T>(value: T, delayMs: number): T {
 
 export function InvestigationsSection() {
   const toast = useToastNotification();
+  const toastDedupeRef = useRef<Map<string, number>>(new Map());
+  const notify = useCallback((key: string, emit: () => void) => {
+    const now = Date.now();
+    const last = toastDedupeRef.current.get(key) ?? 0;
+    if (now - last < TOAST_DEDUPE_MS) return;
+    toastDedupeRef.current.set(key, now);
+    emit();
+  }, []);
   const sectionCardRef = useRef<ConsultationSectionCardHandle>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const didLoadSuggestionsRef = useRef(false);
@@ -109,9 +163,7 @@ export function InvestigationsSection() {
 
   const [query, setQuery] = useState("");
   const [highlightedResult, setHighlightedResult] = useState(0);
-  const [recentlyAddedLabel, setRecentlyAddedLabel] = useState<string | null>(null);
   const [recentlyAddedItemId, setRecentlyAddedItemId] = useState<string | null>(null);
-  const [lastRemovedItem, setLastRemovedItem] = useState<ConsultationSectionItem | null>(null);
   const [suggestions, setSuggestions] = useState<InvestigationSuggestionsResponse | null>(null);
   const [isSuggestionsLoading, setIsSuggestionsLoading] = useState(false);
   const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
@@ -122,12 +174,46 @@ export function InvestigationsSection() {
   const [isInvestigationSearchLoading, setIsInvestigationSearchLoading] = useState(false);
   const [useInvestigationSearchFallback, setUseInvestigationSearchFallback] = useState(false);
   const [bundleLabelOverrides, setBundleLabelOverrides] = useState<Record<string, string>>({});
+  const [customInvestigationSheetOpen, setCustomInvestigationSheetOpen] = useState(false);
   const debouncedQuery = useDebouncedValue(query, SEARCH_DEBOUNCE_MS).trim();
   const selectedItems = sectionItems.investigations ?? [];
   const selectedServiceIds = useMemo(
     () => new Set(selectedItems.map((it) => it.detail?.service_id ?? it.id)),
     [selectedItems]
   );
+  const selectedNormalizedNames = useMemo(() => {
+    const s = new Set<string>();
+    for (const it of selectedItems) {
+      const label = (it.label ?? it.name ?? "").trim();
+      if (label) s.add(normalizeInvestigationName(label));
+    }
+    return s;
+  }, [selectedItems]);
+  const catalogNormalizedNames = useMemo(() => {
+    const s = new Set<string>();
+    INVESTIGATION_MASTER_ITEMS.forEach((item) => {
+      s.add(normalizeInvestigationName(item.name));
+      item.aliases?.forEach((a) => s.add(normalizeInvestigationName(a)));
+    });
+    return s;
+  }, []);
+  /** Resolves API UUIDs + variant labels (e.g. CBC vs Complete Blood Count (CBC)) to one master `service_id`. */
+  const selectedCanonicalKeys = useMemo(() => {
+    const s = new Set<string>();
+    for (const it of selectedItems) {
+      const sid = it.detail?.service_id ?? it.id;
+      const lab = it.label ?? it.name ?? "";
+      s.add(canonicalInvestigationKey(sid, lab));
+    }
+    return s;
+  }, [selectedItems]);
+  const selectionGuardRef = useRef(0);
+  const runWithSelectionGuard = useCallback((fn: () => void) => {
+    const now = Date.now();
+    if (now - selectionGuardRef.current < 320) return;
+    selectionGuardRef.current = now;
+    fn();
+  }, []);
   const selectedDiagnosis = sectionItems.diagnosis ?? [];
   const suggestionsRefetchSignal = useDebouncedValue(
     JSON.stringify({
@@ -148,19 +234,25 @@ export function InvestigationsSection() {
   }, [activeSectionKey, selectedDetail, selectedItems, setSelectedDetail]);
 
   useEffect(() => {
-    const t = window.setTimeout(() => setRecentlyAddedLabel(null), 1200);
-    return () => window.clearTimeout(t);
-  }, [recentlyAddedLabel]);
-  useEffect(() => {
     if (!recentlyAddedItemId) return;
     const t = window.setTimeout(() => setRecentlyAddedItemId(null), 500);
     return () => window.clearTimeout(t);
   }, [recentlyAddedItemId]);
 
+  const masterById = useMemo(
+    () =>
+      Object.fromEntries(INVESTIGATION_MASTER_ITEMS.map((item) => [item.service_id, item])),
+    []
+  );
+
   useEffect(() => {
     let dirty = false;
     Object.entries(appliedPackages).forEach(([bundleId, pkg]) => {
-      const hasAny = pkg.test_ids.some((id) => selectedServiceIds.has(id));
+      const hasAny = pkg.test_ids.some((id) => {
+        if (selectedServiceIds.has(id)) return true;
+        const label = masterById[id]?.name ?? id;
+        return selectedCanonicalKeys.has(canonicalInvestigationKey(id, label));
+      });
       if (!hasAny) {
         clearAppliedPackage(bundleId);
         dirty = true;
@@ -173,17 +265,14 @@ export function InvestigationsSection() {
   }, [
     appliedPackages,
     clearAppliedPackage,
+    masterById,
+    selectedCanonicalKeys,
     selectedDetail,
     selectedItems,
     selectedServiceIds,
     setSelectedDetail,
   ]);
 
-  const masterById = useMemo(
-    () =>
-      Object.fromEntries(INVESTIGATION_MASTER_ITEMS.map((item) => [item.service_id, item])),
-    []
-  );
   const packageById = useMemo(
     () =>
       Object.fromEntries(
@@ -230,7 +319,9 @@ export function InvestigationsSection() {
         setUseSuggestionsFallback(true);
         setSuggestionsError("Could not load live suggestions. Showing fallback recommendations.");
         if (!didShowSuggestionsErrorRef.current) {
-          toast.info("Live suggestions unavailable. Showing fallback recommendations.");
+          notify("suggestions-fallback", () =>
+            toast.info("Live suggestions unavailable. Showing fallback recommendations.")
+          );
           didShowSuggestionsErrorRef.current = true;
         }
       })
@@ -241,7 +332,7 @@ export function InvestigationsSection() {
     return () => {
       cancelled = true;
     };
-  }, [encounterId, suggestionsRefetchSignal]);
+  }, [encounterId, notify, suggestionsRefetchSignal, toast]);
 
   const diagnosisKeys = useMemo(() => {
     return selectedDiagnosis.map((dx) => (dx.diagnosisKey ?? dx.label).toLowerCase());
@@ -268,11 +359,15 @@ export function InvestigationsSection() {
     const out: string[] = [];
     diagnosisKeys.forEach((key) => {
       (INVESTIGATION_DIAGNOSIS_TEST_MAP[key] ?? []).forEach((serviceId) => {
-        if (!out.includes(serviceId) && !selectedServiceIds.has(serviceId)) out.push(serviceId);
+        const name = masterById[serviceId]?.name ?? serviceId;
+        const covered =
+          selectedServiceIds.has(serviceId) ||
+          selectedCanonicalKeys.has(canonicalInvestigationKey(serviceId, name));
+        if (!out.includes(serviceId) && !covered) out.push(serviceId);
       });
     });
     return out.slice(0, MAX_RECOMMENDATIONS);
-  }, [diagnosisKeys, selectedServiceIds]);
+  }, [diagnosisKeys, masterById, selectedCanonicalKeys, selectedServiceIds]);
 
   const fallbackRecommendedPackages = useMemo(() => {
     const seen = new Set<string>();
@@ -287,9 +382,13 @@ export function InvestigationsSection() {
       });
     });
 
-    if (selectedServiceIds.size > 0) {
+    if (selectedServiceIds.size > 0 || selectedCanonicalKeys.size > 0) {
       INVESTIGATION_PACKAGES.forEach((pkg) => {
-        const selectedInBundle = pkg.service_ids.filter((id) => selectedServiceIds.has(id));
+        const selectedInBundle = pkg.service_ids.filter((id) => {
+          if (selectedServiceIds.has(id)) return true;
+          const label = masterById[id]?.name ?? id;
+          return selectedCanonicalKeys.has(canonicalInvestigationKey(id, label));
+        });
         const strictSubset =
           selectedInBundle.length > 0 && selectedInBundle.length < pkg.service_ids.length;
         if (strictSubset && !seen.has(pkg.bundle_id)) {
@@ -299,44 +398,65 @@ export function InvestigationsSection() {
       });
     }
     return out.slice(0, MAX_PACKAGES);
-  }, [diagnosisKeys, selectedServiceIds]);
+  }, [diagnosisKeys, masterById, selectedCanonicalKeys, selectedServiceIds]);
 
   const fallbackPopularPackages = useMemo(() => {
     return INVESTIGATION_POPULAR_PACKAGE_IDS.filter((id) => !fallbackRecommendedPackages.includes(id));
   }, [fallbackRecommendedPackages]);
 
   const commonTestSuggestions = useMemo(() => {
+    let list: InvestigationSuggestionTest[];
     if (!useSuggestionsFallback && suggestions?.common_tests?.length) {
-      return suggestions.common_tests.slice(0, MAX_SEARCH_RESULTS);
+      list = suggestions.common_tests.slice(0, MAX_SEARCH_RESULTS);
+    } else {
+      list = INVESTIGATION_QUICK_PICKS.map((serviceId) => ({
+        id: serviceId,
+        name: masterById[serviceId]?.name ?? serviceId,
+        score: 0,
+        confidence: 0,
+        confidence_label: "Suggested",
+        reason: "Commonly used",
+        badges: [],
+      })) as InvestigationSuggestionTest[];
     }
-    return INVESTIGATION_QUICK_PICKS.map((serviceId) => ({
-      id: serviceId,
-      name: masterById[serviceId]?.name ?? serviceId,
-      score: 0,
-      confidence: 0,
-      confidence_label: "Suggested",
-      reason: "Commonly used",
-      badges: [],
-    })) as InvestigationSuggestionTest[];
+    return dedupeInvestigationSuggestionsByCanonical(list);
   }, [masterById, suggestions, useSuggestionsFallback]);
 
   const recommendedTestSuggestions = useMemo(() => {
+    let list: InvestigationSuggestionTest[];
     if (!useSuggestionsFallback && suggestions?.recommended_tests?.length) {
-      return suggestions.recommended_tests.slice(0, MAX_RECOMMENDATIONS);
+      list = suggestions.recommended_tests.slice(0, MAX_RECOMMENDATIONS);
+    } else if (!useSuggestionsFallback && suggestions && !suggestions.recommended_tests?.length) {
+      list = commonTestSuggestions.slice(0, MAX_RECOMMENDATIONS);
+    } else {
+      list = fallbackRecommendedTests.map((serviceId) => ({
+        id: serviceId,
+        name: masterById[serviceId]?.name ?? serviceId,
+        score: 0,
+        confidence: 0,
+        confidence_label: "Recommended",
+        reason: "Mapped from diagnosis",
+        badges: [],
+      })) as InvestigationSuggestionTest[];
     }
-    if (!useSuggestionsFallback && suggestions && !suggestions.recommended_tests?.length) {
-      return commonTestSuggestions.slice(0, MAX_RECOMMENDATIONS);
-    }
-    return fallbackRecommendedTests.map((serviceId) => ({
-      id: serviceId,
-      name: masterById[serviceId]?.name ?? serviceId,
-      score: 0,
-      confidence: 0,
-      confidence_label: "Recommended",
-      reason: "Mapped from diagnosis",
-      badges: [],
-    })) as InvestigationSuggestionTest[];
+    return dedupeInvestigationSuggestionsByCanonical(list);
   }, [commonTestSuggestions, fallbackRecommendedTests, masterById, suggestions, useSuggestionsFallback]);
+
+  const visibleCommonTestSuggestions = useMemo(
+    () =>
+      commonTestSuggestions.filter(
+        (t) => !selectedCanonicalKeys.has(canonicalInvestigationKey(t.id, t.name))
+      ),
+    [commonTestSuggestions, selectedCanonicalKeys]
+  );
+
+  const visibleRecommendedTestSuggestions = useMemo(
+    () =>
+      recommendedTestSuggestions.filter(
+        (t) => !selectedCanonicalKeys.has(canonicalInvestigationKey(t.id, t.name))
+      ),
+    [recommendedTestSuggestions, selectedCanonicalKeys]
+  );
 
   const normalizedRecommendedPackages = useMemo(() => {
     const source: InvestigationSuggestionPackage[] =
@@ -468,13 +588,16 @@ export function InvestigationsSection() {
         if (process.env.NODE_ENV !== "production") {
           console.warn("[investigation search]", err);
         }
+        notify("search-api-error", () =>
+          toast.error("Unable to fetch tests. Try again")
+        );
       })
       .finally(() => {
         if (!controller.signal.aborted) setIsInvestigationSearchLoading(false);
       });
 
     return () => controller.abort();
-  }, [debouncedQuery]);
+  }, [debouncedQuery, notify, toast]);
 
   const searchResults = useMemo(() => {
     if (!debouncedQuery) return { tests: [] as SearchResult[], packages: [] as SearchResult[] };
@@ -525,6 +648,35 @@ export function InvestigationsSection() {
     useInvestigationSearchFallback,
   ]);
 
+  /** Hide tests/packages already fully represented in selection (instant UI, O(1) checks). */
+  const filteredSearchResults = useMemo(() => {
+    const tests = dedupeInvestigationSearchTests(searchResults.tests).filter(
+      (t) =>
+        !selectedCanonicalKeys.has(canonicalInvestigationKey(t.id, t.label)) &&
+        !selectedServiceIds.has(t.id)
+    );
+    return {
+      tests,
+      packages: searchResults.packages.filter(
+        (p) =>
+          !isSearchPackageFullyAdded(
+            p,
+            packageById,
+            selectedServiceIds,
+            selectedCanonicalKeys,
+            masterById
+          )
+      ),
+    };
+  }, [
+    masterById,
+    packageById,
+    searchResults.packages,
+    searchResults.tests,
+    selectedCanonicalKeys,
+    selectedServiceIds,
+  ]);
+
   const searchDidYouMean = investigationSearchApi?.meta?.did_you_mean;
   const showSearchDidYouMean =
     !!debouncedQuery &&
@@ -539,11 +691,11 @@ export function InvestigationsSection() {
     const rank = (r: SearchResult) =>
       r.match_score ??
       (typeof r.score === "number" && r.score < 99 ? (99 - r.score) / 99 : 0);
-    const merged = [...searchResults.tests, ...searchResults.packages].sort(
+    const merged = [...filteredSearchResults.tests, ...filteredSearchResults.packages].sort(
       (a, b) => rank(b) - rank(a)
     );
     return merged.slice(0, MAX_SEARCH_RESULTS);
-  }, [searchResults]);
+  }, [filteredSearchResults.packages, filteredSearchResults.tests]);
 
   const flatResultsKey = useMemo(
     () => flatResults.map((r) => `${r.kind}:${r.id}`).join("|"),
@@ -553,6 +705,22 @@ export function InvestigationsSection() {
   useEffect(() => {
     setHighlightedResult(flatResults.length > 0 ? 0 : -1);
   }, [flatResults.length, flatResultsKey]);
+
+  useEffect(() => {
+    if (debouncedQuery.length < 2) return;
+    if (isInvestigationSearchLoading) return;
+    if (filteredSearchResults.tests.length > 0 || filteredSearchResults.packages.length > 0) return;
+    notify(`no-results:${debouncedQuery}`, () =>
+      toast.info(`No tests found for '${debouncedQuery}'`)
+    );
+  }, [
+    debouncedQuery,
+    filteredSearchResults.packages.length,
+    filteredSearchResults.tests.length,
+    isInvestigationSearchLoading,
+    notify,
+    toast,
+  ]);
 
   const addTest = useCallback(
     (
@@ -566,9 +734,14 @@ export function InvestigationsSection() {
         recommendationScore?: number;
         confidenceLabel?: string;
         investigationFromApi?: SearchResult["investigationFromApi"];
+        /** Set when picking from Common tests / search UI so live API ids not in static master stay catalog. */
+        fromCatalogUi?: boolean;
+        /** Used when applying packages: one summary toast instead of per-test toasts. */
+        suppressSuccessToast?: boolean;
       }
     ) => {
-      if (selectedServiceIds.has(serviceId)) return false;
+      const labelForCanon = opts?.displayName ?? masterById[serviceId]?.name ?? "";
+      if (selectedCanonicalKeys.has(canonicalInvestigationKey(serviceId, labelForCanon))) return false;
       const master = masterById[serviceId] ?? {
         service_id: serviceId,
         name: opts?.displayName ?? serviceId,
@@ -593,7 +766,12 @@ export function InvestigationsSection() {
         id: `inv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         label: master.name,
         name: master.name,
-        is_custom: source === "manual" && !masterById[serviceId],
+        /** Custom = free-text Enter only, or non-catalog without catalog UI flags — not live suggestion picks. */
+        is_custom:
+          source === "manual" &&
+          !masterById[serviceId] &&
+          !opts?.investigationFromApi &&
+          !opts?.fromCatalogUi,
         is_complete: false,
         detail: {
           service_id: master.service_id,
@@ -617,14 +795,71 @@ export function InvestigationsSection() {
           investigation_preparation: preparationDisplay,
         },
       };
+      nextItem.is_complete = evaluateSectionItemComplete("investigations", nextItem);
       replaceSectionItems("investigations", [nextItem, ...selectedItems]);
       setSelectedDetail({ section: "investigations", itemId: nextItem.id });
       searchInputRef.current?.focus();
-      setRecentlyAddedLabel(master.name);
       setRecentlyAddedItemId(nextItem.id);
+      if (source !== "bundle" && !opts?.suppressSuccessToast) {
+        const addedLabel = master.name;
+        const dedupeKey = `add-success:${canonicalInvestigationKey(serviceId, labelForCanon)}`;
+        notify(dedupeKey, () => {
+          toast.success(`${addedLabel} added to selected tests`);
+        });
+      }
       return true;
     },
-    [masterById, replaceSectionItems, selectedItems, selectedServiceIds, setSelectedDetail]
+    [masterById, notify, replaceSectionItems, selectedItems, selectedCanonicalKeys, setSelectedDetail, toast]
+  );
+
+  const addCustomInvestigationItem = useCallback(
+    (form: CustomInvestigationFormValues) => {
+      const displayName = form.name.trim();
+      if (
+        selectedNormalizedNames.has(normalizeInvestigationName(displayName)) ||
+        selectedCanonicalKeys.has(canonicalInvestigationKey(displayName, displayName))
+      ) {
+        notify(`custom-dup:${normalizeInvestigationName(displayName)}`, () =>
+          toast.info("Test already exists")
+        );
+        return;
+      }
+      const serviceId = `custom-${
+        typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`
+      }`;
+      const nextItem: ConsultationSectionItem = {
+        id: `inv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        label: displayName,
+        name: displayName,
+        is_custom: true,
+        is_complete: false,
+        detail: {
+          service_id: serviceId,
+          recommendation_source: "manual",
+          price_snapshot: null,
+          urgency: form.urgency,
+          custom_investigation_type: form.custom_investigation_type,
+          instructions: [],
+          notes: form.instructions,
+          investigation_category: "Custom",
+          investigation_sample: "—",
+          investigation_tat: "—",
+          investigation_preparation: "—",
+        },
+      };
+      nextItem.is_complete = evaluateSectionItemComplete("investigations", nextItem);
+      replaceSectionItems("investigations", [nextItem, ...selectedItems]);
+      setSelectedDetail({ section: "investigations", itemId: nextItem.id });
+      searchInputRef.current?.focus();
+      setRecentlyAddedItemId(nextItem.id);
+      setQuery("");
+      notify(`custom-add:${normalizeInvestigationName(displayName)}`, () =>
+        toast.success("Custom test added")
+      );
+    },
+    [notify, replaceSectionItems, selectedItems, selectedCanonicalKeys, selectedNormalizedNames, setSelectedDetail, toast]
   );
 
   const handleApplyPackage = useCallback(
@@ -633,20 +868,23 @@ export function InvestigationsSection() {
       const pkg = packageById[canonicalId];
       const serviceCodes = opts?.serviceCodes?.length ? opts.serviceCodes : pkg?.service_ids;
       if (!serviceCodes?.length) {
-        toast.info("Package has no tests");
+        notify(`pkg-no-tests:${canonicalId}`, () => toast.info("Package has no tests"));
         return;
       }
       const added: string[] = [];
+      let skipped = 0;
       serviceCodes.forEach((serviceId) => {
         const firstDiagnosisId = diagnosisIdByService[serviceId];
         const didAdd = addTest(serviceId, "bundle", {
           bundleId: canonicalId,
           diagnosisId: firstDiagnosisId,
+          suppressSuccessToast: true,
         });
         if (didAdd) added.push(serviceId);
+        else skipped += 1;
       });
       if (added.length === 0) {
-        toast.info("Already added");
+        notify(`pkg-included:${canonicalId}`, () => toast.info("Package already included"));
         return;
       }
       setAppliedPackage(canonicalId, serviceCodes);
@@ -654,30 +892,44 @@ export function InvestigationsSection() {
         setBundleLabelOverrides((prev) => ({ ...prev, [canonicalId]: opts.displayName! }));
       }
       const pkgName = pkg?.name ?? opts?.displayName ?? canonicalId;
-      const addedNames = added
-        .map((id) => masterById[id]?.name ?? id)
-        .slice(0, 3)
-        .map((label) => `+ ${label}`);
-      toast.success(`${pkgName}: ${addedNames.join(", ")}${added.length > 3 ? "..." : ""}`);
+      if (skipped > 0) {
+        notify(`pkg-partial:${canonicalId}`, () =>
+          toast.success(`${pkgName}: Package added (duplicates skipped)`)
+        );
+      } else {
+        notify(`pkg-full:${canonicalId}`, () => toast.success(`${pkgName} added`));
+      }
       searchInputRef.current?.focus();
     },
-    [addTest, diagnosisIdByService, masterById, packageById, setAppliedPackage, toast]
+    [addTest, diagnosisIdByService, masterById, notify, packageById, setAppliedPackage, toast]
   );
 
   const removeTest = useCallback(
     (itemId: string) => {
       const removed = selectedItems.find((item) => item.id === itemId) ?? null;
+      if (!removed) return;
+      const label = removed.label ?? removed.name ?? "Test";
+      const nextList = selectedItems.filter((item) => item.id !== itemId);
       if (selectedDetail?.section === "investigations" && selectedDetail.itemId === itemId) {
         setSelectedDetail(null);
       }
-      replaceSectionItems(
-        "investigations",
-        selectedItems.filter((item) => item.id !== itemId)
-      );
-      if (removed) setLastRemovedItem(removed);
+      replaceSectionItems("investigations", nextList);
       searchInputRef.current?.focus();
+      notify(`remove:${itemId}`, () =>
+        toast.success(`${label} removed`, {
+          action: {
+            label: "Undo",
+            onClick: () => {
+              replaceSectionItems("investigations", [removed, ...nextList]);
+              setSelectedDetail({ section: "investigations", itemId: removed.id });
+              searchInputRef.current?.focus();
+              notify(`undo:${removed.id}`, () => toast.success(`${label} restored`));
+            },
+          },
+        })
+      );
     },
-    [replaceSectionItems, selectedDetail, selectedItems, setSelectedDetail]
+    [notify, replaceSectionItems, selectedDetail, selectedItems, setSelectedDetail, toast]
   );
 
   const selectedItemId =
@@ -686,11 +938,15 @@ export function InvestigationsSection() {
   const packageGroups = useMemo(() => {
     return Object.entries(appliedPackages).map(([bundleId, map]) => {
       const itemsInBundle = selectedItems.filter((item) => item.detail?.bundle_id === bundleId);
-      const matched = map.test_ids.filter((id) => selectedServiceIds.has(id)).length;
+      const matched = map.test_ids.filter((id) => {
+        if (selectedServiceIds.has(id)) return true;
+        const label = masterById[id]?.name ?? id;
+        return selectedCanonicalKeys.has(canonicalInvestigationKey(id, label));
+      }).length;
       const state = matched === 0 ? "none" : matched === map.test_ids.length ? "applied" : "modified";
       return { bundleId, itemsInBundle, matched, total: map.test_ids.length, state };
     });
-  }, [appliedPackages, selectedItems, selectedServiceIds]);
+  }, [appliedPackages, masterById, selectedCanonicalKeys, selectedItems, selectedServiceIds]);
 
   const standaloneItems = useMemo(
     () => selectedItems.filter((item) => !item.detail?.bundle_id),
@@ -700,11 +956,41 @@ export function InvestigationsSection() {
   const handleSearchSelect = useCallback(
     (result: SearchResult) => {
       if (result.kind === "test") {
-        addTest(result.id, "manual", {
+        if (
+          selectedServiceIds.has(result.id) ||
+          selectedCanonicalKeys.has(canonicalInvestigationKey(result.id, result.label))
+        ) {
+          notify(`dup-search-t:${result.id}`, () =>
+            toast.warning("This test is already in your list")
+          );
+          return;
+        }
+        const ok = addTest(result.id, "manual", {
           displayName: result.label,
           investigationFromApi: result.investigationFromApi,
+          fromCatalogUi: true,
         });
+        if (!ok) {
+          notify(`dup-search-t2:${result.id}`, () =>
+            toast.warning("This test is already in your list")
+          );
+          return;
+        }
       } else {
+        if (
+          isSearchPackageFullyAdded(
+            result,
+            packageById,
+            selectedServiceIds,
+            selectedCanonicalKeys,
+            masterById
+          )
+        ) {
+          notify(`dup-search-p:${result.id}`, () =>
+            toast.info("Package already included")
+          );
+          return;
+        }
         const codes = result.service_codes?.length ? result.service_codes : undefined;
         handleApplyPackage(result.id, {
           serviceCodes: codes,
@@ -714,16 +1000,72 @@ export function InvestigationsSection() {
       setQuery("");
       searchInputRef.current?.focus();
     },
-    [addTest, handleApplyPackage]
+    [
+      addTest,
+      handleApplyPackage,
+      masterById,
+      notify,
+      packageById,
+      selectedCanonicalKeys,
+      selectedServiceIds,
+      toast,
+    ]
   );
 
   const handleAddNew = useCallback(() => {
     const trimmed = query.trim();
     if (!trimmed) return;
-    const serviceId = slugify(trimmed);
-    addTest(serviceId, "manual");
-    setQuery("");
-  }, [addTest, query]);
+    if (trimmed.length < 2) {
+      notify("enter-two-chars", () => toast.warning("Enter at least 2 characters"));
+      return;
+    }
+    runWithSelectionGuard(() => {
+      const n = normalizeInvestigationName(trimmed);
+      if (selectedNormalizedNames.has(n)) {
+        notify(`addnew-dup-name:${n}`, () =>
+          toast.warning("This test is already in your list")
+        );
+        return;
+      }
+      if (catalogNormalizedNames.has(n)) {
+        notify(`addnew-catalog:${n}`, () =>
+          toast.info("This matches a catalog investigation — use search or suggestions to add it.")
+        );
+        return;
+      }
+      const serviceId = slugify(trimmed);
+      if (selectedServiceIds.has(serviceId)) {
+        notify(`addnew-dup-svc:${serviceId}`, () =>
+          toast.warning("This test is already in your list")
+        );
+        return;
+      }
+      if (selectedCanonicalKeys.has(canonicalInvestigationKey(serviceId, trimmed))) {
+        notify(`addnew-dup-can:${serviceId}`, () =>
+          toast.warning("This test is already in your list")
+        );
+        return;
+      }
+      const ok = addTest(serviceId, "manual");
+      if (!ok) {
+        notify(`addnew-fail:${serviceId}`, () =>
+          toast.warning("This test is already in your list")
+        );
+        return;
+      }
+      setQuery("");
+    });
+  }, [
+    addTest,
+    catalogNormalizedNames,
+    notify,
+    query,
+    runWithSelectionGuard,
+    selectedCanonicalKeys,
+    selectedNormalizedNames,
+    selectedServiceIds,
+    toast,
+  ]);
 
   const handleSectionCardActivate = useCallback(() => {
     activateSection("investigations");
@@ -739,6 +1081,8 @@ export function InvestigationsSection() {
   );
 
   return (
+    <>
+    <TooltipProvider delayDuration={200}>
     <div
       ref={(el) => registerSectionRef("investigations", el)}
       id="investigations-section"
@@ -794,7 +1138,9 @@ export function InvestigationsSection() {
                     if (event.key === "Enter") {
                       event.preventDefault();
                       if (highlightedResult >= 0 && flatResults[highlightedResult]) {
-                        handleSearchSelect(flatResults[highlightedResult]);
+                        runWithSelectionGuard(() =>
+                          handleSearchSelect(flatResults[highlightedResult])
+                        );
                         return;
                       }
                       handleAddNew();
@@ -808,7 +1154,7 @@ export function InvestigationsSection() {
                 variant="outline"
                 size="sm"
                 className="h-10 shrink-0 gap-1.5 rounded-lg"
-                onClick={handleAddNew}
+                onClick={() => setCustomInvestigationSheetOpen(true)}
               >
                 <Plus className="h-4 w-4" />
                 Add New
@@ -835,11 +1181,11 @@ export function InvestigationsSection() {
                     Did you mean &quot;{searchDidYouMean}&quot;?
                   </button>
                 )}
-                {searchResults.tests.length > 0 && (
+                {filteredSearchResults.tests.length > 0 && (
                   <div>
                     <p className="mb-1 text-xs font-semibold text-muted-foreground">Tests</p>
                     <div className="flex flex-wrap gap-2">
-                      {searchResults.tests.map((result) => {
+                      {filteredSearchResults.tests.map((result) => {
                         const idx = flatResults.findIndex(
                           (item) => item.id === result.id && item.kind === "test"
                         );
@@ -847,7 +1193,9 @@ export function InvestigationsSection() {
                           <button
                             key={`test-${result.id}`}
                             type="button"
-                            onClick={() => handleSearchSelect(result)}
+                            onClick={() =>
+                              runWithSelectionGuard(() => handleSearchSelect(result))
+                            }
                             className={cn(
                               "rounded-full border px-3 py-1.5 text-sm",
                               idx === highlightedResult
@@ -862,11 +1210,11 @@ export function InvestigationsSection() {
                     </div>
                   </div>
                 )}
-                {searchResults.packages.length > 0 && (
+                {filteredSearchResults.packages.length > 0 && (
                   <div>
                     <p className="mb-1 text-xs font-semibold text-muted-foreground">Packages</p>
                     <div className="flex flex-wrap gap-2">
-                      {searchResults.packages.map((result) => {
+                      {filteredSearchResults.packages.map((result) => {
                         const idx = flatResults.findIndex(
                           (item) => item.id === result.id && item.kind === "package"
                         );
@@ -874,7 +1222,9 @@ export function InvestigationsSection() {
                           <button
                             key={`pkg-${result.id}`}
                             type="button"
-                            onClick={() => handleSearchSelect(result)}
+                            onClick={() =>
+                              runWithSelectionGuard(() => handleSearchSelect(result))
+                            }
                             className={cn(
                               "rounded-full border px-3 py-1.5 text-sm font-medium",
                               idx === highlightedResult
@@ -895,31 +1245,12 @@ export function InvestigationsSection() {
 
           <div>
             <p className="mb-2 text-sm font-semibold text-foreground">Selected Tests</p>
-            {recentlyAddedLabel && (
-              <p className="mb-2 text-xs text-emerald-700">+ {recentlyAddedLabel} added</p>
-            )}
             {selectedItems.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 No investigations added. Search to add tests or select from recommendations.
               </p>
             ) : (
               <div className="space-y-2.5">
-                {lastRemovedItem && (
-                  <div className="flex items-center justify-between rounded-md border border-border/70 bg-muted/20 px-2.5 py-1.5 text-xs">
-                    <span className="text-muted-foreground">Removed {lastRemovedItem.label}</span>
-                    <button
-                      type="button"
-                      className="font-medium text-primary hover:underline"
-                      onClick={() => {
-                        replaceSectionItems("investigations", [lastRemovedItem, ...selectedItems]);
-                        setLastRemovedItem(null);
-                        searchInputRef.current?.focus();
-                      }}
-                    >
-                      Undo
-                    </button>
-                  </div>
-                )}
                 {packageGroups
                   .filter((group) => group.state !== "none")
                   .map((group) => {
@@ -966,80 +1297,36 @@ export function InvestigationsSection() {
                         </div>
                         <hr className="border-violet-200/70" />
                         <div className="flex flex-wrap gap-1.5">
-                          {group.itemsInBundle.map((item) => {
-                            const selected = selectedItemId === item.id;
-                            return (
-                              <span
-                                key={item.id}
-                                className={cn(
-                                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[13px] font-medium transition-shadow",
-                                  recentlyAddedItemId === item.id &&
-                                    "ring-2 ring-emerald-300 shadow-[0_0_0_2px_rgba(16,185,129,0.18)]",
-                                  selected
-                                    ? "border-blue-300 bg-blue-100 text-blue-800 ring-2 ring-blue-200"
-                                    : "border-border/40 bg-gray-100 text-gray-800"
-                                )}
-                              >
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setSelectedDetail({ section: "investigations", itemId: item.id })
-                                  }
-                                  className="truncate"
-                                >
-                                  {item.label}
-                                </button>
-                                {selected && <ConsultationEditingBadge onDarkChip className="ml-1 shrink-0" />}
-                                <button
-                                  type="button"
-                                  onClick={() => removeTest(item.id)}
-                                  className="ml-0.5 rounded-full p-0.5 hover:bg-muted"
-                                  aria-label={`Remove ${item.label}`}
-                                >
-                                  ×
-                                </button>
-                              </span>
-                            );
-                          })}
+                          {group.itemsInBundle.map((item) => (
+                            <InvestigationItemChip
+                              key={item.id}
+                              item={item}
+                              selected={selectedItemId === item.id}
+                              recentlyAdded={recentlyAddedItemId === item.id}
+                              onSelect={() =>
+                                setSelectedDetail({ section: "investigations", itemId: item.id })
+                              }
+                              onRemove={() => removeTest(item.id)}
+                            />
+                          ))}
                         </div>
                       </div>
                     );
                   })}
                 {standaloneItems.length > 0 && (
                   <div className="flex flex-wrap gap-1.5">
-                    {standaloneItems.map((item) => {
-                      const selected = selectedItemId === item.id;
-                      return (
-                        <span
-                          key={item.id}
-                          className={cn(
-                            "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[13px] font-medium transition-shadow",
-                            recentlyAddedItemId === item.id &&
-                              "ring-2 ring-emerald-300 shadow-[0_0_0_2px_rgba(16,185,129,0.18)]",
-                            selected
-                              ? "border-blue-300 bg-blue-100 text-blue-800 ring-2 ring-blue-200"
-                              : "border-border/40 bg-gray-100 text-gray-800"
-                          )}
-                        >
-                          <button
-                            type="button"
-                            onClick={() => setSelectedDetail({ section: "investigations", itemId: item.id })}
-                            className="truncate"
-                          >
-                            {item.label}
-                          </button>
-                          {selected && <ConsultationEditingBadge onDarkChip className="ml-1 shrink-0" />}
-                          <button
-                            type="button"
-                            onClick={() => removeTest(item.id)}
-                            className="ml-0.5 rounded-full p-0.5 hover:bg-muted"
-                            aria-label={`Remove ${item.label}`}
-                          >
-                            ×
-                          </button>
-                        </span>
-                      );
-                    })}
+                    {standaloneItems.map((item) => (
+                      <InvestigationItemChip
+                        key={item.id}
+                        item={item}
+                        selected={selectedItemId === item.id}
+                        recentlyAdded={recentlyAddedItemId === item.id}
+                        onSelect={() =>
+                          setSelectedDetail({ section: "investigations", itemId: item.id })
+                        }
+                        onRemove={() => removeTest(item.id)}
+                      />
+                    ))}
                   </div>
                 )}
               </div>
@@ -1062,17 +1349,24 @@ export function InvestigationsSection() {
               <p className="mb-2 text-xs text-amber-700">{suggestionsError}</p>
             )}
             <div className="flex flex-wrap gap-2">
-              {commonTestSuggestions.map((test) => (
+              {visibleCommonTestSuggestions.map((test) => (
                 <button
                   key={test.id}
                   type="button"
                   className="rounded-full border border-border bg-muted/40 px-3 py-1.5 text-sm hover:bg-muted/60"
                   onClick={() =>
-                    addTest(test.id, "manual", {
-                      displayName: test.name,
-                      recommendationReason: test.reason,
-                      recommendationScore: test.score,
-                      confidenceLabel: test.confidence_label,
+                    runWithSelectionGuard(() => {
+                      const ok = addTest(test.id, "manual", {
+                        displayName: test.name,
+                        recommendationReason: test.reason,
+                        recommendationScore: test.score,
+                        confidenceLabel: test.confidence_label,
+                        fromCatalogUi: true,
+                      });
+                      if (!ok)
+                        notify(`sugg-common-dup:${test.id}`, () =>
+                          toast.info(`${test.name} is already added`)
+                        );
                     })
                   }
                 >
@@ -1086,22 +1380,28 @@ export function InvestigationsSection() {
 
           <div>
             <p className="mb-2 text-sm font-semibold text-foreground">Recommended Tests</p>
-            {recommendedTestSuggestions.length === 0 ? (
+            {visibleRecommendedTestSuggestions.length === 0 ? (
               <p className="text-sm italic text-muted-foreground/80">No recommendations available</p>
             ) : (
               <div className="flex flex-wrap gap-2">
-                {recommendedTestSuggestions.map((test) => (
+                {visibleRecommendedTestSuggestions.map((test) => (
                   <button
                     key={test.id}
                     type="button"
                     className="rounded-full border border-border bg-transparent px-3 py-1.5 text-sm hover:bg-muted/40"
                     onClick={() =>
-                      addTest(test.id, "diagnosis_map", {
-                        diagnosisId: diagnosisIdByService[test.id],
-                        displayName: test.name,
-                        recommendationReason: test.reason,
-                        recommendationScore: test.score,
-                        confidenceLabel: test.confidence_label,
+                      runWithSelectionGuard(() => {
+                        const ok = addTest(test.id, "diagnosis_map", {
+                          diagnosisId: diagnosisIdByService[test.id],
+                          displayName: test.name,
+                          recommendationReason: test.reason,
+                          recommendationScore: test.score,
+                          confidenceLabel: test.confidence_label,
+                        });
+                        if (!ok)
+                          notify(`sugg-rec-dup:${test.id}`, () =>
+                            toast.info(`${test.name} is already added`)
+                          );
                       })
                     }
                     title={test.reason}
@@ -1123,14 +1423,20 @@ export function InvestigationsSection() {
                   if (!bundleId) return null;
                   const pkg = packageById[bundleId];
                   if (!pkg) return null;
-                  const matched = pkg.service_ids.filter((id) => selectedServiceIds.has(id)).length;
+                  const matched = pkg.service_ids.filter((id) => {
+                    if (selectedServiceIds.has(id)) return true;
+                    const label = masterById[id]?.name ?? id;
+                    return selectedCanonicalKeys.has(canonicalInvestigationKey(id, label));
+                  }).length;
                   const fullyAdded = matched === pkg.service_ids.length;
-                  return (
+                  const btn = (
                     <button
                       key={suggestedPackage.id}
                       type="button"
                       disabled={fullyAdded}
-                      onClick={() => handleApplyPackage(bundleId)}
+                      onClick={() =>
+                        runWithSelectionGuard(() => handleApplyPackage(bundleId))
+                      }
                       className={cn(
                         "rounded-full border px-3 py-1.5 text-left text-sm font-medium",
                         fullyAdded
@@ -1142,6 +1448,16 @@ export function InvestigationsSection() {
                       {!fullyAdded ? `→ Add remaining ${pkg.service_ids.length - matched} tests` : ""}
                       {fullyAdded ? " • Already added" : ""}
                     </button>
+                  );
+                  return fullyAdded ? (
+                    <Tooltip key={suggestedPackage.id}>
+                      <TooltipTrigger asChild>
+                        <span className="inline-flex">{btn}</span>
+                      </TooltipTrigger>
+                      <TooltipContent>Already added</TooltipContent>
+                    </Tooltip>
+                  ) : (
+                    btn
                   );
                 })}
               </div>
@@ -1155,14 +1471,20 @@ export function InvestigationsSection() {
                 if (!bundleId) return null;
                 const pkg = packageById[bundleId];
                 if (!pkg) return null;
-                const matched = pkg.service_ids.filter((id) => selectedServiceIds.has(id)).length;
+                const matched = pkg.service_ids.filter((id) => {
+                  if (selectedServiceIds.has(id)) return true;
+                  const label = masterById[id]?.name ?? id;
+                  return selectedCanonicalKeys.has(canonicalInvestigationKey(id, label));
+                }).length;
                 const fullyAdded = matched === pkg.service_ids.length;
-                return (
+                const btn = (
                   <button
                     key={suggestedPackage.id}
                     type="button"
                     disabled={fullyAdded}
-                    onClick={() => handleApplyPackage(bundleId)}
+                    onClick={() =>
+                      runWithSelectionGuard(() => handleApplyPackage(bundleId))
+                    }
                     className={cn(
                       "rounded-full border px-3 py-1.5 text-sm font-semibold",
                       fullyAdded
@@ -1174,11 +1496,94 @@ export function InvestigationsSection() {
                     {fullyAdded ? " • Already added" : ""}
                   </button>
                 );
+                return fullyAdded ? (
+                  <Tooltip key={suggestedPackage.id}>
+                    <TooltipTrigger asChild>
+                      <span className="inline-flex">{btn}</span>
+                    </TooltipTrigger>
+                    <TooltipContent>Already added</TooltipContent>
+                  </Tooltip>
+                ) : (
+                  btn
+                );
               })}
             </div>
           </div>
         </div>
       </ConsultationSectionCard>
     </div>
+    <CustomInvestigationSheet
+      open={customInvestigationSheetOpen}
+      onOpenChange={setCustomInvestigationSheetOpen}
+      initialName={query}
+      onSave={addCustomInvestigationItem}
+    />
+    </TooltipProvider>
+    </>
+  );
+}
+
+/** Unified with medicines/symptoms: name on chip; CUSTOM sub-tag; incomplete = orange (no complete on chip). */
+function InvestigationItemChip({
+  item,
+  selected,
+  recentlyAdded,
+  onSelect,
+  onRemove,
+}: {
+  item: ConsultationSectionItem;
+  selected: boolean;
+  recentlyAdded: boolean;
+  onSelect: () => void;
+  onRemove: () => void;
+}) {
+  const incomplete = !evaluateSectionItemComplete("investigations", item);
+  const showCustomTag = shouldShowInvestigationCustomTag(item);
+
+  return (
+    <span className="inline-flex max-w-full flex-col gap-1">
+      <span
+        className={cn(
+          "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[13px] font-medium transition-all duration-200 ease-in-out",
+          recentlyAdded &&
+            "ring-2 ring-emerald-300 shadow-[0_0_0_2px_rgba(16,185,129,0.18)]",
+          selected
+            ? "border-blue-300 bg-blue-100 text-blue-800 ring-2 ring-blue-200 hover:bg-blue-200"
+            : incomplete
+              ? "border-orange-50 bg-orange-50 text-gray-800 hover:bg-orange-100"
+              : "border-border/40 bg-gray-100 text-gray-800 hover:bg-gray-200"
+        )}
+      >
+        <button
+          type="button"
+          onClick={onSelect}
+          className="min-w-0 truncate text-left cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-full"
+        >
+          {item.label}
+        </button>
+        {selected && <ConsultationEditingBadge onDarkChip className="ml-1 shrink-0" />}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
+          className={cn(
+            "ml-0.5 shrink-0 rounded-full p-0.5 hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            selected ? "hover:bg-indigo-700 dark:hover:bg-indigo-700" : "hover:bg-muted"
+          )}
+          aria-label={`Remove ${item.label}`}
+        >
+          ×
+        </button>
+      </span>
+      {showCustomTag && (
+        <span className="flex flex-wrap gap-1 pl-1">
+          <span className="rounded-md border-0 bg-gray-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-600">
+            CUSTOM
+          </span>
+        </span>
+      )}
+    </span>
   );
 }

@@ -155,6 +155,12 @@ export interface MedicinePrescriptionDetail {
   is_chronic?: boolean;
 }
 
+/** Investigation priority for catalog and custom tests (matches backend InvestigationUrgency). */
+export type InvestigationUrgencyLevel = "routine" | "urgent" | "stat";
+
+/** Custom investigation classification (UI + payload; procedure maps for analytics). */
+export type CustomInvestigationType = "lab" | "radiology" | "procedure" | "other";
+
 /** Detail fields common to all section items (right-side panel). */
 export interface SectionItemDetail {
   notes?: string;
@@ -174,7 +180,9 @@ export interface SectionItemDetail {
   price_snapshot?: number | null;
   recommendation_source?: "manual" | "diagnosis_map" | "bundle";
   bundle_id?: string;
-  urgency?: "routine" | "urgent";
+  /** Lab / radiology / procedure / other — custom and forward-compatible typing. */
+  custom_investigation_type?: CustomInvestigationType;
+  urgency?: InvestigationUrgencyLevel;
   instructions?: string[];
   /** Static master metadata used in right panel autofill. */
   investigation_category?: string;
