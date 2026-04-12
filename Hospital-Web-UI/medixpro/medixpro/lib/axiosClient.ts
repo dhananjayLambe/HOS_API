@@ -230,6 +230,13 @@ backendAxiosClient.interceptors.response.use(
         console.error(
           `[backendAxiosClient] Error ${error.response?.status || "Network"} on ${error.config.method?.toUpperCase()} ${fullUrl}`,
         );
+        if (!error.response) {
+          // No HTTP response: unreachable host/port, CORS blocked before response, or timeout
+          console.error(
+            "[backendAxiosClient] No response — check Django is running on BACKEND_URL (e.g. python manage.py runserver 0.0.0.0:8000).",
+            { code: error.code, message: error.message },
+          );
+        }
         // Always log response payload if present (even if empty) to avoid losing DRF "detail" messages
         if (error.response) {
           console.error("[backendAxiosClient] Error response statusText:", error.response.statusText);

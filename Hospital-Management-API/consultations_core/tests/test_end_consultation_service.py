@@ -7,6 +7,7 @@ from django.test import SimpleTestCase
 from consultations_core.services.end_consultation_service import (
     _extract_diagnoses_payload,
     _extract_findings_payload,
+    _extract_investigations_payload,
     _extract_symptoms_payload,
     _persist_medicines,
 )
@@ -59,6 +60,25 @@ class EndConsultationPayloadExtractionTests(SimpleTestCase):
         self.assertEqual(extracted[0]["diagnosis_key"], "upper_respiratory_infection")
         self.assertEqual(extracted[0]["diagnosis_icd_code"], "J06.9")
         self.assertEqual(extracted[0]["doctor_note"], "note")
+
+    def test_extract_investigations_from_store_section_items(self):
+        payload = {
+            "store": {
+                "sectionItems": {
+                    "investigations": [
+                        {"source": "catalog", "catalog_item_id": "550e8400-e29b-41d4-a716-446655440000"}
+                    ]
+                }
+            }
+        }
+        extracted = _extract_investigations_payload(payload)
+        self.assertEqual(len(extracted), 1)
+        self.assertEqual(extracted[0]["source"], "catalog")
+
+    def test_extract_investigations_top_level(self):
+        payload = {"investigations": [{"source": "package", "diagnostic_package_id": "550e8400-e29b-41d4-a716-446655440001"}]}
+        extracted = _extract_investigations_payload(payload)
+        self.assertEqual(len(extracted), 1)
 
 
 class EndConsultationMedicinesPersistenceTests(SimpleTestCase):

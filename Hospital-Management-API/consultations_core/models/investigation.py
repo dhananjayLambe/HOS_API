@@ -279,7 +279,7 @@ class InvestigationItem(models.Model):
     def clean(self):
         super().clean()
         if self.investigations_id:
-            EncounterLockValidator.validate(self.investigations.consultation)
+            EncounterLockValidator.validate_investigation_mutation(self.investigations.consultation)
 
         has_catalog = bool(self.catalog_item)
         has_custom = bool(self.custom_investigation or (self.source == InvestigationSource.CUSTOM and self.name))

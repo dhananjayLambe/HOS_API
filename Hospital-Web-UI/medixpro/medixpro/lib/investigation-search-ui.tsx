@@ -1,10 +1,5 @@
 import type { ReactNode } from "react";
 
-const RECENT_STORAGE_KEY = "medixpro:investigation-recent-v1";
-const RECENT_MAX = 8;
-
-export type RecentInvestigationEntry = { id: string; label: string };
-
 function escapeRegExp(s: string) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -29,38 +24,6 @@ export function highlightInvestigationSearchLabel(text: string, query: string): 
       <span key={`t-${i}`}>{part}</span>
     )
   );
-}
-
-export function readRecentInvestigations(): RecentInvestigationEntry[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = window.localStorage.getItem(RECENT_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter(
-        (row): row is RecentInvestigationEntry =>
-          row != null &&
-          typeof row === "object" &&
-          typeof (row as RecentInvestigationEntry).id === "string" &&
-          typeof (row as RecentInvestigationEntry).label === "string"
-      )
-      .slice(0, RECENT_MAX);
-  } catch {
-    return [];
-  }
-}
-
-export function pushRecentInvestigation(entry: RecentInvestigationEntry) {
-  if (typeof window === "undefined") return;
-  try {
-    const prev = readRecentInvestigations().filter((e) => e.id !== entry.id);
-    const next = [{ ...entry }, ...prev].slice(0, RECENT_MAX);
-    window.localStorage.setItem(RECENT_STORAGE_KEY, JSON.stringify(next));
-  } catch {
-    /* ignore quota */
-  }
 }
 
 /** True if any badge suggests high frequency / most-used (backend convention). */

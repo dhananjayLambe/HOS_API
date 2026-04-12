@@ -92,8 +92,9 @@ class InvestigationSearchAPITests(TestCase):
         self.assertIn("packages", data)
         self.assertIn("meta", data)
         self.assertEqual(data["meta"]["query"], "cbc")
-        codes = [t["id"] for t in data["tests"]]
+        codes = [t["code"] for t in data["tests"]]
         self.assertIn("cbc", codes)
+        self.assertTrue(data["tests"][0]["id"])
         self.assertEqual(data["meta"]["total_results"], len(data["tests"]) + len(data["packages"]))
         self.assertEqual(data["tests"][0].get("type"), "test")
 
@@ -103,21 +104,21 @@ class InvestigationSearchAPITests(TestCase):
         self.assertEqual(r1.status_code, 200)
         self.assertEqual(r2.status_code, 200)
         self.assertEqual(
-            [t["id"] for t in r1.data["tests"]],
-            [t["id"] for t in r2.data["tests"]],
+            [t["code"] for t in r1.data["tests"]],
+            [t["code"] for t in r2.data["tests"]],
         )
 
     def test_synonym_sugar(self):
         r = self.client.get(self.url, {"q": "sugar"})
         self.assertEqual(r.status_code, 200)
-        ids = [t["id"] for t in r.data["tests"]]
-        self.assertIn("rbs", ids)
+        codes = [t["code"] for t in r.data["tests"]]
+        self.assertIn("rbs", codes)
 
     def test_typo_livr_matches_liver(self):
         r = self.client.get(self.url, {"q": "livr"})
         self.assertEqual(r.status_code, 200)
-        ids = [t["id"] for t in r.data["tests"]]
-        self.assertIn("lft", ids)
+        codes = [t["code"] for t in r.data["tests"]]
+        self.assertIn("lft", codes)
 
     def test_type_test_only(self):
         r = self.client.get(self.url, {"q": "cbc", "type": "test"})
@@ -134,10 +135,10 @@ class InvestigationSearchAPITests(TestCase):
         r = self.client.get(self.url, {"q": "cbc panel", "type": "all"})
         self.assertEqual(r.status_code, 200)
         body = r.data
-        test_ids = {t["id"] for t in body["tests"]}
-        pkg_ids = {p["id"] for p in body["packages"]}
-        self.assertIn("cbc", test_ids)
-        self.assertIn("fever_panel", pkg_ids)
+        test_codes = {t["code"] for t in body["tests"]}
+        pkg_lineage = {p["lineage_code"] for p in body["packages"]}
+        self.assertIn("cbc", test_codes)
+        self.assertIn("fever_panel", pkg_lineage)
 
     def test_package_has_type_and_test_count(self):
         r = self.client.get(self.url, {"q": "fever", "type": "package"})
@@ -169,3 +170,15 @@ class InvestigationSearchAPITests(TestCase):
     def test_limit_max_20_validation(self):
         r = self.client.get(self.url, {"q": "cbc", "limit": 99})
         self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_unified_results_uuid_ids_and_types(self):
+        r = self.client.get(self.url, {"q": "cbc", "type": "all", "limit": 10})
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("results", r.data)
+        for row in r.data["results"]:
+            self.assertIn(row["type"], ("test", "package"))
+            self.assertTrue(row["id"])
+            self.assertTrue(row["name"])
+        pkg_rows = [x for x in r.data["results"] if x["type"] == "package"]
+        if pkg_rows:
+            self.assertIsNotNone(pkg_rows[0].get("test_count"))

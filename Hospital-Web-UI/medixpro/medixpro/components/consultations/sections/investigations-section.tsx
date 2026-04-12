@@ -66,8 +66,6 @@ import {
 import {
   highlightInvestigationSearchLabel,
   isMostUsedBadge,
-  pushRecentInvestigation,
-  readRecentInvestigations,
 } from "@/lib/investigation-search-ui";
 
 const SEARCH_DEBOUNCE_MS = 300;
@@ -207,7 +205,6 @@ export function InvestigationsSection() {
   const [showAllCommonSuggestions, setShowAllCommonSuggestions] = useState(false);
   const [showAllRecommendedSuggestions, setShowAllRecommendedSuggestions] = useState(false);
   const [packagePreviewBundleId, setPackagePreviewBundleId] = useState<string | null>(null);
-  const [recentTests, setRecentTests] = useState(() => readRecentInvestigations());
   const [addNewHint, setAddNewHint] = useState<string | null>(null);
   const lastSearchSnapshotRef = useRef<{
     query: string;
@@ -909,10 +906,6 @@ export function InvestigationsSection() {
       setSelectedDetail({ section: "investigations", itemId: nextItem.id });
       searchInputRef.current?.focus();
       setRecentlyAddedItemId(nextItem.id);
-      if (opts?.fromCatalogUi) {
-        pushRecentInvestigation({ id: serviceId, label: master.name });
-        setRecentTests(readRecentInvestigations());
-      }
       if (source !== "bundle" && !opts?.suppressSuccessToast) {
         const addedLabel = master.name;
         const dedupeKey = `add-success:${canonicalInvestigationKey(serviceId, labelForCanon)}`;
@@ -1266,62 +1259,11 @@ export function InvestigationsSection() {
                 <TooltipContent>Add a test not in the catalog</TooltipContent>
               </Tooltip>
             </div>
-            <p className="mt-1.5 text-[11px] text-muted-foreground">
-              ↑ ↓ to highlight · Enter adds the highlighted row, or adds a custom test if none match ·{" "}
-              <span className="font-medium text-foreground/80">Press Enter to add custom test</span>{" "}
-              (2+ chars, not in catalog)
-            </p>
             {addNewHint ? (
               <p className="mt-1 text-xs text-amber-800 dark:text-amber-200" role="status">
                 {addNewHint}
               </p>
             ) : null}
-            {!query.trim() && recentTests.length > 0 && (
-              <div className="mt-2 space-y-1.5">
-                <p className="text-xs font-semibold text-muted-foreground">Recently used</p>
-                <div className="flex flex-wrap gap-2">
-                  {recentTests.map((rt) => {
-                    const disabled = selectedCanonicalKeys.has(
-                      canonicalInvestigationKey(rt.id, rt.label)
-                    );
-                    const chip = (
-                      <button
-                        key={rt.id}
-                        type="button"
-                        disabled={disabled}
-                        className={cn(
-                          "rounded-full border px-3 py-1.5 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                          disabled
-                            ? "cursor-not-allowed border-border/50 bg-muted/30 text-muted-foreground"
-                            : "border border-muted-foreground/40 bg-muted/30 text-muted-foreground hover:border-muted-foreground/60 hover:bg-muted/50 hover:text-foreground"
-                        )}
-                        onClick={() =>
-                          runWithSelectionGuard(() => {
-                            if (disabled) return;
-                            addTest(rt.id, "manual", {
-                              displayName: rt.label,
-                              fromCatalogUi: true,
-                            });
-                          })
-                        }
-                      >
-                        {rt.label}
-                      </button>
-                    );
-                    return disabled ? (
-                      <Tooltip key={rt.id}>
-                        <TooltipTrigger asChild>
-                          <span className="inline-flex">{chip}</span>
-                        </TooltipTrigger>
-                        <TooltipContent>Already selected</TooltipContent>
-                      </Tooltip>
-                    ) : (
-                      chip
-                    );
-                  })}
-                </div>
-              </div>
-            )}
             {!!debouncedQuery && debouncedQuery.length >= 2 && (
               <div className="mt-2 space-y-2 rounded-lg border border-border/60 bg-card p-2">
                 {isInvestigationSearchLoading &&

@@ -114,7 +114,8 @@ def _serialize_tests(services: list[DiagnosticServiceMaster], normalized_q: str)
         prep = (svc.preparation_notes or "").strip()
         payload = {
             "type": "test",
-            "id": svc.code,
+            "id": str(svc.id),
+            "code": svc.code,
             "name": svc.name,
             "match_score": round(sc, 4),
             "category": category_label(svc),
@@ -139,7 +140,8 @@ def _serialize_packages(packages: list[DiagnosticPackage], normalized_q: str) ->
         sc = score_package(pkg, normalized_q, trigram)
         payload = {
             "type": "package",
-            "id": pkg.lineage_code,
+            "id": str(pkg.id),
+            "lineage_code": pkg.lineage_code,
             "name": pkg.name,
             "match_score": round(sc, 4),
             "test_count": _test_count(pkg),
@@ -149,6 +151,39 @@ def _serialize_packages(packages: list[DiagnosticPackage], normalized_q: str) ->
         scored.append((sc, 1, payload))
     scored.sort(key=lambda t: (-t[0], t[1]))
     return [x[2] for x in scored]
+
+
+def _build_unified_results(tests_out: list[dict[str, Any]], packages_out: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Flatten tests + packages sorted by match_score (desc), then tests before packages on tie."""
+    combined: list[tuple[float, int, dict[str, Any]]] = []
+    for t in tests_out:
+        combined.append(
+            (
+                float(t.get("match_score") or 0.0),
+                0,
+                {
+                    "id": t["id"],
+                    "name": t["name"],
+                    "type": "test",
+                    "test_count": None,
+                },
+            )
+        )
+    for p in packages_out:
+        combined.append(
+            (
+                float(p.get("match_score") or 0.0),
+                1,
+                {
+                    "id": p["id"],
+                    "name": p["name"],
+                    "type": "package",
+                    "test_count": p.get("test_count"),
+                },
+            )
+        )
+    combined.sort(key=lambda x: (-x[0], x[1]))
+    return [x[2] for x in combined]
 
 
 def run_investigation_search(normalized_q: str, type_filter: str, limit: int) -> dict[str, Any]:
@@ -177,6 +212,7 @@ def run_investigation_search(normalized_q: str, type_filter: str, limit: int) ->
         if dym:
             meta["did_you_mean"] = dym
 
-    payload = {"tests": tests_out, "packages": packages_out, "meta": meta}
+    results = _build_unified_results(tests_out, packages_out)
+    payload = {"tests": tests_out, "packages": packages_out, "results": results, "meta": meta}
     set_cached(cache_key, payload)
     return payload

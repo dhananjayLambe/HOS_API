@@ -6,6 +6,7 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 from django.utils.text import slugify
 
+from consultations_core.api.serializers.investigations import AddInvestigationItemSerializer
 from consultations_core.models.diagnosis import (
     ConsultationDiagnosis,
     CustomDiagnosis,
@@ -16,6 +17,11 @@ from consultations_core.models.findings import (
     CustomFinding,
     FindingMaster,
 )
+from consultations_core.models.investigation import (
+    CustomInvestigation,
+    InvestigationSource,
+    InvestigationUrgency,
+)
 from consultations_core.models.prescription import CustomMedicine, Prescription, PrescriptionLine
 from consultations_core.models.symptoms import (
     ConsultationSymptom,
@@ -25,6 +31,12 @@ from consultations_core.models.symptoms import (
 from consultations_core.services.finding_master_service import (
     get_or_create_finding_master_for_code,
 )
+from consultations_core.services.investigation_api_service import (
+    add_investigation_item,
+    get_or_create_custom_investigation_master,
+    get_or_create_investigations_container,
+)
+from diagnostics_engine.models import DiagnosticPackage, DiagnosticServiceMaster
 from medicines.models import DoseUnitMaster, DrugMaster, FrequencyMaster, RouteMaster
 
 logger = logging.getLogger(__name__)
@@ -32,6 +44,10 @@ logger = logging.getLogger(__name__)
 
 def _medicine_validation_error(message):
     raise DjangoValidationError({"medicines": [message]})
+
+
+def _investigations_validation_error(message):
+    raise DjangoValidationError({"investigations": [message]})
 
 
 def _validate_symptom(item):
@@ -274,6 +290,280 @@ def _extract_medicines_payload(payload):
     if isinstance(store_medicines, list):
         return store_medicines
     return payload.get("medicines", [])
+
+
+def _extract_investigations_payload(payload):
+    store = payload.get("store", {}) if isinstance(payload, dict) else {}
+    section_items = store.get("sectionItems", {}) if isinstance(store, dict) else {}
+    investigations = section_items.get("investigations")
+    if isinstance(investigations, list):
+        return investigations
+    store_inv = store.get("investigations")
+    if isinstance(store_inv, list):
+        return store_inv
+    return payload.get("investigations", [])
+
+
+def _looks_like_uuid(token) -> bool:
+    if token in (None, ""):
+        return False
+    try:
+        uuid.UUID(str(token).strip())
+        return True
+    except (ValueError, TypeError, AttributeError):
+        return False
+
+
+def _uuid_after_custom_prefix(service_id: str | None) -> str | None:
+    """MedixPro uses service_id like 'custom-<uuid>' for custom investigation rows."""
+    if not service_id or not isinstance(service_id, str):
+        return None
+    s = service_id.strip()
+    if not s.lower().startswith("custom-"):
+        return None
+    rest = s[7:].strip()
+    return rest if _looks_like_uuid(rest) else None
+
+
+def _coerce_investigation_instructions(val):
+    """MedixPro sends instructions as a list of lines; API expects a string."""
+    if val is None:
+        return ""
+    if isinstance(val, list):
+        parts = []
+        for x in val:
+            if isinstance(x, dict):
+                parts.append(str(x.get("text") or x.get("label") or x).strip())
+            else:
+                parts.append(str(x).strip())
+        return "\n".join(p for p in parts if p)
+    return str(val)
+
+
+def _merge_investigation_ui_detail(d: dict) -> dict:
+    """Merge detail / detail.investigation into top-level keys (UI section item shape)."""
+    detail = d.get("detail")
+    if isinstance(detail, dict):
+        inner = detail.get("investigation") if isinstance(detail.get("investigation"), dict) else detail
+        if isinstance(inner, dict):
+            for key in (
+                "source",
+                "catalog_item_id",
+                "catalogItemId",
+                "service_id",
+                "serviceId",
+                "custom_investigation_id",
+                "diagnostic_package_id",
+                "diagnosticPackageId",
+                "bundle_id",
+                "bundleId",
+                "name",
+                "label",
+                "investigation_type",
+                "custom_investigation_type",
+                "type",
+                "position",
+                "instructions",
+                "notes",
+                "urgency",
+            ):
+                if key not in d or d.get(key) in (None, ""):
+                    if inner.get(key) is not None:
+                        d[key] = inner[key]
+    return d
+
+
+def _prepare_investigation_item_for_add_serializer(raw) -> dict | None:
+    """
+    Map MedixPro end-consultation investigation rows to AddInvestigationItemSerializer input.
+    Returns None to skip placeholders that cannot be persisted (no UUID / no custom name).
+    """
+    if not isinstance(raw, dict):
+        return None
+    d = _merge_investigation_ui_detail(dict(raw))
+
+    is_custom_flag = bool(d.get("is_custom") or d.get("isCustom"))
+    sid = str(d.get("service_id") or d.get("serviceId") or "").strip()
+    cust_master_uuid = _uuid_after_custom_prefix(sid)
+    if cust_master_uuid:
+        d["custom_investigation_id"] = cust_master_uuid
+    elif sid and _looks_like_uuid(sid) and not is_custom_flag:
+        d["catalog_item_id"] = sid
+    # Do not copy custom-… or custom rows onto catalog_item_id (serializer forbids mixing).
+
+    if not d.get("catalog_item_id"):
+        for k in ("catalogItemId",):
+            if d.get(k) not in (None, ""):
+                cand = str(d[k]).strip()
+                if _looks_like_uuid(cand) and not is_custom_flag:
+                    d["catalog_item_id"] = cand
+                break
+    if not d.get("diagnostic_package_id"):
+        for k in ("diagnosticPackageId", "bundle_id", "bundleId"):
+            if d.get(k) not in (None, ""):
+                d["diagnostic_package_id"] = d[k]
+                break
+    if not d.get("custom_investigation_id") and d.get("customInvestigationId"):
+        d["custom_investigation_id"] = d["customInvestigationId"]
+
+    d["instructions"] = _coerce_investigation_instructions(d.get("instructions"))
+    d["notes"] = _coerce_investigation_instructions(d.get("notes"))
+
+    explicit = (d.get("source") or "").strip().lower()
+    if explicit in (
+        InvestigationSource.CATALOG,
+        InvestigationSource.CUSTOM,
+        InvestigationSource.PACKAGE,
+    ):
+        d["source"] = explicit
+        if explicit == InvestigationSource.CATALOG and not d.get("catalog_item_id"):
+            for k in ("catalogItemId", "service_id", "serviceId"):
+                if d.get(k) not in (None, ""):
+                    cand = str(d[k]).strip()
+                    if _uuid_after_custom_prefix(cand):
+                        break
+                    if _looks_like_uuid(cand):
+                        d["catalog_item_id"] = cand
+                    break
+        if explicit == InvestigationSource.PACKAGE and not d.get("diagnostic_package_id"):
+            for k in ("diagnosticPackageId", "bundle_id", "bundleId"):
+                if d.get(k) not in (None, ""):
+                    d["diagnostic_package_id"] = d[k]
+                    break
+        return d
+
+    is_custom = bool(d.get("is_custom") or d.get("isCustom"))
+    pkg = d.get("diagnostic_package_id")
+    if pkg not in (None, "") and _looks_like_uuid(str(pkg).strip()):
+        d["source"] = InvestigationSource.PACKAGE
+        d["diagnostic_package_id"] = str(pkg).strip()
+    elif is_custom or cust_master_uuid:
+        d["source"] = InvestigationSource.CUSTOM
+        d.pop("catalog_item_id", None)
+        d.pop("diagnostic_package_id", None)
+        name = (d.get("name") or d.get("label") or "").strip()
+        d["name"] = name
+        itype = (
+            d.get("investigation_type")
+            or d.get("type")
+            or d.get("custom_investigation_type")
+            or "other"
+        )
+        d["investigation_type"] = itype
+        if not d.get("custom_investigation_id") and not name:
+            return None
+    else:
+        cid = d.get("catalog_item_id")
+        st = str(cid or "").strip()
+        if _looks_like_uuid(st):
+            d["source"] = InvestigationSource.CATALOG
+            d["catalog_item_id"] = st
+        else:
+            return None
+
+    return d
+
+
+def _persist_investigations(consultation, user, raw_investigations):
+    if not isinstance(raw_investigations, list) or not raw_investigations:
+        return
+
+    container = get_or_create_investigations_container(consultation)
+    urgency_choices = {c[0] for c in InvestigationUrgency.choices}
+
+    for idx, raw in enumerate(raw_investigations):
+        item = _prepare_investigation_item_for_add_serializer(raw)
+        if not isinstance(item, dict):
+            continue
+
+        ser = AddInvestigationItemSerializer(data=item)
+        if not ser.is_valid():
+            _investigations_validation_error(f"Item {idx}: {ser.errors}")
+
+        data = ser.validated_data
+        urgency = (data.get("urgency") or "").strip() or None
+        if urgency and urgency not in urgency_choices:
+            _investigations_validation_error(f"Item {idx}: invalid urgency '{urgency}'.")
+
+        try:
+            if data["source"] == InvestigationSource.CATALOG:
+                catalog_item = (
+                    DiagnosticServiceMaster.objects.filter(is_active=True, deleted_at__isnull=True)
+                    .filter(pk=data["catalog_item_id"])
+                    .first()
+                )
+                if not catalog_item:
+                    _investigations_validation_error(
+                        f"Item {idx}: catalog_item_id not found or inactive."
+                    )
+                add_investigation_item(
+                    container=container,
+                    source=InvestigationSource.CATALOG,
+                    user=user,
+                    catalog_item=catalog_item,
+                    position=data.get("position"),
+                    instructions=data.get("instructions"),
+                    notes=data.get("notes"),
+                    urgency=urgency,
+                )
+
+            elif data["source"] == InvestigationSource.CUSTOM:
+                custom_inv = None
+                if data.get("custom_investigation_id"):
+                    custom_inv = CustomInvestigation.objects.filter(pk=data["custom_investigation_id"]).first()
+                adhoc_name = (data.get("name") or "").strip() or None
+                adhoc_type = data.get("investigation_type") or "other"
+                # Synthetic custom-<uuid> from UI often has no DB row yet — create master like POST /investigations/custom/
+                if custom_inv is None and adhoc_name:
+                    try:
+                        custom_inv, _ = get_or_create_custom_investigation_master(
+                            name=adhoc_name,
+                            investigation_type=str(adhoc_type),
+                            user=user,
+                            clinic=consultation.encounter.clinic,
+                        )
+                    except ValueError as e:
+                        _investigations_validation_error(f"Item {idx}: {e}")
+                if custom_inv is None:
+                    _investigations_validation_error(
+                        f"Item {idx}: custom investigation master not found and name is empty."
+                    )
+                add_investigation_item(
+                    container=container,
+                    source=InvestigationSource.CUSTOM,
+                    user=user,
+                    custom_investigation=custom_inv,
+                    adhoc_name=None,
+                    adhoc_type=None,
+                    position=data.get("position"),
+                    instructions=data.get("instructions"),
+                    notes=data.get("notes"),
+                    urgency=urgency,
+                )
+
+            else:
+                package = (
+                    DiagnosticPackage.objects.filter(is_active=True, is_latest=True, deleted_at__isnull=True)
+                    .filter(pk=data["diagnostic_package_id"])
+                    .first()
+                )
+                if not package:
+                    _investigations_validation_error(
+                        f"Item {idx}: diagnostic_package_id not found or inactive."
+                    )
+                add_investigation_item(
+                    container=container,
+                    source=InvestigationSource.PACKAGE,
+                    user=user,
+                    diagnostic_package=package,
+                    position=data.get("position"),
+                    instructions=data.get("instructions"),
+                    notes=data.get("notes"),
+                    urgency=urgency,
+                )
+
+        except ValueError as e:
+            _investigations_validation_error(str(e))
 
 
 def _persist_medicines(consultation, user, raw_medicines):
@@ -814,4 +1104,9 @@ def persist_consultation_end_state(consultation, payload: dict, user):
         consultation=consultation,
         user=user,
         raw_medicines=_extract_medicines_payload(payload),
+    )
+    _persist_investigations(
+        consultation=consultation,
+        user=user,
+        raw_investigations=_extract_investigations_payload(payload),
     )

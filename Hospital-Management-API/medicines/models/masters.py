@@ -91,7 +91,8 @@ class RouteMaster(models.Model):
         self.name = self.name.strip().lower()
 
     def save(self, *args, **kwargs):
-        if self.pk:
+        # UUID pk is set before first DB insert; use _state.adding, not self.pk, for create vs update.
+        if not self._state.adding:
             old = type(self).objects.only("code").get(pk=self.pk)
             if old.code != self.code:
                 raise ValidationError("Route code cannot be modified.")
@@ -136,7 +137,7 @@ class FrequencyMaster(models.Model):
             raise ValidationError("Use either times_per_day OR interval_hours.")
 
     def save(self, *args, **kwargs):
-        if self.pk:
+        if not self._state.adding:
             old = type(self).objects.only("code").get(pk=self.pk)
             if old.code != self.code:
                 raise ValidationError("Frequency code cannot be modified.")

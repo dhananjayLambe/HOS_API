@@ -20,6 +20,9 @@ class EncounterLockValidator:
     - Instructions
     - Prescription
     - Any future clinical sections
+
+    Exception: investigation line items use validate_investigation_mutation() so orders can be
+    amended after consultation_completed until the encounter is closed.
     """
 
     LOCKED_ENCOUNTER_STATUSES = (
@@ -59,3 +62,32 @@ class EncounterLockValidator:
             raise ValidationError(
                 "Consultation is finalized. Modifications are not allowed."
             )
+
+    @classmethod
+    def validate_investigation_mutation(cls, consultation):
+        """
+        Investigation items may be added or updated after consultation_completed (while finalized)
+        until the encounter is closed. Blocks cancelled/no-show/closed and inconsistent in-progress+finalized.
+        """
+        if not consultation:
+            return
+
+        encounter = consultation.encounter
+        st = encounter.status
+
+        if st in ("cancelled", "no_show"):
+            raise ValidationError(
+                "This visit has been cancelled or is a no-show; cannot modify investigations."
+            )
+        if st == "closed":
+            raise ValidationError("Encounter is closed; cannot modify investigations.")
+        if st in ("consultation_completed", "completed"):
+            return
+        if st == "consultation_in_progress":
+            if consultation.is_finalized:
+                raise ValidationError(
+                    "Consultation is finalized; cannot modify investigations."
+                )
+            return
+
+        raise ValidationError("Investigations cannot be edited in this encounter state.")

@@ -28,6 +28,10 @@ from consultations_core.api.views.findings import (
 from consultations_core.api.views.diagnosis import (
     EncounterCustomDiagnosisCreateAPIView,
 )
+from consultations_core.api.views.investigations import (
+    ConsultationInvestigationItemDetailAPIView,
+    ConsultationInvestigationItemsListCreateAPIView,
+)
 
 router = DefaultRouter()
 
@@ -113,5 +117,15 @@ urlpatterns = [
         "encounter/<uuid:encounter_id>/diagnoses/custom/",
         EncounterCustomDiagnosisCreateAPIView.as_view(),
         name="encounter-custom-diagnosis-create",
+    ),
+    path(
+        "<uuid:consultation_id>/investigations/items/",
+        ConsultationInvestigationItemsListCreateAPIView.as_view(),
+        name="consultation-investigation-items",
+    ),
+    path(
+        "<uuid:consultation_id>/investigations/items/<uuid:item_id>/",
+        ConsultationInvestigationItemDetailAPIView.as_view(),
+        name="consultation-investigation-item-detail",
     ),
 ]

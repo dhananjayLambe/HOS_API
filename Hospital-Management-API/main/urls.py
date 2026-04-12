@@ -47,6 +47,7 @@ urlpatterns = [
     path('api/appointments/', include('appointments.api.urls')),
     path('api/queue/', include('queue_management.api.urls')),
     path('api/consultations/', include('consultations_core.api.urls')),
+    path('api/investigations/', include('consultations_core.api.investigation_urls')),
     path('api/consultation/', include('consultation_config.api.urls')),
     #path('api/consultations/', include('consultations.api.urls')),
     #path('api/prescriptions/', include('prescriptions.api.urls')),
