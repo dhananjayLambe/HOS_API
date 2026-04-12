@@ -1145,6 +1145,12 @@ export function InvestigationsSection() {
     sectionCardRef.current?.expand();
   }, [activateSection]);
 
+  const incompleteCount = useMemo(
+    () =>
+      selectedItems.filter((item) => !evaluateSectionItemComplete("investigations", item)).length,
+    [selectedItems]
+  );
+
   const handleSectionContainerClick = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
       if (shouldIgnoreSectionActivationClick(event.target, event.currentTarget)) return;
@@ -1176,6 +1182,7 @@ export function InvestigationsSection() {
         ref={sectionCardRef}
         title="Investigations"
         icon={<FlaskConical className="text-muted-foreground" />}
+        incompleteCount={incompleteCount}
         defaultOpen={false}
         onOpenChange={(open) => {
           if (open) {
