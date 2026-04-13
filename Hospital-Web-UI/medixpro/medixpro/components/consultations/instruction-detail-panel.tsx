@@ -21,30 +21,17 @@ import type {
   InstructionItemSchema,
 } from "@/lib/consultation-schema-types";
 import { cn, isUuidLike } from "@/lib/utils";
-import { useToastNotification } from "@/hooks/use-toast-notification";
 import {
   isInstructionInputComplete,
   resolveInstructionItemTemplate,
 } from "@/lib/instruction-completion";
 
 const INSTRUCTION_TEMPLATE_PREFIX = "tpl:";
-const TOAST_DEDUPE_MS = 2000;
+const AUTOSAVE_DEBOUNCE_MS = 450;
 
 export function InstructionDetailPanel() {
-  const toast = useToastNotification();
-  const toastDedupeRef = useRef<Map<string, number>>(new Map());
-  const notify = useCallback(
-    (key: string, emit: () => void) => {
-      const now = Date.now();
-      const last = toastDedupeRef.current.get(key) ?? 0;
-      if (now - last < TOAST_DEDUPE_MS) return;
-      toastDedupeRef.current.set(key, now);
-      emit();
-    },
-    [toast]
-  );
-
   const panelFocusRef = useRef<HTMLDivElement>(null);
+  const skipNextAutosaveRef = useRef(true);
 
   const {
     selectedDetail,
@@ -84,9 +71,11 @@ export function InstructionDetailPanel() {
 
   useEffect(() => {
     if (existingInstruction) {
+      skipNextAutosaveRef.current = true;
       setFormData((existingInstruction.input_data as Record<string, unknown>) ?? {});
       setCustomNote(existingInstruction.custom_note ?? "");
     } else if (isNew) {
+      skipNextAutosaveRef.current = true;
       setFormData({});
       setCustomNote("");
     }
@@ -129,67 +118,82 @@ export function InstructionDetailPanel() {
     return "Add required details below";
   }, [isComplete, needsSchemaInput]);
 
-  const handleSave = () => {
-    if (consultationFinalized) return;
-    setError(null);
-
-    if (existingInstruction) {
-      setInstructionsList(
-        instructionsList.map((i) =>
-          i.id === existingInstruction.id
-            ? {
-                ...i,
-                input_data: { ...formData },
-                custom_note: customNote.trim() ? customNote : null,
-              }
-            : i
-        )
-      );
-      notify(`inst-patch:${existingInstruction.id}`, () => toast.success("Instruction updated"));
+  useEffect(() => {
+    if (!isInstructionSection || !itemId || consultationFinalized) return;
+    if (skipNextAutosaveRef.current) {
+      skipNextAutosaveRef.current = false;
       return;
     }
 
-    if (isNew && templateId) {
-      const fromTemplate =
-        template?.id && isUuidLike(String(template.id)) ? String(template.id) : null;
-      const fromSelection = isUuidLike(templateId) ? templateId : null;
-      const instructionTemplateUuid = fromTemplate ?? fromSelection;
-      if (!instructionTemplateUuid) {
-        setError(
-          template
-            ? "Invalid instruction template id. Reload the page and try again."
-            : "Instruction template not found. Select the instruction again from the list."
+    const timer = window.setTimeout(() => {
+      setError(null);
+      const nextInputData = { ...formData };
+      const nextCustomNote = customNote.trim() ? customNote : null;
+
+      if (existingInstruction) {
+        const prevInput = JSON.stringify(existingInstruction.input_data ?? {});
+        const nextInput = JSON.stringify(nextInputData);
+        const prevNote = existingInstruction.custom_note ?? null;
+        if (prevInput === nextInput && prevNote === nextCustomNote) return;
+        setInstructionsList(
+          instructionsList.map((i) =>
+            i.id === existingInstruction.id
+              ? {
+                  ...i,
+                  input_data: nextInputData,
+                  custom_note: nextCustomNote,
+                }
+              : i
+          )
         );
         return;
       }
-      const newId =
-        typeof crypto !== "undefined" && "randomUUID" in crypto
-          ? `inst-draft-${crypto.randomUUID()}`
-          : `inst-local-${instructionTemplateUuid}-${Date.now()}`;
-      const row = {
-        id: newId,
-        instruction_template_id: instructionTemplateUuid,
-        label: template?.label ?? "Instruction",
-        input_data: { ...formData },
-        custom_note: customNote.trim() ? customNote : null,
-        is_active: true as const,
-      };
-      setInstructionsList([row, ...instructionsList]);
-      setSelectedDetail({ section: "instructions", itemId: newId });
-      notify(`inst-post:${newId}`, () => toast.success("Instruction added"));
-    }
-  };
 
-  const handleDelete = () => {
-    if (consultationFinalized || !existingInstruction) return;
-    setError(null);
-    const removedLabel = existingInstruction.label;
-    setInstructionsList(instructionsList.filter((i) => i.id !== existingInstruction.id));
-    setSelectedDetail(null);
-    notify(`inst-del:${existingInstruction.id}`, () =>
-      toast.success(`${removedLabel} removed`)
-    );
-  };
+      if (isNew && templateId) {
+        const fromTemplate =
+          template?.id && isUuidLike(String(template.id)) ? String(template.id) : null;
+        const fromSelection = isUuidLike(templateId) ? templateId : null;
+        const instructionTemplateUuid = fromTemplate ?? fromSelection;
+        if (!instructionTemplateUuid) {
+          setError(
+            template
+              ? "Invalid instruction template id. Reload the page and try again."
+              : "Instruction template not found. Select the instruction again from the list."
+          );
+          return;
+        }
+        const newId =
+          typeof crypto !== "undefined" && "randomUUID" in crypto
+            ? `inst-draft-${crypto.randomUUID()}`
+            : `inst-local-${instructionTemplateUuid}-${Date.now()}`;
+        const row = {
+          id: newId,
+          instruction_template_id: instructionTemplateUuid,
+          label: template?.label ?? "Instruction",
+          input_data: nextInputData,
+          custom_note: nextCustomNote,
+          is_active: true as const,
+        };
+        setInstructionsList([row, ...instructionsList]);
+        setSelectedDetail({ section: "instructions", itemId: newId });
+      }
+    }, AUTOSAVE_DEBOUNCE_MS);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    customNote,
+    existingInstruction,
+    formData,
+    instructionsList,
+    isInstructionSection,
+    isNew,
+    itemId,
+    consultationFinalized,
+    setInstructionsList,
+    setSelectedDetail,
+    template,
+    templateId,
+  ]);
 
   if (!isInstructionSection || !itemId) {
     return (
@@ -208,7 +212,6 @@ export function InstructionDetailPanel() {
 
   const label = existingInstruction?.label ?? template?.label ?? "Instruction";
   const locked = consultationFinalized;
-  const canSave = !locked && (isNew || existingInstruction);
 
   const inner = (
     <>
@@ -298,23 +301,6 @@ export function InstructionDetailPanel() {
           />
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          {canSave && (
-            <Button type="button" variant="default" onClick={handleSave} className="gap-2 rounded-lg">
-              {existingInstruction ? "Update" : "Add instruction"}
-            </Button>
-          )}
-          {existingInstruction && !locked && (
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={handleDelete}
-              className="rounded-lg"
-            >
-              Remove
-            </Button>
-          )}
-        </div>
       </div>
     </>
   );
