@@ -6,6 +6,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Set, Tuple
 
+from django.core.cache import cache
+
 from consultations_core.services.metadata_loader import MetadataLoader
 
 # Relative paths under templates_metadata/
@@ -25,6 +27,7 @@ CATEGORY_SORT_WEIGHT: Dict[str, int] = {
 }
 
 _SPECIALTY_ORDER_FALLBACK = 10**6
+_SUGGESTIONS_CACHE_TTL_SECONDS = 120
 
 
 def normalize_specialty(raw: Optional[str]) -> str:
@@ -33,6 +36,18 @@ def normalize_specialty(raw: Optional[str]) -> str:
 
 def _category_weight(code: str) -> int:
     return CATEGORY_SORT_WEIGHT.get(code, 99)
+
+
+def _suggestions_cache_key(
+    *,
+    q: Optional[str],
+    specialty: Optional[str],
+    category: Optional[str],
+) -> str:
+    q_norm = (q or "").strip().lower()
+    specialty_norm = normalize_specialty(specialty)
+    category_norm = normalize_specialty(category)
+    return f"instructions:suggestions:v1:{q_norm}:{specialty_norm}:{category_norm}"
 
 
 def _load_sources() -> Tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
@@ -78,6 +93,19 @@ def get_instruction_suggestions(
     """
     exclude_set = set(exclude or [])
     limit = max(1, min(int(limit), 100))
+    cache_key = _suggestions_cache_key(q=q, specialty=specialty, category=category)
+    cached_rows = cache.get(cache_key)
+    if isinstance(cached_rows, list):
+        rows = cached_rows
+        filtered_rows = [row for row in rows if row.get("key") not in exclude_set]
+        sliced = filtered_rows[:limit]
+        return {
+            "data": sliced,
+            "meta": {
+                "total": len(filtered_rows),
+                "filtered": len(sliced),
+            },
+        }
 
     master, details_root, specialty_data = _load_sources()
     items: Dict[str, Any] = master.get("items") or {}
@@ -92,7 +120,7 @@ def get_instruction_suggestions(
     q_norm = (q or "").strip().lower()
     cat_norm = normalize_specialty(category) if category else ""
 
-    # Build candidate rows (pre-sort)
+    # Build candidate rows (pre-sort), excluding "exclude" because we apply that post-cache.
     candidates: List[Tuple[str, Dict[str, Any]]] = []
     for key, entry in items.items():
         if not isinstance(entry, dict):
@@ -108,12 +136,7 @@ def get_instruction_suggestions(
         if q_norm and q_norm not in label.lower():
             continue
 
-        if key in exclude_set:
-            continue
-
         candidates.append((key, entry))
-
-    total = len(candidates)
 
     def sort_key(item: Tuple[str, Dict[str, Any]]):
         key, entry = item
@@ -128,17 +151,16 @@ def get_instruction_suggestions(
         )
 
     candidates.sort(key=sort_key)
-    sliced = candidates[:limit]
 
-    data: List[Dict[str, Any]] = []
-    for key, entry in sliced:
+    rows: List[Dict[str, Any]] = []
+    for key, entry in candidates:
         requires_input = bool(entry.get("requires_input", False))
         field_list: List[Dict[str, Any]] = []
         if requires_input:
             detail_block = details.get(key) or {}
             field_list = list(detail_block.get("fields") or [])
 
-        data.append(
+        rows.append(
             {
                 "key": key,
                 "label": entry.get("label") or key,
@@ -148,10 +170,14 @@ def get_instruction_suggestions(
             }
         )
 
+    cache.set(cache_key, rows, timeout=_SUGGESTIONS_CACHE_TTL_SECONDS)
+    filtered_rows = [row for row in rows if row.get("key") not in exclude_set]
+    sliced = filtered_rows[:limit]
+
     return {
-        "data": data,
+        "data": sliced,
         "meta": {
-            "total": total,
-            "filtered": len(data),
+            "total": len(filtered_rows),
+            "filtered": len(sliced),
         },
     }

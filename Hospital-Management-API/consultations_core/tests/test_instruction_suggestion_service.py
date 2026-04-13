@@ -1,5 +1,6 @@
 from unittest.mock import patch
 
+from django.core.cache import cache
 from django.test import SimpleTestCase
 
 from consultations_core.services.instruction_suggestion_service import (
@@ -18,6 +19,10 @@ def _fake_loader_get(path: str):
     side_effect=_fake_loader_get,
 )
 class InstructionSuggestionServiceTests(SimpleTestCase):
+    def setUp(self):
+        super().setUp()
+        cache.clear()
+
     def test_normalize_specialty(self, _mock):
         self.assertEqual(normalize_specialty("  Cardiologist "), "cardiologist")
 
@@ -68,3 +73,15 @@ class InstructionSuggestionServiceTests(SimpleTestCase):
         self.assertEqual(out["meta"]["total"], 4)
         self.assertEqual(out["meta"]["filtered"], 2)
         self.assertEqual(len(out["data"]), 2)
+
+    def test_cache_reuses_pre_exclude_results(self, mock_loader):
+        first = get_instruction_suggestions(specialty="cardiologist", limit=20)
+        first_calls = mock_loader.call_count
+        second = get_instruction_suggestions(
+            specialty="cardiologist",
+            limit=20,
+            exclude=["adequate_rest"],
+        )
+        self.assertEqual(mock_loader.call_count, first_calls)
+        self.assertEqual(first["meta"]["total"], 4)
+        self.assertEqual(second["meta"]["total"], 3)

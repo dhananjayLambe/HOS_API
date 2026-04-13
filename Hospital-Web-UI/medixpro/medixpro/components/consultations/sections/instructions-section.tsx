@@ -255,14 +255,14 @@ export function InstructionsSection() {
     const ac = new AbortController();
     suggestionsAbortRef.current = ac;
     const gen = ++suggestionsFetchGenRef.current;
-    setSuggestionsLoading(true);
+    const hasRowsAlready = suggestionRows.length > 0;
+    setSuggestionsLoading(!hasRowsAlready);
     setSuggestionsError(null);
     fetchInstructionSuggestions(
       {
         q: inlineSearchDebounced,
         specialty: specialtySlug,
         limit: SUGGESTIONS_LIMIT,
-        excludeKeys: excludeTemplateKeys,
       },
       { signal: ac.signal }
     )
@@ -275,7 +275,6 @@ export function InstructionsSection() {
         if (gen !== suggestionsFetchGenRef.current) return;
         const msg = err instanceof Error ? err.message : "Failed to load instructions";
         setSuggestionsError(msg);
-        setSuggestionRows([]);
         notify("inst-suggestions-fail", () => toast.error("Failed to load instructions"));
       })
       .finally(() => {
@@ -287,10 +286,15 @@ export function InstructionsSection() {
   }, [
     inlineSearchDebounced,
     specialtySlug,
-    excludeTemplateKeys,
     consultationFinalized,
     loading,
   ]);
+
+  const filteredSuggestionRows = useMemo(() => {
+    if (excludeTemplateKeys.length === 0) return suggestionRows;
+    const excluded = new Set(excludeTemplateKeys);
+    return suggestionRows.filter((row) => !excluded.has(row.key));
+  }, [excludeTemplateKeys, suggestionRows]);
 
   const isSelected = (templateOrInstructionId: string) => {
     if (!selectedDetail || selectedDetail.section !== "instructions") return false;
@@ -356,9 +360,9 @@ export function InstructionsSection() {
   ]);
 
   const suggestionRowsForCapsules = useMemo(() => {
-    if (showAllInstructionSuggestions) return suggestionRows;
-    return suggestionRows.slice(0, SUGGESTIONS_CAPSULE_CAP);
-  }, [suggestionRows, showAllInstructionSuggestions]);
+    if (showAllInstructionSuggestions) return filteredSuggestionRows;
+    return filteredSuggestionRows.slice(0, SUGGESTIONS_CAPSULE_CAP);
+  }, [filteredSuggestionRows, showAllInstructionSuggestions]);
 
   const handleTemplateClick = (template: InstructionItemSchema) => {
     if (consultationFinalized) return;
@@ -704,7 +708,7 @@ export function InstructionsSection() {
           )}
 
           {instructionsList.length > 0 &&
-            (suggestionRows.length > 0 || suggestionsLoading || suggestionsError) && (
+            (filteredSuggestionRows.length > 0 || suggestionsLoading || suggestionsError) && (
               <hr className="border-border my-2" />
             )}
 
@@ -712,7 +716,7 @@ export function InstructionsSection() {
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Suggested instructions
             </p>
-            {suggestionsLoading && (
+            {suggestionsLoading && filteredSuggestionRows.length === 0 && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin shrink-0" />
                 Loading suggestions…
@@ -721,10 +725,10 @@ export function InstructionsSection() {
             {suggestionsError && !suggestionsLoading && (
               <p className="text-sm text-amber-800 dark:text-amber-200">{suggestionsError}</p>
             )}
-            {!suggestionsLoading && !suggestionsError && suggestionRows.length === 0 && (
+            {!suggestionsLoading && !suggestionsError && filteredSuggestionRows.length === 0 && (
               <p className="text-sm text-muted-foreground">No instructions match your search.</p>
             )}
-            {!suggestionsLoading && !suggestionsError && suggestionRows.length > 0 && (
+            {!suggestionsError && filteredSuggestionRows.length > 0 && (
               <>
                 <div className="flex flex-wrap gap-2">
                   {suggestionRowsForCapsules.map((row) => (
@@ -747,7 +751,7 @@ export function InstructionsSection() {
                     </button>
                   ))}
                 </div>
-                {suggestionRows.length > SUGGESTIONS_CAPSULE_CAP ? (
+                {filteredSuggestionRows.length > SUGGESTIONS_CAPSULE_CAP ? (
                   <button
                     type="button"
                     className="text-xs font-medium text-primary hover:underline"

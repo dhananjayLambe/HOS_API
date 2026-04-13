@@ -52,10 +52,34 @@ export type FetchInstructionSuggestionsParams = {
   excludeKeys?: string[];
 };
 
+const SUGGESTION_CACHE_TTL_MS = 90_000;
+
+type SuggestionCacheEntry = {
+  response: InstructionSuggestionsResponse;
+  expiresAt: number;
+};
+
+const suggestionCache = new Map<string, SuggestionCacheEntry>();
+
+function buildCacheKey(params: FetchInstructionSuggestionsParams): string {
+  const q = (params.q ?? "").trim().toLowerCase();
+  const specialty = normalizeSpecialtySlug(params.specialty ?? "");
+  const category = normalizeSpecialtySlug(params.category ?? "");
+  const limit = String(params.limit ?? 20);
+  return `${q}|${specialty}|${category}|${limit}`;
+}
+
 export async function fetchInstructionSuggestions(
   params: FetchInstructionSuggestionsParams,
   init?: { signal?: AbortSignal }
 ): Promise<InstructionSuggestionsResponse> {
+  const cacheKey = buildCacheKey(params);
+  const cached = suggestionCache.get(cacheKey);
+  const now = Date.now();
+  if (cached && cached.expiresAt > now) {
+    return cached.response;
+  }
+
   const sp = new URLSearchParams();
   const q = (params.q ?? "").trim();
   if (q) sp.set("q", q);
@@ -101,5 +125,10 @@ export async function fetchInstructionSuggestions(
     throw new Error("Invalid suggestion response");
   }
 
-  return data as InstructionSuggestionsResponse;
+  const typed = data as InstructionSuggestionsResponse;
+  suggestionCache.set(cacheKey, {
+    response: typed,
+    expiresAt: now + SUGGESTION_CACHE_TTL_MS,
+  });
+  return typed;
 }

@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 
 const DJANGO_API_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+const CACHE_CONTROL_VALUE = "private, max-age=60, stale-while-revalidate=120";
 
 export async function GET(request: NextRequest) {
   try {
@@ -27,10 +28,20 @@ export async function GET(request: NextRequest) {
     if (!response.ok) {
       return NextResponse.json(
         { error: data.detail || data.message || "Failed to fetch instruction suggestions" },
-        { status: response.status }
+        {
+          status: response.status,
+          headers: {
+            "Cache-Control": CACHE_CONTROL_VALUE,
+          },
+        }
       );
     }
-    return NextResponse.json(data, { status: 200 });
+    return NextResponse.json(data, {
+      status: 200,
+      headers: {
+        "Cache-Control": CACHE_CONTROL_VALUE,
+      },
+    });
   } catch (error: unknown) {
     console.error("[API] Instruction suggestions error:", error);
     return NextResponse.json(

@@ -4,6 +4,7 @@ API tests for GET /api/consultations/instructions/suggestions/
 import uuid
 from unittest.mock import patch
 
+from django.core.cache import cache
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.test import TestCase
@@ -50,6 +51,10 @@ def _make_authenticated_non_doctor_client():
 )
 class InstructionSuggestionsAPITests(TestCase):
     """HTTP contract, auth, query parsing, and error paths."""
+
+    def setUp(self):
+        super().setUp()
+        cache.clear()
 
     def test_get_success_envelope(self, _mock):
         client, _ = _make_doctor_client()
@@ -110,6 +115,16 @@ class InstructionSuggestionsAPITests(TestCase):
         self.assertEqual(r.data["meta"]["total"], 4)
         self.assertEqual(r.data["meta"]["filtered"], 2)
         self.assertEqual(len(r.data["data"]), 2)
+
+    def test_repeated_identical_query_returns_same_envelope(self, _mock):
+        client, _ = _make_doctor_client()
+        url = reverse(SUGGESTIONS_URL)
+        params = {"specialty": "cardiologist", "q": "pressure", "limit": 20}
+        r1 = client.get(url, params)
+        r2 = client.get(url, params)
+        self.assertEqual(r1.status_code, status.HTTP_200_OK)
+        self.assertEqual(r2.status_code, status.HTTP_200_OK)
+        self.assertEqual(r1.data, r2.data)
 
     def test_invalid_limit_too_low_400(self, _mock):
         client, _ = _make_doctor_client()
