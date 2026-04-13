@@ -205,15 +205,16 @@ export function ConsultationSectionScrollProvider({
       const container = document.getElementById(CONSULTATION_CONTAINER_ID);
       const offset = SECTION_SCROLL_OFFSET_PX;
 
-      if (
-        container &&
-        container.scrollHeight > container.clientHeight + 2
-      ) {
-        scrollElementInContainer(el, container, offset);
+      if (container?.contains(el)) {
+        if (container.scrollHeight > container.clientHeight + 2) {
+          scrollElementInContainer(el, container, offset);
+          return;
+        }
+        scrollElementInWindow(el, offset);
         return;
       }
 
-      scrollElementInWindow(el, offset);
+      el.scrollIntoView({ behavior: "smooth", block: "nearest" });
     },
     []
   );

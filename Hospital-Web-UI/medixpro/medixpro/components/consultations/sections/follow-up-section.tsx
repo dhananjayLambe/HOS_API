@@ -1,102 +1,140 @@
 "use client";
 
-import { useMemo } from "react";
-import { Calendar } from "lucide-react";
+import { useCallback, useEffect, useRef } from "react";
+import { CalendarDays, Lock } from "lucide-react";
+import { format } from "date-fns";
+import {
+  ConsultationSectionCard,
+  type ConsultationSectionCardHandle,
+} from "@/components/consultations/consultation-section-card";
+import { useConsultationSectionScroll } from "@/components/consultations/consultation-section-scroll-context";
+import { shouldIgnoreSectionActivationClick } from "@/lib/consultation-section-activation";
 import { useConsultationStore } from "@/store/consultationStore";
 import { cn } from "@/lib/utils";
-import { useConsultationSectionScroll } from "@/components/consultations/consultation-section-scroll-context";
 
-function formatFollowUpSummary(
-  interval: number,
-  unit: string,
-  dateStr: string
-): string {
-  if (dateStr) {
-    try {
-      const d = new Date(dateStr);
-      if (!Number.isNaN(d.getTime())) {
-        return d.toLocaleDateString("en-GB", {
-          day: "numeric",
-          month: "short",
-          year: "numeric",
-        });
-      }
-    } catch {
-      // ignore
-    }
+/** Dispatched from consultation action bar: expand section + open right detail panel. */
+export const EXPAND_FOLLOW_UP_SIDEBAR_EVENT =
+  "medixpro:consultation-expand-follow-up-sidebar";
+
+function parseISODateLocal(s: string): Date | undefined {
+  if (!s?.trim()) return undefined;
+  const parts = s.split("-").map(Number);
+  const y = parts[0];
+  const m = parts[1];
+  const day = parts[2];
+  if (!y || !m || !day) return undefined;
+  const d = new Date(y, m - 1, day);
+  return Number.isNaN(d.getTime()) ? undefined : d;
+}
+
+function formatDisplayDate(iso: string): string {
+  const d = parseISODateLocal(iso);
+  if (!d) return "";
+  try {
+    return format(d, "d MMM yyyy");
+  } catch {
+    return iso;
   }
-  if (interval > 0 && unit) {
-    const isMonth = unit === "months";
-    const label = isMonth
-      ? interval === 1
-        ? "1 Month"
-        : `${interval} Months`
-      : interval === 1
-        ? "1 Day"
-        : `${interval} Days`;
-    return label;
-  }
-  return "";
 }
 
 export function FollowUpSection() {
+  const sectionCardRef = useRef<ConsultationSectionCardHandle>(null);
   const {
-    follow_up_interval,
-    follow_up_unit,
     follow_up_date,
-    follow_up_reason,
+    consultationFinalized,
     setSelectedDetail,
+    setSelectedSymptomId,
   } = useConsultationStore();
+
   const { registerSectionRef, activateSection, activeSectionKey } =
     useConsultationSectionScroll();
 
-  const isConfigured =
-    follow_up_date ||
-    follow_up_interval > 0 ||
-    (follow_up_reason?.trim().length ?? 0) > 0;
+  const locked = consultationFinalized;
+  const hasDate = Boolean(follow_up_date?.trim());
+  const summary = hasDate ? formatDisplayDate(follow_up_date) : "No follow-up scheduled";
 
-  const summary = useMemo(() => {
-    const s = formatFollowUpSummary(
-      follow_up_interval,
-      follow_up_unit,
-      follow_up_date
-    );
-    if (s) return s;
-    return isConfigured ? "✓" : "";
-  }, [follow_up_interval, follow_up_unit, follow_up_date, isConfigured]);
+  const openFollowUpDetail = useCallback(() => {
+    setSelectedSymptomId(null);
+    setSelectedDetail({ section: "follow_up" });
+    activateSection("follow_up");
+    sectionCardRef.current?.expand();
+  }, [
+    activateSection,
+    setSelectedDetail,
+    setSelectedSymptomId,
+  ]);
 
-  const title = summary ? `Follow-Up • ${summary}` : "Follow-Up";
+  useEffect(() => {
+    const onExpand = () => {
+      openFollowUpDetail();
+    };
+    window.addEventListener(EXPAND_FOLLOW_UP_SIDEBAR_EVENT, onExpand);
+    return () => window.removeEventListener(EXPAND_FOLLOW_UP_SIDEBAR_EVENT, onExpand);
+  }, [openFollowUpDetail]);
+
+  const handleSectionCardActivate = useCallback(() => {
+    openFollowUpDetail();
+  }, [openFollowUpDetail]);
+
+  const handleSectionContainerClick = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      if (shouldIgnoreSectionActivationClick(event.target, event.currentTarget))
+        return;
+      handleSectionCardActivate();
+    },
+    [handleSectionCardActivate]
+  );
+
+  const handleSectionContainerKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      handleSectionCardActivate();
+    },
+    [handleSectionCardActivate]
+  );
 
   return (
     <div
       ref={(el) => registerSectionRef("follow_up", el)}
-      id="follow_up-section"
+      id="follow-up-menu"
       role="button"
       tabIndex={0}
-      onClick={() => {
-        setSelectedDetail({ section: "follow_up" });
-        activateSection("follow_up");
-      }}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          setSelectedDetail({ section: "follow_up" });
-          activateSection("follow_up");
-        }
-      }}
+      onClick={handleSectionContainerClick}
+      onKeyDown={handleSectionContainerKeyDown}
       className={cn(
-        "ccp-mid-section scroll-mt-2 mb-4 rounded-2xl border border-border/80 bg-card p-4 shadow-sm transition-[box-shadow,opacity,border-color] hover:shadow-md cursor-pointer touch-manipulation",
+        "ccp-mid-section scroll-mt-2 rounded-2xl cursor-pointer transition-colors hover:border-blue-300/70 hover:bg-blue-50/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/40",
         activeSectionKey === "follow_up" && "ccp-mid-section--active"
       )}
     >
-      <div className="flex flex-row items-center justify-between space-y-0">
-        <div className="flex flex-1 items-center gap-2 text-left min-h-[44px]">
-          <span className="flex shrink-0 text-muted-foreground [&_svg]:size-4">
-            <Calendar className="text-muted-foreground" />
+      <ConsultationSectionCard
+        ref={sectionCardRef}
+        title="Follow-Up"
+        icon={
+          <span className="flex h-8 w-8 items-center justify-center rounded-md border border-primary/20 bg-primary/10 text-primary dark:bg-primary/15">
+            <CalendarDays className="h-4 w-4" strokeWidth={2.25} aria-hidden />
           </span>
-          <span className="font-semibold">{title}</span>
-        </div>
-      </div>
+        }
+        defaultOpen={false}
+        onOpenChange={(open) => {
+          if (open) {
+            setSelectedSymptomId(null);
+            setSelectedDetail({ section: "follow_up" });
+            activateSection("follow_up");
+          }
+        }}
+      >
+        {locked && (
+          <div className="mb-3 flex items-center gap-2 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
+            <Lock className="h-4 w-4 shrink-0" />
+            Consultation finalized
+          </div>
+        )}
+        <p className="text-sm text-muted-foreground">
+          <span className="font-medium text-foreground">Summary: </span>
+          {summary}
+        </p>
+      </ConsultationSectionCard>
     </div>
   );
 }

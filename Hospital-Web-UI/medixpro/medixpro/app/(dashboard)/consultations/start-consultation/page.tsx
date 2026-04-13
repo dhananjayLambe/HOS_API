@@ -23,13 +23,13 @@ import { ConsultationSection } from "@/components/consultations/consultation-sec
 import { ConsultationErrorBoundary } from "@/components/consultations/consultation-error-boundary";
 import { ConsultationSectionScrollProvider } from "@/components/consultations/consultation-section-scroll-context";
 import {
-  FollowUpSection,
   ProceduresSection,
   SymptomsSection,
   FindingsSection,
   DiagnosisSection,
   InstructionsSection,
   InvestigationsSection,
+  FollowUpSection,
 } from "@/components/consultations/sections";
 import { useConsultationStore } from "@/store/consultationStore";
 import { useShallow } from "zustand/react/shallow";

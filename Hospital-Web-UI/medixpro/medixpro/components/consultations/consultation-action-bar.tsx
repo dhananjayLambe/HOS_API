@@ -36,6 +36,8 @@ import { ViewPreDrawer } from "./view-pre-drawer";
 import { ConsultationAutosaveIndicator } from "./consultation-autosave-indicator";
 import { buildEndConsultationPayload } from "@/lib/consultation-payload-builder";
 import { isEncounterInstructionIncomplete } from "@/lib/instruction-completion";
+import { useConsultationSectionScroll } from "@/components/consultations/consultation-section-scroll-context";
+import { EXPAND_FOLLOW_UP_SIDEBAR_EVENT } from "@/components/consultations/sections/follow-up-section";
 
 const CONSULTATION_TYPE_LABELS: Record<ConsultationWorkflowType, string> = {
   FULL: "Full Consultation",
@@ -53,7 +55,9 @@ export function ConsultationActionBar() {
   const searchParams = useSearchParams();
   const toast = useToastNotification();
   const { selectedPatient } = usePatient();
-  const { setSelectedDetail, consultationType, setConsultationType, encounterId: storeEncounterId } = useConsultationStore();
+  const { activateSection } = useConsultationSectionScroll();
+  const { consultationType, setConsultationType, encounterId: storeEncounterId, setSelectedDetail, setSelectedSymptomId } =
+    useConsultationStore();
   const encounterIdFromUrl = searchParams.get("encounter_id");
   const encounterId = storeEncounterId || encounterIdFromUrl;
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
@@ -456,7 +460,13 @@ export function ConsultationActionBar() {
             <AlertDialogAction
               onClick={() => {
                 setShowFollowUpConfirm(false);
+                setSelectedSymptomId(null);
                 setSelectedDetail({ section: "follow_up" });
+                window.dispatchEvent(new Event(EXPAND_FOLLOW_UP_SIDEBAR_EVENT));
+                document
+                  .getElementById("follow-up-menu")
+                  ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+                activateSection("follow_up");
               }}
               className="bg-blue-600 hover:bg-blue-700"
             >
