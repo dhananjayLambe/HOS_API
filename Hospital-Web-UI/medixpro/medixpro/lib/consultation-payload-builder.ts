@@ -133,6 +133,8 @@ export function buildEndConsultationPayload(
         investigations,
         instructions,
       },
+      /** Free text; backend normalizes (trim). Always sent so replace-set can clear rows. */
+      procedures: store.procedures ?? "",
       meta,
     },
   };
