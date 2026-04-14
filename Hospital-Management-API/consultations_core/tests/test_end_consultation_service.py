@@ -6,6 +6,7 @@ from django.core.exceptions import ValidationError
 from django.test import SimpleTestCase
 
 from consultations_core.services.end_consultation_service import (
+    _PROCEDURES_PAYLOAD_OMITTED,
     _extract_diagnoses_payload,
     _extract_findings_payload,
     _extract_follow_up_payload,
@@ -13,7 +14,9 @@ from consultations_core.services.end_consultation_service import (
     _extract_symptoms_payload,
     _persist_follow_up,
     _persist_medicines,
+    _resolve_procedures_for_persist,
 )
+from consultations_core.services.procedure_service import persist_procedures
 
 
 class EndConsultationPayloadExtractionTests(SimpleTestCase):
@@ -234,6 +237,74 @@ class EndConsultationFollowUpExtractionTests(SimpleTestCase):
         payload = {"follow_up": {"date": "2026-06-15", "interval": 0, "unit": "days", "reason": ""}}
         n = _extract_follow_up_payload(payload)
         self.assertEqual(n["date"], datetime.date(2026, 6, 15))
+
+
+class EndConsultationProceduresResolverTests(SimpleTestCase):
+    def test_procedures_omitted_when_no_key(self):
+        payload = {"store": {"sectionItems": {}}}
+        self.assertIs(
+            _resolve_procedures_for_persist(payload),
+            _PROCEDURES_PAYLOAD_OMITTED,
+        )
+
+    def test_procedures_from_store_trimmed(self):
+        payload = {"store": {"procedures": "  Suture  ", "sectionItems": {}}}
+        self.assertEqual(_resolve_procedures_for_persist(payload), "Suture")
+
+    def test_procedures_empty_string_means_clear(self):
+        payload = {"store": {"procedures": "", "sectionItems": {}}}
+        self.assertIsNone(_resolve_procedures_for_persist(payload))
+
+    def test_procedures_explicit_null_means_clear(self):
+        payload = {"store": {"procedures": None, "sectionItems": {}}}
+        self.assertIsNone(_resolve_procedures_for_persist(payload))
+
+    def test_procedures_store_precedence_over_section_items(self):
+        payload = {
+            "store": {
+                "procedures": "from store",
+                "sectionItems": {"procedures": "from section"},
+            }
+        }
+        self.assertEqual(_resolve_procedures_for_persist(payload), "from store")
+
+    def test_procedures_from_section_items_when_store_key_absent(self):
+        payload = {"store": {"sectionItems": {"procedures": "section note"}}}
+        self.assertEqual(_resolve_procedures_for_persist(payload), "section note")
+
+    def test_procedures_non_string_raises(self):
+        payload = {"store": {"procedures": ["x"], "sectionItems": {}}}
+        with self.assertRaises(ValidationError) as ctx:
+            _resolve_procedures_for_persist(payload)
+        self.assertIn("procedures", ctx.exception.message_dict)
+
+
+class EndConsultationProcedureServiceTests(SimpleTestCase):
+    @patch("consultations_core.services.procedure_service.Procedure.objects")
+    def test_persist_procedures_delete_then_create(self, proc_objects):
+        consultation = SimpleNamespace(id="c1")
+        user = SimpleNamespace()
+        created = MagicMock()
+        proc_objects.create.return_value = created
+
+        persist_procedures(consultation, "Dressing done", user)
+
+        proc_objects.filter.assert_called_once_with(consultation=consultation)
+        proc_objects.filter.return_value.delete.assert_called_once()
+        proc_objects.create.assert_called_once_with(
+            consultation=consultation,
+            notes="Dressing done",
+            created_by=user,
+            updated_by=user,
+        )
+
+    @patch("consultations_core.services.procedure_service.Procedure.objects")
+    def test_persist_procedures_none_text_delete_only(self, proc_objects):
+        consultation = SimpleNamespace(id="c1")
+        persist_procedures(consultation, None, SimpleNamespace())
+        proc_objects.filter.assert_called_once_with(consultation=consultation)
+        proc_objects.filter.return_value.delete.assert_called_once()
+        proc_objects.create.assert_not_called()
 
 
 class EndConsultationFollowUpPersistenceTests(SimpleTestCase):

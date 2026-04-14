@@ -34,6 +34,7 @@ from consultations_core.models.investigation import (
     InvestigationSource,
 )
 from consultations_core.models.prescription import Prescription, PrescriptionLine
+from consultations_core.models.procedure import Procedure
 from consultations_core.models.symptoms import ConsultationSymptom
 from consultations_core.services.encounter_service import EncounterService
 from diagnostics_engine.models import (
@@ -508,3 +509,39 @@ class EndConsultationIntegrationTests(TestCase):
         r = self._post_complete(payload)
         self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST, getattr(r, "data", r.content))
         self.assertEqual(FollowUp.objects.filter(consultation=self.consultation).count(), 0)
+
+    def test_21_procedures_free_text_persisted(self):
+        payload = _base_payload()
+        payload["store"]["procedures"] = "Dressing done, suturing 3 stitches"
+        r = self._post_complete(payload)
+        self.assertEqual(r.status_code, status.HTTP_200_OK, getattr(r, "data", r.content))
+        rows = Procedure.objects.filter(consultation=self.consultation)
+        self.assertEqual(rows.count(), 1)
+        self.assertEqual(rows.first().notes, "Dressing done, suturing 3 stitches")
+        self.assertEqual(rows.first().created_by_id, self.doctor_user.id)
+
+    def test_22_procedures_omitted_does_not_touch_existing_rows(self):
+        Procedure.objects.create(
+            consultation=self.consultation,
+            notes="Pre-seeded",
+            created_by=self.doctor_user,
+            updated_by=self.doctor_user,
+        )
+        r = self._post_complete(_base_payload())
+        self.assertEqual(r.status_code, status.HTTP_200_OK, getattr(r, "data", r.content))
+        rows = Procedure.objects.filter(consultation=self.consultation)
+        self.assertEqual(rows.count(), 1)
+        self.assertEqual(rows.first().notes, "Pre-seeded")
+
+    def test_23_procedures_empty_string_clears_rows(self):
+        Procedure.objects.create(
+            consultation=self.consultation,
+            notes="To be cleared",
+            created_by=self.doctor_user,
+            updated_by=self.doctor_user,
+        )
+        payload = _base_payload()
+        payload["store"]["procedures"] = ""
+        r = self._post_complete(payload)
+        self.assertEqual(r.status_code, status.HTTP_200_OK, getattr(r, "data", r.content))
+        self.assertEqual(Procedure.objects.filter(consultation=self.consultation).count(), 0)

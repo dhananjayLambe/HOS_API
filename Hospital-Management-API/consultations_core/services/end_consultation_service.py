@@ -32,6 +32,7 @@ from consultations_core.models.instruction import (
 )
 from consultations_core.models.follow_up import FollowUp
 from consultations_core.models.prescription import CustomMedicine, Prescription, PrescriptionLine
+from consultations_core.services.procedure_service import persist_procedures
 from consultations_core.models.symptoms import (
     ConsultationSymptom,
     CustomSymptom,
@@ -65,6 +66,10 @@ def _instructions_validation_error(message):
 
 def _follow_up_validation_error(message):
     raise DjangoValidationError({"follow_up": [message]})
+
+
+def _procedures_validation_error(message):
+    raise DjangoValidationError({"procedures": [message]})
 
 
 def _validate_symptom(item):
@@ -446,6 +451,41 @@ def _extract_follow_up_payload(payload):
             d.get("early_if_persist") if d.get("early_if_persist") is not None else d.get("follow_up_early_if_persist"),
         )
     return None
+
+
+_PROCEDURES_PAYLOAD_OMITTED = object()
+
+
+def _resolve_procedures_for_persist(payload):
+    """
+    Returns:
+      _PROCEDURES_PAYLOAD_OMITTED — 'procedures' absent from store and sectionItems (no DB change).
+      str — non-empty stripped text to persist.
+      None — clear (delete rows; empty string or explicit null).
+    """
+    if not isinstance(payload, dict):
+        return _PROCEDURES_PAYLOAD_OMITTED
+    store = payload.get("store")
+    if not isinstance(store, dict):
+        return _PROCEDURES_PAYLOAD_OMITTED
+
+    section_items = store.get("sectionItems")
+    if not isinstance(section_items, dict):
+        section_items = {}
+
+    in_store = "procedures" in store
+    in_section = "procedures" in section_items
+    if not in_store and not in_section:
+        return _PROCEDURES_PAYLOAD_OMITTED
+
+    raw = store.get("procedures") if in_store else section_items.get("procedures")
+
+    if raw is None:
+        return None
+    if not isinstance(raw, str):
+        _procedures_validation_error("Procedures must be a string.")
+    cleaned = raw.strip()
+    return cleaned if cleaned else None
 
 
 def _follow_up_is_cleared(norm):
@@ -1482,3 +1522,6 @@ def persist_consultation_end_state(consultation, payload: dict, user):
         user=user,
         raw=_extract_follow_up_payload(payload),
     )
+    proc = _resolve_procedures_for_persist(payload)
+    if proc is not _PROCEDURES_PAYLOAD_OMITTED:
+        persist_procedures(consultation, proc, user)
