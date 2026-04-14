@@ -1,3 +1,4 @@
+import datetime
 import logging
 import uuid
 
@@ -29,6 +30,7 @@ from consultations_core.models.instruction import (
     InstructionTemplate,
     InstructionTemplateVersion,
 )
+from consultations_core.models.follow_up import FollowUp
 from consultations_core.models.prescription import CustomMedicine, Prescription, PrescriptionLine
 from consultations_core.models.symptoms import (
     ConsultationSymptom,
@@ -59,6 +61,10 @@ def _investigations_validation_error(message):
 
 def _instructions_validation_error(message):
     raise DjangoValidationError({"instructions": [message]})
+
+
+def _follow_up_validation_error(message):
+    raise DjangoValidationError({"follow_up": [message]})
 
 
 def _validate_symptom(item):
@@ -342,6 +348,183 @@ def _extract_instructions_payload(payload):
                 "custom_instructions": ci,
             }
     return payload.get("instructions", []) if isinstance(payload, dict) else []
+
+
+_FOLLOW_UP_FLAT_STORE_KEYS = (
+    "follow_up_date",
+    "follow_up_interval",
+    "follow_up_unit",
+    "follow_up_reason",
+    "follow_up_early_if_persist",
+)
+
+
+def _parse_follow_up_date_value(value):
+    if value in (None, ""):
+        return None
+    s = str(value).strip()
+    if not s:
+        return None
+    date_part = s.split("T", 1)[0]
+    try:
+        return datetime.date.fromisoformat(date_part)
+    except ValueError:
+        _follow_up_validation_error(f"Invalid follow-up date: {value!r}.")
+
+
+def _coerce_follow_up_interval(val):
+    if val in (None, ""):
+        return 0
+    try:
+        return int(val)
+    except (TypeError, ValueError):
+        _follow_up_validation_error("Invalid follow-up interval.")
+
+
+def _normalize_follow_up_dict(date_val, interval_val, unit_val, reason_val, early_val):
+    parsed_date = None
+    if date_val not in (None, ""):
+        parsed_date = _parse_follow_up_date_value(date_val)
+    interval = _coerce_follow_up_interval(interval_val)
+    unit = (str(unit_val or "days").strip().lower() or "days")
+    reason = str(reason_val or "").strip()
+    early = bool(early_val)
+    return {
+        "date": parsed_date,
+        "interval": interval,
+        "unit": unit,
+        "reason": reason,
+        "early_if_persist": early,
+    }
+
+
+def _extract_follow_up_payload(payload):
+    """
+    None = client did not send follow-up section (no-op).
+    Dict = normalized follow-up (may be semantically 'cleared' → delete in persist).
+    """
+    if not isinstance(payload, dict):
+        return None
+    store = payload.get("store")
+    if isinstance(store, dict):
+        meta = store.get("meta")
+        if isinstance(meta, dict) and "follow_up" in meta and isinstance(meta["follow_up"], dict):
+            d = meta["follow_up"]
+            return _normalize_follow_up_dict(
+                d.get("date") or d.get("follow_up_date"),
+                d.get("interval") if d.get("interval") is not None else d.get("follow_up_interval"),
+                d.get("unit") or d.get("follow_up_unit"),
+                d.get("reason") or d.get("follow_up_reason"),
+                d.get("early_if_persist") if d.get("early_if_persist") is not None else d.get("follow_up_early_if_persist"),
+            )
+        if any(k in store for k in _FOLLOW_UP_FLAT_STORE_KEYS):
+            return _normalize_follow_up_dict(
+                store.get("follow_up_date"),
+                store.get("follow_up_interval"),
+                store.get("follow_up_unit"),
+                store.get("follow_up_reason"),
+                store.get("follow_up_early_if_persist"),
+            )
+    if isinstance(payload.get("follow_up"), dict):
+        d = payload["follow_up"]
+        return _normalize_follow_up_dict(
+            d.get("date") or d.get("follow_up_date"),
+            d.get("interval") if d.get("interval") is not None else d.get("follow_up_interval"),
+            d.get("unit") or d.get("follow_up_unit"),
+            d.get("reason") or d.get("follow_up_reason"),
+            d.get("early_if_persist") if d.get("early_if_persist") is not None else d.get("follow_up_early_if_persist"),
+        )
+    store = payload.get("store", {}) if isinstance(payload, dict) else {}
+    section_items = store.get("sectionItems", {}) if isinstance(store, dict) else {}
+    if isinstance(section_items, dict) and isinstance(section_items.get("follow_up"), dict):
+        d = section_items["follow_up"]
+        return _normalize_follow_up_dict(
+            d.get("date") or d.get("follow_up_date"),
+            d.get("interval") if d.get("interval") is not None else d.get("follow_up_interval"),
+            d.get("unit") or d.get("follow_up_unit"),
+            d.get("reason") or d.get("follow_up_reason"),
+            d.get("early_if_persist") if d.get("early_if_persist") is not None else d.get("follow_up_early_if_persist"),
+        )
+    return None
+
+
+def _follow_up_is_cleared(norm):
+    if not norm:
+        return True
+    if norm.get("date") is not None:
+        return False
+    if norm.get("interval", 0) > 0:
+        return False
+    if norm.get("reason"):
+        return False
+    if norm.get("early_if_persist"):
+        return False
+    return True
+
+
+def _build_follow_up_condition_note(reason, early_if_persist):
+    suffix = "⚠️ Visit earlier if symptoms persist"
+    if early_if_persist:
+        note = (reason or "").strip()
+        if note:
+            return f"{note}\n{suffix}"
+        return suffix
+    return (reason or "").strip() or None
+
+
+def _persist_follow_up(consultation, user, raw):
+    if raw is None:
+        return
+    norm = raw
+    if norm["interval"] < 0:
+        _follow_up_validation_error("Interval must be greater than 0.")
+    if _follow_up_is_cleared(norm):
+        FollowUp.objects.filter(consultation=consultation).delete()
+        return
+
+    has_date = norm["date"] is not None
+    has_interval = norm["interval"] > 0
+
+    if norm["reason"] and not has_date and not has_interval:
+        _follow_up_validation_error(
+            "Follow-up requires a date or interval when notes are provided."
+        )
+
+    if has_date:
+        # Explicit calendar date wins over quick-interval when both are present (UI redundancy).
+        follow_up_type = FollowUp.FollowUpType.EXACT_DATE
+        after_value = None
+        follow_up_date = norm["date"]
+    elif has_interval:
+        unit = norm["unit"]
+        if unit in ("day", "days"):
+            follow_up_type = FollowUp.FollowUpType.AFTER_DAYS
+        elif unit in ("week", "weeks", "month", "months"):
+            follow_up_type = FollowUp.FollowUpType.AFTER_WEEKS
+        else:
+            _follow_up_validation_error(f"Invalid follow-up unit: {unit!r}.")
+        after_value = norm["interval"]
+        follow_up_date = None
+    else:
+        # Option A: early_if_persist augments date/interval only; early-only is invalid.
+        _follow_up_validation_error(
+            "Follow-up requires a date or interval when earlier-if-persist is set."
+            if norm["early_if_persist"]
+            else "Follow-up requires a date or interval."
+        )
+
+    condition_note = _build_follow_up_condition_note(norm["reason"], norm["early_if_persist"])
+
+    FollowUp.objects.filter(consultation=consultation).delete()
+    FollowUp.objects.create(
+        consultation=consultation,
+        follow_up_type=follow_up_type,
+        follow_up_date=follow_up_date,
+        after_value=after_value,
+        condition_note=condition_note,
+        added_by=user,
+    )
+    logger.info("Follow-up saved for consultation %s", consultation.id)
 
 
 def _looks_like_uuid(token) -> bool:
@@ -1293,4 +1476,9 @@ def persist_consultation_end_state(consultation, payload: dict, user):
         consultation=consultation,
         user=user,
         raw_instructions=_extract_instructions_payload(payload),
+    )
+    _persist_follow_up(
+        consultation=consultation,
+        user=user,
+        raw=_extract_follow_up_payload(payload),
     )

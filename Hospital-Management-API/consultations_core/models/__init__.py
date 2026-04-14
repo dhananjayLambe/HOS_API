@@ -9,3 +9,4 @@ from .prescription import *
 from .investigation import *
 from .recommendations import *
 from .audit import *
+from .follow_up import FollowUp

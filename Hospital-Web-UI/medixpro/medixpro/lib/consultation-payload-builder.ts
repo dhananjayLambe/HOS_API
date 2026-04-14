@@ -6,7 +6,17 @@ import {
   shouldShowInvestigationCustomTag,
 } from "@/lib/consultation-completion";
 import { buildInstructionsPayload } from "@/lib/consultation-instructions-helpers";
+import type { FollowUpUnit } from "@/lib/consultation-types";
 import { useConsultationStore } from "@/store/consultationStore";
+
+/** Map legacy UI values to API contract (days | weeks). */
+function normalizeFollowUpUnit(unit: FollowUpUnit | string | undefined | null): "days" | "weeks" {
+  const u = String(unit ?? "days")
+    .trim()
+    .toLowerCase();
+  if (u === "week" || u === "weeks" || u === "month" || u === "months") return "weeks";
+  return "days";
+}
 
 export function buildEndConsultationPayload(
   store: ReturnType<typeof useConsultationStore.getState>
@@ -88,6 +98,28 @@ export function buildEndConsultationPayload(
   /** Draft rows from Zustand only; backend persists on POST .../consultation/complete/ only. */
   const instructions = buildInstructionsPayload(store.instructionsList ?? []);
 
+  const meta: Record<string, unknown> = {
+    consultation_type: store.consultationType ?? "FULL",
+  };
+
+  if (store.follow_up_payload_touched) {
+    const dateStr = (store.follow_up_date ?? "").trim();
+    const interval = Number(store.follow_up_interval ?? 0) || 0;
+    const reason = (store.follow_up_reason ?? "").trim();
+    const early = Boolean(store.follow_up_early_if_persist);
+    if (!dateStr && interval <= 0 && !reason && !early) {
+      meta.follow_up = {};
+    } else {
+      meta.follow_up = {
+        date: dateStr,
+        interval,
+        unit: normalizeFollowUpUnit(store.follow_up_unit),
+        reason,
+        early_if_persist: store.follow_up_early_if_persist ?? false,
+      };
+    }
+  }
+
   return {
     mode: "commit",
     store: {
@@ -101,15 +133,7 @@ export function buildEndConsultationPayload(
         investigations,
         instructions,
       },
-      meta: {
-        consultation_type: store.consultationType ?? "FULL",
-        follow_up: {
-          date: store.follow_up_date ?? "",
-          interval: store.follow_up_interval ?? 0,
-          unit: store.follow_up_unit ?? "days",
-          reason: store.follow_up_reason ?? "",
-        },
-      },
+      meta,
     },
   };
 }

@@ -7,6 +7,7 @@ Run report:
 Verifies Consultation, ClinicalEncounter, and section persistence tables after end consultation.
 """
 
+import datetime
 import uuid
 
 from django.contrib.auth import get_user_model
@@ -19,6 +20,7 @@ from rest_framework.test import APIClient
 from clinic.models import Clinic
 from consultations_core.models.consultation import Consultation
 from consultations_core.models.diagnosis import ConsultationDiagnosis, CustomDiagnosis
+from consultations_core.models.follow_up import FollowUp
 from consultations_core.models.encounter import ClinicalEncounter
 from consultations_core.models.instruction import (
     CustomDoctorInstruction,
@@ -397,3 +399,112 @@ class EndConsultationIntegrationTests(TestCase):
         self.assertEqual(qs.count(), 1)
         row = qs.first()
         self.assertEqual(row.instruction_template_id, self.instruction_tpl.id)
+
+    def test_14_follow_up_flat_store_exact_date_persisted(self):
+        payload = _base_payload()
+        payload["store"]["follow_up_date"] = "2026-05-10"
+        payload["store"]["follow_up_interval"] = 5
+        payload["store"]["follow_up_unit"] = "days"
+        payload["store"]["follow_up_reason"] = "routine review"
+        payload["store"]["follow_up_early_if_persist"] = True
+        r = self._post_complete(payload)
+        self.assertEqual(r.status_code, status.HTTP_200_OK, getattr(r, "data", r.content))
+        fu = FollowUp.objects.get(consultation=self.consultation)
+        self.assertEqual(fu.follow_up_type, FollowUp.FollowUpType.EXACT_DATE)
+        self.assertEqual(fu.follow_up_date, datetime.date(2026, 5, 10))
+        self.assertIsNone(fu.after_value)
+        self.assertEqual(
+            fu.condition_note,
+            "routine review\n⚠️ Visit earlier if symptoms persist",
+        )
+
+    def test_15_follow_up_interval_anchors_to_consultation_start(self):
+        payload = _base_payload()
+        payload["store"]["follow_up_date"] = ""
+        payload["store"]["follow_up_interval"] = 5
+        payload["store"]["follow_up_unit"] = "days"
+        payload["store"]["follow_up_reason"] = ""
+        payload["store"]["follow_up_early_if_persist"] = False
+        r = self._post_complete(payload)
+        self.assertEqual(r.status_code, status.HTTP_200_OK, getattr(r, "data", r.content))
+        fu = FollowUp.objects.get(consultation=self.consultation)
+        self.assertEqual(fu.follow_up_type, FollowUp.FollowUpType.AFTER_DAYS)
+        self.assertEqual(fu.after_value, 5)
+        base = self.consultation.created_at.date()
+        self.assertEqual(fu.follow_up_date, base + datetime.timedelta(days=5))
+
+    def test_16_follow_up_cleared_deletes_row(self):
+        FollowUp.objects.create(
+            consultation=self.consultation,
+            follow_up_type=FollowUp.FollowUpType.EXACT_DATE,
+            follow_up_date=datetime.date(2026, 1, 1),
+            added_by=self.doctor_user,
+        )
+        payload = _base_payload()
+        payload["store"]["follow_up_date"] = ""
+        payload["store"]["follow_up_interval"] = 0
+        payload["store"]["follow_up_unit"] = "days"
+        payload["store"]["follow_up_reason"] = ""
+        payload["store"]["follow_up_early_if_persist"] = False
+        r = self._post_complete(payload)
+        self.assertEqual(r.status_code, status.HTTP_200_OK, getattr(r, "data", r.content))
+        self.assertEqual(FollowUp.objects.filter(consultation=self.consultation).count(), 0)
+
+    def test_17_follow_up_notes_only_returns_400(self):
+        payload = _base_payload()
+        payload["store"]["follow_up_date"] = ""
+        payload["store"]["follow_up_interval"] = 0
+        payload["store"]["follow_up_unit"] = "days"
+        payload["store"]["follow_up_reason"] = "Call if worse"
+        payload["store"]["follow_up_early_if_persist"] = False
+        r = self._post_complete(payload)
+        self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST, getattr(r, "data", r.content))
+        self.assertEqual(FollowUp.objects.filter(consultation=self.consultation).count(), 0)
+
+    def test_18_follow_up_meta_shape_persisted(self):
+        payload = _base_payload()
+        payload["store"]["meta"] = {
+            "consultation_type": "FULL",
+            "follow_up": {
+                "date": "2026-07-20",
+                "interval": 0,
+                "unit": "days",
+                "reason": "",
+            },
+        }
+        r = self._post_complete(payload)
+        self.assertEqual(r.status_code, status.HTTP_200_OK, getattr(r, "data", r.content))
+        fu = FollowUp.objects.get(consultation=self.consultation)
+        self.assertEqual(fu.follow_up_date, datetime.date(2026, 7, 20))
+
+    def test_19_follow_up_meta_empty_object_deletes(self):
+        FollowUp.objects.create(
+            consultation=self.consultation,
+            follow_up_type=FollowUp.FollowUpType.EXACT_DATE,
+            follow_up_date=datetime.date(2026, 3, 1),
+            added_by=self.doctor_user,
+        )
+        payload = _base_payload()
+        payload["store"]["meta"] = {
+            "consultation_type": "FULL",
+            "follow_up": {},
+        }
+        r = self._post_complete(payload)
+        self.assertEqual(r.status_code, status.HTTP_200_OK, getattr(r, "data", r.content))
+        self.assertEqual(FollowUp.objects.filter(consultation=self.consultation).count(), 0)
+
+    def test_20_follow_up_early_only_meta_returns_400(self):
+        payload = _base_payload()
+        payload["store"]["meta"] = {
+            "consultation_type": "FULL",
+            "follow_up": {
+                "date": "",
+                "interval": 0,
+                "unit": "days",
+                "reason": "",
+                "early_if_persist": True,
+            },
+        }
+        r = self._post_complete(payload)
+        self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST, getattr(r, "data", r.content))
+        self.assertEqual(FollowUp.objects.filter(consultation=self.consultation).count(), 0)

@@ -12,6 +12,7 @@ import type {
   ConsultationSectionItem,
   SectionItemDetail,
   DraftConsultationFinding,
+  FollowUpUnit,
 } from "@/lib/consultation-types";
 import type {
   SymptomsSectionSchema,
@@ -73,6 +74,11 @@ type ConsultationStore = ConsultationState & {
   medicinesSearchFocusNonce: number;
   /** Package to tests mapping for investigations package context and analytics. */
   appliedPackages: Record<string, { test_ids: string[] }>;
+  /**
+   * When true, end-consultation payload includes `meta.follow_up` (object or `{}`).
+   * When false, `follow_up` is omitted so the backend performs a no-op for that section.
+   */
+  follow_up_payload_touched: boolean;
   selectedDetail: SelectedDetailPayload;
   setSymptoms: (symptoms: ConsultationSymptom[]) => void;
   addSymptom: (symptom: ConsultationSymptom) => void;
@@ -89,7 +95,7 @@ type ConsultationStore = ConsultationState & {
   setProcedures: (value: string) => void;
   setFollowUp: (patch: {
     follow_up_interval?: number;
-    follow_up_unit?: "days" | "months";
+    follow_up_unit?: "days" | "weeks";
     follow_up_date?: string;
     follow_up_reason?: string;
     follow_up_early_if_persist?: boolean;
@@ -166,6 +172,7 @@ export const useConsultationStore = create<ConsultationStore>((set, get) => ({
   vitalsLoaded: false,
   medicinesSearchFocusNonce: 0,
   appliedPackages: {},
+  follow_up_payload_touched: false,
   selectedDetail: null,
   symptomsSchema: null,
   symptomSchemaByKey: {},
@@ -224,14 +231,22 @@ export const useConsultationStore = create<ConsultationStore>((set, get) => ({
   setInstructions: (value) => set({ instructions: value }),
   setProcedures: (value) => set({ procedures: value }),
   setFollowUp: (patch) =>
-    set((s) => ({
-      follow_up_interval: patch.follow_up_interval ?? s.follow_up_interval,
-      follow_up_unit: patch.follow_up_unit ?? s.follow_up_unit,
-      follow_up_date: patch.follow_up_date ?? s.follow_up_date,
-      follow_up_reason: patch.follow_up_reason ?? s.follow_up_reason,
-      follow_up_early_if_persist:
-        patch.follow_up_early_if_persist ?? s.follow_up_early_if_persist,
-    })),
+    set((s) => {
+      const rawUnit = String(patch.follow_up_unit ?? s.follow_up_unit ?? "days").toLowerCase();
+      let unit: FollowUpUnit =
+        rawUnit === "week" || rawUnit === "weeks" || rawUnit === "month" || rawUnit === "months"
+          ? "weeks"
+          : "days";
+      return {
+        follow_up_payload_touched: true,
+        follow_up_interval: patch.follow_up_interval ?? s.follow_up_interval,
+        follow_up_unit: unit,
+        follow_up_date: patch.follow_up_date ?? s.follow_up_date,
+        follow_up_reason: patch.follow_up_reason ?? s.follow_up_reason,
+        follow_up_early_if_persist:
+          patch.follow_up_early_if_persist ?? s.follow_up_early_if_persist,
+      };
+    }),
 
   setDraftStatus: (draftStatus) => set({ draftStatus }),
   setSelectedSymptomId: (selectedSymptomId) =>
@@ -510,5 +525,6 @@ export const useConsultationStore = create<ConsultationStore>((set, get) => ({
       vitalsLoaded: false,
       medicinesSearchFocusNonce: 0,
       appliedPackages: {},
+      follow_up_payload_touched: false,
     }),
 }));

@@ -38,8 +38,8 @@ export interface ConsultationVitals {
   temperatureF?: string;
 }
 
-/** Follow-up revisit interval unit. */
-export type FollowUpUnit = "days" | "months";
+/** Follow-up revisit interval unit (aligns with end-consultation API). */
+export type FollowUpUnit = "days" | "weeks";
 
 /** Workflow type: governs visible sections and validation. */
 export type ConsultationWorkflowType = "FULL" | "QUICK_RX" | "TEST_ONLY";

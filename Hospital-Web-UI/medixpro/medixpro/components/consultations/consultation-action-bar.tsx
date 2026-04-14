@@ -47,7 +47,8 @@ const CONSULTATION_TYPE_LABELS: Record<ConsultationWorkflowType, string> = {
 
 function isFollowUpSet(store: ReturnType<typeof useConsultationStore.getState>): boolean {
   const { follow_up_date, follow_up_interval } = store;
-  return !!(follow_up_date?.trim() || follow_up_interval > 0);
+  const interval = follow_up_interval ?? 0;
+  return !!(follow_up_date?.trim() || interval > 0);
 }
 
 export function ConsultationActionBar() {

@@ -1,3 +1,4 @@
+import datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -7,8 +8,10 @@ from django.test import SimpleTestCase
 from consultations_core.services.end_consultation_service import (
     _extract_diagnoses_payload,
     _extract_findings_payload,
+    _extract_follow_up_payload,
     _extract_investigations_payload,
     _extract_symptoms_payload,
+    _persist_follow_up,
     _persist_medicines,
 )
 
@@ -167,3 +170,104 @@ class EndConsultationMedicinesPersistenceTests(SimpleTestCase):
 
         with self.assertRaises(ValidationError):
             _persist_medicines(consultation=consultation, user=user, raw_medicines=raw_medicines)
+
+
+class EndConsultationFollowUpExtractionTests(SimpleTestCase):
+    def test_extract_follow_up_none_when_no_keys(self):
+        payload = {"store": {"sectionItems": {}}}
+        self.assertIsNone(_extract_follow_up_payload(payload))
+
+    def test_extract_follow_up_from_meta(self):
+        payload = {
+            "store": {
+                "meta": {
+                    "follow_up": {
+                        "date": "2026-04-19T00:00:00.000Z",
+                        "interval": 5,
+                        "unit": "days",
+                        "reason": "review",
+                    }
+                }
+            }
+        }
+        n = _extract_follow_up_payload(payload)
+        self.assertEqual(n["date"], datetime.date(2026, 4, 19))
+        self.assertEqual(n["interval"], 5)
+        self.assertEqual(n["unit"], "days")
+        self.assertEqual(n["reason"], "review")
+        self.assertFalse(n["early_if_persist"])
+
+    def test_extract_follow_up_meta_precedence_over_flat(self):
+        payload = {
+            "store": {
+                "meta": {
+                    "follow_up": {
+                        "date": "2026-01-02",
+                        "interval": 0,
+                        "unit": "days",
+                        "reason": "",
+                    }
+                },
+                "follow_up_date": "2099-12-31",
+                "follow_up_interval": 99,
+            }
+        }
+        n = _extract_follow_up_payload(payload)
+        self.assertEqual(n["date"], datetime.date(2026, 1, 2))
+        self.assertEqual(n["interval"], 0)
+
+    def test_extract_follow_up_flat_store_keys(self):
+        payload = {
+            "store": {
+                "follow_up_date": "2026-05-01",
+                "follow_up_interval": 0,
+                "follow_up_unit": "days",
+                "follow_up_reason": "",
+                "follow_up_early_if_persist": False,
+            }
+        }
+        n = _extract_follow_up_payload(payload)
+        self.assertEqual(n["date"], datetime.date(2026, 5, 1))
+        self.assertEqual(n["interval"], 0)
+
+    def test_extract_follow_up_top_level_dict(self):
+        payload = {"follow_up": {"date": "2026-06-15", "interval": 0, "unit": "days", "reason": ""}}
+        n = _extract_follow_up_payload(payload)
+        self.assertEqual(n["date"], datetime.date(2026, 6, 15))
+
+
+class EndConsultationFollowUpPersistenceTests(SimpleTestCase):
+    @patch("consultations_core.services.end_consultation_service.FollowUp.objects")
+    def test_persist_follow_up_none_skips_delete(self, fu_objects):
+        consultation = SimpleNamespace(id="c1")
+        _persist_follow_up(consultation, SimpleNamespace(), None)
+        fu_objects.filter.assert_not_called()
+
+    @patch("consultations_core.services.end_consultation_service.FollowUp.objects")
+    def test_persist_follow_up_cleared_deletes(self, fu_objects):
+        consultation = SimpleNamespace(id="c1")
+        cleared = {
+            "date": None,
+            "interval": 0,
+            "unit": "days",
+            "reason": "",
+            "early_if_persist": False,
+        }
+        _persist_follow_up(consultation, SimpleNamespace(), cleared)
+        fu_objects.filter.assert_called_once_with(consultation=consultation)
+        fu_objects.filter.return_value.delete.assert_called_once()
+        fu_objects.create.assert_not_called()
+
+    @patch("consultations_core.services.end_consultation_service.FollowUp.objects")
+    def test_persist_follow_up_notes_only_raises(self, fu_objects):
+        consultation = SimpleNamespace(id="c1")
+        bad = {
+            "date": None,
+            "interval": 0,
+            "unit": "days",
+            "reason": "needs follow-up",
+            "early_if_persist": False,
+        }
+        with self.assertRaises(ValidationError):
+            _persist_follow_up(consultation, SimpleNamespace(), bad)
+        fu_objects.create.assert_not_called()

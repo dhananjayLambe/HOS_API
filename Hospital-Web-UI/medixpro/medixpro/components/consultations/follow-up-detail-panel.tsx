@@ -207,10 +207,13 @@ export function FollowUpDetailPanel() {
 
   const clearFollowUpDate = useCallback(() => {
     if (locked) return;
+    setNotesLocal("");
     setFollowUp({
       follow_up_date: "",
       follow_up_interval: 0,
       follow_up_unit: "days",
+      follow_up_reason: "",
+      follow_up_early_if_persist: false,
     });
   }, [locked, setFollowUp]);
 

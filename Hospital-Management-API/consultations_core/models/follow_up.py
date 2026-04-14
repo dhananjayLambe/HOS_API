@@ -1,7 +1,7 @@
 import uuid
 from django.db import models
 from django.utils import timezone
-from accounts.models import User
+from account.models import User
 
 class FollowUp(models.Model):
     """
@@ -56,15 +56,28 @@ class FollowUp(models.Model):
         related_name="added_follow_ups"
     )
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["consultation"],
+                name="unique_follow_up_per_consultation",
+            )
+        ]
+
     def calculate_follow_up_date(self):
         """
-        Automatically calculate date if type is AFTER_X
+        For AFTER_DAYS / AFTER_WEEKS, anchor on consultation start—not server "today".
         """
+        if self.consultation_id:
+            base = self.consultation.created_at.date()
+        else:
+            base = timezone.now().date()
+
         if self.follow_up_type == self.FollowUpType.AFTER_DAYS and self.after_value:
-            return timezone.now().date() + timezone.timedelta(days=self.after_value)
+            return base + timezone.timedelta(days=self.after_value)
 
         if self.follow_up_type == self.FollowUpType.AFTER_WEEKS and self.after_value:
-            return timezone.now().date() + timezone.timedelta(weeks=self.after_value)
+            return base + timezone.timedelta(weeks=self.after_value)
 
         return self.follow_up_date
 
