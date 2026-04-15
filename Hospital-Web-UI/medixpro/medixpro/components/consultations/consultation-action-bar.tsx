@@ -69,23 +69,31 @@ export function ConsultationActionBar() {
   const [showViewPre, setShowViewPre] = useState(false);
   const [isEndingConsultation, setIsEndingConsultation] = useState(false);
   const [isStartingNewVisit, setIsStartingNewVisit] = useState(false);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [endConsultationTestData, setEndConsultationTestData] = useState<Record<string, unknown> | null>(null);
   const [loadingTestData, setLoadingTestData] = useState(false);
   const [visitPnr, setVisitPnr] = useState<string | null>(null);
+  const [consultationId, setConsultationId] = useState<string | null>(null);
 
   // Fetch visit_pnr when encounterId is available
   useEffect(() => {
     if (!encounterId) {
       setVisitPnr(null);
+      setConsultationId(null);
       return;
     }
     let cancelled = false;
     backendAxiosClient
-      .get<{ visit_pnr?: string }>(`/consultations/encounter/${encounterId}/`)
+      .get<{ visit_pnr?: string; consultation_id?: string | null }>(`/consultations/encounter/${encounterId}/`)
       .then((res) => {
-        if (!cancelled && res.data?.visit_pnr) setVisitPnr(res.data.visit_pnr);
+        if (cancelled) return;
+        setVisitPnr(res.data?.visit_pnr ?? null);
+        setConsultationId(res.data?.consultation_id ?? null);
       })
-      .catch(() => setVisitPnr(null));
+      .catch(() => {
+        setVisitPnr(null);
+        setConsultationId(null);
+      });
     return () => {
       cancelled = true;
     };
@@ -241,6 +249,79 @@ export function ConsultationActionBar() {
     }
   };
 
+  const openPreviewWindow = (html: string) => {
+    const newWindow = window.open("", "_blank");
+    if (!newWindow) {
+      toast.error("Popup blocked. Please allow popups and try again.");
+      return;
+    }
+    newWindow.document.open();
+    newWindow.document.write(html);
+    newWindow.document.close();
+
+    // Inject a minimal floating print control in preview tab.
+    const printStyle = newWindow.document.createElement("style");
+    printStyle.textContent = "@media print { .rx-preview-print-btn { display: none !important; } }";
+    newWindow.document.head.appendChild(printStyle);
+
+    const printButton = newWindow.document.createElement("button");
+    printButton.className = "rx-preview-print-btn";
+    printButton.type = "button";
+    printButton.textContent = "Print";
+    printButton.setAttribute("aria-label", "Print prescription");
+    printButton.style.position = "fixed";
+    printButton.style.top = "12px";
+    printButton.style.right = "12px";
+    printButton.style.zIndex = "2147483647";
+    printButton.style.padding = "8px 12px";
+    printButton.style.border = "1px solid #d1d5db";
+    printButton.style.borderRadius = "8px";
+    printButton.style.background = "#ffffff";
+    printButton.style.color = "#111827";
+    printButton.style.fontFamily = "Arial, Helvetica, sans-serif";
+    printButton.style.fontSize = "12px";
+    printButton.style.fontWeight = "600";
+    printButton.style.cursor = "pointer";
+    printButton.style.boxShadow = "0 2px 8px rgba(0, 0, 0, 0.12)";
+    printButton.onclick = () => {
+      newWindow.focus();
+      newWindow.print();
+    };
+    newWindow.document.body.appendChild(printButton);
+  };
+
+  const handlePreview = async () => {
+    if (isPreviewLoading) return;
+    if (!encounterId) {
+      toast.error("Encounter not found. Refresh and try again.");
+      return;
+    }
+    if (!consultationId) {
+      toast.error("Consultation not ready for preview.");
+      return;
+    }
+
+    setIsPreviewLoading(true);
+    try {
+      const store = useConsultationStore.getState();
+      const draftPayload = buildEndConsultationPayload(store);
+      const res = await backendAxiosClient.post<{ html?: string }>(
+        `/consultations/${consultationId}/summary-lite/html/`,
+        draftPayload
+      );
+      const html = (res.data?.html || "").trim();
+      if (!html) {
+        toast.error("Failed to load prescription preview.");
+        return;
+      }
+      openPreviewWindow(html);
+    } catch (error: any) {
+      toast.error("Failed to load preview");
+    } finally {
+      setIsPreviewLoading(false);
+    }
+  };
+
   return (
     <>
       <div className="sticky top-0 z-20 flex h-12 min-h-12 min-w-0 shrink-0 items-center justify-between gap-2 border-b border-[#eee] bg-white px-3 sm:px-4 md:px-5 shadow-sm dark:border-border dark:bg-background">
@@ -356,8 +437,10 @@ export function ConsultationActionBar() {
               size="sm"
               variant="outline"
               className="gap-1.5 rounded-lg border-violet-200 dark:border-violet-800 bg-violet-100 dark:bg-violet-950/50 text-violet-700 dark:text-violet-300 hover:bg-violet-200 dark:hover:bg-violet-900/50 hover:text-violet-800 dark:hover:text-violet-200"
+              onClick={handlePreview}
+              disabled={!encounterId || !consultationId || isPreviewLoading}
             >
-              <Eye className="h-4 w-4" />
+              {isPreviewLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
               Preview Rx
             </Button>
           </div>
@@ -383,8 +466,12 @@ export function ConsultationActionBar() {
                 <FileText className="h-4 w-4" />
                 Templates
               </DropdownMenuItem>
-              <DropdownMenuItem className="gap-2 py-3">
-                <Eye className="h-4 w-4" />
+              <DropdownMenuItem
+                className="gap-2 py-3"
+                onClick={handlePreview}
+                disabled={!encounterId || !consultationId || isPreviewLoading}
+              >
+                {isPreviewLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
                 Preview Rx
               </DropdownMenuItem>
             </DropdownMenuContent>

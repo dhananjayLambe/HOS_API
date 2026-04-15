@@ -15,7 +15,12 @@ from consultations_core.api.views.preconsultation import (
     CancelEncounterAPIView,
     PreConsultationPreviewAPIView,
 )
-from consultations_core.api.views.consultation import EndConsultationAPIView
+from consultations_core.api.views.consultation import (
+    EndConsultationAPIView,
+    ConsultationSummaryAPIView,
+    ConsultationSummaryLiteAPIView,
+    ConsultationSummaryLiteHTMLAPIView,
+)
 from consultations_core.api.views.instructions import (
     InstructionTemplatesAPIView,
     EncounterInstructionsListCreateAPIView,
@@ -134,5 +139,20 @@ urlpatterns = [
         "<uuid:consultation_id>/investigations/items/<uuid:item_id>/",
         ConsultationInvestigationItemDetailAPIView.as_view(),
         name="consultation-investigation-item-detail",
+    ),
+    path(
+        "<uuid:consultation_id>/summary/",
+        ConsultationSummaryAPIView.as_view(),
+        name="consultation-summary",
+    ),
+    path(
+        "<uuid:consultation_id>/summary-lite/",
+        ConsultationSummaryLiteAPIView.as_view(),
+        name="consultation-summary-lite",
+    ),
+    path(
+        "<uuid:consultation_id>/summary-lite/html/",
+        ConsultationSummaryLiteHTMLAPIView.as_view(),
+        name="consultation-summary-lite-html",
     ),
 ]

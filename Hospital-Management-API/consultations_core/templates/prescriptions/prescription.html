@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Prescription</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 15mm;
+            @top-center {
+                content: element(rx-header);
+            }
+            @bottom-center {
+                content: element(rx-footer);
+            }
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            color: #000;
+            line-height: 1.6;
+            margin: 0;
+        }
+
+        main {
+            max-width: 180mm;
+            margin: 0 auto;
+        }
+
+        header.running-header {
+            position: running(rx-header);
+            height: 0;
+            overflow: hidden;
+        }
+
+        footer.running-footer {
+            position: running(rx-footer);
+            height: 0;
+            overflow: hidden;
+        }
+
+        .header {
+            border-bottom: 2px solid #000;
+            padding-bottom: 8px;
+            margin-bottom: 14px;
+        }
+
+        .header-top {
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .clinic-left {
+            max-width: 65%;
+        }
+
+        .clinic-name {
+            font-size: 20px;
+            font-weight: bold;
+        }
+
+        .clinic-details {
+            font-size: 13px;
+            margin-top: 3px;
+        }
+
+        .timing {
+            font-size: 11px;
+            margin-top: 4px;
+        }
+
+        .doctor-right {
+            text-align: right;
+            max-width: 35%;
+            line-height: 1.4;
+        }
+
+        .doctor-name {
+            font-weight: bold;
+            font-size: 15px;
+        }
+
+        .doctor-details {
+            font-size: 13px;
+        }
+
+        .section {
+            margin-top: 16px;
+            page-break-inside: avoid;
+        }
+
+        .title {
+            font-weight: bold;
+            font-size: 16px;
+            margin-top: 18px;
+            margin-bottom: 8px;
+        }
+
+        .row {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 10px;
+            font-size: 14px;
+        }
+
+        .vitals {
+            margin-top: 10px;
+            font-size: 13px;
+        }
+
+        .rx-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 6px;
+            page-break-inside: auto;
+            table-layout: fixed;
+        }
+
+        .rx-table th {
+            border-bottom: 2px solid #000;
+            text-align: left;
+            padding: 8px 6px;
+            font-weight: 600;
+            vertical-align: top;
+        }
+
+        .rx-table td {
+            border-bottom: 1px solid #ddd;
+            padding: 11px 6px;
+            vertical-align: top;
+            text-align: left;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+        }
+
+        .rx-table tr {
+            height: 36px;
+            page-break-inside: avoid;
+        }
+
+        .rx-table th:nth-child(1) { width: 32%; }
+        .rx-table th:nth-child(2) { width: 28%; }
+        .rx-table th:nth-child(3) { width: 14%; }
+        .rx-table th:nth-child(4) { width: 26%; }
+
+        ul {
+            margin: 0;
+            padding-left: 18px;
+        }
+
+        ul li {
+            margin-bottom: 4px;
+            page-break-inside: avoid;
+        }
+
+        .note {
+            font-size: 12px;
+            color: #444;
+            margin-top: 6px;
+        }
+
+        .signature {
+            margin-top: 35px;
+            text-align: right;
+            page-break-inside: avoid;
+        }
+
+        .footer {
+            margin-top: 20px;
+            font-size: 10px;
+            text-align: center;
+            border-top: 1px solid #d1d5db;
+            padding-top: 8px;
+            color: #6b7280;
+            line-height: 1.5;
+        }
+
+        .footer-line {
+            margin: 2px 0;
+        }
+
+        /* Browser print/PDF does not reliably support running() footers. Keep inline footer visible for print. */
+        @media print {
+            .running-footer {
+                display: none !important;
+            }
+            main {
+                padding-bottom: 52px;
+            }
+            .footer--inline {
+                position: fixed;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                margin: 0;
+                background: #fff;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<header class="running-header">
+    <div class="header">
+        <div class="header-top">
+            <div class="clinic-left">
+                <div class="clinic-name">{{ clinic.name|default:"-" }}</div>
+                <div class="clinic-details">
+                    {{ clinic.address|default:"-" }}<br>
+                    Phone: {{ clinic.contact|default:"-" }} | Email: {{ clinic.email|default:"-" }}
+                </div>
+            </div>
+            <div class="doctor-right">
+                <div class="doctor-name">{% include "prescriptions/_doctor_display_name.html" %}</div>
+                <div class="doctor-details">
+                    {{ doctor.qualification|default:"-" }}<br>
+                    Reg No: {{ doctor.registration_number|default:"-" }}<br>
+                    Mobile: {{ doctor.mobile|default:"-" }}
+                </div>
+            </div>
+        </div>
+    </div>
+</header>
+
+<footer class="running-footer">
+    <div class="footer">
+        <div class="footer-line">This is a computer-generated prescription. Valid if digitally verified.</div>
+        <div class="footer-line">Dr. {{ doctor.full_name|default:"Doctor" }} | Reg No: {{ doctor.registration_number|default:"Not available" }}</div>
+        <div class="footer-line">Powered by MedixPro EMR &#8226; www.medixpro.com</div>
+    </div>
+</footer>
+
+<main>
+    <div class="header">
+        <div class="header-top">
+            <div class="clinic-left">
+                <div class="clinic-name">{{ clinic.name|default:"-" }}</div>
+                <div class="clinic-details">
+                    {{ clinic.address|default:"-" }}<br>
+                    Phone: {{ clinic.contact|default:"-" }} | Email: {{ clinic.email|default:"-" }}
+                </div>
+            </div>
+            <div class="doctor-right">
+                <div class="doctor-name">{% include "prescriptions/_doctor_display_name.html" %}</div>
+                <div class="doctor-details">
+                    {{ doctor.qualification|default:"-" }}<br>
+                    Reg No: {{ doctor.registration_number|default:"-" }}<br>
+                    Mobile: {{ doctor.mobile|default:"-" }}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div><b>Patient:</b> {{ patient.full_name|default:"-" }} ({{ patient.age_display|default:"-" }} / {{ patient.gender|default:"-" }})</div>
+        <div><b>Date:</b> {{ visit.date_display|default:"-" }}{% if visit.time_display %} | {{ visit.time_display }}{% endif %}</div>
+    </div>
+
+    {% if vitals.bp or vitals.pulse or vitals.temperature or vitals.weight_kg or vitals.height_cm %}
+    <div class="vitals">
+        {% if vitals.bp %}BP: {{ vitals.bp }} mmHg{% endif %}
+        {% if vitals.pulse %}{% if vitals.bp %} | {% endif %}Pulse: {{ vitals.pulse }} bpm{% endif %}<br>
+        {% if vitals.temperature %}Temp: {{ vitals.temperature }}&deg;{{ vitals.temperature_unit|default:"C" }}{% endif %}
+        {% if vitals.weight_kg %}{% if vitals.temperature %} | {% endif %}Weight: {{ vitals.weight_kg }} kg{% endif %}
+        {% if vitals.height_cm %}{% if vitals.temperature or vitals.weight_kg %} | {% endif %}Height: {{ vitals.height_cm }} cm{% endif %}
+    </div>
+    {% endif %}
+
+    {% if symptoms %}
+    <div class="section">
+        <div class="title">Complaints</div>
+        <ul>
+            {% for item in symptoms %}
+            <li>
+                {{ item.name }}{% if item.duration %} ({{ item.duration }}){% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    {% if diagnoses %}
+    <div class="section">
+        <div class="title">Diagnosis</div>
+        <ul>
+            {% for item in diagnoses %}
+            <li>{{ item.name }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <div class="section">
+        <div class="title">Rx</div>
+        {% if prescriptions %}
+        <table class="rx-table">
+            <thead>
+                <tr>
+                    <th>Medicine</th>
+                    <th style="text-align: left;">Dose</th>
+                    <th>Duration</th>
+                    <th>Instructions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for med in prescriptions %}
+                <tr>
+                    <td>{{ med.drug_name|default:"—" }}</td>
+                    <td>
+                        {% if med.dose_display_numeric %}
+                            {{ med.dose_display_numeric }}
+                        {% elif med.dosage_display %}
+                            {{ med.dosage_display }}
+                        {% else %}
+                            —
+                        {% endif %}
+                    </td>
+                    <td>{{ med.duration_display|default:"—" }}</td>
+                    <td>{{ med.instructions|default:"No specific instructions" }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="note">No medicines prescribed.</div>
+        {% endif %}
+    </div>
+
+    {% if investigations %}
+    <div class="section">
+        <div class="title">Recommended Tests</div>
+        <ul>
+            {% for test in investigations %}
+            <li>{{ test.name }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    {% if instructions %}
+    <div class="section">
+        <div class="title">Advice</div>
+        <ul>
+            {% for item in instructions %}
+            <li>{{ item.text }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    {% if follow_up.date_display %}
+    <div class="section">
+        <b>Follow-up:</b> {{ follow_up.date_display }}
+    </div>
+    {% endif %}
+
+    <div class="signature">
+        ___________________<br>
+        {% include "prescriptions/_doctor_display_name.html" %}<br>
+        <span style="font-size:11px;">Reg No: {{ doctor.registration_number|default:"-" }}</span>
+    </div>
+
+    <div class="footer footer--inline">
+        <div class="footer-line">This is a computer-generated prescription. Valid if digitally verified.</div>
+        <div class="footer-line">Powered by MedixPro EMR &#8226; www.medixpro.com</div>
+    </div>
+</main>
+
+</body>
+</html>

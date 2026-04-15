@@ -158,6 +158,9 @@ class EndConsultationIntegrationTests(TestCase):
     def _post_complete(self, payload):
         return self.client.post(self._url(), payload, format="json")
 
+    def _post_complete_with_summary(self, payload):
+        return self.client.post(f"{self._url()}?include_summary=true", payload, format="json")
+
     def test_01_minimal_empty_sections_finalizes_encounter(self):
         r = self._post_complete(_base_payload())
         self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
@@ -545,3 +548,12 @@ class EndConsultationIntegrationTests(TestCase):
         r = self._post_complete(payload)
         self.assertEqual(r.status_code, status.HTTP_200_OK, getattr(r, "data", r.content))
         self.assertEqual(Procedure.objects.filter(consultation=self.consultation).count(), 0)
+
+    def test_24_complete_can_return_summary_snapshot(self):
+        payload = _base_payload(
+            symptoms=[{"label": "Headache", "name": "Headache", "detail": {"note": "dull"}}],
+        )
+        r = self._post_complete_with_summary(payload)
+        self.assertEqual(r.status_code, status.HTTP_200_OK, getattr(r, "data", r.content))
+        self.assertIn("summary", r.data)
+        self.assertEqual(r.data["summary"]["meta"]["status"], "completed")

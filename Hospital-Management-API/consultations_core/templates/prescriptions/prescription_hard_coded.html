@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Prescription</title>
+
+    <style>
+        @page {
+            margin: 15mm;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 13px;
+            color: #000;
+            line-height: 1.5;
+        }
+
+        /* HEADER */
+        .header {
+            border-bottom: 2px solid #000;
+            padding-bottom: 8px;
+            margin-bottom: 12px;
+        }
+
+        .header-top {
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .clinic-left {
+            max-width: 65%;
+        }
+
+        .clinic-name {
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        .clinic-details {
+            font-size: 12px;
+            margin-top: 3px;
+        }
+
+        .timing {
+            font-size: 11px;
+            margin-top: 4px;
+        }
+
+        .doctor-right {
+            text-align: right;
+            max-width: 35%;
+            line-height: 1.4;
+        }
+
+        .doctor-name {
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        .doctor-details {
+            font-size: 12px;
+        }
+
+        /* SECTION */
+        .section {
+            margin-top: 15px;
+        }
+
+        .title {
+            font-weight: bold;
+            font-size: 14px;
+            margin-top: 18px;
+            margin-bottom: 6px;
+        }
+
+        .row {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 10px;
+        }
+
+        /* VITALS */
+        .vitals {
+            margin-top: 10px;
+        }
+
+        /* RX TABLE */
+        .rx-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 6px;
+        }
+
+        .rx-table th {
+            border-bottom: 2px solid #000;
+            text-align: left;
+            padding: 6px;
+        }
+
+        .rx-table td {
+            border-bottom: 1px solid #ddd;
+            padding: 8px 6px;
+        }
+
+        .rx-table tr {
+            height: 36px;
+        }
+
+        .rx-table th:nth-child(1) { width: 35%; }
+        .rx-table th:nth-child(2) { width: 15%; }
+        .rx-table th:nth-child(3) { width: 15%; }
+        .rx-table th:nth-child(4) { width: 35%; }
+
+        ul {
+            margin: 0;
+            padding-left: 18px;
+        }
+
+        ul li {
+            margin-bottom: 4px;
+        }
+
+        .note {
+            font-size: 11px;
+            color: #444;
+            margin-top: 6px;
+        }
+
+        /* SIGNATURE */
+        .signature {
+            margin-top: 35px;
+            text-align: right;
+        }
+
+        /* FOOTER */
+        .footer {
+            margin-top: 20px;
+            font-size: 10px;
+            text-align: center;
+            border-top: 1px solid #000;
+            padding-top: 5px;
+        }
+    </style>
+</head>
+
+<body>
+
+<!-- HEADER -->
+<div class="header">
+    <div class="header-top">
+
+        <!-- CLINIC -->
+        <div class="clinic-left">
+            <div class="clinic-name">Doctor Endocrine Diabetes Clinic</div>
+
+            <div class="clinic-details">
+                #102, Block A, New Delhi - 110001<br>
+                Phone: +91-9876543210 | Email: support@clinic.com
+            </div>
+
+            <div class="timing">
+                Timings: Mon-Sat 9:00 AM - 1:00 PM | 5:00 PM - 8:00 PM | Sun Closed
+            </div>
+        </div>
+
+        <!-- DOCTOR -->
+        <div class="doctor-right">
+            <div class="doctor-name">Dr. David Khan</div>
+            <div class="doctor-details">
+                MD, DM (Endocrinology)<br>
+                Reg No: 2011/03/0577<br>
+                Mobile: 9599887761
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- PATIENT -->
+<div class="row">
+    <div><b>Patient:</b> Rahul Doe (35 / Male)</div>
+    <div><b>Date:</b> 14 Apr 2026 | 03:30 PM IST</div>
+</div>
+
+<!-- VITALS -->
+<div class="vitals">
+    BP: 120/80 mmHg | Pulse: 72 bpm<br>
+    Temp: 98.6°F | Weight: 65 kg | Height: 170 cm
+</div>
+
+<!-- COMPLAINTS -->
+<div class="section">
+    <div class="title">Complaints</div>
+    Fever (3 days), Dry cough
+</div>
+
+<!-- DIAGNOSIS -->
+<div class="section">
+    <div class="title">Diagnosis</div>
+    <ul>
+        <li>Viral Upper Respiratory Infection</li>
+        <li>Mild Pyrexia</li>
+    </ul>
+</div>
+
+<!-- RX -->
+<div class="section">
+    <div class="title">Rx</div>
+
+    <table class="rx-table">
+        <tr>
+            <th>Medicine</th>
+            <th>Dose</th>
+            <th>Duration</th>
+            <th>Instructions</th>
+        </tr>
+
+        <tr>
+            <td>Tab. Dolo 650</td>
+            <td>1-0-1</td>
+            <td>5 days</td>
+            <td>After food</td>
+        </tr>
+
+        <tr>
+            <td>Syp. Ascoril LS</td>
+            <td>5ml-5ml-5ml</td>
+            <td>3 days</td>
+            <td>Shake well before use</td>
+        </tr>
+
+        <tr>
+            <td>Cap. Limcee</td>
+            <td>1-0-0</td>
+            <td>10 days</td>
+            <td>After breakfast</td>
+        </tr>
+    </table>
+
+    <div class="note">Dose format: Morning - Afternoon - Night</div>
+</div>
+
+<!-- TESTS -->
+<div class="section">
+    <div class="title">Recommended Tests</div>
+    <ul>
+        <li>CBC (if fever persists)</li>
+    </ul>
+</div>
+
+<!-- ADVICE -->
+<div class="section">
+    <div class="title">Advice</div>
+    <ul>
+        <li>Gargle with warm salt water 3 times daily</li>
+        <li>Avoid cold food and drinks</li>
+        <li>Take rest for 2 days</li>
+    </ul>
+</div>
+
+<!-- FOLLOW UP -->
+<div class="section">
+    <b>Follow-up Date:</b> 20 April 2026
+</div>
+
+<!-- SIGNATURE -->
+<div class="signature">
+    ___________________<br>
+    Dr. David Khan<br>
+    <span style="font-size:11px;">Reg No: 2011/03/0577</span>
+</div>
+
+<!-- FOOTER -->
+<div class="footer">
+    This is a computer-generated prescription.<br>
+    Valid without physical signature if digitally verified.<br>
+    Powered by DoctorProCare.com
+</div>
+
+</body>
+</html>

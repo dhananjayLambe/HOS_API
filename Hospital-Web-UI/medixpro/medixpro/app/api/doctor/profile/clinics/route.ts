@@ -1,6 +1,26 @@
 import { type NextRequest, NextResponse } from "next/server"
 
-const DJANGO_API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+function resolveDjangoApiBase(): string {
+  const fallback = "http://127.0.0.1:8000";
+  const raw =
+    process.env.DJANGO_API_URL ||
+    process.env.BACKEND_URL ||
+    process.env.NEXT_PUBLIC_BACKEND_URL ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    fallback;
+
+  let base = raw.replace(/\/+$/, "");
+  if (base.endsWith("/api")) {
+    base = base.slice(0, -4);
+  }
+
+  if (/^https?:\/\/(localhost|127\.0\.0\.1):3000$/i.test(base)) {
+    return fallback;
+  }
+  return base || fallback;
+}
+
+const DJANGO_API_URL = resolveDjangoApiBase();
 
 export async function GET(request: NextRequest) {
   try {

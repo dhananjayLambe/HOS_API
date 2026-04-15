@@ -1093,8 +1093,10 @@ class EncounterDetailAPIView(APIView):
 
     def get(self, request, encounter_id):
         encounter = get_object_or_404(ClinicalEncounter, id=encounter_id)
+        consultation = Consultation.objects.filter(encounter=encounter).only("id").first()
         payload = {
             "id": str(encounter.id),
+            "consultation_id": str(consultation.id) if consultation else None,
             "visit_pnr": encounter.visit_pnr or "",
             "status": _status_for_api(encounter.status),
             "check_in_time": encounter.check_in_time.isoformat() if encounter.check_in_time else None,

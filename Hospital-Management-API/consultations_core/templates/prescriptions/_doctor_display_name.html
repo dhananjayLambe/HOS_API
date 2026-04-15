@@ -1,0 +1,13 @@
+{% with n=doctor.full_name|default:"" %}
+{% if n %}
+{% with p=n|slice:":3"|lower %}
+{% if p == "dr." or p == "dr " %}
+{{ n }}
+{% else %}
+Dr. {{ n }}
+{% endif %}
+{% endwith %}
+{% else %}
+-
+{% endif %}
+{% endwith %}

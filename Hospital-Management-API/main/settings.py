@@ -47,6 +47,16 @@ INV_SUGGEST_MAX_PER_CATEGORY = int(os.getenv("INV_SUGGEST_MAX_PER_CATEGORY", "3"
 INV_SUGGEST_MAX_PACKAGE_SIZE = int(os.getenv("INV_SUGGEST_MAX_PACKAGE_SIZE", "25"))
 INV_SUGGEST_CACHE_TTL_SECONDS = int(os.getenv("INV_SUGGEST_CACHE_TTL_SECONDS", "120"))
 
+# Consultation summary caching (feature-flagged)
+ENABLE_CONSULTATION_SUMMARY_CACHE = os.getenv("ENABLE_CONSULTATION_SUMMARY_CACHE", "false").lower() in (
+    "1",
+    "true",
+    "yes",
+    "on",
+)
+CONSULTATION_SUMMARY_CACHE_TTL_SECONDS = int(os.getenv("CONSULTATION_SUMMARY_CACHE_TTL_SECONDS", "900"))
+PRESCRIPTION_TIMING_SLOT_MAX = int(os.getenv("PRESCRIPTION_TIMING_SLOT_MAX", "2"))
+
 
 
 # Application definition

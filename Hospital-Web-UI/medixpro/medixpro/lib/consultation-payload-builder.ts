@@ -133,6 +133,8 @@ export function buildEndConsultationPayload(
         investigations,
         instructions,
       },
+      /** Right-menu vitals (camelCase); used by summary-lite HTML preview before preconsult is persisted. */
+      vitals: store.vitals ?? {},
       /** Free text; backend normalizes (trim). Always sent so replace-set can clear rows. */
       procedures: store.procedures ?? "",
       meta,

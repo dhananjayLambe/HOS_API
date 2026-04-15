@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -608,6 +609,9 @@ export function InstructionsSection() {
             <DialogContent className="sm:max-w-md" onOpenAutoFocus={(e) => e.preventDefault()}>
               <DialogHeader>
                 <DialogTitle>Add custom instruction</DialogTitle>
+                <DialogDescription>
+                  Add a custom instruction for this consultation.
+                </DialogDescription>
               </DialogHeader>
               <Textarea
                 placeholder="Type the instruction for the patient…"
