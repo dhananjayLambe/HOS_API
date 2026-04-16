@@ -26,32 +26,7 @@ import {
   shouldIgnoreSectionActivationClick,
 } from "@/lib/consultation-section-activation";
 import { flushConsultationAutosave } from "@/lib/consultation-autosave";
-
-function isDiagnosisIncomplete(item: ConsultationSectionItem): boolean {
-  const d = item.detail ?? {};
-  const hasStandardDetail =
-    !!d.notes ||
-    !!d.duration ||
-    !!d.severity ||
-    (Array.isArray(d.attributes) && d.attributes.length > 0) ||
-    (Array.isArray(d.customTags) && d.customTags.length > 0);
-  const hasCustomDetail = Object.keys(d).some((key) => {
-    if (
-      key === "notes" ||
-      key === "duration" ||
-      key === "severity" ||
-      key === "attributes" ||
-      key === "customTags"
-    ) {
-      return false;
-    }
-    const value = (d as Record<string, unknown>)[key];
-    if (Array.isArray(value)) return value.length > 0;
-    if (typeof value === "boolean") return value;
-    return value !== null && value !== undefined && String(value).trim() !== "";
-  });
-  return !(hasStandardDetail || hasCustomDetail);
-}
+import { evaluateSectionItemCompleteWithSchema } from "@/lib/consultation-completion";
 
 export function DiagnosisSection() {
   const toast = useToastNotification();
@@ -79,6 +54,21 @@ export function DiagnosisSection() {
   }, [registerTabSectionExpander]);
 
   const diagnosisItems = sectionItems["diagnosis"] ?? [];
+  const isDiagnosisIncomplete = useCallback(
+    (item: ConsultationSectionItem) => {
+      const schemaItem = diagnosisSchema?.items.find(
+        (s) =>
+          s.key.toLowerCase() === String(item.diagnosisKey ?? "").toLowerCase() ||
+          s.display_name.toLowerCase() === item.label.toLowerCase()
+      );
+      const isComplete = evaluateSectionItemCompleteWithSchema("diagnosis", item, {
+        fields: schemaItem?.fields,
+        no_hard_required: false,
+      });
+      return !isComplete;
+    },
+    [diagnosisSchema]
+  );
 
   useEffect(() => {
     if (activeSectionKey !== "diagnosis") return;

@@ -27,7 +27,7 @@ import type { FindingFieldSchema, FindingItemSchema } from "@/lib/consultation-s
 import { cn } from "@/lib/utils";
 import { mergeDetailPatchIntoDraft } from "@/lib/consultation-findings-helpers";
 import {
-  evaluateSectionItemComplete,
+  evaluateSectionItemCompleteWithSchema,
   getSectionCompletionHints,
   normalizeItem,
 } from "@/lib/consultation-completion";
@@ -36,6 +36,7 @@ function FindingDetailPanelBody({
   draft,
   updateDraftFinding,
   getFindingSchemaForLabel,
+  noHardRequired,
   setSelectedDetail,
 }: {
   draft: DraftConsultationFinding;
@@ -44,6 +45,7 @@ function FindingDetailPanelBody({
     patch: Partial<DraftConsultationFinding>
   ) => void;
   getFindingSchemaForLabel: (label: string) => FindingItemSchema | undefined;
+  noHardRequired: boolean;
   setSelectedDetail: (payload: SelectedDetailPayload) => void;
 }) {
   const schemaItem = getFindingSchemaForLabel(draft.display_label);
@@ -60,7 +62,7 @@ function FindingDetailPanelBody({
   const set = (patch: Partial<SectionItemDetail> & Record<string, unknown>) => {
     updateDraftFinding(draft.id, mergeDetailPatchIntoDraft(draft, patch));
   };
-  const completionStatus = evaluateSectionItemComplete(
+  const completionStatus = evaluateSectionItemCompleteWithSchema(
     "findings",
     normalizeItem({
       id: draft.id,
@@ -70,7 +72,8 @@ function FindingDetailPanelBody({
         notes: draft.note ?? "",
         ...(draft.extension_data ?? {}),
       },
-    })
+    }),
+    { fields: schemaItem?.fields, no_hard_required: noHardRequired }
   );
   const completionHints = getSectionCompletionHints(
     "findings",
@@ -82,7 +85,8 @@ function FindingDetailPanelBody({
         notes: draft.note ?? "",
         ...(draft.extension_data ?? {}),
       },
-    })
+    }),
+    { fields: schemaItem?.fields, no_hard_required: noHardRequired }
   );
 
   return (
@@ -167,6 +171,7 @@ export function FindingDetailPanel() {
     selectedDetail,
     updateDraftFinding,
     getFindingSchemaForLabel,
+    findingsSchema,
     setSelectedDetail,
   } = useConsultationStore();
 
@@ -202,6 +207,7 @@ export function FindingDetailPanel() {
       draft={draft}
       updateDraftFinding={updateDraftFinding}
       getFindingSchemaForLabel={getFindingSchemaForLabel}
+      noHardRequired={Boolean(findingsSchema?.meta?.rules?.no_hard_required)}
       setSelectedDetail={setSelectedDetail}
     />
   );

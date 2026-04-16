@@ -29,6 +29,7 @@ import {
   shouldIgnoreSectionActivationClick,
 } from "@/lib/consultation-section-activation";
 import { flushConsultationAutosave } from "@/lib/consultation-autosave";
+import { evaluateSectionItemCompleteWithSchema } from "@/lib/consultation-completion";
 
 function useDebouncedValue<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value);
@@ -41,21 +42,26 @@ function useDebouncedValue<T>(value: T, delay: number): T {
 
 function isDraftFindingIncomplete(
   d: DraftConsultationFinding,
-  schemaFieldsEmpty: boolean
-): boolean {
-  const note = (d.note ?? "").trim();
-  const hasSeverity = !!d.severity;
-  const ext = d.extension_data ?? {};
-  const hasExt = Object.keys(ext).some((k) => {
-    const v = ext[k];
-    if (Array.isArray(v)) return v.length > 0;
-    if (typeof v === "boolean") return v;
-    return v !== null && v !== undefined && String(v).trim() !== "";
-  });
-  if (schemaFieldsEmpty) {
-    return !(note || hasSeverity || hasExt);
+  options?: {
+    fields?: { key: string; label?: string; required?: boolean }[];
+    no_hard_required?: boolean;
   }
-  return !(note || hasSeverity || hasExt);
+): boolean {
+  const item: ConsultationSectionItem = {
+    id: d.id,
+    label: d.display_label,
+    name: d.display_label,
+    is_custom: d.is_custom,
+    detail: {
+      notes: d.note ?? "",
+      severity: d.severity ?? undefined,
+      ...(d.extension_data ?? {}),
+    },
+  };
+  return !evaluateSectionItemCompleteWithSchema("findings", item, {
+    fields: options?.fields,
+    no_hard_required: options?.no_hard_required,
+  });
 }
 
 export function FindingsSection() {
@@ -98,8 +104,10 @@ export function FindingsSection() {
       const schemaItem = findingsSchema?.items.find(
         (s) => s.key === d.finding_code || s.display_name === d.display_label
       );
-      const schemaFieldsEmpty = !schemaItem?.fields?.length;
-      return isDraftFindingIncomplete(d, schemaFieldsEmpty);
+      return isDraftFindingIncomplete(d, {
+        fields: schemaItem?.fields,
+        no_hard_required: Boolean(findingsSchema?.meta?.rules?.no_hard_required),
+      });
     });
     if (firstIncomplete) {
       setSelectedDetail({ section: "findings", itemId: firstIncomplete.id });
@@ -294,8 +302,10 @@ export function FindingsSection() {
       const schemaItem = findingsSchema?.items.find(
         (s) => s.key === d.finding_code || s.display_name === d.display_label
       );
-      const schemaFieldsEmpty = !schemaItem?.fields?.length;
-      return isDraftFindingIncomplete(d, schemaFieldsEmpty);
+      return isDraftFindingIncomplete(d, {
+        fields: schemaItem?.fields,
+        no_hard_required: Boolean(findingsSchema?.meta?.rules?.no_hard_required),
+      });
     }).length;
   }, [visible, findingsSchema]);
 
@@ -315,8 +325,10 @@ export function FindingsSection() {
       const schemaItem = findingsSchema?.items.find(
         (s) => s.key === item.finding_code || s.display_name === item.display_label
       );
-      const schemaFieldsEmpty = !schemaItem?.fields?.length;
-      return isDraftFindingIncomplete(item, schemaFieldsEmpty);
+      return isDraftFindingIncomplete(item, {
+        fields: schemaItem?.fields,
+        no_hard_required: Boolean(findingsSchema?.meta?.rules?.no_hard_required),
+      });
     });
     if (defaultItemId) {
       setSelectedDetail({ section: "findings", itemId: defaultItemId });
@@ -424,8 +436,10 @@ export function FindingsSection() {
               const schemaItem = findingsSchema?.items.find(
                 (s) => s.key === item.finding_code || s.display_name === item.display_label
               );
-              const schemaFieldsEmpty = !schemaItem?.fields?.length;
-              const incomplete = isDraftFindingIncomplete(item, schemaFieldsEmpty);
+              const incomplete = isDraftFindingIncomplete(item, {
+                fields: schemaItem?.fields,
+                no_hard_required: Boolean(findingsSchema?.meta?.rules?.no_hard_required),
+              });
               const selected = selectedId === item.id;
               return (
                 <span

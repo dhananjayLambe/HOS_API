@@ -25,10 +25,10 @@ import {
 } from "@/lib/consultation-section-activation";
 import { flushConsultationAutosave } from "@/lib/consultation-autosave";
 import type {
-  SymptomDetail,
   ConsultationSectionConfig,
   ConsultationSectionItem,
 } from "@/lib/consultation-types";
+import { evaluateSectionItemCompleteWithSchema } from "@/lib/consultation-completion";
 
 function symptomId() {
   return `sym-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -43,6 +43,7 @@ export function SymptomsSection() {
     selectedSymptomId,
     symptomsSchema,
     setSymptomsSchema,
+    getSymptomSchemaForLabel,
   } = useConsultationStore();
   const [search, setSearch] = useState("");
   const inputId = useId();
@@ -61,7 +62,7 @@ export function SymptomsSection() {
   useEffect(() => {
     if (activeSectionKey !== "symptoms") return;
     if (selectedSymptomId) return;
-    const firstIncomplete = symptoms.find((s) => isSymptomIncomplete(s.detail));
+    const firstIncomplete = symptoms.find((s) => isSymptomIncomplete(s));
     if (firstIncomplete) {
       setSelectedSymptomId(firstIncomplete.id);
     }
@@ -122,14 +123,18 @@ export function SymptomsSection() {
     setSearch("");
   };
 
-  const isSymptomIncomplete = (detail: SymptomDetail | undefined) => {
-    if (!detail) return true;
-    return Object.keys(detail).length === 0;
+  const isSymptomIncomplete = (item: ConsultationSectionItem) => {
+    const schemaItem = getSymptomSchemaForLabel(item.name ?? item.label);
+    const isComplete = evaluateSectionItemCompleteWithSchema("symptoms", item, {
+      fields: schemaItem?.fields,
+      no_hard_required: Boolean(symptomsSchema?.meta?.rules?.no_hard_required),
+    });
+    return !isComplete;
   };
 
   const incompleteCount = useMemo(
-    () => symptoms.filter((s) => isSymptomIncomplete(s.detail)).length,
-    [symptoms]
+    () => symptoms.filter((s) => isSymptomIncomplete(s)).length,
+    [symptoms, symptomsSchema, getSymptomSchemaForLabel]
   );
 
   const orderedSymptoms = useMemo(
@@ -195,7 +200,7 @@ export function SymptomsSection() {
     if (selectedSymptomId) return;
     const defaultItemId = pickDefaultSectionItemId(
       symptoms,
-      (item) => isSymptomIncomplete(item.detail)
+      (item) => isSymptomIncomplete(item)
     );
     if (defaultItemId) {
       setSelectedSymptomId(defaultItemId);
@@ -316,7 +321,7 @@ export function SymptomsSection() {
         {symptoms.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-2">
             {orderedSymptoms.map((s) => {
-              const incomplete = isSymptomIncomplete(s.detail);
+              const incomplete = isSymptomIncomplete(s);
               const selected = selectedSymptomId === s.id;
               return (
                 <span

@@ -308,7 +308,51 @@ export function ConsultationSection({
 
   const visibleInlineSuggestions = useMemo(() => {
     if (type !== "medicines") return [];
-    return filteredInline.filter((opt) => !items.some((i) => i.id === opt.id));
+    const normalize = (value: string) =>
+      value
+        .toLowerCase()
+        .replace(/\s+/g, " ")
+        .replace(/[^a-z0-9 ]/g, "")
+        .trim();
+    const medicineBaseName = (value: string) =>
+      normalize(value)
+        .replace(/\([^)]*\)/g, " ")
+        .replace(/\b\d+(\.\d+)?\s*(mg|mcg|g|gm|ml|iu)\b/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+
+    const existingIds = new Set<string>();
+    const existingLabels = new Set<string>();
+    const existingBaseNames = new Set<string>();
+    for (const item of items) {
+      existingIds.add(String(item.id));
+      const label = normalize(String(item.label ?? item.name ?? ""));
+      if (label) existingLabels.add(label);
+      const baseName = medicineBaseName(String(item.label ?? item.name ?? ""));
+      if (baseName) existingBaseNames.add(baseName);
+      const drugId = String(item.detail?.medicine?.drug_id ?? "").trim();
+      if (drugId) existingIds.add(drugId);
+    }
+
+    return filteredInline.filter((opt) => {
+      const optId = String(opt.id);
+      const optLabel = normalize(String(opt.label ?? ""));
+      const optBaseName = medicineBaseName(String(opt.label ?? ""));
+      if (existingIds.has(optId)) return false;
+      if (optLabel && existingLabels.has(optLabel)) return false;
+      if (optBaseName && existingBaseNames.has(optBaseName)) return false;
+      if (
+        optBaseName &&
+        Array.from(existingBaseNames).some(
+          (base) =>
+            (base.length >= 6 && optBaseName.includes(base)) ||
+            (optBaseName.length >= 6 && base.includes(optBaseName))
+        )
+      ) {
+        return false;
+      }
+      return true;
+    });
   }, [type, filteredInline, items]);
 
   useEffect(() => {

@@ -188,6 +188,52 @@ function extractDurationDisplayFromMedicine(raw: any): string {
   return "";
 }
 
+function validateMedicinePayloadForEnd(payload: any): string | null {
+  const medicines = payload?.store?.sectionItems?.medicines;
+  if (!Array.isArray(medicines) || medicines.length === 0) return null;
+
+  for (let index = 0; index < medicines.length; index += 1) {
+    const item = medicines[index];
+    const med =
+      item && typeof item === "object" && item.detail && typeof item.detail === "object"
+        ? item.detail.medicine ?? item
+        : item;
+    if (!med || typeof med !== "object") continue;
+
+    const name = String((med as any).name ?? (item as any)?.label ?? `Medicine ${index + 1}`).trim();
+    const doseValue = (med as any).dose_value;
+    const doseUnitId = String((med as any).dose_unit_id ?? "").trim();
+    const routeId = String((med as any).route_id ?? "").trim();
+    const frequencyId = String((med as any).frequency_id ?? "").trim();
+    const durationValue = (med as any).duration_value;
+    const durationSpecial = String((med as any).duration_special ?? "").trim();
+    const durationUnit = String((med as any).duration_unit ?? "").trim();
+
+    if (doseValue === undefined || doseValue === null || doseValue === "" || Number(doseValue) <= 0) {
+      return `${name}: dose is required`;
+    }
+    if (!doseUnitId) {
+      return `${name}: dose unit is required`;
+    }
+    if (!routeId) {
+      return `${name}: route is required`;
+    }
+    if (!frequencyId) {
+      return `${name}: frequency is required`;
+    }
+    const hasDurationValue = durationValue !== undefined && durationValue !== null && durationValue !== "";
+    const hasDurationSpecial = Boolean(durationSpecial);
+    if (!hasDurationValue && !hasDurationSpecial) {
+      return `${name}: duration is required`;
+    }
+    if (hasDurationValue && !durationUnit) {
+      return `${name}: duration unit is required`;
+    }
+  }
+
+  return null;
+}
+
 export function ConsultationActionBar() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -345,6 +391,11 @@ export function ConsultationActionBar() {
     try {
       const store = useConsultationStore.getState();
       const payload = buildEndConsultationPayload(store);
+      const medicineValidationMessage = validateMedicinePayloadForEnd(payload);
+      if (medicineValidationMessage) {
+        toast.error(medicineValidationMessage);
+        return;
+      }
       const res = await backendAxiosClient.post<{ redirect_url?: string; status?: string }>(
         `/consultations/encounter/${id}/consultation/complete/`,
         payload

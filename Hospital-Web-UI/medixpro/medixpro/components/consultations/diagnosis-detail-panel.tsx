@@ -11,7 +11,7 @@ import { useConsultationStore } from "@/store/consultationStore";
 import type { SectionItemDetail } from "@/lib/consultation-types";
 import { cn } from "@/lib/utils";
 import {
-  evaluateSectionItemComplete,
+  evaluateSectionItemCompleteWithSchema,
   getSectionCompletionHints,
   normalizeItem,
 } from "@/lib/consultation-completion";
@@ -61,8 +61,15 @@ export function DiagnosisDetailPanel() {
   const isPrimary = detail.primary === true;
   const chronicFromSchema = schemaItem?.chronic === true;
   const chronic = detail.chronic ?? chronicFromSchema ?? false;
-  const completionStatus = evaluateSectionItemComplete("diagnosis", normalizeItem(item));
-  const completionHints = getSectionCompletionHints("diagnosis", normalizeItem(item));
+  const completionStatus = evaluateSectionItemCompleteWithSchema(
+    "diagnosis",
+    normalizeItem(item),
+    { fields: schemaItem?.fields, no_hard_required: false }
+  );
+  const completionHints = getSectionCompletionHints("diagnosis", normalizeItem(item), {
+    fields: schemaItem?.fields,
+    no_hard_required: false,
+  });
 
   return (
     <Card className="h-fit w-full max-w-full min-w-0 max-w-md shrink-0 self-start rounded-2xl border border-border/80 bg-card shadow-sm transition-shadow hover:shadow-md">

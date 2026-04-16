@@ -12,6 +12,17 @@ export type NormalizedSectionItem = ConsultationSectionItem & {
   meta: Record<string, unknown>;
 };
 
+export type SchemaFieldRequirement = {
+  key: string;
+  label?: string;
+  required?: boolean;
+};
+
+export type SectionSchemaRequirementOptions = {
+  fields?: SchemaFieldRequirement[];
+  no_hard_required?: boolean;
+};
+
 function itemName(item: ConsultationSectionItem): string {
   return String(item.name ?? item.label ?? "").trim();
 }
@@ -32,6 +43,33 @@ function hasMeaningfulValue(value: unknown): boolean {
   if (Array.isArray(value)) return value.length > 0;
   if (typeof value === "object") return Object.keys(value as Record<string, unknown>).length > 0;
   return false;
+}
+
+function hasRequiredFieldValue(value: unknown): boolean {
+  if (value === null || value === undefined) return false;
+  if (typeof value === "string") return value.trim().length > 0;
+  if (typeof value === "number") return !Number.isNaN(value);
+  if (typeof value === "boolean") return true;
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === "object") return Object.keys(value as Record<string, unknown>).length > 0;
+  return false;
+}
+
+function getRequiredSchemaFields(
+  options?: SectionSchemaRequirementOptions
+): SchemaFieldRequirement[] {
+  if (!options || options.no_hard_required) return [];
+  const fields = Array.isArray(options.fields) ? options.fields : [];
+  return fields.filter((field) => field.required === true);
+}
+
+function getMissingRequiredFields(
+  normalized: NormalizedSectionItem,
+  options?: SectionSchemaRequirementOptions
+): SchemaFieldRequirement[] {
+  const requiredFields = getRequiredSchemaFields(options);
+  if (requiredFields.length === 0) return [];
+  return requiredFields.filter((field) => !hasRequiredFieldValue(normalized.meta[field.key]));
 }
 
 export function normalizeItem(item: ConsultationSectionItem): NormalizedSectionItem {
@@ -109,20 +147,51 @@ export function evaluateSectionItemComplete(
   section: ConsultationSectionType,
   item: ConsultationSectionItem
 ): boolean {
+  return evaluateSectionItemCompleteWithSchema(section, item);
+}
+
+export function evaluateSectionItemCompleteWithSchema(
+  section: ConsultationSectionType,
+  item: ConsultationSectionItem,
+  options?: SectionSchemaRequirementOptions
+): boolean {
+  const normalized = normalizeItem(item);
+  if (!normalized.name) return false;
+
+  const missingRequiredFields = getMissingRequiredFields(normalized, options);
+  if (missingRequiredFields.length > 0) return false;
+
+  if (section === "symptoms" || section === "findings" || section === "diagnosis") {
+    const hasHardRequirements = getRequiredSchemaFields(options).length > 0;
+    if (!hasHardRequirements) {
+      // Optional-only schema rows are complete as soon as the item is selected/added.
+      return true;
+    }
+  }
+
   if (section === "symptoms") return isSymptomComplete(item);
   if (section === "findings") return isFindingComplete(item);
   if (section === "diagnosis") return isDiagnosisComplete(item);
   if (section === "medicines") return isMedicineComplete(item);
   if (section === "investigations") return isInvestigationComplete(item);
-  return !!itemName(item);
+  return true;
 }
 
 export function getSectionCompletionHints(
   section: ConsultationSectionType,
-  item: ConsultationSectionItem
+  item: ConsultationSectionItem,
+  options?: SectionSchemaRequirementOptions
 ): string[] {
   const normalized = normalizeItem(item);
+  const missingRequiredFields = getMissingRequiredFields(normalized, options);
+  if (missingRequiredFields.length > 0) {
+    const labels = missingRequiredFields.map((field) => field.label ?? field.key);
+    return [`Fill required fields: ${labels.join(", ")}`];
+  }
+
   if (section === "symptoms") {
+    const hasHardRequirements = getRequiredSchemaFields(options).length > 0;
+    if (!hasHardRequirements) return [];
     const hints: string[] = [];
     if (!normalized.name) hints.push("Add symptom name");
     const hasDetail = Object.values(normalized.meta).some((v) => hasMeaningfulValue(v));
@@ -130,6 +199,8 @@ export function getSectionCompletionHints(
     return hints;
   }
   if (section === "findings") {
+    const hasHardRequirements = getRequiredSchemaFields(options).length > 0;
+    if (!hasHardRequirements) return [];
     const hints: string[] = [];
     if (!normalized.name) hints.push("Add finding name");
     const hasValue = hasMeaningfulValue(normalized.meta.value);
@@ -143,6 +214,8 @@ export function getSectionCompletionHints(
     return hints;
   }
   if (section === "diagnosis") {
+    const hasHardRequirements = getRequiredSchemaFields(options).length > 0;
+    if (!hasHardRequirements) return [];
     const hints: string[] = [];
     if (!normalized.name) hints.push("Add diagnosis name");
     const hasMasterCode = Boolean(item.diagnosisKey || item.diagnosisIcdCode);

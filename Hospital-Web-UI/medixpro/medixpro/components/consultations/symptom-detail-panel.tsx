@@ -25,7 +25,7 @@ import type { SymptomDetail } from "@/lib/consultation-types";
 import type { SymptomFieldSchema } from "@/lib/consultation-schema-types";
 import { cn } from "@/lib/utils";
 import {
-  evaluateSectionItemComplete,
+  evaluateSectionItemCompleteWithSchema,
   getSectionCompletionHints,
   normalizeItem,
 } from "@/lib/consultation-completion";
@@ -37,6 +37,7 @@ export function SymptomDetailPanel() {
     updateSymptomDetail,
     setSelectedSymptomId,
     getSymptomSchemaForLabel,
+    symptomsSchema,
   } = useConsultationStore();
 
   const symptom = symptoms.find((s) => s.id === selectedSymptomId);
@@ -62,7 +63,7 @@ export function SymptomDetailPanel() {
   }
 
   const detail = symptom.detail ?? {};
-  const completionStatus = evaluateSectionItemComplete(
+  const completionStatus = evaluateSectionItemCompleteWithSchema(
     "symptoms",
     normalizeItem({
       id: symptom.id,
@@ -70,7 +71,11 @@ export function SymptomDetailPanel() {
       is_custom: Boolean(symptom.is_custom ?? symptom.isCustom),
       isCustom: Boolean(symptom.is_custom ?? symptom.isCustom),
       detail: symptom.detail ?? {},
-    })
+    }),
+    {
+      fields: schemaItem?.fields,
+      no_hard_required: Boolean(symptomsSchema?.meta?.rules?.no_hard_required),
+    }
   );
   const completionHints = getSectionCompletionHints(
     "symptoms",
@@ -80,7 +85,11 @@ export function SymptomDetailPanel() {
       is_custom: Boolean(symptom.is_custom ?? symptom.isCustom),
       isCustom: Boolean(symptom.is_custom ?? symptom.isCustom),
       detail: symptom.detail ?? {},
-    })
+    }),
+    {
+      fields: schemaItem?.fields,
+      no_hard_required: Boolean(symptomsSchema?.meta?.rules?.no_hard_required),
+    }
   );
   const set = (patch: Partial<SymptomDetail>) => updateSymptomDetail(symptom.id, patch);
 
