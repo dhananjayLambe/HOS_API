@@ -38,6 +38,10 @@ import { buildEndConsultationPayload } from "@/lib/consultation-payload-builder"
 import { isEncounterInstructionIncomplete } from "@/lib/instruction-completion";
 import { useConsultationSectionScroll } from "@/components/consultations/consultation-section-scroll-context";
 import { EXPAND_FOLLOW_UP_SIDEBAR_EVENT } from "@/components/consultations/sections/follow-up-section";
+import {
+  EndConsultationReviewData,
+  EndConsultationReviewModal,
+} from "./EndConsultationReviewModal";
 
 const CONSULTATION_TYPE_LABELS: Record<ConsultationWorkflowType, string> = {
   FULL: "Full Consultation",
@@ -49,6 +53,139 @@ function isFollowUpSet(store: ReturnType<typeof useConsultationStore.getState>):
   const { follow_up_date, follow_up_interval } = store;
   const interval = follow_up_interval ?? 0;
   return !!(follow_up_date?.trim() || interval > 0);
+}
+
+function calculateAgeFromDob(dateOfBirth?: string): string {
+  if (!dateOfBirth) return "-";
+  try {
+    const birthDate = new Date(dateOfBirth);
+    if (Number.isNaN(birthDate.getTime())) return "-";
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age -= 1;
+    }
+    return age >= 0 ? String(age) : "-";
+  } catch {
+    return "-";
+  }
+}
+
+function formatPatientGender(gender?: string): string {
+  const raw = (gender ?? "").trim().toLowerCase();
+  if (!raw) return "";
+  if (raw.startsWith("m")) return "M";
+  if (raw.startsWith("f")) return "F";
+  return raw.charAt(0).toUpperCase();
+}
+
+function formatFollowUpReviewText(store: ReturnType<typeof useConsultationStore.getState>): string {
+  if (store.follow_up_date?.trim()) {
+    const rawDate = store.follow_up_date.trim();
+    const parsed = new Date(rawDate);
+    if (!Number.isNaN(parsed.getTime())) {
+      const formatted = parsed.toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      });
+      return `Follow-up: ${formatted}`;
+    }
+    return `Follow-up: ${rawDate}`;
+  }
+  const interval = Number(store.follow_up_interval ?? 0);
+  if (interval > 0) {
+    const unit = store.follow_up_unit === "weeks" ? "week" : "day";
+    return `Follow-up in ${interval} ${unit}${interval === 1 ? "" : "s"}`;
+  }
+  return "As advised";
+}
+
+function splitLegacyLines(value?: string): string[] {
+  return String(value ?? "")
+    .split(/\r?\n|,/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function extractDoseDisplayFromMedicine(raw: any): string {
+  const explicitDoseDisplay = String(raw?.dose_display ?? "").trim();
+  if (explicitDoseDisplay) return explicitDoseDisplay;
+
+  const doseUnitId = String(raw?.dose_unit_id ?? "").trim().toLowerCase();
+  const doseUnitLabel = String(raw?.dose_unit_label ?? raw?.dose_unit ?? "").trim().toLowerCase();
+  const doseUnitMap: Record<string, string> = {
+    tab: "tablet",
+    tablet: "tablet",
+    cap: "capsule",
+    capsule: "capsule",
+    ml: "ml",
+    mg: "mg",
+    gm: "gm",
+    drop: "drop",
+    drops: "drops",
+    puff: "puff",
+    puffs: "puffs",
+    spray: "spray",
+    patch: "patch",
+    suppository: "suppository",
+    inhaler: "inhaler",
+    nebulizer: "nebulizer",
+    powder: "powder",
+    other: "apply",
+    topical: "apply",
+    apply: "apply",
+  };
+  const resolvedDoseUnit =
+    doseUnitMap[doseUnitId] ||
+    doseUnitMap[doseUnitLabel] ||
+    (doseUnitLabel ? doseUnitLabel : "");
+
+  const frequencyId = String(raw?.frequency_id ?? "").trim();
+  const patternText = String(raw?.frequency_custom_text ?? "").trim();
+  const durationText = String(raw?.duration_display ?? "").trim();
+  const doseCustomText = String(raw?.dose_custom_text ?? "").trim();
+  const doseValue = raw?.dose_value;
+  const doseValueText =
+    doseValue === undefined || doseValue === null || Number.isNaN(Number(doseValue))
+      ? ""
+      : String(doseValue).trim();
+
+  if (doseValueText && resolvedDoseUnit) {
+    const patternSuffix = patternText ? ` (${patternText})` : "";
+    return `${doseValueText} ${resolvedDoseUnit}${patternSuffix}`.trim();
+  }
+
+  // Keep this strictly from already stored values; prefer explicit pattern format like "1-0-1".
+  if (patternText) return patternText;
+  if (frequencyId) return frequencyId;
+  if (durationText) return durationText;
+  if (doseCustomText) return doseCustomText;
+  if (doseValueText) return doseValueText;
+  return "";
+}
+
+function extractDurationDisplayFromMedicine(raw: any): string {
+  const explicitDurationDisplay = String(raw?.duration_display ?? "").trim();
+  if (explicitDurationDisplay) return explicitDurationDisplay;
+
+  const durationSpecial = String(raw?.duration_special ?? "").trim().toLowerCase();
+  if (durationSpecial === "sos") return "SOS";
+  if (durationSpecial === "till_required") return "Till required";
+  if (durationSpecial === "continue") return "Continue";
+  if (durationSpecial === "stat") return "STAT";
+
+  const rawDurationValue = Number(raw?.duration_value ?? 0);
+  if (Number.isFinite(rawDurationValue) && rawDurationValue > 0) {
+    const durationValue = Math.floor(rawDurationValue);
+    const durationUnit = String(raw?.duration_unit ?? "days").trim().toLowerCase();
+    if (durationUnit === "weeks") return `${durationValue} week${durationValue === 1 ? "" : "s"}`;
+    if (durationUnit === "months") return `${durationValue} month${durationValue === 1 ? "" : "s"}`;
+    return `${durationValue} day${durationValue === 1 ? "" : "s"}`;
+  }
+
+  return "";
 }
 
 export function ConsultationActionBar() {
@@ -70,8 +207,7 @@ export function ConsultationActionBar() {
   const [isEndingConsultation, setIsEndingConsultation] = useState(false);
   const [isStartingNewVisit, setIsStartingNewVisit] = useState(false);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
-  const [endConsultationTestData, setEndConsultationTestData] = useState<Record<string, unknown> | null>(null);
-  const [loadingTestData, setLoadingTestData] = useState(false);
+  const [endConsultationReviewData, setEndConsultationReviewData] = useState<EndConsultationReviewData | null>(null);
   const [visitPnr, setVisitPnr] = useState<string | null>(null);
   const [consultationId, setConsultationId] = useState<string | null>(null);
 
@@ -121,67 +257,65 @@ export function ConsultationActionBar() {
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
-  // For testing: when End Consultation dialog opens, fetch encounter + instructions and snapshot store
   useEffect(() => {
-    if (!showEndConsultationConfirm || !encounterId) {
-      setEndConsultationTestData(null);
+    if (!showEndConsultationConfirm) {
+      setEndConsultationReviewData(null);
       return;
     }
-    setLoadingTestData(true);
     const store = useConsultationStore.getState();
-    const storeSnapshot: Record<string, unknown> = {
-      encounterId: store.encounterId,
-      consultationType: store.consultationType,
-      draftStatus: store.draftStatus,
-      symptoms: store.symptoms,
-      findings: store.findings,
-      diagnosis: store.diagnosis,
-      medicines: store.medicines,
-      investigations: store.investigations,
-      instructions: store.instructions,
-      procedures: store.procedures,
-      medicalHistory: store.medicalHistory,
-      vitals: store.vitals,
-      prescriptionNotes: store.prescriptionNotes,
-      doctorNotes: store.doctorNotes,
-      follow_up_interval: store.follow_up_interval,
-      follow_up_unit: store.follow_up_unit,
-      follow_up_date: store.follow_up_date,
-      follow_up_reason: store.follow_up_reason,
-      follow_up_early_if_persist: store.follow_up_early_if_persist,
-      sectionItems: store.sectionItems,
-      draftFindings: store.draftFindings,
-      instructionsList: store.instructionsList,
-      consultationFinalized: store.consultationFinalized,
-      selectedDetail: store.selectedDetail,
+    const diagnosisItems = store.sectionItems.diagnosis ?? [];
+    const medicineItems = store.sectionItems.medicines ?? [];
+    const investigationItems = store.sectionItems.investigations ?? [];
+    const legacyMeds = Array.isArray(store.medicines)
+      ? store.medicines.map((m: any) => ({
+          name: String(m?.name ?? "").trim() || "Unnamed medicine",
+          dose_display: extractDoseDisplayFromMedicine(m),
+          duration_display: extractDurationDisplayFromMedicine(m),
+          instructions: String(m?.instructions ?? m?.notes ?? "").trim() || undefined,
+        }))
+      : [];
+    const medicinesFromSections = medicineItems.map((item: any) => ({
+      name: String(item?.label ?? item?.name ?? "").trim() || "Unnamed medicine",
+      dose_display: extractDoseDisplayFromMedicine(item?.detail?.medicine),
+      duration_display: extractDurationDisplayFromMedicine(item?.detail?.medicine),
+      instructions: String(item?.detail?.medicine?.instructions ?? item?.detail?.notes ?? "").trim() || undefined,
+    }));
+    const medicines = medicinesFromSections.length > 0 ? medicinesFromSections : legacyMeds;
+    const diagnosis = diagnosisItems.length > 0
+      ? diagnosisItems
+          .map((item: any) => String(item?.label ?? item?.name ?? "").trim())
+          .filter(Boolean)
+      : splitLegacyLines(store.diagnosis);
+    const tests = investigationItems.length > 0
+      ? investigationItems
+          .map((item: any) => String(item?.label ?? item?.name ?? "").trim())
+          .filter(Boolean)
+      : splitLegacyLines(store.investigations);
+    const patient = selectedPatient as (typeof selectedPatient & { age?: string | number }) | null;
+    const directAge = patient?.age;
+    const age =
+      (directAge !== undefined && directAge !== null && String(directAge).trim()) ||
+      calculateAgeFromDob(patient?.date_of_birth);
+    const reviewData: EndConsultationReviewData = {
+      patient: {
+        name: patient?.full_name || `${patient?.first_name ?? ""} ${patient?.last_name ?? ""}`.trim() || "Unknown patient",
+        age: String(age || "-"),
+        gender: formatPatientGender(patient?.gender) || "-",
+      },
+      vitals: {
+        bp: (store.vitals as Record<string, unknown>)?.bp as string | undefined,
+        pulse: (store.vitals as Record<string, unknown>)?.pulse as string | undefined,
+        temp: store.vitals?.temperatureF,
+        weight: store.vitals?.weightKg,
+        height: store.vitals?.heightCm,
+      },
+      diagnosis,
+      medicines,
+      tests,
+      follow_up: formatFollowUpReviewText(store),
     };
-    const preConsultSectionCodes = ["vitals", "chief_complaint", "allergies", "medical_history"];
-    const preConsultFetches = preConsultSectionCodes.map((code) =>
-      backendAxiosClient
-        .get(`/consultations/pre-consult/encounter/${encounterId}/section/${code}/`)
-        .then((r) => ({ code, data: r.data?.data ?? null }))
-        .catch(() => ({ code, data: null }))
-    );
-    Promise.all([
-      backendAxiosClient.get(`/consultations/encounter/${encounterId}/`).then((r) => r.data).catch((e) => ({ error: e.message || "Failed to fetch encounter" })),
-      backendAxiosClient.get(`/consultations/encounter/${encounterId}/instructions/`).then((r) => r.data).catch((e) => ({ error: e.message || "Failed to fetch instructions" })),
-      Promise.all(preConsultFetches).then((results) => {
-        const sections: Record<string, unknown> = {};
-        results.forEach(({ code, data }) => {
-          sections[code] = data;
-        });
-        return { encounter_id: encounterId, ...sections };
-      }),
-    ]).then(([encounter, instructions, pre_consultation]) => {
-      setEndConsultationTestData({
-        encounter,
-        instructions,
-        pre_consultation,
-        store: storeSnapshot,
-      });
-    }).catch(() => setEndConsultationTestData({ store: storeSnapshot, encounter: null, instructions: null, pre_consultation: null }))
-      .finally(() => setLoadingTestData(false));
-  }, [showEndConsultationConfirm, encounterId]);
+    setEndConsultationReviewData(reviewData);
+  }, [showEndConsultationConfirm, selectedPatient]);
 
   const handleTypeChange = (nextType: ConsultationWorkflowType) => {
     if (nextType !== consultationType) {
@@ -219,8 +353,21 @@ export function ConsultationActionBar() {
       useConsultationStore.getState().reset();
       setShowEndConsultationConfirm(false);
       router.push(url);
-    } catch {
-      toast.error("Failed to save consultation");
+    } catch (err: any) {
+      const responseData = err?.response?.data;
+      const errors = responseData?.errors;
+      let message = responseData?.message || responseData?.detail || err?.message || "Failed to save consultation";
+
+      if (errors && typeof errors === "object") {
+        const entries = Object.entries(errors);
+        if (entries.length > 0) {
+          const [field, value] = entries[0];
+          const firstValue = Array.isArray(value) ? value[0] : value;
+          message = `${field}: ${String(firstValue)}`;
+        }
+      }
+
+      toast.error(message);
     } finally {
       setIsEndingConsultation(false);
     }
@@ -564,39 +711,15 @@ export function ConsultationActionBar() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog open={showEndConsultationConfirm} onOpenChange={setShowEndConsultationConfirm}>
-        <AlertDialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
-          <AlertDialogHeader>
-            <AlertDialogTitle>End consultation?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to end this consultation? This will lock the encounter.
-              {!isFollowUpSet(useConsultationStore.getState()) && " You have not set a follow-up; you can still end the consultation."}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="rounded-lg border bg-muted/30 p-2 my-2">
-            <p className="text-xs font-semibold text-muted-foreground mb-1.5">Testing: all data (encounter, instructions, store snapshot)</p>
-            {loadingTestData ? (
-              <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Loading…
-              </div>
-            ) : endConsultationTestData ? (
-              <pre className="text-xs overflow-auto max-h-[40vh] p-2 rounded bg-background border whitespace-pre-wrap break-words">
-                {JSON.stringify(endConsultationTestData, null, 2)}
-              </pre>
-            ) : (
-              <p className="text-xs text-muted-foreground py-2">No data (missing encounter_id?)</p>
-            )}
-          </div>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isEndingConsultation}>Stay</AlertDialogCancel>
-            <AlertDialogAction onClick={handleEndConsultation} disabled={isEndingConsultation} className="bg-blue-600 hover:bg-blue-700">
-              {isEndingConsultation ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              End Consultation
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <EndConsultationReviewModal
+        open={showEndConsultationConfirm}
+        onOpenChange={setShowEndConsultationConfirm}
+        onStay={() => setShowEndConsultationConfirm(false)}
+        onConfirmEnd={handleEndConsultation}
+        isEndingConsultation={isEndingConsultation}
+        data={endConsultationReviewData}
+        hasFollowUp={isFollowUpSet(useConsultationStore.getState())}
+      />
 
       <AlertDialog open={showStartNewVisitConfirm} onOpenChange={setShowStartNewVisitConfirm}>
         <AlertDialogContent>
