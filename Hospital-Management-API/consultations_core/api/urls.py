@@ -20,6 +20,7 @@ from consultations_core.api.views.consultation import (
     ConsultationSummaryAPIView,
     ConsultationSummaryLiteAPIView,
     ConsultationSummaryLiteHTMLAPIView,
+    ConsultationSummaryLitePDFAPIView,
 )
 from consultations_core.api.views.instructions import (
     InstructionTemplatesAPIView,
@@ -154,5 +155,10 @@ urlpatterns = [
         "<uuid:consultation_id>/summary-lite/html/",
         ConsultationSummaryLiteHTMLAPIView.as_view(),
         name="consultation-summary-lite-html",
+    ),
+    path(
+        "<uuid:consultation_id>/summary-lite/pdf/",
+        ConsultationSummaryLitePDFAPIView.as_view(),
+        name="consultation-summary-lite-pdf",
     ),
 ]

@@ -240,7 +240,13 @@ export function ConsultationActionBar() {
   const toast = useToastNotification();
   const { selectedPatient } = usePatient();
   const { activateSection } = useConsultationSectionScroll();
-  const { consultationType, setConsultationType, encounterId: storeEncounterId, setSelectedDetail, setSelectedSymptomId } =
+  const {
+    consultationType,
+    setConsultationType,
+    encounterId: storeEncounterId,
+    setSelectedDetail,
+    setSelectedSymptomId,
+  } =
     useConsultationStore();
   const encounterIdFromUrl = searchParams.get("encounter_id");
   const encounterId = storeEncounterId || encounterIdFromUrl;
@@ -256,6 +262,7 @@ export function ConsultationActionBar() {
   const [endConsultationReviewData, setEndConsultationReviewData] = useState<EndConsultationReviewData | null>(null);
   const [visitPnr, setVisitPnr] = useState<string | null>(null);
   const [consultationId, setConsultationId] = useState<string | null>(null);
+  const [isFinalizationOverlayVisible, setIsFinalizationOverlayVisible] = useState(false);
 
   // Fetch visit_pnr when encounterId is available
   useEffect(() => {
@@ -302,6 +309,21 @@ export function ConsultationActionBar() {
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
+
+  useEffect(() => {
+    if (!isFinalizationOverlayVisible) return;
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKeyDown = (event: KeyboardEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      window.removeEventListener("keydown", onKeyDown, true);
+    };
+  }, [isFinalizationOverlayVisible]);
 
   useEffect(() => {
     if (!showEndConsultationConfirm) {
@@ -369,6 +391,65 @@ export function ConsultationActionBar() {
     }
   };
 
+  const downloadPrescriptionPdf = async (
+    consultationIdForPdf: string,
+    payload: ReturnType<typeof buildEndConsultationPayload>,
+    targetWindow: Window
+  ) => {
+    const token = window.localStorage.getItem("access_token");
+    const response = await fetch(`/api/consultations/${consultationIdForPdf}/summary-lite/pdf/`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      credentials: "include",
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      let detail = "PDF generation failed";
+      try {
+        const errPayload = await response.json();
+        detail = errPayload?.detail || detail;
+      } catch {}
+      throw new Error(detail);
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = targetWindow.document.createElement("a");
+    link.href = url;
+    link.download = `prescription-${consultationIdForPdf}.pdf`;
+    targetWindow.document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const renderCompletedPreviewAndRedirect = async (
+    previewTab: Window,
+    payload: ReturnType<typeof buildEndConsultationPayload>
+  ) => {
+    if (consultationId) {
+      const previewRes = await backendAxiosClient.post<{ html?: string }>(
+        `/consultations/${consultationId}/summary-lite/html/`,
+        payload
+      );
+      const html = (previewRes.data?.html || "").trim();
+      if (html) {
+        openPreviewWindow(html, previewTab, consultationId, payload);
+      } else {
+        previewTab.close();
+        toast.error("Failed to load prescription preview.");
+      }
+    } else {
+      previewTab.close();
+    }
+    toast.success("Consultation completed successfully");
+    setTimeout(() => {
+      router.replace("/doctor-dashboard");
+    }, 0);
+  };
+
   const handleEndConsultation = async () => {
     if (isEndingConsultation) {
       return;
@@ -387,40 +468,54 @@ export function ConsultationActionBar() {
       toast.error("Please complete all instruction details before ending consultation");
       return;
     }
+    const previewTab = window.open("", "_blank");
+    if (!previewTab) {
+      toast.error("Popup blocked. Please allow popups and try again.");
+      return;
+    }
+    previewTab.document.title = "Preparing prescription preview...";
+    previewTab.document.body.innerHTML =
+      "<div style='font-family: Arial, sans-serif; padding: 24px; color: #374151;'>Preparing prescription preview...</div>";
+
     setIsEndingConsultation(true);
+    setIsFinalizationOverlayVisible(true);
     try {
       const store = useConsultationStore.getState();
       const payload = buildEndConsultationPayload(store);
       const medicineValidationMessage = validateMedicinePayloadForEnd(payload);
       if (medicineValidationMessage) {
         toast.error(medicineValidationMessage);
+        previewTab.close();
         return;
       }
-      const res = await backendAxiosClient.post<{ redirect_url?: string; status?: string }>(
+      await backendAxiosClient.post<{ redirect_url?: string; status?: string }>(
         `/consultations/encounter/${id}/consultation/complete/`,
         payload
       );
-      const url = res.data?.redirect_url || "/doctor-dashboard";
-      useConsultationStore.getState().reset();
       setShowEndConsultationConfirm(false);
-      router.push(url);
+      await renderCompletedPreviewAndRedirect(previewTab, payload);
     } catch (err: any) {
       const responseData = err?.response?.data;
-      const errors = responseData?.errors;
-      let message = responseData?.message || responseData?.detail || err?.message || "Failed to save consultation";
-
-      if (errors && typeof errors === "object") {
-        const entries = Object.entries(errors);
-        if (entries.length > 0) {
-          const [field, value] = entries[0];
-          const firstValue = Array.isArray(value) ? value[0] : value;
-          message = `${field}: ${String(firstValue)}`;
+      const message = String(responseData?.message || responseData?.detail || err?.message || "");
+      const alreadyCompleted =
+        message.toLowerCase().includes("consultation_completed") ||
+        message.toLowerCase().includes("current: consultation_completed");
+      if (alreadyCompleted) {
+        try {
+          setShowEndConsultationConfirm(false);
+          const payload = buildEndConsultationPayload(useConsultationStore.getState());
+          await renderCompletedPreviewAndRedirect(previewTab, payload);
+          return;
+        } catch {
+          // continue to generic failure handling
         }
       }
 
-      toast.error(message);
+      toast.error("Failed to finalize consultation. Please try again.");
+      if (!previewTab.closed) previewTab.close();
     } finally {
       setIsEndingConsultation(false);
+      setIsFinalizationOverlayVisible(false);
     }
   };
 
@@ -447,8 +542,13 @@ export function ConsultationActionBar() {
     }
   };
 
-  const openPreviewWindow = (html: string) => {
-    const newWindow = window.open("", "_blank");
+  const openPreviewWindow = (
+    html: string,
+    targetWindow?: Window | null,
+    consultationIdForPdf?: string | null,
+    draftPayload?: ReturnType<typeof buildEndConsultationPayload>
+  ) => {
+    const newWindow = targetWindow ?? window.open("", "_blank");
     if (!newWindow) {
       toast.error("Popup blocked. Please allow popups and try again.");
       return;
@@ -457,35 +557,65 @@ export function ConsultationActionBar() {
     newWindow.document.write(html);
     newWindow.document.close();
 
-    // Inject a minimal floating print control in preview tab.
+    // Inject floating print/download controls in preview tab.
     const printStyle = newWindow.document.createElement("style");
-    printStyle.textContent = "@media print { .rx-preview-print-btn { display: none !important; } }";
+    printStyle.textContent = "@media print { .rx-preview-action-btn { display: none !important; } }";
     newWindow.document.head.appendChild(printStyle);
 
+    const actionWrap = newWindow.document.createElement("div");
+    actionWrap.style.position = "fixed";
+    actionWrap.style.top = "12px";
+    actionWrap.style.right = "12px";
+    actionWrap.style.zIndex = "2147483647";
+    actionWrap.style.display = "flex";
+    actionWrap.style.gap = "8px";
+
+    const applyButtonStyles = (button: HTMLButtonElement) => {
+      button.style.padding = "8px 12px";
+      button.style.border = "1px solid #d1d5db";
+      button.style.borderRadius = "8px";
+      button.style.background = "#ffffff";
+      button.style.color = "#111827";
+      button.style.fontFamily = "Arial, Helvetica, sans-serif";
+      button.style.fontSize = "12px";
+      button.style.fontWeight = "600";
+      button.style.cursor = "pointer";
+      button.style.boxShadow = "0 2px 8px rgba(0, 0, 0, 0.12)";
+    };
+
     const printButton = newWindow.document.createElement("button");
-    printButton.className = "rx-preview-print-btn";
+    printButton.className = "rx-preview-action-btn";
     printButton.type = "button";
-    printButton.textContent = "Print";
+    printButton.textContent = "🖨 Print";
     printButton.setAttribute("aria-label", "Print prescription");
-    printButton.style.position = "fixed";
-    printButton.style.top = "12px";
-    printButton.style.right = "12px";
-    printButton.style.zIndex = "2147483647";
-    printButton.style.padding = "8px 12px";
-    printButton.style.border = "1px solid #d1d5db";
-    printButton.style.borderRadius = "8px";
-    printButton.style.background = "#ffffff";
-    printButton.style.color = "#111827";
-    printButton.style.fontFamily = "Arial, Helvetica, sans-serif";
-    printButton.style.fontSize = "12px";
-    printButton.style.fontWeight = "600";
-    printButton.style.cursor = "pointer";
-    printButton.style.boxShadow = "0 2px 8px rgba(0, 0, 0, 0.12)";
+    applyButtonStyles(printButton);
     printButton.onclick = () => {
       newWindow.focus();
       newWindow.print();
     };
-    newWindow.document.body.appendChild(printButton);
+
+    const downloadButton = newWindow.document.createElement("button");
+    downloadButton.className = "rx-preview-action-btn";
+    downloadButton.type = "button";
+    downloadButton.textContent = "⬇ Download PDF";
+    downloadButton.setAttribute("aria-label", "Download prescription PDF");
+    applyButtonStyles(downloadButton);
+    downloadButton.onclick = async () => {
+      if (!consultationIdForPdf || !draftPayload) {
+        toast.error("Consultation not ready for PDF download.");
+        return;
+      }
+      try {
+        await downloadPrescriptionPdf(consultationIdForPdf, draftPayload, newWindow);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Failed to download PDF.";
+        toast.error(message);
+      }
+    };
+
+    actionWrap.appendChild(printButton);
+    actionWrap.appendChild(downloadButton);
+    newWindow.document.body.appendChild(actionWrap);
   };
 
   const handlePreview = async () => {
@@ -512,7 +642,7 @@ export function ConsultationActionBar() {
         toast.error("Failed to load prescription preview.");
         return;
       }
-      openPreviewWindow(html);
+      openPreviewWindow(html, undefined, consultationId, draftPayload);
     } catch (error: any) {
       toast.error("Failed to load preview");
     } finally {
@@ -529,6 +659,7 @@ export function ConsultationActionBar() {
             size="sm"
             aria-label="Back to appointments"
             onClick={() => setShowCancelConfirm(true)}
+            disabled={isFinalizationOverlayVisible}
             className="gap-1.5 h-8 shrink-0 rounded-lg border-border/80 bg-muted/60 px-2.5 text-muted-foreground hover:text-foreground hover:bg-muted hover:border-muted-foreground/30 touch-manipulation"
           >
             <ArrowLeft className="h-4 w-4 shrink-0" />
@@ -647,6 +778,7 @@ export function ConsultationActionBar() {
             size="sm"
             className="gap-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 min-h-[44px] touch-manipulation md:min-h-0 border-0"
             onClick={() => setShowEndConsultationConfirm(true)}
+            disabled={isEndingConsultation}
           >
             {isEndingConsultation ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
             End Consultation
@@ -796,6 +928,31 @@ export function ConsultationActionBar() {
           onOpenChange={setShowViewPre}
           encounterId={encounterId}
         />
+      )}
+
+      {isFinalizationOverlayVisible && (
+        <div
+          className="fixed inset-0 z-[100] bg-white/65 backdrop-blur-sm"
+          role="status"
+          aria-live="polite"
+          aria-label="Finalizing consultation"
+          onWheel={(event) => event.preventDefault()}
+          onTouchMove={(event) => event.preventDefault()}
+          tabIndex={-1}
+        >
+          <div className="flex h-full w-full items-center justify-center">
+            <div className="w-full max-w-md rounded-xl border bg-white p-6 shadow-xl">
+              <div className="mb-4 flex items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+              </div>
+              <p className="text-center text-base font-semibold text-gray-900">Finalizing consultation...</p>
+              <p className="mt-1 text-center text-sm text-gray-600">Generating prescription...</p>
+              <div className="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-blue-100">
+                <div className="h-full w-1/2 animate-pulse rounded-full bg-blue-600" />
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );

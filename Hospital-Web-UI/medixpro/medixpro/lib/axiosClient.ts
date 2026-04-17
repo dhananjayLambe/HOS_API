@@ -221,11 +221,24 @@ backendAxiosClient.interceptors.response.use(
       const isSectionEndpoint = fullUrl.includes("/section/");
       const isTemplateEndpoint = fullUrl.includes("/pre-consult/template");
       const isPreviewEndpoint = fullUrl.includes("/pre-consultation/preview/");
+      const isConsultationCompleteEndpoint = fullUrl.includes("/consultation/complete/");
       const is404 = error.response?.status === 404;
       const isExpectedPreview400 = isPreviewEndpoint && error.response?.status === 400;
+      const responseMessage = String((error.response?.data as any)?.message ?? "").toLowerCase();
+      const isAlreadyCompleted400 =
+        isConsultationCompleteEndpoint &&
+        error.response?.status === 400 &&
+        (responseMessage.includes("consultation_completed") ||
+          responseMessage.includes("current: consultation_completed"));
       if (isExpectedPreview400 && process.env.NODE_ENV !== "production") {
         console.info(
           `[backendAxiosClient] Suppressed expected 400 on ${error.config.method?.toUpperCase()} ${fullUrl}`,
+          error.response?.data,
+        );
+      }
+      if (isAlreadyCompleted400 && process.env.NODE_ENV !== "production") {
+        console.info(
+          `[backendAxiosClient] Suppressed expected already-completed 400 on ${error.config.method?.toUpperCase()} ${fullUrl}`,
           error.response?.data,
         );
       }
@@ -233,7 +246,8 @@ backendAxiosClient.interceptors.response.use(
       // Only log actionable errors:
       // - skip expected 404s on section/template endpoints
       // - skip expected 400s on preview endpoint (e.g. cancelled/no-show encounters)
-      if ((!is404 || (!isSectionEndpoint && !isTemplateEndpoint)) && !isExpectedPreview400) {
+      // - skip expected already-completed 400 on consultation complete endpoint
+      if ((!is404 || (!isSectionEndpoint && !isTemplateEndpoint)) && !isExpectedPreview400 && !isAlreadyCompleted400) {
         console.error(
           `[backendAxiosClient] Error ${error.response?.status || "Network"} on ${error.config.method?.toUpperCase()} ${fullUrl}`,
         );

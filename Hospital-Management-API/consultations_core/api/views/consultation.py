@@ -9,6 +9,7 @@ import logging
 import json
 
 from django.conf import settings
+from django.http import HttpResponse
 from django.template.loader import render_to_string
 from rest_framework import status
 from rest_framework.exceptions import NotFound
@@ -376,6 +377,58 @@ class ConsultationSummaryLiteHTMLAPIView(_BaseConsultationSummaryAPIView):
     def post(self, request, consultation_id):
         draft_payload = request.data if isinstance(request.data, dict) else {}
         return self._render_preview(
+            request=request,
+            consultation_id=consultation_id,
+            draft_payload=draft_payload,
+        )
+
+
+class ConsultationSummaryLitePDFAPIView(ConsultationSummaryLiteHTMLAPIView):
+    summary_profile = "preview_pdf"
+
+    def _render_pdf(self, request, consultation_id, draft_payload=None):
+        sections = request.query_params.getlist("sections")
+        try:
+            summary = build_consultation_summary(
+                consultation_id=consultation_id,
+                sections=sections or None,
+                profile=self.summary_profile,
+            )
+        except Consultation.DoesNotExist:
+            return Response({"detail": "Consultation not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        if not summary:
+            raise NotFound("Consultation not found.")
+
+        if isinstance(draft_payload, dict):
+            summary = _apply_draft_preview_overrides(summary, draft_payload)
+
+        html = render_to_string("prescriptions/prescription.html", summary).strip()
+        base_url = request.build_absolute_uri("/")
+        try:
+            from weasyprint import HTML
+
+            pdf_binary = HTML(string=html, base_url=base_url).write_pdf()
+        except Exception as exc:
+            logger.exception("Failed to generate prescription PDF for consultation %s", consultation_id)
+            return Response(
+                {
+                    "detail": "PDF generation failed. Ensure WeasyPrint and system dependencies are installed.",
+                    "error": str(exc),
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        response = HttpResponse(pdf_binary, content_type="application/pdf")
+        response["Content-Disposition"] = f'attachment; filename="prescription-{consultation_id}.pdf"'
+        return response
+
+    def get(self, request, consultation_id):
+        return self._render_pdf(request=request, consultation_id=consultation_id)
+
+    def post(self, request, consultation_id):
+        draft_payload = request.data if isinstance(request.data, dict) else {}
+        return self._render_pdf(
             request=request,
             consultation_id=consultation_id,
             draft_payload=draft_payload,
