@@ -114,7 +114,7 @@ axiosClient.interceptors.response.use(
       try {
         // Call refresh token endpoint via Next.js API route (use plain axios to avoid interceptor loop)
         const refreshAxios = axios.create({ baseURL: '' });
-        const response = await refreshAxios.post("/api/refresh-token", {
+        const response = await refreshAxios.post("/api/refresh-token/", {
           refresh_token: refreshToken,
         });
 
@@ -261,7 +261,7 @@ backendAxiosClient.interceptors.response.use(
       if (refreshToken) {
         try {
           const refreshAxios = axios.create({ baseURL: '' });
-          const response = await refreshAxios.post("/api/refresh-token", {
+          const response = await refreshAxios.post("/api/refresh-token/", {
             refresh_token: refreshToken,
           });
           const { tokens } = response.data;

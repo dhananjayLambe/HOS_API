@@ -188,13 +188,13 @@ async function apiRequest<T>(endpoint: string, options: AxiosRequestConfig = {})
 export const doctorAPI = {
   // Get doctor profile (token auto-attached by axios interceptor)
   getProfile: () =>
-    apiRequest<any>("/doctor/profile", {
+    apiRequest<any>("/doctor/profile/", {
       method: "GET",
     }),
 
   // Update personal information
   updatePersonalInfo: (data: any) =>
-    apiRequest<any>("/doctor/profile", {
+    apiRequest<any>("/doctor/profile/", {
       method: "PATCH",
       data,
     }),

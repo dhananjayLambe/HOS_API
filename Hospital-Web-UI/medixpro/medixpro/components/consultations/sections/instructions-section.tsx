@@ -20,10 +20,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useConsultationStore } from "@/store/consultationStore";
-import { apiClient } from "@/lib/apiClient";
 import type { InstructionsSectionSchema, InstructionItemSchema } from "@/lib/consultation-schema-types";
 import {
-  extractPrimarySpecializationFromProfile,
   fetchInstructionSuggestions,
   normalizeSpecialtySlug,
   type InstructionSuggestionRow,
@@ -115,24 +113,16 @@ export function InstructionsSection() {
   const suggestionsFetchGenRef = useRef(0);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const data = await apiClient.getProfile();
-        if (cancelled) return;
-        const profile =
-          data && typeof data === "object" && "doctor_profile" in data
-            ? (data as { doctor_profile?: unknown }).doctor_profile ?? data
-            : data;
-        const raw = extractPrimarySpecializationFromProfile(profile);
-        if (raw) setSpecialtySlug(normalizeSpecialtySlug(raw));
-      } catch {
-        /* keep default */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+    if (typeof window === "undefined") return;
+    // Keep start-consultation resilient: do not call profile API during mount.
+    // Profile fetch may trigger auth refresh churn when session expires.
+    const localSpecialty =
+      window.localStorage.getItem("primary_specialization") ||
+      window.localStorage.getItem("specialization") ||
+      "";
+    if (localSpecialty.trim()) {
+      setSpecialtySlug(normalizeSpecialtySlug(localSpecialty));
+    }
   }, []);
 
   useEffect(() => {
