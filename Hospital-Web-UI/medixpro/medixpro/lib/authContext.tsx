@@ -21,6 +21,8 @@ interface AuthContextType {
   refreshAccessToken: () => Promise<boolean>;
   setUserInfo: (userData: Partial<UserInfo>) => void;
   isAuthenticated: boolean;
+  /** True after initial localStorage/token restore has finished (safe for auth-dependent UI). */
+  sessionChecked: boolean;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -30,6 +32,7 @@ const AuthContext = createContext<AuthContextType>({
   refreshAccessToken: async () => false,
   setUserInfo: () => {},
   isAuthenticated: false,
+  sessionChecked: false,
 });
 
 // LocalStorage keys for user info
@@ -267,8 +270,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const isAuthenticated = !!(user && role);
 
   return (
-    <AuthContext.Provider value={{ user, role, logout, refreshAccessToken, setUserInfo: saveUserInfo, isAuthenticated }}>
-      {sessionChecked ? children : null} {/* Wait until session is checked */}
+    <AuthContext.Provider
+      value={{ user, role, logout, refreshAccessToken, setUserInfo: saveUserInfo, isAuthenticated, sessionChecked }}
+    >
+      {children}
     </AuthContext.Provider>
   );
 };

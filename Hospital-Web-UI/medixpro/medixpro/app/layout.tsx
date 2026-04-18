@@ -53,7 +53,7 @@ export default function RootLayout({
       <body className={inter.className} suppressHydrationWarning style={{ backgroundColor: 'white' }}>
         <AuthProvider>
           <ThemeProvider>{children}</ThemeProvider>
-          <GlobalLoader /> {/* ⬅ loader always available */}
+          <GlobalLoader />
           <Toaster position="top-center" />
         </AuthProvider>
       </body>
