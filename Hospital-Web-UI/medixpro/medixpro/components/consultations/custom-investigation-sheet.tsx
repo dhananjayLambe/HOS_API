@@ -104,7 +104,7 @@ export function CustomInvestigationSheet({
         <div className="flex flex-1 flex-col gap-4 overflow-y-auto py-4 pr-1">
           <div className="space-y-2">
             <Label htmlFor="custom-inv-name">
-              Investigation name <span className="text-destructive">*</span>
+              Investigation name <span className="text-amber-600 dark:text-amber-400">*</span>
             </Label>
             <Input
               id="custom-inv-name"
@@ -120,7 +120,7 @@ export function CustomInvestigationSheet({
               aria-describedby={nameError ? "custom-inv-name-error" : undefined}
             />
             {nameError && (
-              <p id="custom-inv-name-error" className="text-sm text-destructive">
+              <p id="custom-inv-name-error" className="text-sm text-amber-900 dark:text-amber-100">
                 Name is required
               </p>
             )}

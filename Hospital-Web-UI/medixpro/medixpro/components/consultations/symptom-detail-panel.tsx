@@ -285,7 +285,7 @@ function SymptomFieldRenderer({
   const footer = (
     <>
       {msgs.errors.map((e) => (
-        <p key={e} className="text-sm text-destructive">
+        <p key={e} className="text-sm text-amber-800 dark:text-amber-200">
           {e}
         </p>
       ))}

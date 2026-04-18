@@ -528,7 +528,7 @@ export function ViewPreDrawer({ open, onOpenChange, encounterId }: ViewPreDrawer
         )}
 
         {!loading && error && (
-          <div className="mt-4 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+          <div className="mt-4 rounded-md border border-amber-300/80 bg-amber-50/90 dark:bg-amber-950/40 px-3 py-2 text-xs text-amber-950 dark:text-amber-100">
             {error}
           </div>
         )}

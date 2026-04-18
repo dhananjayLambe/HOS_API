@@ -55,7 +55,7 @@ export function DynamicField({
             min={field.validation?.min}
             max={field.validation?.max}
             step={field.step || 1}
-            className={cn("h-9 text-sm", error && "border-destructive", className)}
+            className={cn("h-9 text-sm", error && "border-amber-500", className)}
           />
         );
 
@@ -68,7 +68,7 @@ export function DynamicField({
               value={value || ""}
               onChange={(e) => onChange(e.target.value)}
               onBlur={onBlur}
-              className={cn(error && "border-destructive", className)}
+              className={cn(error && "border-amber-500", className)}
               rows={3}
             />
           );
@@ -81,7 +81,7 @@ export function DynamicField({
             value={value || ""}
             onChange={(e) => onChange(e.target.value)}
             onBlur={onBlur}
-            className={cn("h-9 text-sm", error && "border-destructive", className)}
+            className={cn("h-9 text-sm", error && "border-amber-500", className)}
           />
         );
 
@@ -93,7 +93,7 @@ export function DynamicField({
           >
             <SelectTrigger
               id={field.key}
-              className={cn("h-9 text-sm", error && "border-destructive", className)}
+              className={cn("h-9 text-sm", error && "border-amber-500", className)}
             >
               <SelectValue placeholder={`Select ${field.label}`} />
             </SelectTrigger>
@@ -150,7 +150,7 @@ export function DynamicField({
             value={value || ""}
             onChange={(e) => onChange(e.target.value)}
             onBlur={onBlur}
-            className={cn("h-9 text-sm", error && "border-destructive", className)}
+            className={cn("h-9 text-sm", error && "border-amber-500", className)}
           />
         );
     }
@@ -160,14 +160,16 @@ export function DynamicField({
     <div className="space-y-1.5">
       <Label htmlFor={field.key} className="text-xs font-medium">
         {field.label}
-        {field.validation?.required && <span className="text-destructive ml-1">*</span>}
+        {field.validation?.required && (
+          <span className="text-amber-600 dark:text-amber-400 ml-1">*</span>
+        )}
         {field.unit && (
           <span className="text-muted-foreground ml-1">({field.unit})</span>
         )}
       </Label>
       {renderField()}
       {error && (
-        <p className="text-xs text-destructive mt-1">{error}</p>
+        <p className="text-xs text-amber-900 dark:text-amber-100 mt-1">{error}</p>
       )}
     </div>
   );

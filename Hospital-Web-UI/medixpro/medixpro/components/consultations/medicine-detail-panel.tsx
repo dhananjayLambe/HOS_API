@@ -520,7 +520,7 @@ export function MedicineDetailPanel() {
                 className={cn(
                   "h-10 min-w-[140px] flex-1 rounded-lg",
                   doseFieldIncomplete &&
-                    "border-destructive focus-visible:ring-destructive/40"
+                    "border-amber-500 focus-visible:ring-amber-500/40"
                 )}
                 aria-label="Dose amount"
                 aria-invalid={doseFieldIncomplete}
@@ -587,7 +587,7 @@ export function MedicineDetailPanel() {
             className={cn(
               "space-y-2.5 border-t border-border/60 pt-3 outline-none",
               frequencyFieldIncomplete &&
-                "rounded-lg ring-2 ring-destructive/45 ring-offset-2 ring-offset-background"
+                "rounded-lg ring-2 ring-amber-500/45 ring-offset-2 ring-offset-background"
             )}
           >
             <SectionLabel>Frequency</SectionLabel>

@@ -7,7 +7,7 @@ import {
   useImperativeHandle,
   useState,
 } from "react";
-import { AlertTriangle, ChevronDown, Minus, Plus } from "lucide-react";
+import { AlertCircle, AlertTriangle, ChevronDown, Minus, Plus } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -73,7 +73,7 @@ export const ConsultationSectionCard = forwardRef<
         className={cn(
           "mb-4 rounded-2xl border border-border/80 bg-card p-4 shadow-sm transition-shadow hover:shadow-md",
           validationError &&
-            "border-destructive/80 bg-destructive/[0.06] dark:bg-destructive/10",
+            "border-amber-500/50 bg-amber-500/[0.04] dark:bg-amber-500/10",
           className
         )}
       >
@@ -91,7 +91,7 @@ export const ConsultationSectionCard = forwardRef<
             <span className="font-semibold">
               {title}
               {titleRequired && (
-                <span className="text-destructive ml-0.5" aria-hidden>
+                <span className="text-amber-600 dark:text-amber-400 ml-0.5" aria-hidden>
                   *
                 </span>
               )}
@@ -129,13 +129,15 @@ export const ConsultationSectionCard = forwardRef<
         <CollapsibleContent>
           <CardContent className="p-0 pt-2 pb-1">
             {validationError ? (
-              <p
-                className="mb-2 text-sm text-destructive flex items-start gap-1.5"
+              <div
+                className="mb-3 rounded-lg border border-amber-300/80 bg-amber-50/90 dark:bg-amber-950/40 px-3 py-2 flex items-start gap-2"
                 role="alert"
               >
-                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" aria-hidden />
-                {validationError}
-              </p>
+                <AlertCircle className="h-4 w-4 text-amber-700 dark:text-amber-400 mt-0.5 shrink-0" aria-hidden />
+                <p className="text-xs text-amber-950 dark:text-amber-100 leading-snug">
+                  {validationError}
+                </p>
+              </div>
             ) : null}
             {children}
           </CardContent>

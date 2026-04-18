@@ -893,7 +893,7 @@ export function DynamicSectionForm({
           specialtyRanges={specialtyRanges}
         />
         {showError && (
-          <p className="text-xs text-destructive mt-1 flex items-center gap-1">
+          <p className="text-xs text-amber-900 dark:text-amber-100 mt-1 flex items-center gap-1">
             <span>⚠</span>
             <span>{hasError}</span>
           </p>

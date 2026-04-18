@@ -432,7 +432,7 @@ export function ConsultationActionBar() {
       expandSectionCard("instructions");
       scrollSectionIntoView("instructions");
       activateSection("instructions");
-      toast.error("Please complete all instruction details before ending consultation");
+      toast.warning("Please complete all instruction details before ending consultation");
       return;
     }
 
@@ -453,7 +453,7 @@ export function ConsultationActionBar() {
         scrollSectionIntoView(first);
         activateSection(first);
       }
-      toast.error(formatEndConsultationErrorToast(errors));
+      toast.warning(formatEndConsultationErrorToast(errors));
       return;
     }
     setSectionValidationErrors({});

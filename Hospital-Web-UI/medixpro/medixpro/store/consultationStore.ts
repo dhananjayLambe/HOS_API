@@ -29,6 +29,25 @@ import { DEFAULT_CONSULTATION_STATE } from "@/lib/consultation-types";
 import { evaluateSectionItemComplete } from "@/lib/consultation-completion";
 import type { MainSectionId } from "@/lib/consultation-workflow";
 
+/** Drop one section key so stale end-consultation errors clear after the user fixes data. */
+function omitSectionValidationKey(
+  errors: Partial<Record<MainSectionId, string>>,
+  key: MainSectionId
+): Partial<Record<MainSectionId, string>> {
+  if (!errors[key]) return errors;
+  const next = { ...errors };
+  delete next[key];
+  return next;
+}
+
+/** `sectionItems` keys align with `MainSectionId` except we only use the shared subset. */
+function clearErrorForSectionType(
+  errors: Partial<Record<MainSectionId, string>>,
+  section: ConsultationSectionType
+): Partial<Record<MainSectionId, string>> {
+  return omitSectionValidationKey(errors, section);
+}
+
 type DraftStatus = {
   savedAt: Date | null;
   message: string | null;
@@ -201,7 +220,11 @@ export const useConsultationStore = create<ConsultationStore>((set, get) => ({
   clearSectionValidationUi: () =>
     set({ sectionValidationErrors: {}, sectionValidationSoftWarnings: {} }),
 
-  setSymptoms: (symptoms) => set({ symptoms }),
+  setSymptoms: (symptoms) =>
+    set((s) => ({
+      symptoms,
+      sectionValidationErrors: omitSectionValidationKey(s.sectionValidationErrors, "symptoms"),
+    })),
   addSymptom: (symptom) =>
     set((s) => {
       const incoming = symptom.name.trim().toLowerCase();
@@ -209,12 +232,16 @@ export const useConsultationStore = create<ConsultationStore>((set, get) => ({
         (existing) => existing.name.trim().toLowerCase() === incoming
       );
       if (duplicate) return s;
-      return { symptoms: [symptom, ...s.symptoms] };
+      return {
+        symptoms: [symptom, ...s.symptoms],
+        sectionValidationErrors: omitSectionValidationKey(s.sectionValidationErrors, "symptoms"),
+      };
     }),
   removeSymptom: (id) =>
     set((s) => ({
       symptoms: s.symptoms.filter((x) => x.id !== id),
       selectedSymptomId: s.selectedSymptomId === id ? null : s.selectedSymptomId,
+      sectionValidationErrors: omitSectionValidationKey(s.sectionValidationErrors, "symptoms"),
     })),
   updateSymptomDetail: (id, detail) =>
     set((s) => ({
@@ -230,29 +257,51 @@ export const useConsultationStore = create<ConsultationStore>((set, get) => ({
         }
         return { ...x, detail: base as typeof x.detail };
       }),
+      sectionValidationErrors: omitSectionValidationKey(s.sectionValidationErrors, "symptoms"),
     })),
 
   setFindings: (value) => set({ findings: value }),
   setDiagnosis: (value) => set({ diagnosis: value }),
 
-  setMedicines: (medicines) => set({ medicines }),
+  setMedicines: (medicines) =>
+    set((s) => ({
+      medicines,
+      sectionValidationErrors: omitSectionValidationKey(s.sectionValidationErrors, "medicines"),
+    })),
   addMedicine: (medicine) =>
     set((s) => ({
       medicines: [
         ...s.medicines,
         { ...medicine, id: `med-${Date.now()}-${Math.random().toString(36).slice(2)}` },
       ],
+      sectionValidationErrors: omitSectionValidationKey(s.sectionValidationErrors, "medicines"),
     })),
   updateMedicine: (id, patch) =>
     set((s) => ({
       medicines: s.medicines.map((m) => (m.id === id ? { ...m, ...patch } : m)),
+      sectionValidationErrors: omitSectionValidationKey(s.sectionValidationErrors, "medicines"),
     })),
   removeMedicine: (id) =>
-    set((s) => ({ medicines: s.medicines.filter((m) => m.id !== id) })),
+    set((s) => ({
+      medicines: s.medicines.filter((m) => m.id !== id),
+      sectionValidationErrors: omitSectionValidationKey(s.sectionValidationErrors, "medicines"),
+    })),
 
-  setInvestigations: (value) => set({ investigations: value }),
-  setInstructions: (value) => set({ instructions: value }),
-  setProcedures: (value) => set({ procedures: value }),
+  setInvestigations: (value) =>
+    set((s) => ({
+      investigations: value,
+      sectionValidationErrors: omitSectionValidationKey(s.sectionValidationErrors, "investigations"),
+    })),
+  setInstructions: (value) =>
+    set((s) => ({
+      instructions: value,
+      sectionValidationErrors: omitSectionValidationKey(s.sectionValidationErrors, "instructions"),
+    })),
+  setProcedures: (value) =>
+    set((s) => ({
+      procedures: value,
+      sectionValidationErrors: omitSectionValidationKey(s.sectionValidationErrors, "procedure"),
+    })),
   setFollowUp: (patch) =>
     set((s) => {
       const rawUnit = String(patch.follow_up_unit ?? s.follow_up_unit ?? "days").toLowerCase();
@@ -268,6 +317,7 @@ export const useConsultationStore = create<ConsultationStore>((set, get) => ({
         follow_up_reason: patch.follow_up_reason ?? s.follow_up_reason,
         follow_up_early_if_persist:
           patch.follow_up_early_if_persist ?? s.follow_up_early_if_persist,
+        sectionValidationErrors: omitSectionValidationKey(s.sectionValidationErrors, "follow_up"),
       };
     }),
 
@@ -366,12 +416,17 @@ export const useConsultationStore = create<ConsultationStore>((set, get) => ({
           ...s.sectionItems,
           diagnosis: updated,
         },
+        sectionValidationErrors: omitSectionValidationKey(s.sectionValidationErrors, "diagnosis"),
       };
     }),
 
   setEncounterId: (id) => set({ encounterId: id }),
   setInstructionsSchema: (schema) => set({ instructionsSchema: schema }),
-  setInstructionsList: (list) => set({ instructionsList: list }),
+  setInstructionsList: (list) =>
+    set((s) => ({
+      instructionsList: list,
+      sectionValidationErrors: omitSectionValidationKey(s.sectionValidationErrors, "instructions"),
+    })),
   setConsultationFinalized: (v) => set({ consultationFinalized: v }),
   getInstructionTemplateByKeyOrId: (keyOrId) => {
     const { instructionsSchema } = get();
@@ -398,6 +453,7 @@ export const useConsultationStore = create<ConsultationStore>((set, get) => ({
           ...s.sectionItems,
           [section]: [normalizedItem, ...current],
         },
+        sectionValidationErrors: clearErrorForSectionType(s.sectionValidationErrors, section),
       };
     }),
   replaceSectionItems: (section, items) =>
@@ -406,6 +462,7 @@ export const useConsultationStore = create<ConsultationStore>((set, get) => ({
         ...s.sectionItems,
         [section]: items,
       },
+      sectionValidationErrors: clearErrorForSectionType(s.sectionValidationErrors, section),
     })),
   removeSectionItem: (section, id) =>
     set((s) => {
@@ -417,6 +474,7 @@ export const useConsultationStore = create<ConsultationStore>((set, get) => ({
       return {
         sectionItems: { ...s.sectionItems, [section]: next },
         selectedDetail,
+        sectionValidationErrors: clearErrorForSectionType(s.sectionValidationErrors, section),
       };
     }),
   updateSectionItemDetail: (section, id, detail) =>
@@ -438,6 +496,7 @@ export const useConsultationStore = create<ConsultationStore>((set, get) => ({
             : i
         ),
       },
+      sectionValidationErrors: clearErrorForSectionType(s.sectionValidationErrors, section),
     })),
   requestMedicinesSearchFocus: () =>
     set((s) => ({ medicinesSearchFocusNonce: s.medicinesSearchFocusNonce + 1 })),
@@ -487,7 +546,10 @@ export const useConsultationStore = create<ConsultationStore>((set, get) => ({
         extension_data: null,
         is_deleted: false,
       };
-      return { draftFindings: [row, ...s.draftFindings] };
+      return {
+        draftFindings: [row, ...s.draftFindings],
+        sectionValidationErrors: omitSectionValidationKey(s.sectionValidationErrors, "findings"),
+      };
     }),
 
   addDraftFindingCustom: (custom_name) =>
@@ -513,7 +575,10 @@ export const useConsultationStore = create<ConsultationStore>((set, get) => ({
         extension_data: null,
         is_deleted: false,
       };
-      return { draftFindings: [row, ...s.draftFindings] };
+      return {
+        draftFindings: [row, ...s.draftFindings],
+        sectionValidationErrors: omitSectionValidationKey(s.sectionValidationErrors, "findings"),
+      };
     }),
 
   updateDraftFinding: (id, patch) =>
@@ -521,6 +586,7 @@ export const useConsultationStore = create<ConsultationStore>((set, get) => ({
       draftFindings: s.draftFindings.map((d) =>
         d.id === id ? { ...d, ...patch } : d
       ),
+      sectionValidationErrors: omitSectionValidationKey(s.sectionValidationErrors, "findings"),
     })),
 
   markDraftFindingDeleted: (id) =>
@@ -532,6 +598,7 @@ export const useConsultationStore = create<ConsultationStore>((set, get) => ({
         s.selectedDetail?.section === "findings" && s.selectedDetail?.itemId === id
           ? null
           : s.selectedDetail,
+      sectionValidationErrors: omitSectionValidationKey(s.sectionValidationErrors, "findings"),
     })),
 
   reset: () =>

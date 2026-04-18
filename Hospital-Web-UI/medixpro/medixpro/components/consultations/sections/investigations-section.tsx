@@ -1297,7 +1297,7 @@ export function InvestigationsSection() {
                     </div>
                   )}
                 {inlineSearchError && (
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-destructive">
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-amber-800 dark:text-amber-200">
                     <span>Could not load search. </span>
                     <Button
                       type="button"

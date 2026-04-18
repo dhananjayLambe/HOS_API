@@ -416,7 +416,7 @@ export function ConsultationSearchAddDrawer({
             >
               <div className="space-y-2">
                 <Label htmlFor="add-name">
-                  Name <span className="text-destructive">*</span>
+                  Name <span className="text-amber-600 dark:text-amber-400">*</span>
                 </Label>
                 <Input
                   id="add-name"
@@ -432,14 +432,14 @@ export function ConsultationSearchAddDrawer({
                   aria-describedby={nameError ? "add-name-error" : undefined}
                 />
                 {nameError && (
-                  <p id="add-name-error" className="text-sm text-destructive">
+                  <p id="add-name-error" className="text-sm text-amber-900 dark:text-amber-100">
                     Name is required
                   </p>
                 )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="add-dose-type">
-                  Dose type <span className="text-destructive">*</span>
+                  Dose type <span className="text-amber-600 dark:text-amber-400">*</span>
                 </Label>
                 <Select value={medicineDoseType} onValueChange={setMedicineDoseType}>
                   <SelectTrigger id="add-dose-type" className="rounded-lg border-border/80">
@@ -466,7 +466,7 @@ export function ConsultationSearchAddDrawer({
                     placeholder={strengthPlaceholder}
                     className={cn(
                       "min-w-0 flex-1 rounded-lg border-border/80 focus-visible:ring-2 focus-visible:ring-blue-500/30",
-                      strengthFieldError && "border-destructive focus-visible:ring-destructive/30"
+                      strengthFieldError && "border-amber-500 focus-visible:ring-amber-500/30"
                     )}
                     aria-label="Strength value"
                     aria-invalid={Boolean(strengthFieldError)}
@@ -492,7 +492,7 @@ export function ConsultationSearchAddDrawer({
                   </Select>
                 </div>
                 {strengthFieldError && (
-                  <p id="add-strength-error" className="text-sm text-destructive">
+                  <p id="add-strength-error" className="text-sm text-amber-900 dark:text-amber-100">
                     {strengthFieldError}
                   </p>
                 )}
@@ -531,7 +531,7 @@ export function ConsultationSearchAddDrawer({
             <div className="space-y-4 rounded-lg border border-border/80 p-4">
               <div className="space-y-2">
                 <Label htmlFor="add-name">
-                  Name <span className="text-destructive">*</span>
+                  Name <span className="text-amber-600 dark:text-amber-400">*</span>
                 </Label>
                 <Input
                   id="add-name"

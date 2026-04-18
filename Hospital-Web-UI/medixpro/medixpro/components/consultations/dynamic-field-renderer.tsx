@@ -281,7 +281,7 @@ export const DynamicFieldRenderer = memo<DynamicFieldRendererProps>(
           <div className="space-y-1.5">
             <Label htmlFor={field.key} className="text-sm font-medium">
               {field.label}
-              {field.required && sectionCode !== "vitals" && <span className="text-destructive ml-1">*</span>}
+              {field.required && sectionCode !== "vitals" && <span className="text-amber-600 dark:text-amber-400 ml-1">*</span>}
             </Label>
             <div className="relative flex items-center gap-2 w-fit max-w-full">
               <Input
@@ -323,7 +323,7 @@ export const DynamicFieldRenderer = memo<DynamicFieldRendererProps>(
                 placeholder={field.placeholder}
                 className={`${inputWidthClass} h-10 text-base focus:ring-2 focus:ring-offset-1 transition-all ${
                   error 
-                    ? "border-destructive focus:ring-destructive focus:border-destructive" 
+                    ? "border-amber-500 focus:ring-amber-500 focus:border-amber-500" 
                     : "focus:ring-purple-500"
                 } ${hasUnitSwitcher ? "pr-16" : ""}`}
                 inputMode={step === 1 ? "numeric" : "decimal"}
@@ -437,7 +437,7 @@ export const DynamicFieldRenderer = memo<DynamicFieldRendererProps>(
             <div className="space-y-1.5">
               <Label htmlFor={field.key} className="text-sm font-medium">
                 {displayLabel}
-                {field.required && <span className="text-destructive ml-1">*</span>}
+                {field.required && <span className="text-amber-600 dark:text-amber-400 ml-1">*</span>}
               </Label>
               <Textarea
                 id={field.key}
@@ -455,7 +455,7 @@ export const DynamicFieldRenderer = memo<DynamicFieldRendererProps>(
                 maxLength={field.maxLength}
                 className={`w-full min-h-[80px] text-sm focus:ring-2 focus:ring-offset-1 transition-all resize-y ${
                   textError 
-                    ? "border-destructive focus:ring-destructive focus:border-destructive" 
+                    ? "border-amber-500 focus:ring-amber-500 focus:border-amber-500" 
                     : "focus:ring-purple-500"
                 }`}
                 rows={3}
@@ -472,7 +472,7 @@ export const DynamicFieldRenderer = memo<DynamicFieldRendererProps>(
           <div className="space-y-1.5">
             <Label htmlFor={field.key} className="text-sm font-medium">
               {displayLabel}
-              {field.required && <span className="text-destructive ml-1">*</span>}
+              {field.required && <span className="text-amber-600 dark:text-amber-400 ml-1">*</span>}
             </Label>
             <Input
               id={field.key}
@@ -485,7 +485,7 @@ export const DynamicFieldRenderer = memo<DynamicFieldRendererProps>(
               maxLength={field.maxLength}
               className={`w-full max-w-xs h-10 text-sm focus:ring-2 focus:ring-offset-1 transition-all ${
                 textError 
-                  ? "border-destructive focus:ring-destructive focus:border-destructive" 
+                  ? "border-amber-500 focus:ring-amber-500 focus:border-amber-500" 
                   : "focus:ring-purple-500"
               }`}
               autoComplete="off"
@@ -504,7 +504,7 @@ export const DynamicFieldRenderer = memo<DynamicFieldRendererProps>(
           <div className="space-y-1.5">
             <Label htmlFor={field.key} className="text-sm font-medium">
               {displayLabel}
-              {field.required && <span className="text-destructive ml-1">*</span>}
+              {field.required && <span className="text-amber-600 dark:text-amber-400 ml-1">*</span>}
             </Label>
             <Select
               value={value ?? ""}
@@ -514,7 +514,7 @@ export const DynamicFieldRenderer = memo<DynamicFieldRendererProps>(
                 id={field.key} 
                 className={`w-full max-w-[12rem] min-w-[8rem] h-10 text-sm focus:ring-2 focus:ring-offset-1 transition-all ${
                   error 
-                    ? "border-destructive focus:ring-destructive focus:border-destructive" 
+                    ? "border-amber-500 focus:ring-amber-500 focus:border-amber-500" 
                     : "focus:ring-purple-500"
                 }`}
               >
@@ -556,11 +556,11 @@ export const DynamicFieldRenderer = memo<DynamicFieldRendererProps>(
           <div className="space-y-1.5">
             <Label className="text-sm font-medium">
               {displayLabel}
-              {field.required && <span className="text-destructive ml-1">*</span>}
+              {field.required && <span className="text-amber-600 dark:text-amber-400 ml-1">*</span>}
             </Label>
             <div className={`grid grid-cols-2 sm:grid-cols-3 gap-2 border rounded-md p-2 max-w-2xl bg-background focus-within:ring-2 focus-within:ring-purple-500/20 transition-all ${
               error 
-                ? "border-destructive focus-within:border-destructive" 
+                ? "border-amber-500 focus-within:border-amber-500" 
                 : "border-border focus-within:border-purple-500"
             }`}>
               {normalizedOptions.map((option, index) => {

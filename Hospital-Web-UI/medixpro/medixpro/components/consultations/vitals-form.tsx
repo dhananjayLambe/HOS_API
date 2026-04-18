@@ -168,7 +168,7 @@ export function VitalsForm({ initialData, onSave, onCancel, templateFields = [],
           <Label htmlFor="height" className="text-xs font-medium">
             Height (cm)
             {hasValidation && getFieldError("height_cm") && (
-              <span className="text-destructive ml-1">*</span>
+              <span className="text-amber-600 dark:text-amber-400 ml-1">*</span>
             )}
           </Label>
           <Input
@@ -192,12 +192,12 @@ export function VitalsForm({ initialData, onSave, onCancel, templateFields = [],
                 document.getElementById("weight")?.focus();
               }
             }}
-            className={`h-9 text-sm ${hasValidation && getFieldError("height_cm") ? "border-destructive" : ""}`}
+            className={`h-9 text-sm ${hasValidation && getFieldError("height_cm") ? "border-amber-500" : ""}`}
             min={hasValidation ? 30 : undefined}
             max={hasValidation ? 250 : undefined}
           />
           {hasValidation && getFieldError("height_cm") && (
-            <p className="text-xs text-destructive mt-1">{getFieldError("height_cm")}</p>
+            <p className="text-xs text-amber-900 dark:text-amber-100 mt-1">{getFieldError("height_cm")}</p>
           )}
         </div>
 
@@ -206,7 +206,7 @@ export function VitalsForm({ initialData, onSave, onCancel, templateFields = [],
           <Label htmlFor="weight" className="text-xs font-medium">
             Weight (kg)
             {hasValidation && getFieldError("weight_kg") && (
-              <span className="text-destructive ml-1">*</span>
+              <span className="text-amber-600 dark:text-amber-400 ml-1">*</span>
             )}
           </Label>
           <Input
@@ -229,12 +229,12 @@ export function VitalsForm({ initialData, onSave, onCancel, templateFields = [],
                 document.getElementById("systolic")?.focus();
               }
             }}
-            className={`h-9 text-sm ${hasValidation && getFieldError("weight_kg") ? "border-destructive" : ""}`}
+            className={`h-9 text-sm ${hasValidation && getFieldError("weight_kg") ? "border-amber-500" : ""}`}
             min={hasValidation ? 0.1 : undefined}
             max={hasValidation ? 500 : undefined}
           />
           {hasValidation && getFieldError("weight_kg") && (
-            <p className="text-xs text-destructive mt-1">{getFieldError("weight_kg")}</p>
+            <p className="text-xs text-amber-900 dark:text-amber-100 mt-1">{getFieldError("weight_kg")}</p>
           )}
         </div>
 
@@ -251,7 +251,7 @@ export function VitalsForm({ initialData, onSave, onCancel, templateFields = [],
           <Label htmlFor="systolic" className="text-xs font-medium">
             Systolic (mmHg)
             {hasValidation && getFieldError("systolic") && (
-              <span className="text-destructive ml-1">*</span>
+              <span className="text-amber-600 dark:text-amber-400 ml-1">*</span>
             )}
           </Label>
           <Input
@@ -274,12 +274,12 @@ export function VitalsForm({ initialData, onSave, onCancel, templateFields = [],
                 document.getElementById("diastolic")?.focus();
               }
             }}
-            className={`h-9 text-sm ${hasValidation && getFieldError("systolic") ? "border-destructive" : ""}`}
+            className={`h-9 text-sm ${hasValidation && getFieldError("systolic") ? "border-amber-500" : ""}`}
             min={hasValidation ? 50 : undefined}
             max={hasValidation ? 300 : undefined}
           />
           {hasValidation && getFieldError("systolic") && (
-            <p className="text-xs text-destructive mt-1">{getFieldError("systolic")}</p>
+            <p className="text-xs text-amber-900 dark:text-amber-100 mt-1">{getFieldError("systolic")}</p>
           )}
         </div>
 
@@ -288,7 +288,7 @@ export function VitalsForm({ initialData, onSave, onCancel, templateFields = [],
           <Label htmlFor="diastolic" className="text-xs font-medium">
             Diastolic (mmHg)
             {hasValidation && getFieldError("diastolic") && (
-              <span className="text-destructive ml-1">*</span>
+              <span className="text-amber-600 dark:text-amber-400 ml-1">*</span>
             )}
           </Label>
           <Input
@@ -311,12 +311,12 @@ export function VitalsForm({ initialData, onSave, onCancel, templateFields = [],
                 document.getElementById("temperature")?.focus();
               }
             }}
-            className={`h-9 text-sm ${hasValidation && getFieldError("diastolic") ? "border-destructive" : ""}`}
+            className={`h-9 text-sm ${hasValidation && getFieldError("diastolic") ? "border-amber-500" : ""}`}
             min={hasValidation ? 30 : undefined}
             max={hasValidation ? 200 : undefined}
           />
           {hasValidation && getFieldError("diastolic") && (
-            <p className="text-xs text-destructive mt-1">{getFieldError("diastolic")}</p>
+            <p className="text-xs text-amber-900 dark:text-amber-100 mt-1">{getFieldError("diastolic")}</p>
           )}
         </div>
 
@@ -325,7 +325,7 @@ export function VitalsForm({ initialData, onSave, onCancel, templateFields = [],
           <Label htmlFor="temperature" className="text-xs font-medium">
             Temperature (°F)
             {hasValidation && getFieldError("temperature") && (
-              <span className="text-destructive ml-1">*</span>
+              <span className="text-amber-600 dark:text-amber-400 ml-1">*</span>
             )}
           </Label>
           <Input
@@ -349,12 +349,12 @@ export function VitalsForm({ initialData, onSave, onCancel, templateFields = [],
                 form?.requestSubmit();
               }
             }}
-            className={`h-9 text-sm ${hasValidation && getFieldError("temperature") ? "border-destructive" : ""}`}
+            className={`h-9 text-sm ${hasValidation && getFieldError("temperature") ? "border-amber-500" : ""}`}
             min={hasValidation ? 90 : undefined}
             max={hasValidation ? 115 : undefined}
           />
           {hasValidation && getFieldError("temperature") && (
-            <p className="text-xs text-destructive mt-1">{getFieldError("temperature")}</p>
+            <p className="text-xs text-amber-900 dark:text-amber-100 mt-1">{getFieldError("temperature")}</p>
           )}
         </div>
       </div>
