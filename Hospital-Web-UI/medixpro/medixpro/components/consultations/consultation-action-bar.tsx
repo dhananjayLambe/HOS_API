@@ -1,8 +1,23 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
-import { ArrowLeft, ChevronDown, FileText, Eye, X, MoreHorizontal, Stethoscope, CheckCircle, LayoutList, Loader2, Copy } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  AlertCircle,
+  ArrowLeft,
+  ChevronDown,
+  CheckCircle,
+  Copy,
+  Eye,
+  FileText,
+  LayoutList,
+  Loader2,
+  MoreHorizontal,
+  Search,
+  Star,
+  Stethoscope,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useConsultationStore } from "@/store/consultationStore";
 import { usePatient } from "@/lib/patientContext";
@@ -31,7 +46,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import type { ConsultationWorkflowType } from "@/lib/consultation-types";
+import { isSectionVisible } from "@/lib/consultation-workflow";
+import { applyClinicalTemplate } from "@/lib/apply-clinical-template";
+import { parseClinicalTemplateApiError } from "@/lib/clinical-template-api-errors";
+import {
+  getClinicalTemplates,
+  type ClinicalTemplateListItem,
+} from "@/services/clinical-template.service";
 import { ViewPreDrawer } from "./view-pre-drawer";
 import { ConsultationAutosaveIndicator } from "./consultation-autosave-indicator";
 import { buildEndConsultationPayload } from "@/lib/consultation-payload-builder";
@@ -47,12 +77,35 @@ import {
   EndConsultationReviewData,
   EndConsultationReviewModal,
 } from "./EndConsultationReviewModal";
+import { SaveTemplateModal } from "./save-template-modal";
 
 const CONSULTATION_TYPE_LABELS: Record<ConsultationWorkflowType, string> = {
   FULL: "Full Consultation",
   QUICK_RX: "Quick Prescription",
   TEST_ONLY: "Test Only Visit",
 };
+
+const TEMPLATE_TYPE_SHORT: Record<string, string> = {
+  FULL: "Full",
+  QUICK_RX: "Quick",
+  TEST_ONLY: "Test",
+};
+
+/** After applying a template: expand these when visible; scroll/activate only the first visible (diagnosis → medicines → investigations). */
+const APPLY_TEMPLATE_SECTION_PRIORITY = [
+  "diagnosis",
+  "medicines",
+  "investigations",
+] as const;
+
+function useDebouncedValue<T>(value: T, delay: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(t);
+  }, [value, delay]);
+  return debounced;
+}
 
 function isFollowUpSet(store: ReturnType<typeof useConsultationStore.getState>): boolean {
   const { follow_up_date, follow_up_interval } = store;
@@ -197,6 +250,9 @@ export function ConsultationActionBar() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const toast = useToastNotification();
+  /** useToastNotification() returns a new object each render; keep a stable ref for effects. */
+  const toastErrorRef = useRef(toast.error);
+  toastErrorRef.current = toast.error;
   const { selectedPatient } = usePatient();
   const { activateSection, scrollSectionIntoView, expandSectionCard } =
     useConsultationSectionScroll();
@@ -226,6 +282,16 @@ export function ConsultationActionBar() {
   const [visitPnr, setVisitPnr] = useState<string | null>(null);
   const [consultationId, setConsultationId] = useState<string | null>(null);
   const [isFinalizationOverlayVisible, setIsFinalizationOverlayVisible] = useState(false);
+  const [showSaveTemplateModal, setShowSaveTemplateModal] = useState(false);
+  const [templatesPopoverOpen, setTemplatesPopoverOpen] = useState(false);
+  const [templatesMobileOpen, setTemplatesMobileOpen] = useState(false);
+  const [templateSearch, setTemplateSearch] = useState("");
+  const debouncedTemplateSearch = useDebouncedValue(templateSearch, 300);
+  const [clinicalTemplates, setClinicalTemplates] = useState<ClinicalTemplateListItem[]>([]);
+  const [clinicalTemplatesLoading, setClinicalTemplatesLoading] = useState(false);
+  const [clinicalTemplatesError, setClinicalTemplatesError] = useState<string | null>(null);
+  const [templatesRefetchNonce, setTemplatesRefetchNonce] = useState(0);
+  const templateSearchInputRef = useRef<HTMLInputElement | null>(null);
 
   // Fetch visit_pnr when encounterId is available
   useEffect(() => {
@@ -258,6 +324,169 @@ export function ConsultationActionBar() {
     }).catch(() => {
       toast.error("Failed to copy PNR");
     });
+  };
+
+  const templatesPickerOpen = templatesPopoverOpen || templatesMobileOpen;
+
+  /** Only API loading drives the blocking spinner; debounce lag must not (see toast dep fix below). */
+  const templatesListBusy = clinicalTemplatesLoading;
+
+  useEffect(() => {
+    if (!templatesPickerOpen) {
+      setTemplateSearch("");
+      setClinicalTemplatesError(null);
+      return;
+    }
+    const id = requestAnimationFrame(() => {
+      templateSearchInputRef.current?.focus();
+    });
+    return () => cancelAnimationFrame(id);
+  }, [templatesPickerOpen]);
+
+  useEffect(() => {
+    if (!templatesPickerOpen) return;
+    let cancelled = false;
+    setClinicalTemplatesLoading(true);
+    setClinicalTemplatesError(null);
+    const q = debouncedTemplateSearch.trim();
+    getClinicalTemplates({
+      type: consultationType || "FULL",
+      search: q || undefined,
+    })
+      .then((res) => {
+        if (!cancelled) setClinicalTemplates(Array.isArray(res.data) ? res.data : []);
+      })
+      .catch((err: unknown) => {
+        const message = parseClinicalTemplateApiError(err);
+        if (!cancelled) {
+          setClinicalTemplates([]);
+          setClinicalTemplatesError(message);
+        }
+        toastErrorRef.current(message);
+      })
+      .finally(() => {
+        if (!cancelled) setClinicalTemplatesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    templatesPickerOpen,
+    debouncedTemplateSearch,
+    consultationType,
+    templatesRefetchNonce,
+  ]);
+
+  const handleApplyClinicalTemplate = useCallback(
+    (t: ClinicalTemplateListItem) => {
+      const result = applyClinicalTemplate(t);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      if (!result.applied) return;
+      if (result.typeMismatch) {
+        toast.warning(
+          `Template is for ${t.consultation_type}, current is ${consultationType ?? "FULL"}`
+        );
+      }
+      toast.success(`Template "${t.name}" applied`);
+      const wf = (consultationType || "FULL") as ConsultationWorkflowType;
+      for (const section of APPLY_TEMPLATE_SECTION_PRIORITY) {
+        if (isSectionVisible(wf, section)) {
+          expandSectionCard(section);
+        }
+      }
+      const scrollTarget = APPLY_TEMPLATE_SECTION_PRIORITY.find((section) =>
+        isSectionVisible(wf, section)
+      );
+      if (scrollTarget) {
+        scrollSectionIntoView(scrollTarget);
+        activateSection(scrollTarget);
+      }
+      setTemplatesPopoverOpen(false);
+      setTemplatesMobileOpen(false);
+    },
+    [
+      activateSection,
+      consultationType,
+      expandSectionCard,
+      scrollSectionIntoView,
+      toast,
+    ]
+  );
+
+  const renderTemplatesPickerList = () => {
+    const hasSearch = debouncedTemplateSearch.trim().length > 0;
+
+    return (
+      <div className="flex flex-col gap-2">
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            ref={templateSearchInputRef}
+            placeholder="Search templates..."
+            value={templateSearch}
+            onChange={(e) => setTemplateSearch(e.target.value)}
+            className="h-9 pl-8"
+            aria-label="Search templates"
+            autoFocus={templatesPickerOpen}
+          />
+        </div>
+        <div className="max-h-[min(360px,50vh)] overflow-y-auto rounded-md border border-border/60">
+          {templatesListBusy ? (
+            <div className="flex flex-col items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
+              <span>Loading templates…</span>
+            </div>
+          ) : clinicalTemplatesError ? (
+            <div className="flex flex-col items-center gap-2 px-3 py-8 text-center">
+              <AlertCircle className="h-8 w-8 text-destructive" aria-hidden />
+              <p className="text-sm text-foreground">{clinicalTemplatesError}</p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setTemplatesRefetchNonce((n) => n + 1)}
+              >
+                Try again
+              </Button>
+            </div>
+          ) : clinicalTemplates.length === 0 ? (
+            <div className="px-3 py-8 text-center text-sm text-muted-foreground">
+              {hasSearch ? (
+                <>
+                  <p>No templates found</p>
+                  <p className="mt-1 text-xs">Try a different search</p>
+                </>
+              ) : (
+                <>
+                  <p>No saved templates for this consultation type</p>
+                  <p className="mt-1 text-xs">Use &quot;Save template&quot; on the toolbar to create one</p>
+                </>
+              )}
+            </div>
+          ) : (
+            <ul className="divide-y divide-border/60 p-1">
+              {clinicalTemplates.map((item) => (
+                <li key={item.id}>
+                  <button
+                    type="button"
+                    className="flex w-full flex-col items-start gap-0.5 rounded-md px-2 py-2.5 text-left text-sm hover:bg-muted/80"
+                    onClick={() => handleApplyClinicalTemplate(item)}
+                  >
+                    <span className="font-medium text-foreground">{item.name}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {TEMPLATE_TYPE_SHORT[item.consultation_type] ?? item.consultation_type}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    );
   };
 
   // Intercept browser back so the same "Unsaved changes" dialog appears; on confirm, same as Cancel (reset + dashboard)
@@ -735,12 +964,40 @@ export function ConsultationActionBar() {
               </SelectContent>
             </Select>
           </div>
-          {/* 1. Templates */}
+          {/* 1. Templates (desktop: popover) */}
           <div className="hidden md:block">
-            <Button variant="ghost" size="sm" className="gap-1.5 rounded-lg">
-              <FileText className="h-4 w-4 text-muted-foreground" />
-              Templates
-              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+            <Popover open={templatesPopoverOpen} onOpenChange={setTemplatesPopoverOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1.5 rounded-lg"
+                  disabled={!encounterId}
+                  aria-expanded={templatesPopoverOpen}
+                >
+                  <FileText className="h-4 w-4 text-muted-foreground" />
+                  Templates
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-80 p-3" align="end">
+                {renderTemplatesPickerList()}
+              </PopoverContent>
+            </Popover>
+          </div>
+          {/* Save Template (desktop) */}
+          <div className="hidden md:block">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-1.5 rounded-lg min-h-[44px] touch-manipulation md:min-h-0"
+              onClick={() => setShowSaveTemplateModal(true)}
+              disabled={!encounterId}
+            >
+              <Star className="h-4 w-4" />
+              Save Template
             </Button>
           </div>
           {/* 2. View Pre Consultation */}
@@ -796,9 +1053,24 @@ export function ConsultationActionBar() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuItem className="gap-2 py-3">
+              <DropdownMenuItem
+                className="gap-2 py-3"
+                disabled={!encounterId}
+                onSelect={(e) => {
+                  e.preventDefault();
+                  setTemplatesMobileOpen(true);
+                }}
+              >
                 <FileText className="h-4 w-4" />
                 Templates
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="gap-2 py-3"
+                disabled={!encounterId}
+                onClick={() => setShowSaveTemplateModal(true)}
+              >
+                <Star className="h-4 w-4" />
+                Save Template
               </DropdownMenuItem>
               <DropdownMenuItem
                 className="gap-2 py-3"
@@ -907,6 +1179,17 @@ export function ConsultationActionBar() {
         data={endConsultationReviewData}
         hasFollowUp={isFollowUpSet(useConsultationStore.getState())}
       />
+
+      <SaveTemplateModal open={showSaveTemplateModal} onOpenChange={setShowSaveTemplateModal} />
+
+      <Dialog open={templatesMobileOpen} onOpenChange={setTemplatesMobileOpen}>
+        <DialogContent className="gap-0 p-4 sm:max-w-md md:hidden" aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>Templates</DialogTitle>
+          </DialogHeader>
+          <div className="pt-1">{renderTemplatesPickerList()}</div>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={showStartNewVisitConfirm} onOpenChange={setShowStartNewVisitConfirm}>
         <AlertDialogContent>
