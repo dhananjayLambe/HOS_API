@@ -11,3 +11,4 @@ from .recommendations import *
 from .audit import *
 from .follow_up import FollowUp
 from .procedure import *
+from .clinical_templates import ClinicalTemplate

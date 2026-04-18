@@ -39,6 +39,7 @@ from consultations_core.api.views.investigations import (
     ConsultationInvestigationItemDetailAPIView,
     ConsultationInvestigationItemsListCreateAPIView,
 )
+from consultations_core.api.views.clinical_template import ClinicalTemplateViewSet
 
 router = DefaultRouter()
 
@@ -99,6 +100,12 @@ urlpatterns = [
         "instructions/suggestions/",
         InstructionSuggestionsAPIView.as_view(),
         name="instruction-suggestions",
+    ),
+    # Doctor-owned reusable clinical templates (list/create)
+    path(
+        "clinical-templates/",
+        ClinicalTemplateViewSet.as_view({"get": "list", "post": "create"}),
+        name="clinical-template-list-create",
     ),
     # Instruction templates and CRUD (encounter-scoped)
     path(
