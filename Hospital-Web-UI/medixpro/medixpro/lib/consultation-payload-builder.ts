@@ -1,4 +1,8 @@
 import { draftFindingsToEndConsultationPayload } from "@/lib/consultation-findings-helpers";
+import {
+  prunePayload,
+  type TemplateItemSchema,
+} from "@/lib/consultation-template-engine";
 import { sectionItemsToEndConsultationDiagnosisPayload } from "@/lib/consultation-diagnosis-helpers";
 import {
   evaluateSectionItemComplete,
@@ -28,13 +32,23 @@ export function buildEndConsultationPayload(
       : store.symptoms ?? [];
   const symptoms = (Array.isArray(symptomsRaw) ? symptomsRaw : []).map((s: any) => {
     const normalized = normalizeItem(s);
+    const rawDetail = s?.detail;
+    const schema = store.getSymptomSchemaForLabel(s.name);
+    const detail =
+      rawDetail && typeof rawDetail === "object"
+        ? prunePayload(
+            rawDetail as Record<string, unknown>,
+            schema as unknown as TemplateItemSchema,
+            store.symptomsSchema?.meta ?? null
+          )
+        : rawDetail;
     return {
       id: normalized.id,
       name: normalized.name,
       is_custom: normalized.is_custom,
       is_complete: evaluateSectionItemComplete("symptoms", normalized),
       meta: normalized.meta,
-      detail: s?.detail,
+      detail,
     };
   });
 
@@ -125,7 +139,11 @@ export function buildEndConsultationPayload(
     store: {
       sectionItems: {
         symptoms,
-        findings: draftFindingsToEndConsultationPayload(store.draftFindings ?? []),
+        findings: draftFindingsToEndConsultationPayload(store.draftFindings ?? [], {
+          resolveSchema: (label) =>
+            store.getFindingSchemaForLabel(label) as TemplateItemSchema | undefined,
+          meta: store.findingsSchema?.meta ?? null,
+        }),
         diagnosis: sectionItemsToEndConsultationDiagnosisPayload(
           store.sectionItems["diagnosis"] ?? []
         ),

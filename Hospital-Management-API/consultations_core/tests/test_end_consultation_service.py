@@ -15,6 +15,7 @@ from consultations_core.services.end_consultation_service import (
     _persist_follow_up,
     _persist_medicines,
     _resolve_procedures_for_persist,
+    _validate_finding,
 )
 from consultations_core.services.procedure_service import persist_procedures
 
@@ -85,6 +86,59 @@ class EndConsultationPayloadExtractionTests(SimpleTestCase):
         payload = {"investigations": [{"source": "package", "diagnostic_package_id": "550e8400-e29b-41d4-a716-446655440001"}]}
         extracted = _extract_investigations_payload(payload)
         self.assertEqual(len(extracted), 1)
+
+
+class ValidateFindingTests(SimpleTestCase):
+    def test_validate_finding_master_code_only_no_note_or_extension_ok(self):
+        _validate_finding(
+            {
+                "is_custom": False,
+                "finding_code": "lung_creps",
+                "note": "",
+                "extension_data": {},
+            }
+        )
+
+    def test_validate_finding_master_with_additional_notes_ok(self):
+        _validate_finding(
+            {
+                "is_custom": False,
+                "finding_code": "lung_creps",
+                "note": "",
+                "extension_data": {"additional_notes": "Bilateral"},
+            }
+        )
+
+    def test_validate_finding_custom_name_only_ok(self):
+        _validate_finding(
+            {
+                "is_custom": True,
+                "custom_name": "Custom rash",
+                "note": "",
+                "extension_data": {},
+            }
+        )
+
+    def test_validate_finding_raises_master_without_code_or_id(self):
+        with self.assertRaises(ValidationError) as ctx:
+            _validate_finding(
+                {
+                    "is_custom": False,
+                    "finding_code": "",
+                    "finding_id": "",
+                }
+            )
+        self.assertIn("findings", ctx.exception.message_dict)
+
+    def test_validate_finding_raises_custom_without_name(self):
+        with self.assertRaises(ValidationError) as ctx:
+            _validate_finding(
+                {
+                    "is_custom": True,
+                    "custom_name": "",
+                }
+            )
+        self.assertIn("findings", ctx.exception.message_dict)
 
 
 class EndConsultationMedicinesPersistenceTests(SimpleTestCase):

@@ -10,6 +10,7 @@ import {
 import { useConsultationSectionScroll } from "@/components/consultations/consultation-section-scroll-context";
 import { shouldIgnoreSectionActivationClick } from "@/lib/consultation-section-activation";
 import { useConsultationStore } from "@/store/consultationStore";
+import { isSectionMarkedRequired } from "@/lib/consultation-workflow";
 import { cn } from "@/lib/utils";
 
 /** Dispatched from consultation action bar: expand section + open right detail panel. */
@@ -44,10 +45,20 @@ export function FollowUpSection() {
     consultationFinalized,
     setSelectedDetail,
     setSelectedSymptomId,
+    consultationType,
+    sectionValidationErrors,
   } = useConsultationStore();
 
-  const { registerSectionRef, activateSection, activeSectionKey } =
-    useConsultationSectionScroll();
+  const {
+    registerSectionRef,
+    registerSectionCardExpander,
+    activateSection,
+    activeSectionKey,
+  } = useConsultationSectionScroll();
+
+  useEffect(() => {
+    return registerSectionCardExpander("follow_up", () => sectionCardRef.current?.expand());
+  }, [registerSectionCardExpander]);
 
   const locked = consultationFinalized;
   const hasDate = Boolean(follow_up_date?.trim());
@@ -116,6 +127,8 @@ export function FollowUpSection() {
           </span>
         }
         defaultOpen={false}
+        validationError={sectionValidationErrors.follow_up}
+        titleRequired={isSectionMarkedRequired(consultationType, "follow_up")}
         onOpenChange={(open) => {
           if (open) {
             setSelectedSymptomId(null);

@@ -35,6 +35,11 @@ import type { ConsultationWorkflowType } from "@/lib/consultation-types";
 import { ViewPreDrawer } from "./view-pre-drawer";
 import { ConsultationAutosaveIndicator } from "./consultation-autosave-indicator";
 import { buildEndConsultationPayload } from "@/lib/consultation-payload-builder";
+import {
+  formatEndConsultationErrorToast,
+  getFirstSectionErrorKey,
+  validateConsultationForEnd,
+} from "@/lib/consultation-end-validation";
 import { isEncounterInstructionIncomplete } from "@/lib/instruction-completion";
 import { useConsultationSectionScroll } from "@/components/consultations/consultation-section-scroll-context";
 import { EXPAND_FOLLOW_UP_SIDEBAR_EVENT } from "@/components/consultations/sections/follow-up-section";
@@ -188,64 +193,22 @@ function extractDurationDisplayFromMedicine(raw: any): string {
   return "";
 }
 
-function validateMedicinePayloadForEnd(payload: any): string | null {
-  const medicines = payload?.store?.sectionItems?.medicines;
-  if (!Array.isArray(medicines) || medicines.length === 0) return null;
-
-  for (let index = 0; index < medicines.length; index += 1) {
-    const item = medicines[index];
-    const med =
-      item && typeof item === "object" && item.detail && typeof item.detail === "object"
-        ? item.detail.medicine ?? item
-        : item;
-    if (!med || typeof med !== "object") continue;
-
-    const name = String((med as any).name ?? (item as any)?.label ?? `Medicine ${index + 1}`).trim();
-    const doseValue = (med as any).dose_value;
-    const doseUnitId = String((med as any).dose_unit_id ?? "").trim();
-    const routeId = String((med as any).route_id ?? "").trim();
-    const frequencyId = String((med as any).frequency_id ?? "").trim();
-    const durationValue = (med as any).duration_value;
-    const durationSpecial = String((med as any).duration_special ?? "").trim();
-    const durationUnit = String((med as any).duration_unit ?? "").trim();
-
-    if (doseValue === undefined || doseValue === null || doseValue === "" || Number(doseValue) <= 0) {
-      return `${name}: dose is required`;
-    }
-    if (!doseUnitId) {
-      return `${name}: dose unit is required`;
-    }
-    if (!routeId) {
-      return `${name}: route is required`;
-    }
-    if (!frequencyId) {
-      return `${name}: frequency is required`;
-    }
-    const hasDurationValue = durationValue !== undefined && durationValue !== null && durationValue !== "";
-    const hasDurationSpecial = Boolean(durationSpecial);
-    if (!hasDurationValue && !hasDurationSpecial) {
-      return `${name}: duration is required`;
-    }
-    if (hasDurationValue && !durationUnit) {
-      return `${name}: duration unit is required`;
-    }
-  }
-
-  return null;
-}
-
 export function ConsultationActionBar() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const toast = useToastNotification();
   const { selectedPatient } = usePatient();
-  const { activateSection } = useConsultationSectionScroll();
+  const { activateSection, scrollSectionIntoView, expandSectionCard } =
+    useConsultationSectionScroll();
   const {
     consultationType,
     setConsultationType,
     encounterId: storeEncounterId,
     setSelectedDetail,
     setSelectedSymptomId,
+    setSectionValidationErrors,
+    setSectionValidationSoftWarnings,
+    clearSectionValidationUi,
   } =
     useConsultationStore();
   const encounterIdFromUrl = searchParams.get("encounter_id");
@@ -446,6 +409,7 @@ export function ConsultationActionBar() {
     }
     toast.success("Consultation completed successfully");
     setTimeout(() => {
+      useConsultationStore.getState().reset();
       router.replace("/doctor-dashboard");
     }, 0);
   };
@@ -465,9 +429,41 @@ export function ConsultationActionBar() {
         isEncounterInstructionIncomplete(row, preStore.getInstructionTemplateByKeyOrId)
       )
     ) {
+      expandSectionCard("instructions");
+      scrollSectionIntoView("instructions");
+      activateSection("instructions");
       toast.error("Please complete all instruction details before ending consultation");
       return;
     }
+
+    const storeSnapshot = useConsultationStore.getState();
+    const payload = buildEndConsultationPayload(storeSnapshot);
+    clearSectionValidationUi();
+    const { errors, warnings } = validateConsultationForEnd(
+      storeSnapshot,
+      payload,
+      storeSnapshot.consultationType
+    );
+    if (Object.keys(errors).length > 0) {
+      setSectionValidationErrors(errors);
+      setSectionValidationSoftWarnings({});
+      const first = getFirstSectionErrorKey(errors);
+      if (first) {
+        expandSectionCard(first);
+        scrollSectionIntoView(first);
+        activateSection(first);
+      }
+      toast.error(formatEndConsultationErrorToast(errors));
+      return;
+    }
+    setSectionValidationErrors({});
+    setSectionValidationSoftWarnings(
+      warnings.vitals ? { vitals: warnings.vitals } : {}
+    );
+    if (warnings.vitals) {
+      toast.warning(warnings.vitals);
+    }
+
     const previewTab = window.open("", "_blank");
     if (!previewTab) {
       toast.error("Popup blocked. Please allow popups and try again.");
@@ -481,21 +477,25 @@ export function ConsultationActionBar() {
     setIsFinalizationOverlayVisible(true);
     try {
       const store = useConsultationStore.getState();
-      const payload = buildEndConsultationPayload(store);
-      const medicineValidationMessage = validateMedicinePayloadForEnd(payload);
-      if (medicineValidationMessage) {
-        toast.error(medicineValidationMessage);
-        previewTab.close();
-        return;
-      }
+      const payloadForPost = buildEndConsultationPayload(store);
       await backendAxiosClient.post<{ redirect_url?: string; status?: string }>(
         `/consultations/encounter/${id}/consultation/complete/`,
-        payload
+        payloadForPost
       );
+      clearSectionValidationUi();
       setShowEndConsultationConfirm(false);
-      await renderCompletedPreviewAndRedirect(previewTab, payload);
+      await renderCompletedPreviewAndRedirect(previewTab, payloadForPost);
     } catch (err: any) {
       const responseData = err?.response?.data;
+      const rawErrors = responseData?.errors;
+      const errorsText =
+        rawErrors && typeof rawErrors === "object" && !Array.isArray(rawErrors)
+          ? Object.entries(rawErrors as Record<string, string[]>)
+              .flatMap(([k, msgs]) =>
+                Array.isArray(msgs) ? msgs.map((m) => `${k}: ${m}`) : [`${k}: ${String(msgs)}`]
+              )
+              .join(" · ")
+          : "";
       const message = String(responseData?.message || responseData?.detail || err?.message || "");
       const alreadyCompleted =
         message.toLowerCase().includes("consultation_completed") ||
@@ -511,7 +511,11 @@ export function ConsultationActionBar() {
         }
       }
 
-      toast.error("Failed to finalize consultation. Please try again.");
+      toast.error(
+        errorsText
+          ? `Validation: ${errorsText}`
+          : "Failed to finalize consultation. Please try again."
+      );
       if (!previewTab.closed) previewTab.close();
     } finally {
       setIsEndingConsultation(false);

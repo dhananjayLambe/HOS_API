@@ -3,8 +3,11 @@
  * Shape aligned for future backend API integration.
  */
 
-export interface SymptomDetail {
+export type SymptomDetail = {
+  /** @deprecated Prefer `additional_notes`; still read when migrating old drafts. */
   note?: string;
+  /** Optional free text; sole notes field for template-driven symptoms. */
+  additional_notes?: string;
   since?: string;
   severity?: "mild" | "moderate" | "severe";
   continuous?: boolean;
@@ -12,7 +15,7 @@ export interface SymptomDetail {
   grade?: string;
   maxTemps?: string[];
   respondsToParacetamol?: boolean;
-}
+} & Record<string, unknown>;
 
 export interface ConsultationSymptom {
   id: string;

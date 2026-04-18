@@ -27,6 +27,10 @@ export interface ConsultationSectionCardProps {
   incompleteCount?: number;
   /** Fires when the collapsible opens or closes. */
   onOpenChange?: (open: boolean) => void;
+  /** End-consultation validation: inline message + card highlight. */
+  validationError?: string;
+  /** Show required (*) next to title for current workflow. */
+  titleRequired?: boolean;
 }
 
 export type ConsultationSectionCardHandle = {
@@ -46,6 +50,8 @@ export const ConsultationSectionCard = forwardRef<
     className,
     incompleteCount = 0,
     onOpenChange,
+    validationError,
+    titleRequired = false,
   },
   ref
 ) {
@@ -66,6 +72,8 @@ export const ConsultationSectionCard = forwardRef<
       <Card
         className={cn(
           "mb-4 rounded-2xl border border-border/80 bg-card p-4 shadow-sm transition-shadow hover:shadow-md",
+          validationError &&
+            "border-destructive/80 bg-destructive/[0.06] dark:bg-destructive/10",
           className
         )}
       >
@@ -80,7 +88,14 @@ export const ConsultationSectionCard = forwardRef<
             <span className="flex shrink-0 text-muted-foreground [&_svg]:size-4">
               {icon}
             </span>
-            <span className="font-semibold">{title}</span>
+            <span className="font-semibold">
+              {title}
+              {titleRequired && (
+                <span className="text-destructive ml-0.5" aria-hidden>
+                  *
+                </span>
+              )}
+            </span>
             {incompleteCount > 0 && (
               <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400 text-xs font-normal">
                 <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
@@ -112,7 +127,18 @@ export const ConsultationSectionCard = forwardRef<
           </div>
         </CardHeader>
         <CollapsibleContent>
-          <CardContent className="p-0 pt-2 pb-1">{children}</CardContent>
+          <CardContent className="p-0 pt-2 pb-1">
+            {validationError ? (
+              <p
+                className="mb-2 text-sm text-destructive flex items-start gap-1.5"
+                role="alert"
+              >
+                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" aria-hidden />
+                {validationError}
+              </p>
+            ) : null}
+            {children}
+          </CardContent>
         </CollapsibleContent>
       </Card>
     </Collapsible>

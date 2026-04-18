@@ -106,10 +106,15 @@ function StartConsultationContent() {
   const redirectedForEncounterIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (encounterIdFromUrl) {
+    if (!encounterIdFromUrl) return;
+    const { encounterId: storeEncounterId } = useConsultationStore.getState();
+    if (storeEncounterId !== encounterIdFromUrl) {
+      useConsultationStore.getState().reset();
       setEncounterId(encounterIdFromUrl);
-      entryFlowDoneRef.current = true;
+    } else {
+      setEncounterId(encounterIdFromUrl);
     }
+    entryFlowDoneRef.current = true;
   }, [encounterIdFromUrl, setEncounterId]);
 
   // Load pre-consultation preview (including vitals) for this encounter so doctor sees read-only vitals.
@@ -232,6 +237,7 @@ function StartConsultationContent() {
           redirectingDueToCancelledRef.current = true;
           redirectedForEncounterIdRef.current = encounterIdFromUrl;
           toast.error("Visit already cancelled. Please start a new visit.");
+          useConsultationStore.getState().reset();
           router.replace("/doctor-dashboard");
         }
       })
@@ -250,6 +256,7 @@ function StartConsultationContent() {
     const runEntryFlow = async () => {
       setIsResolvingOrCreating(true);
       try {
+        useConsultationStore.getState().reset();
         const startNewVisitRes = await backendAxiosClient.post<{
           encounter_id: string;
           visit_pnr?: string;

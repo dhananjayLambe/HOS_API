@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { MoreHorizontal } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -31,6 +31,14 @@ import {
   getSectionCompletionHints,
   normalizeItem,
 } from "@/lib/consultation-completion";
+import {
+  clearHiddenFields,
+  evaluateRules,
+  evaluateVisibility,
+  validateField,
+  type FieldValidationResult,
+  type TemplateMeta,
+} from "@/lib/consultation-template-engine";
 
 function FindingDetailPanelBody({
   draft,
@@ -38,6 +46,7 @@ function FindingDetailPanelBody({
   getFindingSchemaForLabel,
   noHardRequired,
   setSelectedDetail,
+  findingsMeta,
 }: {
   draft: DraftConsultationFinding;
   updateDraftFinding: (
@@ -47,6 +56,7 @@ function FindingDetailPanelBody({
   getFindingSchemaForLabel: (label: string) => FindingItemSchema | undefined;
   noHardRequired: boolean;
   setSelectedDetail: (payload: SelectedDetailPayload) => void;
+  findingsMeta?: TemplateMeta | null;
 }) {
   const schemaItem = getFindingSchemaForLabel(draft.display_label);
   const detail = useMemo(
@@ -57,6 +67,55 @@ function FindingDetailPanelBody({
         ...(draft.extension_data ?? {}),
       }) as SectionItemDetail & Record<string, unknown>,
     [draft]
+  );
+
+  const templateValues = useMemo((): Record<string, unknown> => {
+    return { ...detail };
+  }, [detail]);
+
+  useEffect(() => {
+    if (!schemaItem?.fields?.length) return;
+    const cleared = clearHiddenFields(schemaItem.fields, { ...templateValues });
+    const keys = new Set(schemaItem.fields.map((f) => f.key));
+    const patch: Partial<SectionItemDetail> & Record<string, unknown> = {};
+    for (const k of keys) {
+      const before = templateValues[k];
+      const after = cleared[k];
+      if (before !== after) {
+        if (after === undefined && k in templateValues) {
+          patch[k] = undefined;
+        } else if (after !== undefined) {
+          patch[k] = after;
+        }
+      }
+    }
+    if (Object.keys(patch).length) {
+      updateDraftFinding(draft.id, mergeDetailPatchIntoDraft(draft, patch));
+    }
+  }, [draft, schemaItem, templateValues, updateDraftFinding, findingsMeta]);
+
+  const fieldMessages = useMemo(() => {
+    const map: Record<string, FieldValidationResult> = {};
+    if (!schemaItem?.fields) return map;
+    for (const f of schemaItem.fields) {
+      if (!evaluateVisibility(f, templateValues)) continue;
+      map[f.key] = validateField(
+        f,
+        templateValues[f.key],
+        templateValues,
+        findingsMeta
+      );
+    }
+    return map;
+  }, [schemaItem, templateValues, findingsMeta]);
+
+  const ruleWarnings = useMemo(
+    () =>
+      evaluateRules(
+        schemaItem?.rules as Parameters<typeof evaluateRules>[0],
+        templateValues
+      ),
+    [schemaItem?.rules, templateValues]
   );
 
   const set = (patch: Partial<SectionItemDetail> & Record<string, unknown>) => {
@@ -101,12 +160,16 @@ function FindingDetailPanelBody({
           <div className="flex flex-wrap items-center gap-2" aria-live="polite" aria-atomic="true">
             {completionStatus ? (
               <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/35 bg-emerald-500/[0.1] px-3 py-1 text-xs font-medium text-emerald-900 dark:text-emerald-100">
-                <span className="text-[10px]" aria-hidden>●</span>
+                <span className="text-[10px]" aria-hidden>
+                  ●
+                </span>
                 Complete
               </span>
             ) : (
               <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/45 bg-amber-500/12 px-3 py-1 text-xs font-medium text-amber-950 dark:text-amber-50">
-                <span className="text-[10px]" aria-hidden>●</span>
+                <span className="text-[10px]" aria-hidden>
+                  ●
+                </span>
                 Incomplete
               </span>
             )}
@@ -120,6 +183,13 @@ function FindingDetailPanelBody({
             <p className="text-xs text-amber-700 dark:text-amber-400">
               Fill next: {completionHints.join(" • ")}
             </p>
+          )}
+          {ruleWarnings.length > 0 && (
+            <ul className="text-xs text-amber-700 dark:text-amber-400 list-disc pl-4 space-y-0.5">
+              {ruleWarnings.map((w) => (
+                <li key={w}>{w}</li>
+              ))}
+            </ul>
           )}
         </div>
         <DropdownMenu>
@@ -157,7 +227,9 @@ function FindingDetailPanelBody({
             key={field.key}
             field={field}
             detail={detail}
+            templateValues={templateValues}
             set={set}
+            messages={fieldMessages[field.key]}
           />
         ))}
       </CardContent>
@@ -209,6 +281,7 @@ export function FindingDetailPanel() {
       getFindingSchemaForLabel={getFindingSchemaForLabel}
       noHardRequired={Boolean(findingsSchema?.meta?.rules?.no_hard_required)}
       setSelectedDetail={setSelectedDetail}
+      findingsMeta={findingsSchema?.meta}
     />
   );
 }
@@ -216,19 +289,42 @@ export function FindingDetailPanel() {
 function FindingFieldRenderer({
   field,
   detail,
+  templateValues,
   set,
+  messages,
 }: {
   field: FindingFieldSchema;
   detail: SectionItemDetail & Record<string, unknown>;
+  templateValues: Record<string, unknown>;
   set: (patch: Partial<SectionItemDetail> & Record<string, unknown>) => void;
+  messages?: FieldValidationResult;
 }) {
+  if (!evaluateVisibility(field as Parameters<typeof evaluateVisibility>[0], templateValues)) {
+    return null;
+  }
+
   const baseLabel = field.label ?? field.key;
   const importanceClass =
-    field.importance === "high"
-      ? "border-blue-500"
-      : "";
+    field.importance === "high" ? "border-blue-500" : "";
 
   const storeKey = field.key as keyof SectionItemDetail;
+
+  const msgs = messages ?? { errors: [], warnings: [] };
+
+  const footer = (
+    <>
+      {msgs.errors.map((e) => (
+        <p key={e} className="text-sm text-destructive">
+          {e}
+        </p>
+      ))}
+      {msgs.warnings.map((w) => (
+        <p key={w} className="text-sm text-amber-600 dark:text-amber-500">
+          {w}
+        </p>
+      ))}
+    </>
+  );
 
   if (field.type === "number") {
     const rawNum = (detail as Record<string, unknown>)[storeKey as string];
@@ -251,6 +347,7 @@ function FindingFieldRenderer({
           />
           {field.suffix && <span className="text-sm text-muted-foreground">{field.suffix}</span>}
         </div>
+        {footer}
       </div>
     );
   }
@@ -294,6 +391,7 @@ function FindingFieldRenderer({
               );
             })}
           </div>
+          {footer}
         </div>
       );
     }
@@ -321,6 +419,7 @@ function FindingFieldRenderer({
             ))}
           </SelectContent>
         </Select>
+        {footer}
       </div>
     );
   }
@@ -330,7 +429,7 @@ function FindingFieldRenderer({
       <div className="space-y-2">
         <Label>{baseLabel}</Label>
         <RadioGroup
-          value={(detail as Record<string, unknown>)[storeKey as string] as string ?? ""}
+          value={(detail as Record<string, unknown>)[storeKey as string] as string}
           onValueChange={(v) => set({ [storeKey]: v })}
           className="flex flex-wrap gap-4"
         >
@@ -341,6 +440,7 @@ function FindingFieldRenderer({
             </label>
           ))}
         </RadioGroup>
+        {footer}
       </div>
     );
   }
@@ -351,10 +451,11 @@ function FindingFieldRenderer({
         <Label>{baseLabel}</Label>
         <Textarea
           placeholder={field.placeholder}
-          value={(detail as Record<string, unknown>)[storeKey as string] as string ?? ""}
+          value={(detail as Record<string, unknown>)[storeKey as string] as string}
           onChange={(e) => set({ [storeKey]: e.target.value })}
           className={cn("min-h-[80px] resize-y rounded-md", importanceClass)}
         />
+        {footer}
       </div>
     );
   }
@@ -366,10 +467,11 @@ function FindingFieldRenderer({
         <Input
           type="date"
           placeholder={field.placeholder}
-          value={(detail as Record<string, unknown>)[storeKey as string] as string ?? ""}
+          value={(detail as Record<string, unknown>)[storeKey as string] as string}
           onChange={(e) => set({ [storeKey]: e.target.value })}
           className={cn("rounded-md max-w-[180px]", importanceClass)}
         />
+        {footer}
       </div>
     );
   }
@@ -393,6 +495,7 @@ function FindingFieldRenderer({
         >
           {isOn ? "Yes" : "No"}
         </Button>
+        {footer}
       </div>
     );
   }
@@ -402,10 +505,11 @@ function FindingFieldRenderer({
       <Label>{baseLabel}</Label>
       <Input
         placeholder={field.placeholder}
-        value={(detail as Record<string, unknown>)[storeKey as string] as string ?? ""}
+        value={(detail as Record<string, unknown>)[storeKey as string] as string}
         onChange={(e) => set({ [storeKey]: e.target.value })}
         className={cn("rounded-md", importanceClass)}
       />
+      {footer}
     </div>
   );
 }

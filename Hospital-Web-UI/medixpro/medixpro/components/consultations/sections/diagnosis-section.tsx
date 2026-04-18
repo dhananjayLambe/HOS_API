@@ -26,6 +26,7 @@ import {
   shouldIgnoreSectionActivationClick,
 } from "@/lib/consultation-section-activation";
 import { flushConsultationAutosave } from "@/lib/consultation-autosave";
+import { isSectionMarkedRequired } from "@/lib/consultation-workflow";
 import { evaluateSectionItemCompleteWithSchema } from "@/lib/consultation-completion";
 
 export function DiagnosisSection() {
@@ -39,6 +40,8 @@ export function DiagnosisSection() {
     selectedDetail,
     setSelectedDetail,
     encounterId,
+    consultationType,
+    sectionValidationErrors,
   } = useConsultationStore();
   const [search, setSearch] = useState("");
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -46,12 +49,21 @@ export function DiagnosisSection() {
     undefined
   );
   const sectionCardRef = useRef<ConsultationSectionCardHandle>(null);
-  const { registerSectionRef, registerTabSectionExpander, activateSection, activeSectionKey } =
-    useConsultationSectionScroll();
+  const {
+    registerSectionRef,
+    registerTabSectionExpander,
+    registerSectionCardExpander,
+    activateSection,
+    activeSectionKey,
+  } = useConsultationSectionScroll();
 
   useEffect(() => {
     return registerTabSectionExpander("diagnosis", () => sectionCardRef.current?.expand());
   }, [registerTabSectionExpander]);
+
+  useEffect(() => {
+    return registerSectionCardExpander("diagnosis", () => sectionCardRef.current?.expand());
+  }, [registerSectionCardExpander]);
 
   const diagnosisItems = sectionItems["diagnosis"] ?? [];
   const isDiagnosisIncomplete = useCallback(
@@ -292,6 +304,8 @@ export function DiagnosisSection() {
       icon={<ClipboardList className="text-muted-foreground" />}
       defaultOpen={false}
       incompleteCount={incompleteCount}
+      validationError={sectionValidationErrors.diagnosis}
+      titleRequired={isSectionMarkedRequired(consultationType, "diagnosis")}
     >
       <div className="space-y-3">
         <div className="consultation-section-search-row sticky top-0 z-[5] -mx-1 px-1 bg-card/95 dark:bg-card/95 backdrop-blur-sm pb-2 pt-0.5">

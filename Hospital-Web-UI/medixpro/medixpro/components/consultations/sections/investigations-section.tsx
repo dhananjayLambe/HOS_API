@@ -45,6 +45,7 @@ import {
 import type { ConsultationSectionItem } from "@/lib/consultation-types";
 import { cn } from "@/lib/utils";
 import { useConsultationStore } from "@/store/consultationStore";
+import { isSectionMarkedRequired } from "@/lib/consultation-workflow";
 import {
   pickDefaultSectionItemId,
   shouldIgnoreSectionActivationClick,
@@ -183,8 +184,19 @@ export function InvestigationsSection() {
     setAppliedPackage,
     clearAppliedPackage,
     encounterId,
+    consultationType,
+    sectionValidationErrors,
   } = useConsultationStore();
-  const { registerSectionRef, activateSection, activeSectionKey } = useConsultationSectionScroll();
+  const {
+    registerSectionRef,
+    registerSectionCardExpander,
+    activateSection,
+    activeSectionKey,
+  } = useConsultationSectionScroll();
+
+  useEffect(() => {
+    return registerSectionCardExpander("investigations", () => sectionCardRef.current?.expand());
+  }, [registerSectionCardExpander]);
 
   const [query, setQuery] = useState("");
   const [highlightedResult, setHighlightedResult] = useState(0);
@@ -1184,6 +1196,8 @@ export function InvestigationsSection() {
         icon={<FlaskConical className="text-muted-foreground" />}
         incompleteCount={incompleteCount}
         defaultOpen={false}
+        validationError={sectionValidationErrors.investigations}
+        titleRequired={isSectionMarkedRequired(consultationType, "investigations")}
         onOpenChange={(open) => {
           if (open) {
             window.requestAnimationFrame(() => searchInputRef.current?.focus());

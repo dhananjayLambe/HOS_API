@@ -20,6 +20,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useConsultationStore } from "@/store/consultationStore";
+import { isSectionMarkedRequired } from "@/lib/consultation-workflow";
 import type { InstructionsSectionSchema, InstructionItemSchema } from "@/lib/consultation-schema-types";
 import {
   fetchInstructionSuggestions,
@@ -92,6 +93,8 @@ export function InstructionsSection() {
     setSelectedDetail,
     setSelectedSymptomId,
     getInstructionTemplateByKeyOrId,
+    consultationType,
+    sectionValidationErrors,
   } = useConsultationStore();
 
   const [loading, setLoading] = useState(false);
@@ -99,8 +102,12 @@ export function InstructionsSection() {
   const inlineSearchDebounced = useDebouncedValue(inlineSearch, 300);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const sectionCardRef = useRef<ConsultationSectionCardHandle>(null);
-  const { registerSectionRef, activateSection, activeSectionKey } =
+  const { registerSectionRef, registerSectionCardExpander, activateSection, activeSectionKey } =
     useConsultationSectionScroll();
+
+  useEffect(() => {
+    return registerSectionCardExpander("instructions", () => sectionCardRef.current?.expand());
+  }, [registerSectionCardExpander]);
 
   const [specialtySlug, setSpecialtySlug] = useState(DEFAULT_SPECIALTY_SLUG);
   const [suggestionRows, setSuggestionRows] = useState<InstructionSuggestionRow[]>([]);
@@ -535,6 +542,8 @@ export function InstructionsSection() {
       icon={<FileText className="text-muted-foreground" />}
       incompleteCount={incompleteCount}
       defaultOpen={false}
+      validationError={sectionValidationErrors.instructions}
+      titleRequired={isSectionMarkedRequired(consultationType, "instructions")}
       onOpenChange={(open) => {
         if (open) {
           window.requestAnimationFrame(() => searchInputRef.current?.focus());

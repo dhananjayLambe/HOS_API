@@ -24,11 +24,17 @@ import {
   shouldIgnoreSectionActivationClick,
 } from "@/lib/consultation-section-activation";
 import { flushConsultationAutosave } from "@/lib/consultation-autosave";
+import { isSectionMarkedRequired } from "@/lib/consultation-workflow";
 import type {
   ConsultationSectionConfig,
   ConsultationSectionItem,
+  SymptomDetail,
 } from "@/lib/consultation-types";
 import { evaluateSectionItemCompleteWithSchema } from "@/lib/consultation-completion";
+import {
+  extractApplyOnInitDefaults,
+  type TemplateField,
+} from "@/lib/consultation-template-engine";
 
 function symptomId() {
   return `sym-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -44,6 +50,9 @@ export function SymptomsSection() {
     symptomsSchema,
     setSymptomsSchema,
     getSymptomSchemaForLabel,
+    updateSymptomDetail,
+    consultationType,
+    sectionValidationErrors,
   } = useConsultationStore();
   const [search, setSearch] = useState("");
   const inputId = useId();
@@ -52,17 +61,28 @@ export function SymptomsSection() {
     undefined
   );
   const sectionCardRef = useRef<ConsultationSectionCardHandle>(null);
-  const { registerSectionRef, registerTabSectionExpander, activateSection, activeSectionKey } =
-    useConsultationSectionScroll();
+  const {
+    registerSectionRef,
+    registerTabSectionExpander,
+    registerSectionCardExpander,
+    activateSection,
+    activeSectionKey,
+  } = useConsultationSectionScroll();
 
   useEffect(() => {
     return registerTabSectionExpander("symptoms", () => sectionCardRef.current?.expand());
   }, [registerTabSectionExpander]);
 
   useEffect(() => {
+    return registerSectionCardExpander("symptoms", () => sectionCardRef.current?.expand());
+  }, [registerSectionCardExpander]);
+
+  useEffect(() => {
     if (activeSectionKey !== "symptoms") return;
     if (selectedSymptomId) return;
-    const firstIncomplete = symptoms.find((s) => isSymptomIncomplete(s));
+    const firstIncomplete = symptoms.find((s) =>
+      isSymptomIncomplete(s as ConsultationSectionItem)
+    );
     if (firstIncomplete) {
       setSelectedSymptomId(firstIncomplete.id);
     }
@@ -118,7 +138,15 @@ export function SymptomsSection() {
     }
 
     const id = symptomId();
-    addSymptom({ id, name: trimmed, isCustom, is_custom: isCustom, is_complete: false });
+    addSymptom({ id, name: trimmed, isCustom });
+    const schemaItem = getSymptomSchemaForLabel(trimmed);
+    const defaults = extractApplyOnInitDefaults(
+      schemaItem?.fields as TemplateField[] | undefined,
+      symptomsSchema?.meta
+    );
+    if (Object.keys(defaults).length > 0) {
+      updateSymptomDetail(id, defaults as Partial<SymptomDetail>);
+    }
     selectSymptomAndScroll(id);
     setSearch("");
   };
@@ -133,7 +161,8 @@ export function SymptomsSection() {
   };
 
   const incompleteCount = useMemo(
-    () => symptoms.filter((s) => isSymptomIncomplete(s)).length,
+    () =>
+      symptoms.filter((s) => isSymptomIncomplete(s as ConsultationSectionItem)).length,
     [symptoms, symptomsSchema, getSymptomSchemaForLabel]
   );
 
@@ -181,7 +210,7 @@ export function SymptomsSection() {
       symptoms.map((s) => ({
         id: s.id,
         label: s.name,
-        isCustom: Boolean(s.isCustom ?? s.is_custom),
+        isCustom: Boolean(s.isCustom),
       })),
     [symptoms]
   );
@@ -200,7 +229,7 @@ export function SymptomsSection() {
     if (selectedSymptomId) return;
     const defaultItemId = pickDefaultSectionItemId(
       symptoms,
-      (item) => isSymptomIncomplete(item)
+      (item) => isSymptomIncomplete(item as ConsultationSectionItem)
     );
     if (defaultItemId) {
       setSelectedSymptomId(defaultItemId);
@@ -252,6 +281,8 @@ export function SymptomsSection() {
       icon={<Thermometer className="text-muted-foreground" />}
       defaultOpen
       incompleteCount={incompleteCount}
+      validationError={sectionValidationErrors.symptoms}
+      titleRequired={isSectionMarkedRequired(consultationType, "symptoms")}
     >
       <div className="space-y-2">
         <div className="consultation-section-search-row sticky top-0 z-[5] -mx-1 px-1 bg-card/95 dark:bg-card/95 backdrop-blur-sm pb-2 pt-0.5">
@@ -321,7 +352,7 @@ export function SymptomsSection() {
         {symptoms.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-2">
             {orderedSymptoms.map((s) => {
-              const incomplete = isSymptomIncomplete(s);
+              const incomplete = isSymptomIncomplete(s as ConsultationSectionItem);
               const selected = selectedSymptomId === s.id;
               return (
                 <span
@@ -345,7 +376,7 @@ export function SymptomsSection() {
                   {selected && (
                     <ConsultationEditingBadge onDarkChip className="ml-1 shrink-0" />
                   )}
-                  {(s.is_custom ?? s.isCustom) && (
+                  {s.isCustom && (
                     <span className="rounded-full border-0 bg-gray-200 px-1.5 py-0.5 text-xs font-medium text-gray-600">
                       CUSTOM
                     </span>

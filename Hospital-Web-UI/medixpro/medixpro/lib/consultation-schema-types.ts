@@ -36,6 +36,8 @@ export interface SymptomItemSchema {
   synonyms?: string[];
   search_keywords?: string[];
   fields: SymptomFieldSchema[];
+  /** V4.1 item-level clinical warnings (non-blocking). */
+  rules?: Array<{ type?: string; condition?: unknown; message?: string }>;
 }
 
 export interface SymptomsSectionSchema {

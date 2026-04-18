@@ -4,6 +4,11 @@ import type {
   SectionItemDetail,
 } from "@/lib/consultation-types";
 import { evaluateSectionItemComplete, normalizeItem } from "@/lib/consultation-completion";
+import {
+  prunePayload,
+  type TemplateItemSchema,
+  type TemplateMeta,
+} from "@/lib/consultation-template-engine";
 
 function normalizeApiSeverity(
   v: unknown
@@ -87,9 +92,15 @@ export function sectionItemsToEndConsultationFindingsPayload(
   });
 }
 
+export type DraftFindingsPayloadOptions = {
+  resolveSchema?: (displayLabel: string) => TemplateItemSchema | undefined;
+  meta?: TemplateMeta | null;
+};
+
 /** Build End Consultation `findings` array from draft state (excludes deleted). */
 export function draftFindingsToEndConsultationPayload(
-  drafts: DraftConsultationFinding[]
+  drafts: DraftConsultationFinding[],
+  options?: DraftFindingsPayloadOptions
 ) {
   return drafts
     .filter((d) => !d.is_deleted)
@@ -105,6 +116,17 @@ export function draftFindingsToEndConsultationPayload(
         },
       };
       const normalized = normalizeItem(item);
+
+      let extension_data: Record<string, unknown> | null =
+        d.extension_data && typeof d.extension_data === "object"
+          ? { ...d.extension_data }
+          : null;
+      if (extension_data && options?.resolveSchema) {
+        const schema = options.resolveSchema(d.display_label);
+        const pruned = prunePayload(extension_data, schema, options.meta ?? null);
+        extension_data = Object.keys(pruned).length > 0 ? pruned : null;
+      }
+
       return {
         finding_id: d.is_custom ? null : (d.finding_id ?? null),
         finding_code: d.is_custom ? null : (d.finding_code ?? null),
@@ -114,10 +136,7 @@ export function draftFindingsToEndConsultationPayload(
         is_complete: evaluateSectionItemComplete("findings", normalized),
         severity: normalizeApiSeverity(d.severity),
         note: typeof d.note === "string" ? d.note : "",
-        extension_data:
-          d.extension_data && typeof d.extension_data === "object"
-            ? d.extension_data
-            : null,
+        extension_data,
         meta: normalized.meta,
       };
     });

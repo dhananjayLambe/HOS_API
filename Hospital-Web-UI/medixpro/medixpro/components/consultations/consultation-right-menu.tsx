@@ -4,7 +4,9 @@ import { History, Activity, Stethoscope, AlertCircle } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { useConsultationSectionScroll } from "@/components/consultations/consultation-section-scroll-context";
 import { useConsultationStore } from "@/store/consultationStore";
+import { cn } from "@/lib/utils";
 
 /**
  * Left menu: Doctor Notes, Medical History, Vitals.
@@ -17,7 +19,9 @@ export function ConsultationRightMenu() {
     doctorNotes,
     vitalsLoaded,
     setDoctorNotes,
+    sectionValidationSoftWarnings,
   } = useConsultationStore();
+  const { registerSectionRef } = useConsultationSectionScroll();
 
   const renderValue = (value: unknown) => {
     if (value !== null && value !== undefined && String(value).trim() !== "") {
@@ -128,7 +132,18 @@ export function ConsultationRightMenu() {
       </Card>
 
       {/* Vitals — read-only; data loaded from backend later */}
-      <Card className="rounded-2xl border border-border/80 bg-card shadow-sm transition-shadow hover:shadow-md">
+      <div
+        id="consultation-vitals-anchor"
+        ref={(el) => registerSectionRef("vitals", el)}
+        className="scroll-mt-24"
+      >
+      <Card
+        className={cn(
+          "rounded-2xl border border-border/80 bg-card shadow-sm transition-shadow hover:shadow-md",
+          sectionValidationSoftWarnings.vitals &&
+            "border-amber-500/50 bg-amber-500/[0.04] dark:bg-amber-500/10"
+        )}
+      >
         <CardHeader className="flex flex-row items-center gap-2 py-4 pb-3">
           <Activity className="h-4 w-4 text-muted-foreground" />
           <h3 className="font-bold text-sm">Vitals</h3>
@@ -173,8 +188,17 @@ export function ConsultationRightMenu() {
               </p>
             </div>
           )}
+          {sectionValidationSoftWarnings.vitals && (
+            <div className="mt-2 rounded-lg border border-amber-300/80 bg-amber-50/90 dark:bg-amber-950/40 px-3 py-2 flex items-start gap-2">
+              <AlertCircle className="h-4 w-4 text-amber-700 mt-0.5 shrink-0" />
+              <p className="text-xs text-amber-950 dark:text-amber-100">
+                {sectionValidationSoftWarnings.vitals}
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 }

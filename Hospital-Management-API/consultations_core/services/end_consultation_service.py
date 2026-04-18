@@ -79,19 +79,15 @@ def _validate_symptom(item):
 
 
 def _validate_finding(item):
+    """Require catalog identity (code/id) or custom name; note/extension_data are optional."""
     custom_name = str(item.get("custom_name") or "").strip()
     finding_code = str(item.get("finding_code") or "").strip()
     finding_id = str(item.get("finding_id") or "").strip()
-    note = str(item.get("note") or "").strip()
-    ext = item.get("extension_data") if isinstance(item.get("extension_data"), dict) else {}
-    value = str(ext.get("value") or "").strip() if isinstance(ext, dict) else ""
     is_custom = bool(item.get("is_custom"))
     if is_custom and not custom_name:
         raise DjangoValidationError({"findings": ["Custom finding name is required."]})
     if not is_custom and not (finding_code or finding_id):
         raise DjangoValidationError({"findings": ["Finding code or finding_id is required."]})
-    if not (value or note):
-        raise DjangoValidationError({"findings": ["Finding value or observation is required."]})
 
 
 def _validate_diagnosis(item):

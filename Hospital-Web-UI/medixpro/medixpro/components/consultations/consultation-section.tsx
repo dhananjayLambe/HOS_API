@@ -93,6 +93,8 @@ import {
   shouldIgnoreSectionActivationClick,
 } from "@/lib/consultation-section-activation";
 import { flushConsultationAutosave } from "@/lib/consultation-autosave";
+import type { MainSectionId } from "@/lib/consultation-workflow";
+import { isSectionMarkedRequired } from "@/lib/consultation-workflow";
 
 function useDebouncedValue<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value);
@@ -147,6 +149,8 @@ export function ConsultationSection({
     setSelectedDetail,
     selectedDetail,
     medicinesSearchFocusNonce,
+    consultationType,
+    sectionValidationErrors,
   } = useConsultationStore();
   const { toast } = useToast();
   const items = getSectionItems(type);
@@ -179,13 +183,22 @@ export function ConsultationSection({
   const sectionHeaderRef = useRef<HTMLButtonElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const sectionCardRef = useRef<ConsultationSectionCardHandle>(null);
-  const { registerSectionRef, registerTabSectionExpander, activateSection, activeSectionKey } =
-    useConsultationSectionScroll();
+  const {
+    registerSectionRef,
+    registerTabSectionExpander,
+    registerSectionCardExpander,
+    activateSection,
+    activeSectionKey,
+  } = useConsultationSectionScroll();
 
   useEffect(() => {
     if (type !== "medicines") return;
     return registerTabSectionExpander("medicines", () => sectionCardRef.current?.expand());
   }, [type, registerTabSectionExpander]);
+
+  useEffect(() => {
+    return registerSectionCardExpander(type, () => sectionCardRef.current?.expand());
+  }, [type, registerSectionCardExpander]);
 
   useEffect(() => {
     if (type !== "medicines" || medicinesSearchFocusNonce === 0) return;
@@ -612,6 +625,8 @@ export function ConsultationSection({
         icon={icon}
         defaultOpen={defaultOpen}
         incompleteCount={incompleteCount}
+        validationError={sectionValidationErrors[type as MainSectionId]}
+        titleRequired={isSectionMarkedRequired(consultationType, type as MainSectionId)}
       >
         <div className="space-y-3">
           {/* Row 1: Optional left chip + Search bar + Add New — sticky within section while scrolling */}

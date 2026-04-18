@@ -1,349 +1,288 @@
 {
-  "version": 1,
+  "version": 4.1,
+
   "meta": {
     "rules": {
       "no_hard_required": true,
       "importance_over_required": true,
       "structured_dependencies": false,
-      "free_text_allowed": true
+      "free_text_allowed": true,
+      "validation_driven": true
     },
-    "notes": "Clinical findings are objective observations. They must never block consultation flow. Details are optional and minimal."
+
+    "validation_defaults": {
+      "severity": "error",
+      "skip_if_hidden": true
+    },
+
+    "ui_behavior": {
+      "show_inline_errors": true,
+      "show_summary": false
+    },
+
+    "empty_values": [null, "", []],
+
+    "guidance": "Findings are objective observations. They should never block workflow.",
+    "updated_at": "2026-04-18T10:00:00Z"
   },
 
   "pallor": {
+    "version": 1,
+    "display": { "hide_if_empty": true },
     "fields": [
       {
+        "id": "pallor_severity",
         "key": "severity",
         "label": "Severity",
         "type": "select",
-        "options": ["Mild", "Moderate", "Severe"]
+        "options": ["Mild", "Moderate", "Severe"],
+        "required": false,
+        "validation": { "required": false }
       },
       {
-        "key": "notes",
-        "label": "Notes",
-        "type": "text"
+        "id": "pallor_additional_notes",
+        "key": "additional_notes",
+        "label": "Additional notes",
+        "type": "textarea",
+        "required": false,
+        "validation": { "type": "text", "required": false, "max_length": 500 }
       }
     ]
   },
 
   "edema": {
+    "version": 1,
+    "display": { "hide_if_empty": true },
     "fields": [
       {
+        "id": "edema_site",
         "key": "site",
         "label": "Site",
         "type": "select",
-        "options": ["Feet", "Ankles", "Generalized"]
+        "options": ["Feet", "Ankles", "Generalized"],
+        "required": false,
+        "validation": { "required": false }
       },
       {
+        "id": "edema_pitting",
         "key": "pitting",
         "label": "Pitting?",
         "type": "radio",
-        "options": ["Yes", "No"]
+        "options": ["Yes", "No"],
+        "required": false,
+        "validation": { "required": false }
+      },
+      {
+        "id": "edema_additional_notes",
+        "key": "additional_notes",
+        "label": "Additional notes",
+        "type": "textarea",
+        "required": false,
+        "validation": { "type": "text", "required": false, "max_length": 500 }
       }
     ]
   },
 
   "pedal_edema": {
+    "version": 1,
+    "display": { "hide_if_empty": true },
     "fields": [
       {
+        "id": "pedal_edema_severity",
         "key": "severity",
         "label": "Severity",
         "type": "select",
-        "options": ["Mild", "Moderate", "Severe"]
-      }
-    ]
-  },
-
-  "dehydration": {
-    "fields": [
+        "options": ["Mild", "Moderate", "Severe"],
+        "required": false,
+        "validation": { "required": false }
+      },
       {
-        "key": "severity",
-        "label": "Severity",
-        "type": "select",
-        "options": ["Mild", "Moderate", "Severe"]
+        "id": "pedal_edema_additional_notes",
+        "key": "additional_notes",
+        "label": "Additional notes",
+        "type": "textarea",
+        "required": false,
+        "validation": { "type": "text", "required": false, "max_length": 500 }
       }
     ]
   },
 
   "icterus": {
+    "version": 1,
+    "display": { "hide_if_empty": true },
     "fields": [
       {
+        "id": "icterus_present",
         "key": "present",
         "label": "Icterus Present?",
         "type": "radio",
-        "options": ["Yes", "No"]
-      }
-    ]
-  },
-
-  "cyanosis": {
-    "fields": [
+        "options": ["Yes", "No"],
+        "required": false,
+        "default": { "value": "No", "apply_on": ["init"] },
+        "validation": { "required": false }
+      },
       {
-        "key": "present",
-        "label": "Cyanosis Present?",
-        "type": "radio",
-        "options": ["Yes", "No"]
+        "id": "icterus_additional_notes",
+        "key": "additional_notes",
+        "label": "Additional notes",
+        "type": "textarea",
+        "required": false,
+        "validation": { "type": "text", "required": false, "max_length": 500 }
       }
     ]
   },
 
   "lymphadenopathy": {
+    "version": 1,
+    "display": { "hide_if_empty": true },
     "fields": [
       {
+        "id": "lymph_region",
         "key": "region",
         "label": "Region",
         "type": "select",
         "options": ["Cervical", "Axillary", "Inguinal", "Generalized"],
-        "is_multi": true
-      }
-    ]
-  },
-
-  "pharyngeal_congestion": {
-    "fields": [
+        "is_multi": true,
+        "required": false,
+        "validation": { "required": false, "min_items": 0, "max_items": 4 }
+      },
       {
-        "key": "present",
-        "label": "Congestion Present?",
-        "type": "radio",
-        "options": ["Yes", "No"]
-      }
-    ]
-  },
-
-  "tonsillar_enlargement": {
-    "fields": [
-      {
-        "key": "grade",
-        "label": "Grade",
-        "type": "select",
-        "options": ["Grade I", "Grade II", "Grade III", "Grade IV"]
+        "id": "lymph_additional_notes",
+        "key": "additional_notes",
+        "label": "Additional notes",
+        "type": "textarea",
+        "required": false,
+        "validation": { "type": "text", "required": false, "max_length": 500 }
       }
     ]
   },
 
   "respiratory_distress": {
+    "version": 1,
+    "display": { "hide_if_empty": true },
     "fields": [
       {
+        "id": "resp_distress_severity",
         "key": "severity",
         "label": "Severity",
         "type": "select",
-        "options": ["Mild", "Moderate", "Severe"]
+        "options": ["Mild", "Moderate", "Severe"],
+        "required": false,
+        "validation": { "required": false }
+      },
+      {
+        "id": "resp_distress_additional_notes",
+        "key": "additional_notes",
+        "label": "Additional notes",
+        "type": "textarea",
+        "required": false,
+        "validation": { "type": "text", "required": false, "max_length": 500 }
       }
     ]
   },
 
   "wheeze": {
+    "version": 1,
+    "display": { "hide_if_empty": true },
     "fields": [
       {
+        "id": "wheeze_side",
         "key": "side",
         "label": "Side",
         "type": "select",
-        "options": ["Bilateral", "Right", "Left"]
-      }
-    ]
-  },
-
-  "crepitations": {
-    "fields": [
+        "options": ["Bilateral", "Right", "Left"],
+        "required": false,
+        "validation": { "required": false }
+      },
       {
-        "key": "location",
-        "label": "Location",
-        "type": "select",
-        "options": ["Basal", "Diffuse"]
-      }
-    ]
-  },
-
-  "decreased_air_entry": {
-    "fields": [
-      {
-        "key": "side",
-        "label": "Side",
-        "type": "select",
-        "options": ["Bilateral", "Right", "Left"]
-      }
-    ]
-  },
-
-  "clubbing": {
-    "fields": [
-      {
-        "key": "grade",
-        "label": "Grade",
-        "type": "select",
-        "options": ["Grade I", "Grade II", "Grade III"]
+        "id": "wheeze_additional_notes",
+        "key": "additional_notes",
+        "label": "Additional notes",
+        "type": "textarea",
+        "required": false,
+        "validation": { "type": "text", "required": false, "max_length": 500 }
       }
     ]
   },
 
   "abdominal_tenderness": {
+    "version": 1,
+    "display": { "hide_if_empty": true },
     "fields": [
       {
+        "id": "abd_tender_location",
         "key": "location",
         "label": "Location",
         "type": "select",
-        "options": ["Upper", "Lower", "Generalized"]
+        "options": ["Upper", "Lower", "Generalized"],
+        "required": false,
+        "validation": { "required": false }
       },
       {
+        "id": "abd_tender_severity",
         "key": "severity",
         "label": "Severity",
         "type": "select",
-        "options": ["Mild", "Moderate", "Severe"]
-      }
-    ]
-  },
-
-  "abdominal_distension": {
-    "fields": [
+        "options": ["Mild", "Moderate", "Severe"],
+        "required": false,
+        "validation": { "required": false }
+      },
       {
-        "key": "present",
-        "label": "Distension Present?",
-        "type": "radio",
-        "options": ["Yes", "No"]
-      }
-    ]
-  },
-
-  "organomegaly": {
-    "fields": [
-      {
-        "key": "organ",
-        "label": "Organ Involved",
-        "type": "select",
-        "options": ["Liver", "Spleen", "Both"]
-      }
-    ]
-  },
-
-  "ascites": {
-    "fields": [
-      {
-        "key": "present",
-        "label": "Ascites Present?",
-        "type": "radio",
-        "options": ["Yes", "No"]
-      }
-    ]
-  },
-
-  "uterine_tenderness": {
-    "fields": [
-      {
-        "key": "present",
-        "label": "Tenderness Present?",
-        "type": "radio",
-        "options": ["Yes", "No"]
-      }
-    ]
-  },
-
-  "adnexal_tenderness": {
-    "fields": [
-      {
-        "key": "side",
-        "label": "Side",
-        "type": "select",
-        "options": ["Right", "Left", "Bilateral"]
-      }
-    ]
-  },
-
-  "vaginal_discharge_exam": {
-    "fields": [
-      {
-        "key": "character",
-        "label": "Character",
-        "type": "select",
-        "options": ["White", "Yellow", "Green", "Foul Smelling"]
-      }
-    ]
-  },
-
-  "neuropathy_signs": {
-    "fields": [
-      {
-        "key": "site",
-        "label": "Site",
-        "type": "select",
-        "options": ["Feet", "Hands", "Both"]
-      }
-    ]
-  },
-
-  "foot_ulcer": {
-    "fields": [
-      {
-        "key": "grade",
-        "label": "Ulcer Grade",
-        "type": "select",
-        "options": ["Superficial", "Deep", "Infected"]
+        "id": "abd_tender_additional_notes",
+        "key": "additional_notes",
+        "label": "Additional notes",
+        "type": "textarea",
+        "required": false,
+        "validation": { "type": "text", "required": false, "max_length": 500 }
       }
     ]
   },
 
   "joint_swelling": {
+    "version": 1,
+    "display": { "hide_if_empty": true },
     "fields": [
       {
+        "id": "joint_swelling_joint",
         "key": "joint",
         "label": "Joint",
         "type": "select",
         "options": ["Knee", "Shoulder", "Elbow", "Wrist", "Ankle"],
-        "is_multi": true
-      }
-    ]
-  },
-
-  "restricted_range_of_motion": {
-    "fields": [
+        "is_multi": true,
+        "required": false,
+        "validation": { "required": false, "min_items": 0, "max_items": 5 }
+      },
       {
-        "key": "severity",
-        "label": "Severity",
-        "type": "select",
-        "options": ["Mild", "Moderate", "Severe"]
+        "id": "joint_swelling_additional_notes",
+        "key": "additional_notes",
+        "label": "Additional notes",
+        "type": "textarea",
+        "required": false,
+        "validation": { "type": "text", "required": false, "max_length": 500 }
       }
     ]
   },
 
   "heart_murmur": {
+    "version": 1,
+    "display": { "hide_if_empty": true },
     "fields": [
       {
+        "id": "heart_murmur_present",
         "key": "present",
         "label": "Murmur Present?",
         "type": "radio",
-        "options": ["Yes", "No"]
-      }
-    ]
-  },
-
-  "irregular_pulse": {
-    "fields": [
+        "options": ["Yes", "No"],
+        "required": false,
+        "validation": { "required": false }
+      },
       {
-        "key": "present",
-        "label": "Irregular Pulse?",
-        "type": "radio",
-        "options": ["Yes", "No"]
-      }
-    ]
-  },
-
-  "raised_jvp": {
-    "fields": [
-      {
-        "key": "present",
-        "label": "Raised JVP?",
-        "type": "radio",
-        "options": ["Yes", "No"]
-      }
-    ]
-  },
-
-  "growth_delay": {
-    "fields": [
-      {
-        "key": "present",
-        "label": "Growth Delay Present?",
-        "type": "radio",
-        "options": ["Yes", "No"]
+        "id": "heart_murmur_additional_notes",
+        "key": "additional_notes",
+        "label": "Additional notes",
+        "type": "textarea",
+        "required": false,
+        "validation": { "type": "text", "required": false, "max_length": 500 }
       }
     ]
   }

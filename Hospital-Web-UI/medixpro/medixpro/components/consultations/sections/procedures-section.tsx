@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { Clipboard } from "lucide-react";
 import {
   ConsultationSectionCard,
@@ -9,18 +9,25 @@ import {
 import { useConsultationSectionScroll } from "@/components/consultations/consultation-section-scroll-context";
 import { Textarea } from "@/components/ui/textarea";
 import { useConsultationStore } from "@/store/consultationStore";
+import { isSectionMarkedRequired } from "@/lib/consultation-workflow";
 import { cn } from "@/lib/utils";
 import { shouldIgnoreSectionActivationClick } from "@/lib/consultation-section-activation";
 
 export function ProceduresSection() {
-  const { procedures, setProcedures } = useConsultationStore();
+  const { procedures, setProcedures, consultationType, sectionValidationErrors } =
+    useConsultationStore();
   const sectionCardRef = useRef<ConsultationSectionCardHandle>(null);
   const {
     registerSectionRef,
+    registerSectionCardExpander,
     activateSection,
     activeSectionKey,
     setProcedureEditorActive,
   } = useConsultationSectionScroll();
+
+  useEffect(() => {
+    return registerSectionCardExpander("procedure", () => sectionCardRef.current?.expand());
+  }, [registerSectionCardExpander]);
 
   const handleSectionCardActivate = useCallback(() => {
     activateSection("procedure");
@@ -61,6 +68,8 @@ export function ProceduresSection() {
         ref={sectionCardRef}
         title="Procedures"
         icon={<Clipboard className="text-muted-foreground" />}
+        validationError={sectionValidationErrors.procedure}
+        titleRequired={isSectionMarkedRequired(consultationType, "procedure")}
       >
         <Textarea
           placeholder="Procedures (optional)"

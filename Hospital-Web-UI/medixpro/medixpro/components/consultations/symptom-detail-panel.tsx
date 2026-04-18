@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useMemo } from "react";
 import { MoreHorizontal } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,13 @@ import {
   getSectionCompletionHints,
   normalizeItem,
 } from "@/lib/consultation-completion";
+import {
+  clearHiddenFields,
+  evaluateRules,
+  evaluateVisibility,
+  validateField,
+  type FieldValidationResult,
+} from "@/lib/consultation-template-engine";
 
 export function SymptomDetailPanel() {
   const {
@@ -42,6 +50,56 @@ export function SymptomDetailPanel() {
 
   const symptom = symptoms.find((s) => s.id === selectedSymptomId);
   const schemaItem = symptom ? getSymptomSchemaForLabel(symptom.name) : undefined;
+
+  const templateValues = useMemo((): Record<string, unknown> => {
+    const d = symptom?.detail ?? {};
+    return { ...(d as Record<string, unknown>) };
+  }, [symptom?.detail]);
+
+  useEffect(() => {
+    if (!symptom || !schemaItem?.fields?.length) return;
+    const cleared = clearHiddenFields(schemaItem.fields, { ...templateValues });
+    const keys = new Set(schemaItem.fields.map((f) => f.key));
+    const patch: Record<string, unknown> = {};
+    for (const k of keys) {
+      const before = templateValues[k];
+      const after = cleared[k];
+      if (before !== after) {
+        if (after === undefined && k in templateValues) {
+          patch[k] = undefined;
+        } else if (after !== undefined) {
+          patch[k] = after;
+        }
+      }
+    }
+    if (Object.keys(patch).length) {
+      updateSymptomDetail(symptom.id, patch as Partial<SymptomDetail>);
+    }
+  }, [symptom, schemaItem, templateValues, symptomsSchema?.meta, updateSymptomDetail]);
+
+  const fieldMessages = useMemo(() => {
+    const map: Record<string, FieldValidationResult> = {};
+    if (!schemaItem?.fields) return map;
+    for (const f of schemaItem.fields) {
+      if (!evaluateVisibility(f, templateValues)) continue;
+      map[f.key] = validateField(
+        f,
+        templateValues[f.key],
+        templateValues,
+        symptomsSchema?.meta
+      );
+    }
+    return map;
+  }, [schemaItem, templateValues, symptomsSchema]);
+
+  const ruleWarnings = useMemo(
+    () =>
+      evaluateRules(
+        schemaItem?.rules as Parameters<typeof evaluateRules>[0],
+        templateValues
+      ),
+    [schemaItem?.rules, templateValues]
+  );
 
   if (!symptom) {
     return (
@@ -68,8 +126,8 @@ export function SymptomDetailPanel() {
     normalizeItem({
       id: symptom.id,
       label: symptom.name,
-      is_custom: Boolean(symptom.is_custom ?? symptom.isCustom),
-      isCustom: Boolean(symptom.is_custom ?? symptom.isCustom),
+      is_custom: Boolean(symptom.isCustom),
+      isCustom: Boolean(symptom.isCustom),
       detail: symptom.detail ?? {},
     }),
     {
@@ -82,8 +140,8 @@ export function SymptomDetailPanel() {
     normalizeItem({
       id: symptom.id,
       label: symptom.name,
-      is_custom: Boolean(symptom.is_custom ?? symptom.isCustom),
-      isCustom: Boolean(symptom.is_custom ?? symptom.isCustom),
+      is_custom: Boolean(symptom.isCustom),
+      isCustom: Boolean(symptom.isCustom),
       detail: symptom.detail ?? {},
     }),
     {
@@ -92,6 +150,11 @@ export function SymptomDetailPanel() {
     }
   );
   const set = (patch: Partial<SymptomDetail>) => updateSymptomDetail(symptom.id, patch);
+
+  /** Template already renders `additional_notes`; do not duplicate with legacy free-text `note`. */
+  const schemaHasAdditionalNotes = Boolean(
+    schemaItem?.fields?.some((f) => f.key === "additional_notes")
+  );
 
   return (
     <Card
@@ -105,16 +168,20 @@ export function SymptomDetailPanel() {
           <div className="flex flex-wrap items-center gap-2" aria-live="polite" aria-atomic="true">
             {completionStatus ? (
               <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/35 bg-emerald-500/[0.1] px-3 py-1 text-xs font-medium text-emerald-900 dark:text-emerald-100">
-                <span className="text-[10px]" aria-hidden>●</span>
+                <span className="text-[10px]" aria-hidden>
+                  ●
+                </span>
                 Complete
               </span>
             ) : (
               <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/45 bg-amber-500/12 px-3 py-1 text-xs font-medium text-amber-950 dark:text-amber-50">
-                <span className="text-[10px]" aria-hidden>●</span>
+                <span className="text-[10px]" aria-hidden>
+                  ●
+                </span>
                 Incomplete
               </span>
             )}
-            {(symptom.is_custom ?? symptom.isCustom) && (
+            {symptom.isCustom && (
               <span className="rounded-full border border-amber-500/45 bg-amber-500/10 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-900 dark:text-amber-200">
                 CUSTOM
               </span>
@@ -124,6 +191,13 @@ export function SymptomDetailPanel() {
             <p className="text-xs text-amber-700 dark:text-amber-400">
               Fill next: {completionHints.join(" • ")}
             </p>
+          )}
+          {ruleWarnings.length > 0 && (
+            <ul className="text-xs text-amber-700 dark:text-amber-400 list-disc pl-4 space-y-0.5">
+              {ruleWarnings.map((w) => (
+                <li key={w}>{w}</li>
+              ))}
+            </ul>
           )}
         </div>
         <DropdownMenu>
@@ -142,27 +216,40 @@ export function SymptomDetailPanel() {
       <CardContent className="space-y-6 pb-6">
         {!schemaItem && (
           <p className="text-sm text-muted-foreground">
-            No structured fields configured for this symptom. You can still add free-text notes.
+            No structured fields configured for this symptom. You can still add optional additional
+            notes below.
           </p>
         )}
 
-        {/* Always show a generic Notes field, independent of schema */}
-        <div className="space-y-2">
-          <Label>Notes</Label>
-          <Textarea
-            placeholder="Enter note here..."
-            value={detail.note ?? ""}
-            onChange={(e) => set({ note: e.target.value })}
-            className="min-h-[100px] resize-y rounded-md"
-          />
-        </div>
+        {!schemaHasAdditionalNotes && (
+          <div className="space-y-2">
+            <Label>Additional notes</Label>
+            <Textarea
+              placeholder="Optional details..."
+              value={String(
+                (detail as Record<string, unknown>).additional_notes ??
+                  detail.note ??
+                  ""
+              )}
+              onChange={(e) =>
+                set({
+                  additional_notes: e.target.value,
+                  note: undefined,
+                })
+              }
+              className="min-h-[100px] resize-y rounded-md"
+            />
+          </div>
+        )}
 
         {schemaItem?.fields.map((field) => (
-          <FieldRenderer
+          <SymptomFieldRenderer
             key={field.key}
             field={field}
             detail={detail}
+            templateValues={templateValues}
             set={set}
+            messages={fieldMessages[field.key]}
           />
         ))}
       </CardContent>
@@ -170,33 +257,45 @@ export function SymptomDetailPanel() {
   );
 }
 
-function FieldRenderer({
+function SymptomFieldRenderer({
   field,
   detail,
+  templateValues,
   set,
+  messages,
 }: {
   field: SymptomFieldSchema;
   detail: SymptomDetail;
+  templateValues: Record<string, unknown>;
   set: (patch: Partial<SymptomDetail>) => void;
+  messages?: FieldValidationResult;
 }) {
-  // Dependency handling: hide field if dependency not satisfied
-  if (field.dependency) {
-    const current = (detail as Record<string, unknown>)[field.dependency.field];
-    const shouldShow =
-      field.dependency.operator === "equals"
-        ? current === field.dependency.value
-        : true;
-    if (!shouldShow) return null;
+  if (!evaluateVisibility(field as Parameters<typeof evaluateVisibility>[0], templateValues)) {
+    return null;
   }
 
   const baseLabel = field.label ?? field.key;
   const importanceClass =
-    field.importance === "high"
-      ? "border-blue-500"
-      : "";
+    field.importance === "high" ? "border-blue-500" : "";
 
-  // Map storage key directly by field.key
   const storeKey = field.key as keyof SymptomDetail;
+
+  const msgs = messages ?? { errors: [], warnings: [] };
+
+  const footer = (
+    <>
+      {msgs.errors.map((e) => (
+        <p key={e} className="text-sm text-destructive">
+          {e}
+        </p>
+      ))}
+      {msgs.warnings.map((w) => (
+        <p key={w} className="text-sm text-amber-600 dark:text-amber-500">
+          {w}
+        </p>
+      ))}
+    </>
+  );
 
   if (field.type === "number") {
     return (
@@ -206,19 +305,20 @@ function FieldRenderer({
           <Input
             type="number"
             placeholder={field.placeholder}
-            value={(detail as any)[storeKey] ?? ""}
+            value={String((detail as Record<string, unknown>)[storeKey as string] ?? "")}
             onChange={(e) => set({ [storeKey]: e.target.value } as Partial<SymptomDetail>)}
             className={cn("rounded-md max-w-[140px]", importanceClass)}
           />
           {field.suffix && <span className="text-sm text-muted-foreground">{field.suffix}</span>}
         </div>
+        {footer}
       </div>
     );
   }
 
   if (field.type === "select" && field.options) {
     const isMulti = field.is_multi;
-    const currentValue = (detail as any)[storeKey];
+    const currentValue = (detail as Record<string, unknown>)[storeKey as string];
 
     if (isMulti) {
       const currentArr: string[] = Array.isArray(currentValue) ? currentValue : [];
@@ -251,6 +351,7 @@ function FieldRenderer({
               );
             })}
           </div>
+          {footer}
         </div>
       );
     }
@@ -259,7 +360,7 @@ function FieldRenderer({
       <div className="space-y-2">
         <Label>{baseLabel}</Label>
         <Select
-          value={currentValue ?? ""}
+          value={String((currentValue as string | number | undefined) ?? "")}
           onValueChange={(v) => set({ [storeKey]: v } as Partial<SymptomDetail>)}
         >
           <SelectTrigger className={cn("rounded-md", importanceClass)}>
@@ -273,6 +374,7 @@ function FieldRenderer({
             ))}
           </SelectContent>
         </Select>
+        {footer}
       </div>
     );
   }
@@ -282,7 +384,7 @@ function FieldRenderer({
       <div className="space-y-2">
         <Label>{baseLabel}</Label>
         <RadioGroup
-          value={(detail as any)[storeKey] ?? ""}
+          value={String((detail as Record<string, unknown>)[storeKey as string] ?? "")}
           onValueChange={(v) => set({ [storeKey]: v } as Partial<SymptomDetail>)}
           className="flex flex-wrap gap-4"
         >
@@ -293,6 +395,7 @@ function FieldRenderer({
             </label>
           ))}
         </RadioGroup>
+        {footer}
       </div>
     );
   }
@@ -303,10 +406,11 @@ function FieldRenderer({
         <Label>{baseLabel}</Label>
         <Textarea
           placeholder={field.placeholder}
-          value={(detail as any)[storeKey] ?? ""}
-          onChange={(e) => set({ [storeKey]: e.target.value } as Partial<SymptomDetail>)}
-          className={cn("min-h-[80px] resize-y rounded-md", importanceClass)}
+          value={String((detail as Record<string, unknown>)[storeKey as string] ?? "")}
+            onChange={(e) => set({ [storeKey]: e.target.value } as Partial<SymptomDetail>)}
+            className={cn("min-h-[80px] resize-y rounded-md", importanceClass)}
         />
+        {footer}
       </div>
     );
   }
@@ -318,16 +422,17 @@ function FieldRenderer({
         <Input
           type="date"
           placeholder={field.placeholder}
-          value={(detail as any)[storeKey] ?? ""}
-          onChange={(e) => set({ [storeKey]: e.target.value } as Partial<SymptomDetail>)}
-          className={cn("rounded-md max-w-[180px]", importanceClass)}
+          value={String((detail as Record<string, unknown>)[storeKey as string] ?? "")}
+            onChange={(e) => set({ [storeKey]: e.target.value } as Partial<SymptomDetail>)}
+            className={cn("rounded-md max-w-[180px]", importanceClass)}
         />
+        {footer}
       </div>
     );
   }
 
   if (field.type === "toggle") {
-    const current = (detail as any)[storeKey];
+    const current = (detail as Record<string, unknown>)[storeKey as string];
     const isOn = Boolean(current);
     return (
       <div className="space-y-2">
@@ -345,20 +450,21 @@ function FieldRenderer({
         >
           {isOn ? "Yes" : "No"}
         </Button>
+        {footer}
       </div>
     );
   }
 
-  // Default: simple text input
   return (
     <div className="space-y-2">
       <Label>{baseLabel}</Label>
       <Input
         placeholder={field.placeholder}
-        value={(detail as any)[storeKey] ?? ""}
+        value={String((detail as Record<string, unknown>)[storeKey as string] ?? "")}
         onChange={(e) => set({ [storeKey]: e.target.value } as Partial<SymptomDetail>)}
         className={cn("rounded-md", importanceClass)}
       />
+      {footer}
     </div>
   );
 }

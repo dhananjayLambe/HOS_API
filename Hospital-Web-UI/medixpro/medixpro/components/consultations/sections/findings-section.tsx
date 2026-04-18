@@ -29,7 +29,12 @@ import {
   shouldIgnoreSectionActivationClick,
 } from "@/lib/consultation-section-activation";
 import { flushConsultationAutosave } from "@/lib/consultation-autosave";
+import { isSectionMarkedRequired } from "@/lib/consultation-workflow";
 import { evaluateSectionItemCompleteWithSchema } from "@/lib/consultation-completion";
+import {
+  extractApplyOnInitDefaults,
+  type TemplateField,
+} from "@/lib/consultation-template-engine";
 
 function useDebouncedValue<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value);
@@ -73,10 +78,13 @@ export function FindingsSection() {
     draftFindings,
     addDraftFindingMaster,
     addDraftFindingCustom,
+    updateDraftFinding,
     markDraftFindingDeleted,
     replaceSectionItems,
     setSelectedDetail,
     selectedDetail,
+    consultationType,
+    sectionValidationErrors,
   } = useConsultationStore();
 
   const visible = useMemo(
@@ -88,12 +96,21 @@ export function FindingsSection() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerInitialValue, setDrawerInitialValue] = useState<string | undefined>(undefined);
   const sectionCardRef = useRef<ConsultationSectionCardHandle>(null);
-  const { registerSectionRef, registerTabSectionExpander, activateSection, activeSectionKey } =
-    useConsultationSectionScroll();
+  const {
+    registerSectionRef,
+    registerTabSectionExpander,
+    registerSectionCardExpander,
+    activateSection,
+    activeSectionKey,
+  } = useConsultationSectionScroll();
 
   useEffect(() => {
     return registerTabSectionExpander("findings", () => sectionCardRef.current?.expand());
   }, [registerTabSectionExpander]);
+
+  useEffect(() => {
+    return registerSectionCardExpander("findings", () => sectionCardRef.current?.expand());
+  }, [registerSectionCardExpander]);
 
   useEffect(() => {
     if (activeSectionKey !== "findings") return;
@@ -250,11 +267,26 @@ export function FindingsSection() {
             !d.is_custom &&
             (d.finding_code ?? "").toLowerCase() === key.toLowerCase()
         );
-      if (created) selectFindingAndScroll(created.id);
+      if (created) {
+        const item = findingsSchema?.items.find((i) => i.key === key);
+        const defaults = extractApplyOnInitDefaults(
+          item?.fields as TemplateField[] | undefined,
+          findingsSchema?.meta
+        );
+        if (Object.keys(defaults).length > 0) {
+          updateDraftFinding(created.id, {
+            extension_data: {
+              ...(created.extension_data ?? {}),
+              ...defaults,
+            },
+          });
+        }
+        selectFindingAndScroll(created.id);
+      }
       setSearch("");
       toast.success(`${displayName} added`);
     },
-    [addDraftFindingMaster, selectFindingAndScroll, toast]
+    [addDraftFindingMaster, selectFindingAndScroll, toast, findingsSchema, updateDraftFinding]
   );
 
   const addCustomByName = useCallback(
@@ -368,6 +400,8 @@ export function FindingsSection() {
       icon={<Stethoscope className="text-muted-foreground" />}
       defaultOpen={false}
       incompleteCount={incompleteCount}
+      validationError={sectionValidationErrors.findings}
+      titleRequired={isSectionMarkedRequired(consultationType, "findings")}
     >
       <div className="space-y-3">
         <div className="consultation-section-search-row sticky top-0 z-[5] -mx-1 px-1 bg-card/95 dark:bg-card/95 backdrop-blur-sm pb-2 pt-0.5">

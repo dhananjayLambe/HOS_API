@@ -26,21 +26,16 @@ const FULL_SECTIONS: MainSectionId[] = [
   "procedure",
 ];
 
+/** Quick Rx: medicines required; diagnosis optional; no symptoms (per workflow spec). */
 const QUICK_RX_SECTIONS: MainSectionId[] = [
-  "symptoms",
   "diagnosis",
   "medicines",
   "instructions",
   "follow_up",
 ];
 
-const TEST_ONLY_SECTIONS: MainSectionId[] = [
-  "symptoms",
-  "diagnosis",
-  "investigations",
-  "instructions",
-  "follow_up",
-];
+/** Tests-only visit: investigations required; minimal UI (per workflow spec). */
+const TEST_ONLY_SECTIONS: MainSectionId[] = ["investigations"];
 
 export function getVisibleSections(type: ConsultationWorkflowType): MainSectionId[] {
   switch (type) {
@@ -66,16 +61,16 @@ export function isLeftPanelVisible(workflowType: ConsultationWorkflowType): bool
 export function getDefaultExpandedSections(type: ConsultationWorkflowType): MainSectionId[] {
   switch (type) {
     case "QUICK_RX":
-      return ["symptoms", "medicines"];
+      return ["medicines", "diagnosis"];
     case "TEST_ONLY":
-      return ["symptoms", "investigations"];
+      return ["investigations"];
     default:
       return ["symptoms"];
   }
 }
 
 export function isSymptomSectionExpandedByDefault(type: ConsultationWorkflowType): boolean {
-  return true; // all workflows expand symptoms
+  return type === "FULL";
 }
 
 export function isMedicinesSectionExpandedByDefault(type: ConsultationWorkflowType): boolean {
@@ -84,4 +79,28 @@ export function isMedicinesSectionExpandedByDefault(type: ConsultationWorkflowTy
 
 export function isInvestigationsSectionExpandedByDefault(type: ConsultationWorkflowType): boolean {
   return type === "TEST_ONLY";
+}
+
+/** Sections that must pass client validation before End Consultation (per workflow type). */
+export function getHardRequiredSectionsForWorkflow(
+  type: ConsultationWorkflowType
+): MainSectionId[] {
+  switch (type) {
+    case "FULL":
+      return ["symptoms", "diagnosis", "medicines"];
+    case "QUICK_RX":
+      return ["medicines"];
+    case "TEST_ONLY":
+      return ["investigations"];
+    default:
+      return ["symptoms", "diagnosis", "medicines"];
+  }
+}
+
+/** Whether this section shows a required (*) marker for the current workflow. */
+export function isSectionMarkedRequired(
+  type: ConsultationWorkflowType,
+  section: MainSectionId
+): boolean {
+  return getHardRequiredSectionsForWorkflow(type).includes(section);
 }

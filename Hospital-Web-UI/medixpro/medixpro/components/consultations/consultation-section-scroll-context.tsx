@@ -25,8 +25,8 @@ import {
 import type { ConsultationSectionType } from "@/lib/consultation-types";
 import { useConsultationStore } from "@/store/consultationStore";
 
-/** Sections anchored in the middle column (start consultation). */
-export type ConsultationScrollSectionKey = ConsultationSectionType | "procedure";
+/** Sections anchored in the middle column (start consultation); vitals = right menu card. */
+export type ConsultationScrollSectionKey = ConsultationSectionType | "procedure" | "vitals";
 
 const SECTION_SCROLL_OFFSET_PX = 70;
 
@@ -50,6 +50,12 @@ type ConsultationSectionScrollContextValue = {
     key: ConsultationTabSectionKey,
     expand: () => void
   ) => () => void;
+  /** Expand any consultation section card (validation UX, not only tab-ring). */
+  registerSectionCardExpander: (
+    key: ConsultationScrollSectionKey,
+    expand: () => void
+  ) => () => void;
+  expandSectionCard: (key: ConsultationScrollSectionKey) => void;
   scrollSectionIntoView: (key: ConsultationScrollSectionKey) => void;
   /**
    * User is working in this section (chip click, search focus, Add New, typing).
@@ -152,6 +158,10 @@ export function ConsultationSectionScrollProvider({
     Partial<Record<ConsultationTabSectionKey, () => void>>
   >({});
 
+  const sectionCardExpandersRef = useRef<
+    Partial<Record<ConsultationScrollSectionKey, () => void>>
+  >({});
+
   const registerTabSectionExpander = useCallback(
     (key: ConsultationTabSectionKey, expand: () => void) => {
       tabSectionExpandersRef.current[key] = expand;
@@ -161,6 +171,20 @@ export function ConsultationSectionScrollProvider({
     },
     []
   );
+
+  const registerSectionCardExpander = useCallback(
+    (key: ConsultationScrollSectionKey, expand: () => void) => {
+      sectionCardExpandersRef.current[key] = expand;
+      return () => {
+        delete sectionCardExpandersRef.current[key];
+      };
+    },
+    []
+  );
+
+  const expandSectionCard = useCallback((key: ConsultationScrollSectionKey) => {
+    sectionCardExpandersRef.current[key]?.();
+  }, []);
 
   const [procedureEditorActive, setProcedureEditorActive] = useState(false);
   /** Focus / toolbar intent (search, Add New) so highlight works before any chip is selected. */
@@ -299,6 +323,8 @@ export function ConsultationSectionScrollProvider({
     () => ({
       registerSectionRef,
       registerTabSectionExpander,
+      registerSectionCardExpander,
+      expandSectionCard,
       scrollSectionIntoView,
       activateSection,
       activeSectionKey,
@@ -307,6 +333,8 @@ export function ConsultationSectionScrollProvider({
     [
       registerSectionRef,
       registerTabSectionExpander,
+      registerSectionCardExpander,
+      expandSectionCard,
       scrollSectionIntoView,
       activateSection,
       activeSectionKey,

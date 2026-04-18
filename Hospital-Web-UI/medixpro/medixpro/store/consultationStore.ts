@@ -27,6 +27,7 @@ import type {
 } from "@/lib/consultation-schema-types";
 import { DEFAULT_CONSULTATION_STATE } from "@/lib/consultation-types";
 import { evaluateSectionItemComplete } from "@/lib/consultation-completion";
+import type { MainSectionId } from "@/lib/consultation-workflow";
 
 type DraftStatus = {
   savedAt: Date | null;
@@ -143,6 +144,13 @@ type ConsultationStore = ConsultationState & {
     patch: Partial<DraftConsultationFinding>
   ) => void;
   markDraftFindingDeleted: (id: string) => void;
+  /** Inline + card highlight after failed End Consultation validation. */
+  sectionValidationErrors: Partial<Record<MainSectionId, string>>;
+  /** Soft warning (e.g. vitals); does not block end. */
+  sectionValidationSoftWarnings: { vitals?: string };
+  setSectionValidationErrors: (errors: Partial<Record<MainSectionId, string>>) => void;
+  setSectionValidationSoftWarnings: (w: { vitals?: string }) => void;
+  clearSectionValidationUi: () => void;
 };
 
 const SECTION_TYPES: ConsultationSectionType[] = [
@@ -184,6 +192,14 @@ export const useConsultationStore = create<ConsultationStore>((set, get) => ({
   instructionsSchema: null,
   instructionsList: [],
   consultationFinalized: false,
+  sectionValidationErrors: {},
+  sectionValidationSoftWarnings: {},
+
+  setSectionValidationErrors: (sectionValidationErrors) => set({ sectionValidationErrors }),
+  setSectionValidationSoftWarnings: (sectionValidationSoftWarnings) =>
+    set({ sectionValidationSoftWarnings }),
+  clearSectionValidationUi: () =>
+    set({ sectionValidationErrors: {}, sectionValidationSoftWarnings: {} }),
 
   setSymptoms: (symptoms) => set({ symptoms }),
   addSymptom: (symptom) =>
@@ -202,11 +218,18 @@ export const useConsultationStore = create<ConsultationStore>((set, get) => ({
     })),
   updateSymptomDetail: (id, detail) =>
     set((s) => ({
-      symptoms: s.symptoms.map((x) =>
-        x.id === id
-          ? { ...x, detail: { ...(x.detail ?? {}), ...detail } }
-          : x
-      ),
+      symptoms: s.symptoms.map((x) => {
+        if (x.id !== id) return x;
+        const base: Record<string, unknown> = { ...(x.detail ?? {}) };
+        for (const [k, v] of Object.entries(detail as Record<string, unknown>)) {
+          if (v === undefined) {
+            delete base[k];
+          } else {
+            base[k] = v;
+          }
+        }
+        return { ...x, detail: base as typeof x.detail };
+      }),
     })),
 
   setFindings: (value) => set({ findings: value }),
@@ -260,7 +283,8 @@ export const useConsultationStore = create<ConsultationStore>((set, get) => ({
   setVitalsLoaded: (vitalsLoaded) => set({ vitalsLoaded }),
   setPrescriptionNotes: (prescriptionNotes) => set({ prescriptionNotes }),
   setDoctorNotes: (doctorNotes) => set({ doctorNotes }),
-  setConsultationType: (consultationType) => set({ consultationType }),
+  setConsultationType: (consultationType) =>
+    set({ consultationType, sectionValidationErrors: {}, sectionValidationSoftWarnings: {} }),
 
   setSymptomsSchema: (schema) =>
     set(() => {
@@ -526,5 +550,7 @@ export const useConsultationStore = create<ConsultationStore>((set, get) => ({
       medicinesSearchFocusNonce: 0,
       appliedPackages: {},
       follow_up_payload_touched: false,
+      sectionValidationErrors: {},
+      sectionValidationSoftWarnings: {},
     }),
 }));

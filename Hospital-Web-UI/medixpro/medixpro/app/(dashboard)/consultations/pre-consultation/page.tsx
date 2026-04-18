@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { usePatient } from "@/lib/patientContext";
 import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -17,7 +17,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { usePreConsultationTemplateStore } from "@/store/preConsultationTemplateStore";
 
-export default function PreConsultationPage() {
+function PreConsultationPageContent() {
   const { selectedPatient, triggerSearchHighlight } = usePatient();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -1128,3 +1128,16 @@ export default function PreConsultationPage() {
   );
 }
 
+export default function PreConsultationPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-[40vh] items-center justify-center p-6 text-sm text-muted-foreground">
+          Loading…
+        </div>
+      }
+    >
+      <PreConsultationPageContent />
+    </Suspense>
+  );
+}
