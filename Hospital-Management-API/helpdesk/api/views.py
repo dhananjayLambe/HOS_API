@@ -1,55 +1,91 @@
-from rest_framework import generics, permissions,status
-from rest_framework.response import Response
-from rest_framework.status import HTTP_201_CREATED
-from helpdesk.api.serializers import (
-     HelpdeskUserRegistrationSerializer,HelpdeskLoginSerializer,HelpdeskLogoutSerializer
-    )
-from helpdesk.models import HelpdeskClinicUser
-from helpdesk.api.serializers import HelpdeskClinicUserSerializer
 from rest_framework.views import APIView
-from rest_framework_simplejwt.authentication import JWTAuthentication
-from account.permissions import IsHelpdesk
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
 
-class HelpdeskUserRegisterView(generics.CreateAPIView):
-    serializer_class = HelpdeskUserRegistrationSerializer
-    permission_classes = [permissions.AllowAny]  # Open for self-registration
+from account.permissions import IsDoctor
+from .serializers import HelpdeskCreateSerializer, HelpdeskListSerializer
+from .services import (
+    create_helpdesk_user,
+    list_helpdesk_users,
+    remove_helpdesk_user
+)
+import logging
 
-    def perform_create(self, serializer):
-        user = serializer.save()
-        return Response(
-            {"message": "Helpdesk user registered. Pending admin approval.", "user_id": user.id},
-            status=HTTP_201_CREATED
-        )
+from django.core.exceptions import ValidationError
 
-class HelpdeskLoginView(generics.GenericAPIView):
-    serializer_class = HelpdeskLoginSerializer
-    permission_classes = []
-    authentication_classes = []
-    
-    def post(self, request):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        return Response(serializer.validated_data, status=status.HTTP_200_OK)
+logger = logging.getLogger(__name__)
 
-class HelpdeskLogoutView(generics.GenericAPIView):
-    serializer_class = HelpdeskLogoutSerializer
-    permission_classes = [permissions.IsAuthenticated]
+
+class CreateHelpdeskAPIView(APIView):
+    permission_classes = [IsAuthenticated, IsDoctor]
 
     def post(self, request):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        return Response({"message": "Successfully logged out"}, status=status.HTTP_205_RESET_CONTENT)
+        serializer = HelpdeskCreateSerializer(data=request.data)
+
+        if serializer.is_valid():
+            try:
+                create_helpdesk_user(
+                    user=request.user,
+                    clinic_id=serializer.validated_data["clinic_id"],
+                    first_name=serializer.validated_data["first_name"],
+                    last_name=serializer.validated_data["last_name"],
+                    mobile=serializer.validated_data["mobile"],
+                )
+
+                return Response(
+                    {"message": "Helpdesk user created successfully"},
+                    status=status.HTTP_201_CREATED,
+                )
+
+            except ValidationError as e:
+                return Response(
+                    {"error": str(e)},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            except Exception:
+                logger.exception("CreateHelpdeskAPIView failed")
+                return Response(
+                    {"error": "Something went wrong"},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-class HelpdeskClinicUserDetailView(APIView):
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [permissions.IsAuthenticated,IsHelpdesk]
+class ListHelpdeskAPIView(APIView):
+    permission_classes = [IsAuthenticated, IsDoctor]
 
     def get(self, request):
+        clinic_id = request.GET.get("clinic_id")
+
+        if not clinic_id:
+            return Response(
+                {"error": "clinic_id is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         try:
-            # Fetch the helpdesk user details based on the authenticated user
-            helpdesk_user = HelpdeskClinicUser.objects.get(user=request.user)
-            serializer = HelpdeskClinicUserSerializer(helpdesk_user)
-            return Response(serializer.data, status=200)
-        except HelpdeskClinicUser.DoesNotExist:
-            return Response({"error": "Helpdesk user not found"}, status=404)
+            queryset = list_helpdesk_users(request.user, clinic_id)
+            data = HelpdeskListSerializer(queryset, many=True).data
+
+            return Response(data, status=status.HTTP_200_OK)
+
+        except ValidationError as e:
+            return Response({"error": str(e)}, status=400)
+
+
+class DeleteHelpdeskAPIView(APIView):
+    permission_classes = [IsAuthenticated, IsDoctor]
+
+    def delete(self, request, pk):
+        try:
+            remove_helpdesk_user(request.user, pk)
+
+            return Response(
+                {"message": "Helpdesk user removed successfully"},
+                status=status.HTTP_200_OK
+            )
+
+        except ValidationError as e:
+            return Response({"error": str(e)}, status=400)

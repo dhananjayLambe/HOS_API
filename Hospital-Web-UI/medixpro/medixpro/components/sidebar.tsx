@@ -307,17 +307,17 @@ export function Sidebar({ isOpen, setIsOpen, alignBelowHeader }: SidebarProps) {
         
       ],
     },
-    // {
-    //   title: "Staff",
-    //   href: "/staff",
-    //   icon: UserCog,
-    //   submenu: [
-    //     { title: "All Staff", href: "/staff" },
-    //     { title: "Add Staff", href: "/staff/add" },
-    //     { title: "Roles & Permissions", href: "/staff/roles" },
-    //     { title: "Attendance", href: "/staff/attendance" },
-    //   ],
-    // },
+    {
+      title: "Staff",
+      href: "/staff",
+      icon: UserCog,
+      submenu: [
+        { title: "All Staff", href: "/staff" },
+        { title: "Add Staff", href: "/staff/add" },
+        // { title: "Roles & Permissions", href: "/staff/roles" },
+        // { title: "Attendance", href: "/staff/attendance" },
+      ],
+    },
     // {
     //   title: "Reviews",
     //   href: "/reviews",
@@ -360,6 +360,11 @@ export function Sidebar({ isOpen, setIsOpen, alignBelowHeader }: SidebarProps) {
     //   icon: Grid,
     // },
   ];
+
+  const navItems =
+    role?.toLowerCase() === "helpdesk"
+      ? sidebarItems.filter((item) => item.title !== "Staff")
+      : sidebarItems;
 
   const toggleSubmenu = (title: string) => {
     if (openSubmenu === title) {
@@ -441,7 +446,7 @@ export function Sidebar({ isOpen, setIsOpen, alignBelowHeader }: SidebarProps) {
 
       <div className="flex-1 min-h-0 overflow-y-auto pt-1 pb-2">
         <nav className="space-y-1 px-2 ">
-          {sidebarItems.map((item) => (
+          {navItems.map((item) => (
             <div key={item.title} className="space-y-1 custom-scrollbar">
               {item.submenu ? (
                 <>

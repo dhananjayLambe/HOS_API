@@ -1,575 +1,329 @@
 "use client"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Award, Building, Calendar, Clipboard, Clock, Download, Edit, Eye, FileText, Filter, Mail, MoreVertical, Phone, RefreshCw, Search, Shield, Trash, UserCheck, UserPlus, Users, UserX } from "lucide-react";
-import Link from "next/link";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { useState } from "react";
 
-// Mock data for staff members
-const staffMembers = [
-  {
-    id: "1",
-    name: "Dr. Sarah Johnson",
-    initials: "SJ",
-    role: "Cardiologist",
-    department: "Medical",
-    email: "sarah.j@clinic.com",
-    phone: "555-0101",
-    status: "Active",
-    avatar: "/mystical-forest-spirit.png",
-    joinDate: "May 15, 2012",
-  },
-  {
-    id: "2",
-    name: "Dr. Michael Chen",
-    initials: "MC",
-    role: "Neurologist",
-    department: "Medical",
-    email: "michael.c@clinic.com",
-    phone: "555-0102",
-    status: "Active",
-    avatar: "",
-    joinDate: "Jun 22, 2015",
-  },
-  {
-    id: "3",
-    name: "Emma Rodriguez",
-    initials: "ER",
-    role: "Head Nurse",
-    department: "Nursing",
-    email: "emma.r@clinic.com",
-    phone: "555-0103",
-    status: "On Leave",
-    avatar: "",
-    joinDate: "Feb 10, 2018",
-  },
-  {
-    id: "4",
-    name: "Robert Davis",
-    initials: "RD",
-    role: "Lab Technician",
-    department: "Laboratory",
-    email: "robert.d@clinic.com",
-    phone: "555-0104",
-    status: "Active",
-    avatar: "",
-    joinDate: "Nov 5, 2019",
-  },
-  {
-    id: "5",
-    name: "Jennifer Kim",
-    initials: "JK",
-    role: "Pharmacist",
-    department: "Pharmacy",
-    email: "jennifer.k@clinic.com",
-    phone: "555-0105",
-    status: "Active",
-    avatar: "",
-    joinDate: "Mar 18, 2017",
-  },
-  {
-    id: "6",
-    name: "David Wilson",
-    initials: "DW",
-    role: "Radiologist",
-    department: "Radiology",
-    email: "david.w@clinic.com",
-    phone: "555-0106",
-    status: "Inactive",
-    avatar: "",
-    joinDate: "Sep 30, 2016",
-  },
-  {
-    id: "7",
-    name: "Maria Garcia",
-    initials: "MG",
-    role: "Receptionist",
-    department: "Administration",
-    email: "maria.g@clinic.com",
-    phone: "555-0107",
-    status: "Active",
-    avatar: "",
-    joinDate: "Jan 12, 2020",
-  },
-  {
-    id: "8",
-    name: "James Brown",
-    initials: "JB",
-    role: "Physical Therapist",
-    department: "Therapy",
-    email: "james.b@clinic.com",
-    phone: "555-0108",
-    status: "Active",
-    avatar: "",
-    joinDate: "Jul 7, 2018",
-  },
-];
-
-// Mock data for department stats
-const departmentStats = [
-  { name: "Medical", count: 12, color: "bg-blue-500" },
-  { name: "Nursing", count: 18, color: "bg-green-500" },
-  { name: "Administration", count: 8, color: "bg-purple-500" },
-  { name: "Laboratory", count: 5, color: "bg-amber-500" },
-  { name: "Pharmacy", count: 4, color: "bg-red-500" },
-  { name: "Radiology", count: 3, color: "bg-indigo-500" },
-  { name: "Therapy", count: 6, color: "bg-pink-500" },
-  { name: "Support", count: 7, color: "bg-cyan-500" },
-];
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { useToastNotification } from "@/hooks/use-toast-notification"
+import { loadStaffClinicSelection, type ClinicOption } from "@/lib/doctorClinicsClient"
+import {
+  formatMobileDisplay,
+  listStaff,
+  MAX_STAFF_PER_CLINIC,
+  removeStaff,
+  StaffApiError,
+  type StaffMember,
+} from "@/lib/staffHelpdeskApi"
+import { AlertTriangle, Plus, UserRound } from "lucide-react"
+import Link from "next/link"
+import { useCallback, useEffect, useLayoutEffect, useState } from "react"
 
 export default function StaffPage() {
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const toast = useToastNotification()
+  const [clinics, setClinics] = useState<ClinicOption[]>([])
+  const [clinicId, setClinicId] = useState<string>("")
+  const [staff, setStaff] = useState<StaffMember[]>([])
+  const [clinicsLoading, setClinicsLoading] = useState(true)
+  const [staffListLoading, setStaffListLoading] = useState(false)
+  const [removeTarget, setRemoveTarget] = useState<StaffMember | null>(null)
+  const [removing, setRemoving] = useState(false)
+
+  const activeCount = staff.length
+  const atLimit = activeCount >= MAX_STAFF_PER_CLINIC
+
+  /** Load clinics once via shared resolver (localStorage primary, API fallback). */
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      setClinicsLoading(true)
+      try {
+        const { clinics: list, clinicId: selected } = await loadStaffClinicSelection()
+        if (cancelled) return
+        setClinics(list)
+        setClinicId(selected)
+      } finally {
+        if (!cancelled) setClinicsLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  /** Load helpdesk list when clinic changes; useLayoutEffect avoids empty-state flash before fetch. */
+  useLayoutEffect(() => {
+    if (!clinicId) {
+      setStaffListLoading(false)
+      return
+    }
+    let cancelled = false
+    setStaffListLoading(true)
+    listStaff({ clinicId })
+      .then(({ staff: rows }) => {
+        if (!cancelled) setStaff(rows)
+      })
+      .catch((e) => {
+        console.error(e)
+        if (!cancelled) {
+          setStaff([])
+          toast.error("Could not load staff.")
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setStaffListLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+    // toast omitted: avoid refetching staff when toast identity changes
+  }, [clinicId])
+
+  const reloadStaff = useCallback(async () => {
+    if (!clinicId) return
+    setStaffListLoading(true)
+    try {
+      const { staff: rows } = await listStaff({ clinicId })
+      setStaff(rows)
+    } catch (e) {
+      console.error(e)
+      toast.error("Could not load staff.")
+    } finally {
+      setStaffListLoading(false)
+    }
+  }, [clinicId, toast])
+
+  const onClinicChange = useCallback((value: string) => {
+    setClinicId(value)
+    localStorage.setItem("clinic_id", value)
+  }, [])
+
+  const confirmRemove = async () => {
+    if (!removeTarget || !clinicId) return
+    setRemoving(true)
+    try {
+      await removeStaff({ staffId: removeTarget.id })
+      toast.success("Staff removed.")
+      setRemoveTarget(null)
+      await reloadStaff()
+    } catch (e) {
+      if (e instanceof StaffApiError) {
+        toast.error(e.message)
+      } else {
+        toast.error("Could not remove staff.")
+      }
+    } finally {
+      setRemoving(false)
+    }
+  }
+
+  const showClinicSelect = clinics.length > 1
+
+  const addStaffControl =
+    atLimit ? (
+      <Button type="button" size="lg" className="min-h-11 touch-manipulation" disabled>
+        <Plus className="mr-2 h-4 w-4" />
+        Add Staff
+      </Button>
+    ) : (
+      <Button asChild size="lg" className="min-h-11 touch-manipulation">
+        <Link href="/staff/add">
+          <Plus className="mr-2 h-4 w-4" />
+          Add Staff
+        </Link>
+      </Button>
+    )
+
   return (
     <>
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-2xl lg:text-3xl font-bold tracking-tight mb-2">Staff Management</h2>
-          <p className="text-muted-foreground">Manage clinic staff, roles, and permissions</p>
+      <div className="flex flex-col gap-5 pb-24 md:pb-5">
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div>
+            <h2 className="text-2xl lg:text-3xl font-bold tracking-tight">Staff</h2>
+            <p className="text-muted-foreground">Manage your clinic staff</p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {activeCount} / {MAX_STAFF_PER_CLINIC} Active Staff
+            </p>
+          </div>
+          <div className="hidden md:flex flex-col items-end gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {showClinicSelect && (
+                <div className="flex flex-col gap-1.5 min-w-[200px]">
+                  <Label className="text-xs text-muted-foreground sr-only">Clinic</Label>
+                  <Select value={clinicId} onValueChange={onClinicChange} disabled={clinicsLoading}>
+                    <SelectTrigger className="w-full md:w-[240px]">
+                      <SelectValue placeholder="Select clinic" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {clinics.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              {addStaffControl}
+            </div>
+          </div>
         </div>
-        <div className="flex items-center flex-wrap gap-2">
-          <Button asChild>
+
+        <div className="flex md:hidden flex-col gap-3">
+          {showClinicSelect && (
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs text-muted-foreground">Clinic</Label>
+              <Select value={clinicId} onValueChange={onClinicChange} disabled={clinicsLoading}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select clinic" />
+                </SelectTrigger>
+                <SelectContent>
+                  {clinics.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+        </div>
+
+        {atLimit && (
+          <div
+            className="flex gap-3 rounded-lg border border-amber-200/80 bg-amber-50/80 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100"
+            role="status"
+          >
+            <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+            <p>
+              You’ve reached the maximum of 3 staff members for this clinic. Remove an existing
+              staff member to add a new one.
+            </p>
+          </div>
+        )}
+
+        {clinicsLoading ? (
+          <p className="text-sm text-muted-foreground">Loading clinics…</p>
+        ) : staffListLoading ? (
+          <p className="text-sm text-muted-foreground">Loading staff…</p>
+        ) : staff.length === 0 ? (
+          <Card className="border-dashed">
+            <CardContent className="flex flex-col items-center justify-center gap-4 py-16">
+              <UserRound className="h-12 w-12 text-muted-foreground" />
+              <p className="text-center text-muted-foreground">No staff added yet</p>
+              {atLimit ? (
+                <Button type="button" size="lg" className="min-h-11 touch-manipulation" disabled>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Staff
+                </Button>
+              ) : (
+                <Button asChild size="lg" className="min-h-11 touch-manipulation">
+                  <Link href="/staff/add">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add Staff
+                  </Link>
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {staff.map((member) => (
+              <Card key={member.id} className="flex flex-col">
+                <CardHeader className="flex flex-row items-start gap-3 space-y-0 pb-2">
+                  <Avatar className="h-11 w-11">
+                    <AvatarFallback>
+                      {member.name
+                        .split(/\s+/)
+                        .map((p) => p[0])
+                        .join("")
+                        .slice(0, 2)
+                        .toUpperCase() || "?"}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold leading-tight truncate">{member.name}</p>
+                    <Badge variant="secondary" className="mt-1 font-normal capitalize">
+                      Helpdesk
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="flex-1 space-y-1 text-sm">
+                  <p className="text-muted-foreground">
+                    Mobile: +91 {formatMobileDisplay(member.mobile)}
+                  </p>
+                  <p className="text-muted-foreground">
+                    Status: <span className="text-foreground font-medium">Active</span>
+                  </p>
+                </CardContent>
+                <CardFooter className="pt-0">
+                  <Button
+                    variant="outline"
+                    className="w-full min-h-11 touch-manipulation text-destructive hover:text-destructive"
+                    onClick={() => setRemoveTarget(member)}
+                  >
+                    Remove
+                  </Button>
+                </CardFooter>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="fixed bottom-0 left-0 right-0 z-40 border-t bg-background/95 p-3 backdrop-blur md:hidden">
+        {atLimit ? (
+          <Button type="button" className="w-full min-h-12 touch-manipulation" size="lg" disabled>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Staff
+          </Button>
+        ) : (
+          <Button asChild className="w-full min-h-12 touch-manipulation" size="lg">
             <Link href="/staff/add">
-              <UserPlus className="mr-2 h-4 w-4" />
-              Add New Staff
+              <Plus className="mr-2 h-4 w-4" />
+              Add Staff
             </Link>
           </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline">
-                <FileText className="mr-2 h-4 w-4" />
-                More Options
-                <svg className="ml-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="m6 9 6 6 6-6" />
-                </svg>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem asChild>
-                <Link href="/staff/roles">
-                  <Shield className="mr-2 h-4 w-4" />
-                  Roles & Permissions
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link href="/staff/attendance">
-                  <Clock className="mr-2 h-4 w-4" />
-                  Attendance
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link href="/staff/certifications">
-                  <Award className="mr-2 h-4 w-4" />
-                  Certifications
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link href="/staff/performance">
-                  <Clipboard className="mr-2 h-4 w-4" />
-                  Performance
-                </Link>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+        )}
       </div>
 
-      <div className="md:grid max-md:space-y-6 gap-6 md:grid-cols-4">
-        <Card className="md:col-span-3">
-          <CardHeader className="pb-3">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <CardTitle>Staff Directory</CardTitle>
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <div className="relative">
-                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input type="search" placeholder="Search staff..." className="w-full pl-8 sm:w-[300px]" />
-                </div>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="icon">
-                      <Filter className="h-4 w-4" />
-                      <span className="sr-only">Filter</span>
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-[200px]">
-                    <DropdownMenuLabel>Filter By</DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem>
-                      <Select>
-                        <SelectTrigger className="w-full border-none p-0 shadow-none">
-                          <SelectValue placeholder="Department" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All Departments</SelectItem>
-                          <SelectItem value="medical">Medical</SelectItem>
-                          <SelectItem value="nursing">Nursing</SelectItem>
-                          <SelectItem value="admin">Administration</SelectItem>
-                          <SelectItem value="lab">Laboratory</SelectItem>
-                          <SelectItem value="pharmacy">Pharmacy</SelectItem>
-                          <SelectItem value="radiology">Radiology</SelectItem>
-                          <SelectItem value="therapy">Therapy</SelectItem>
-                          <SelectItem value="support">Support</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem>
-                      <Select>
-                        <SelectTrigger className="w-full border-none p-0 shadow-none">
-                          <SelectValue placeholder="Role" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All Roles</SelectItem>
-                          <SelectItem value="doctor">Doctor</SelectItem>
-                          <SelectItem value="nurse">Nurse</SelectItem>
-                          <SelectItem value="admin">Administrator</SelectItem>
-                          <SelectItem value="technician">Technician</SelectItem>
-                          <SelectItem value="receptionist">Receptionist</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem>
-                      <Select>
-                        <SelectTrigger className="w-full border-none p-0 shadow-none">
-                          <SelectValue placeholder="Status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All Statuses</SelectItem>
-                          <SelectItem value="active">Active</SelectItem>
-                          <SelectItem value="inactive">Inactive</SelectItem>
-                          <SelectItem value="on-leave">On Leave</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem>
-                      <Button variant="outline" size="sm" className="w-full">
-                        <RefreshCw className="mr-2 h-3 w-3" />
-                        Reset Filters
-                      </Button>
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <Tabs defaultValue="list" className="w-full">
-              <TabsList className="mb-4 grid w-full grid-cols-2">
-                <TabsTrigger value="list">List View</TabsTrigger>
-                <TabsTrigger value="grid">Grid View</TabsTrigger>
-              </TabsList>
-              <TabsContent value="list" className="mt-0">
-                <div className="rounded-md border">
-                  <Table className="whitespace-nowrap">
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Role</TableHead>
-                        <TableHead className="hidden md:table-cell">Department</TableHead>
-                        <TableHead className="hidden md:table-cell">Contact</TableHead>
-                        <TableHead className="hidden md:table-cell">Joined</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody className="whitespace-nowrap">
-                      {staffMembers.map((staff) => (
-                        <TableRow key={staff.id}>
-                          <TableCell>
-                            <div className="flex items-center gap-3">
-                              <Avatar className="h-8 w-8">
-                                <AvatarImage src={staff.avatar || "/user-2.png?height=32&width=32&query=person"} alt={staff.name} />
-                                <AvatarFallback>{staff.initials}</AvatarFallback>
-                              </Avatar>
-                              <div className="font-medium">{staff.name}</div>
-                            </div>
-                          </TableCell>
-                          <TableCell>{staff.role}</TableCell>
-                          <TableCell className="hidden md:table-cell">{staff.department}</TableCell>
-                          <TableCell className="hidden md:table-cell">
-                            <div className="flex flex-col">
-                              <span className="text-xs text-muted-foreground">{staff.email}</span>
-                              <span className="text-xs text-muted-foreground">{staff.phone}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell className="hidden md:table-cell">{staff.joinDate}</TableCell>
-                          <TableCell>
-                            <Badge variant={staff.status === "Active" ? "success" : staff.status === "On Leave" ? "warning" : "secondary"}>{staff.status}</Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon">
-                                  <MoreVertical className="h-4 w-4" />
-                                  <span className="sr-only">Actions</span>
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem asChild>
-                                  <Link href={`/staff/${staff.id}`}>
-                                    <Eye className="mr-2 h-4 w-4" />
-                                    View Profile
-                                  </Link>
-                                </DropdownMenuItem>
-                                <DropdownMenuItem asChild>
-                                  <Link href={`/staff/${staff.id}/edit`}>
-                                    <Edit className="mr-2 h-4 w-4" />
-                                    Edit
-                                  </Link>
-                                </DropdownMenuItem>
-                                <DropdownMenuItem asChild>
-                                  <Link href={`/staff/${staff.id}/schedule`}>
-                                    <Calendar className="mr-2 h-4 w-4" />
-                                    Schedule
-                                  </Link>
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem>
-                                  {staff.status === "Active" ? (
-                                    <>
-                                      <UserX className="mr-2 h-4 w-4" />
-                                      Deactivate
-                                    </>
-                                  ) : (
-                                    <>
-                                      <UserCheck className="mr-2 h-4 w-4" />
-                                      Activate
-                                    </>
-                                  )}
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => setDeleteDialogOpen(true)} className="text-red-500">
-                                  <Trash className="mr-2 h-4 w-4" />
-                                  Delete
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-                <div className="mt-4 flex items-center justify-between">
-                  <div className="text-sm text-muted-foreground">
-                    Showing <strong>1-8</strong> of <strong>63</strong> staff members
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" disabled>
-                      Previous
-                    </Button>
-                    <Button variant="outline" size="sm">
-                      Next
-                    </Button>
-                  </div>
-                </div>
-              </TabsContent>
-              <TabsContent value="grid" className="mt-0">
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {staffMembers.map((staff) => (
-                    <Card key={staff.id} className="overflow-hidden">
-                      <CardContent className="!p-0">
-                        <div className="flex flex-col">
-                          <div className="flex items-center justify-between bg-muted p-2 lg:p-4">
-                            <div className="flex items-center gap-3">
-                              <Avatar className="h-10 w-10">
-                                <AvatarImage src={staff.avatar || "/user-2.png?height=40&width=40&query=person"} alt={staff.name} />
-                                <AvatarFallback>{staff.initials}</AvatarFallback>
-                              </Avatar>
-                              <div>
-                                <div className="font-medium">{staff.name}</div>
-                                <div className="text-xs text-muted-foreground">{staff.role}</div>
-                              </div>
-                            </div>
-                            <Badge variant={staff.status === "Active" ? "success" : staff.status === "On Leave" ? "warning" : "secondary"}>{staff.status}</Badge>
-                          </div>
-                          <div className="p-4">
-                            <div className="grid gap-2">
-                              <div className="flex items-center gap-2">
-                                <Building className="h-4 w-4 text-muted-foreground" />
-                                <span className="text-sm">{staff.department}</span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <Mail className="h-4 w-4 text-muted-foreground" />
-                                <span className="text-sm">{staff.email}</span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <Phone className="h-4 w-4 text-muted-foreground" />
-                                <span className="text-sm">{staff.phone}</span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <Calendar className="h-4 w-4 text-muted-foreground" />
-                                <span className="text-sm">Joined {staff.joinDate}</span>
-                              </div>
-                            </div>
-                          </div>
-                          <div className="flex border-t">
-                            <Button asChild variant="ghost" className="flex-1 rounded-none rounded-bl-md py-2">
-                              <Link href={`/staff/${staff.id}`}>
-                                <Eye className="mr-2 h-4 w-4" />
-                                View
-                              </Link>
-                            </Button>
-                            <Button asChild variant="ghost" className="flex-1 rounded-none border-l py-2">
-                              <Link href={`/staff/${staff.id}/edit`}>
-                                <Edit className="mr-2 h-4 w-4" />
-                                Edit
-                              </Link>
-                            </Button>
-                            <Button asChild variant="ghost" className="flex-1 rounded-none rounded-br-md border-l py-2">
-                              <Link href={`/staff/${staff.id}/schedule`}>
-                                <Calendar className="mr-2 h-4 w-4" />
-                                Schedule
-                              </Link>
-                            </Button>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-                <div className="mt-4 flex items-center justify-between">
-                  <div className="text-sm text-muted-foreground">
-                    Showing <strong>1-8</strong> of <strong>63</strong> staff members
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" disabled>
-                      Previous
-                    </Button>
-                    <Button variant="outline" size="sm">
-                      Next
-                    </Button>
-                  </div>
-                </div>
-              </TabsContent>
-            </Tabs>
-          </CardContent>
-        </Card>
-
-        <div className="flex flex-col gap-6">
-          <Card>
-            <CardHeader className="pb-2 flex !flex-row items-center justify-between">
-              <CardTitle className="text-base">Staff Overview</CardTitle>
-              <Users className="size-8 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between">
-                <div className="flex flex-col">
-                  <span className="text-3xl font-bold">63</span>
-                  <span className="text-xs text-muted-foreground">Total Staff</span>
-                </div>                
-              </div>
-              <div className="mt-4 space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span>Active</span>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline">52</Badge>
-                    <span className="text-xs text-muted-foreground">83%</span>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span>On Leave</span>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline">8</Badge>
-                    <span className="text-xs text-muted-foreground">13%</span>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span>Inactive</span>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline">3</Badge>
-                    <span className="text-xs text-muted-foreground">4%</span>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Departments</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {departmentStats.map((dept) => (
-                  <div key={dept.name} className="flex items-center gap-2">
-                    <div className={`h-3 w-3 rounded-full ${dept.color}`} />
-                    <div className="flex flex-1 items-center justify-between">
-                      <span className="text-sm">{dept.name}</span>
-                      <Badge variant="outline">{dept.count}</Badge>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-4 flex justify-center">
-                <Button variant="outline" size="sm" asChild>
-                  <Link href="/departments">
-                    <Building className="mr-2 h-4 w-4" />
-                    Manage Departments
-                  </Link>
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Quick Actions</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-2">
-                <Button variant="outline" className="justify-start" asChild>
-                  <Link href="/staff/add">
-                    <UserPlus className="mr-2 h-4 w-4" />
-                    Add New Staff
-                  </Link>
-                </Button>
-                <Button variant="outline" className="justify-start" asChild>
-                  <Link href="/staff/roles">
-                    <Shield className="mr-2 h-4 w-4" />
-                    Manage Roles
-                  </Link>
-                </Button>
-                <Button variant="outline" className="justify-start" asChild>
-                  <Link href="/staff/attendance">
-                    <Clock className="mr-2 h-4 w-4" />
-                    Attendance
-                  </Link>
-                </Button>
-                <Button variant="outline" className="justify-start">
-                  <Download className="mr-2 h-4 w-4" />
-                  Export Staff List
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    </div>
-
-    <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+      <AlertDialog open={!!removeTarget} onOpenChange={(o) => !o && setRemoveTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure you want to Delete this staff member?</AlertDialogTitle>
-            <AlertDialogDescription>This action will permanently delete the staff member's record from the system. This action cannot be undone and will remove all associated data including schedules, permissions and attendance records.</AlertDialogDescription>
+            <AlertDialogTitle>Remove Staff?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This user will lose access immediately.
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => setDeleteDialogOpen(false)} className="bg-red-500 text-neutral-50 hover:bg-red-700">
-              Delete
-            </AlertDialogAction>
+            <AlertDialogCancel disabled={removing}>Cancel</AlertDialogCancel>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={removing}
+              onClick={() => void confirmRemove()}
+            >
+              Remove
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </>
-  );
+  )
 }
