@@ -17,6 +17,7 @@ export function UserNav() {
       const firstName = user.first_name || "";
       const lastName = user.last_name || "";
       const fullName = `${firstName} ${lastName}`.trim();
+      if (role?.toLowerCase() === "helpdesk") return fullName;
       return `Dr. ${fullName}`;
     }
     return "User";
@@ -53,10 +54,10 @@ export function UserNav() {
           <Button
             variant="ghost"
             size="icon"
-            className="relative h-9 w-9 rounded-full p-0 shrink-0 min-w-9 min-h-9 border-2 border-purple-500/60 bg-purple-100 hover:bg-purple-200 dark:bg-purple-900/40 dark:hover:bg-purple-800/50 ring-offset-background focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2"
+            className="relative h-9 w-9 rounded-full p-0 shrink-0 min-w-9 min-h-9 border-2 border-primary/35 bg-primary/10 hover:bg-primary/15 dark:bg-primary/20 dark:hover:bg-primary/25 ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           >
             <Avatar className="h-8 w-8 ring-2 ring-background">
-              <AvatarFallback className="bg-purple-600 text-white dark:bg-purple-500 text-sm font-semibold">{initials}</AvatarFallback>
+              <AvatarFallback className="bg-primary text-primary-foreground text-sm font-semibold">{initials}</AvatarFallback>
             </Avatar>
             <span className="sr-only">Open user menu</span>
           </Button>

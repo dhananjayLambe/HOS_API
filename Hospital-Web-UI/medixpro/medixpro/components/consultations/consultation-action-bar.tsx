@@ -743,7 +743,7 @@ export function ConsultationActionBar() {
       toast.error(
         errorsText
           ? `Validation: ${errorsText}`
-          : "Failed to finalize consultation. Please try again."
+          : message || "Failed to finalize consultation. Please try again."
       );
       if (!previewTab.closed) previewTab.close();
     } finally {

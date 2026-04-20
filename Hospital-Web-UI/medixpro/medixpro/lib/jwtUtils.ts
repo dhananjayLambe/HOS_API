@@ -50,14 +50,16 @@ export function isTokenValid(token: string | null): boolean {
 /**
  * Get redirect path based on role
  */
-export function getRoleRedirectPath(role: string | null): string {
-  if (!role) return "/dashboard";
-  
-  switch (role.toLowerCase()) {
+export function getRoleRedirectPath(role: string | null | undefined): string {
+  if (role == null || typeof role !== "string") return "/dashboard";
+  const normalized = role.trim();
+  if (!normalized) return "/dashboard";
+
+  switch (normalized.toLowerCase()) {
     case "doctor":
       return "/doctor-dashboard";
     case "helpdesk":
-      return "/helpdesk-dashboard";
+      return "/helpdesk/queue";
     case "labadmin":
       return "/lab-dashboard";
     case "superuser":

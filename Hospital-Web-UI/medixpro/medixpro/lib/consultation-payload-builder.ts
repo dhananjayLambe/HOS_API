@@ -22,6 +22,54 @@ function normalizeFollowUpUnit(unit: FollowUpUnit | string | undefined | null): 
   return "days";
 }
 
+/** Normalize medicine aliases that backend master data does not accept directly. */
+function normalizeMedicineForApi(medicine: Record<string, unknown>): Record<string, unknown> {
+  const doseUnitRaw = String(medicine.dose_unit_id ?? medicine.dose_unit ?? "")
+    .trim()
+    .toLowerCase();
+  let doseUnitId = String(medicine.dose_unit_id ?? "").trim().toLowerCase();
+  if (!doseUnitId) {
+    doseUnitId = doseUnitRaw;
+  }
+  if (doseUnitId === "gm") {
+    doseUnitId = "g";
+  }
+  return {
+    ...medicine,
+    dose_unit_id: doseUnitId,
+  };
+}
+
+function normalizeMedicineRowForApi(row: Record<string, unknown>): Record<string, unknown> {
+  const normalizedRow = normalizeMedicineForApi(row);
+  const rowMedicine =
+    normalizedRow.medicine && typeof normalizedRow.medicine === "object"
+      ? normalizeMedicineForApi(normalizedRow.medicine as Record<string, unknown>)
+      : normalizedRow.medicine;
+  const detail =
+    normalizedRow.detail && typeof normalizedRow.detail === "object"
+      ? (normalizedRow.detail as Record<string, unknown>)
+      : null;
+  const normalizedDetailMedicine =
+    detail?.medicine && typeof detail.medicine === "object"
+      ? normalizeMedicineForApi(detail.medicine as Record<string, unknown>)
+      : detail?.medicine;
+  return {
+    ...normalizedRow,
+    ...(rowMedicine && typeof rowMedicine === "object" ? { medicine: rowMedicine } : {}),
+    ...(detail
+      ? {
+          detail: {
+            ...detail,
+            ...(normalizedDetailMedicine && typeof normalizedDetailMedicine === "object"
+              ? { medicine: normalizedDetailMedicine }
+              : {}),
+          },
+        }
+      : {}),
+  };
+}
+
 export function buildEndConsultationPayload(
   store: ReturnType<typeof useConsultationStore.getState>
 ) {
@@ -59,8 +107,11 @@ export function buildEndConsultationPayload(
       : store.medicines ?? []
   ).map((m: any) => {
     const normalized = normalizeItem(m);
+    const medicineWithApiAliases = normalizeMedicineRowForApi(
+      m && typeof m === "object" ? (m as Record<string, unknown>) : {}
+    );
     return {
-      ...m,
+      ...medicineWithApiAliases,
       name: normalized.name,
       is_custom: normalized.is_custom,
       is_complete: evaluateSectionItemComplete("medicines", normalized),

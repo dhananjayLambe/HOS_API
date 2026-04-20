@@ -11,7 +11,7 @@ export default function StaffSectionLayout({ children }: { children: React.React
   useEffect(() => {
     if (!sessionChecked) return
     if (role?.toLowerCase() === "helpdesk") {
-      router.replace("/helpdesk-dashboard")
+      router.replace("/helpdesk/queue")
     }
   }, [role, sessionChecked, router])
 

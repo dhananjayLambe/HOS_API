@@ -1,7 +1,7 @@
 //app/page.tsx
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ComponentProps } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -33,24 +33,30 @@ import { getRoleRedirectPath, isTokenValid } from "@/lib/jwtUtils";
 import { ACCESS_TOKEN_KEY } from "@/lib/axiosClient";
 
 // Component to handle login link with auto-redirect if already logged in
-function LoginLink({ children, className, ...props }: { children: React.ReactNode; className?: string; [key: string]: any }) {
+function LoginLink({
+  children,
+  className,
+  onClick,
+  ...rest
+}: Omit<ComponentProps<typeof Link>, "href">) {
   const router = useRouter();
 
-  const handleClick = (e: React.MouseEvent) => {
+  const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    // Run Slot/Button-asChild or other merged handlers first
+    onClick?.(e);
     if (typeof window === "undefined") return;
-    
-    // Check if user is already logged in
+
     const accessToken = localStorage.getItem(ACCESS_TOKEN_KEY);
     if (accessToken && isTokenValid(accessToken)) {
       e.preventDefault();
       const storedRole = localStorage.getItem("role");
       const redirectPath = getRoleRedirectPath(storedRole);
-      router.push(redirectPath);
+      void router.push(redirectPath);
     }
   };
 
   return (
-    <Link href="/auth/login" className={className} onClick={handleClick} {...props}>
+    <Link href="/auth/login" className={className} onClick={handleClick} {...rest}>
       {children}
     </Link>
   );

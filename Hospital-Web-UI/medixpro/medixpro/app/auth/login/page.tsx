@@ -19,7 +19,13 @@ import { ACCESS_TOKEN_KEY } from "@/lib/axiosClient";
 import { useAuth } from "@/lib/authContext";
 const RESEND_COOLDOWN = 30; // 30 seconds cooldown
 
-const Button = ({ className = "", variant = "default", size = "default", ...props }) => {
+const Button = ({
+  className = "",
+  type = "button" as "button" | "submit" | "reset",
+  variant = "default",
+  size = "default",
+  ...props
+}: React.ComponentProps<"button"> & { variant?: string; size?: string }) => {
   const baseClasses =
     "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50";
 
@@ -43,7 +49,7 @@ const Button = ({ className = "", variant = "default", size = "default", ...prop
 
   const combinedClasses = `${baseClasses} ${variantClasses} ${sizeClasses} ${className}`;
 
-  return <button className={combinedClasses} {...props} />;
+  return <button type={type} className={combinedClasses} {...props} />;
 };
 
 const Card = ({ className = "", ...props }) => (
@@ -146,7 +152,7 @@ export default function OTPLoginPage() {
               redirectPath = "/doctor-dashboard";
               break;
             case "helpdesk":
-              redirectPath = "/helpdesk-dashboard";
+              redirectPath = "/helpdesk/queue";
               break;
             case "labadmin":
               redirectPath = "/lab-dashboard";
@@ -199,11 +205,12 @@ export default function OTPLoginPage() {
                 redirectPath = "/doctor-dashboard";
                 break;
               case "helpdesk":
-                redirectPath = "/helpdesk-dashboard";
+                redirectPath = "/helpdesk/queue";
                 break;
               case "labadmin":
                 redirectPath = "/lab-dashboard";
                 break;
+              case "superuser":
               case "superadmin":
                 redirectPath = "/admin-dashboard";
                 break;
@@ -330,6 +337,9 @@ export default function OTPLoginPage() {
             email: data.email,
             role: data.role,
           });
+        } else if (data.role) {
+          // Tokens + role only — still sync auth context `role` (used by isAuthenticated and guards)
+          setUserInfo({ role: data.role });
         }
 
         // 🚀 Redirect based on role
@@ -339,7 +349,7 @@ export default function OTPLoginPage() {
             redirectPath = "/doctor-dashboard";
             break;
           case "helpdesk":
-            redirectPath = "/helpdesk-dashboard";
+            redirectPath = "/helpdesk/queue";
             break;
           case "labadmin":
             redirectPath = "/lab-dashboard";

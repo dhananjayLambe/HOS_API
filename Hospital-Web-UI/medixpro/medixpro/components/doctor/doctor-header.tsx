@@ -4,7 +4,6 @@ import { Calendar, MessageSquare, Search } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { ThemeToggle } from "@/components/theme-toggle"
 import { NotificationDropdown } from "@/components/notification-dropdown"
 import { UserNav } from "@/components/user-nav"
 
@@ -50,7 +49,6 @@ export function DoctorHeader() {
             </Link>
           </Button>
           <NotificationDropdown />
-          <ThemeToggle />
           <UserNav />
         </div>
       </div>

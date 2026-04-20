@@ -3,7 +3,13 @@ import { ThemeProvider as NextThemeProvider } from "next-themes";
 
 const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
   return (
-    <NextThemeProvider enableSystem={false} defaultTheme="dark" attribute="class">
+    <NextThemeProvider
+      attribute="class"
+      defaultTheme="light"
+      forcedTheme="light"
+      enableSystem={false}
+      disableTransitionOnChange
+    >
       {children}
     </NextThemeProvider>
   );

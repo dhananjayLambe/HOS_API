@@ -36,21 +36,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <head>
-        <style dangerouslySetInnerHTML={{
-          __html: `
-            html, body {
-              background-color: white !important;
-              color: rgb(15 23 42) !important;
-            }
-            .dark html, .dark body {
-              background-color: rgb(2 6 23) !important;
-              color: white !important;
-            }
-          `
-        }} />
-      </head>
-      <body className={inter.className} suppressHydrationWarning style={{ backgroundColor: 'white' }}>
+      <body className={inter.className} suppressHydrationWarning>
         <AuthProvider>
           <ThemeProvider>{children}</ThemeProvider>
           <GlobalLoader />

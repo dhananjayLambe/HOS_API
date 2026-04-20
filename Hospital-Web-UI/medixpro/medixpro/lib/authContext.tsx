@@ -52,13 +52,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Helper function to save user info to localStorage and state
   const saveUserInfo = (userData: Partial<UserInfo>) => {
+    const roleFromStorage = localStorage.getItem(ROLE_KEY);
+    const resolvedRole = userData.role ?? roleFromStorage ?? role;
+
     const userInfo: UserInfo = {
       user_id: userData.user_id ?? localStorage.getItem(USER_INFO_KEYS.USER_ID),
       username: userData.username ?? localStorage.getItem(USER_INFO_KEYS.USERNAME),
       first_name: userData.first_name ?? localStorage.getItem(USER_INFO_KEYS.FIRST_NAME),
       last_name: userData.last_name ?? localStorage.getItem(USER_INFO_KEYS.LAST_NAME),
       email: userData.email ?? localStorage.getItem(USER_INFO_KEYS.EMAIL),
-      role: userData.role ?? role,
+      role: resolvedRole,
     };
 
     // Save to localStorage
@@ -68,7 +71,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (userInfo.last_name) localStorage.setItem(USER_INFO_KEYS.LAST_NAME, userInfo.last_name);
     if (userInfo.email) localStorage.setItem(USER_INFO_KEYS.EMAIL, userInfo.email);
 
-    // Update state
+    // Keep auth `role` in sync with user (login previously only set `user` here — broke isAuthenticated)
+    if (userData.role != null && userData.role !== "") {
+      localStorage.setItem(ROLE_KEY, userData.role);
+      setRole(userData.role);
+    } else if (resolvedRole) {
+      setRole(resolvedRole);
+    }
+
     setUser(userInfo);
   };
 
@@ -82,13 +92,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (!user_id && !username) return null;
 
+    const storedRole = localStorage.getItem(ROLE_KEY);
+
     return {
       user_id,
       username,
       first_name,
       last_name,
       email,
-      role: role,
+      role: storedRole ?? role,
     };
   };
 
