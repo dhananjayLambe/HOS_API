@@ -170,9 +170,18 @@ export function HelpdeskLayout({ children }: { children: React.ReactNode }) {
             <div className="relative min-w-0 flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
               <Input
-                placeholder="Search patient..."
+                placeholder="Search queue (press Enter for all patients)"
                 value={headerSearch}
                 onChange={(e) => setHeaderSearch(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key !== "Enter") return;
+                  const q = headerSearch.trim();
+                  if (q.length < 2) {
+                    toast.message("Type at least 2 characters");
+                    return;
+                  }
+                  router.push(`/helpdesk/patients?q=${encodeURIComponent(q)}`);
+                }}
                 className="h-11 flex-1 rounded-full border-border bg-background pl-9 pr-11 shadow-sm"
                 aria-label="Search patient"
               />

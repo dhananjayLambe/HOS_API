@@ -34,7 +34,8 @@ from django.core.cache import cache
 from django.db.models import Q
 from rest_framework.generics import ListAPIView
 from django.db import transaction
-from django.db.models import F
+from django.db.models import F, Value, CharField
+from django.db.models.functions import Concat
 from django.utils import timezone
 import traceback
 
@@ -328,6 +329,17 @@ class PatientProfileSearchView(ListAPIView):
     Uses case-insensitive containment to avoid database-specific trigram requirements.
     """
     serializer_class = PatientProfileSearchSerializer
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [JWTAuthentication]
+
+    def _get_user_clinic_ids(self, user):
+        """Return clinic ids for doctor/helpdesk users to keep results clinic-scoped."""
+        clinic_ids = set()
+        if hasattr(user, "doctor"):
+            clinic_ids.update(user.doctor.clinics.values_list("id", flat=True))
+        if hasattr(user, "helpdesk_profile") and user.helpdesk_profile.clinic_id:
+            clinic_ids.add(user.helpdesk_profile.clinic_id)
+        return list(clinic_ids)
 
     def get(self, request, *args, **kwargs):
         query = request.query_params.get('query', '').strip()
@@ -340,7 +352,8 @@ class PatientProfileSearchView(ListAPIView):
         if len(query) > 50:
             query = query[:50]
 
-        cache_key = f"patient_search_{query}"
+        # Patient search is global for doctor/helpdesk and should not depend on clinic.
+        cache_key = f"patient_search_v3_all_{query.lower()}"
         cached_data = None
 
         # Safely try cache get – if Redis is down, log and ignore errors
@@ -350,22 +363,42 @@ class PatientProfileSearchView(ListAPIView):
             logger.exception("PatientProfileSearchView: Redis cache GET failed", exc_info=True)
             cached_data = None
 
-        if cached_data is not None:
+        if cached_data:
             return Response(cached_data)
 
         # Basic icontains search across first name, last name, and mobile (username)
-        queryset = PatientProfile.objects.select_related('account__user').filter(
+        queryset = PatientProfile.objects.select_related('account__user').annotate(
+            full_name_search=Concat(
+                F('first_name'),
+                Value(' '),
+                F('last_name'),
+                output_field=CharField(),
+            ),
+            user_full_name_search=Concat(
+                F('account__user__first_name'),
+                Value(' '),
+                F('account__user__last_name'),
+                output_field=CharField(),
+            ),
+        ).filter(
             Q(first_name__icontains=query) |
             Q(last_name__icontains=query) |
+            Q(full_name_search__icontains=query) |
+            Q(account__user__first_name__icontains=query) |
+            Q(account__user__last_name__icontains=query) |
+            Q(user_full_name_search__icontains=query) |
             Q(account__user__username__icontains=query)
-        ).order_by('first_name', 'last_name')
+        )
+
+        queryset = queryset.distinct().order_by('first_name', 'last_name')[:10]
 
         serializer = self.get_serializer(queryset, many=True)
         data = serializer.data
 
         # Safely try cache set – if Redis is down, log and ignore errors
         try:
-            cache.set(cache_key, data, timeout=300)  # cache for 5 minutes
+            if data:
+                cache.set(cache_key, data, timeout=300)  # cache for 5 minutes
         except Exception:
             logger.exception("PatientProfileSearchView: Redis cache SET failed", exc_info=True)
             pass

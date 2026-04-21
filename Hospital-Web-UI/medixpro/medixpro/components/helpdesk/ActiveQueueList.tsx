@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 interface ActiveQueueListProps {
   selectedId: string | null;
+  highlightedId?: string | null;
   onSelect: (id: string) => void;
   onCheckIn: (id: string) => void;
   onOpenVitals: (id: string) => void;
@@ -16,6 +17,7 @@ interface ActiveQueueListProps {
 
 export function ActiveQueueList({
   selectedId,
+  highlightedId = null,
   onSelect,
   onCheckIn,
   onOpenVitals,
@@ -48,7 +50,13 @@ export function ActiveQueueList({
       {list.map((entry, index) => (
         <div
           key={entry.id}
-          className={selectedId === entry.id ? "rounded-xl ring-2 ring-primary ring-offset-2" : ""}
+          data-queue-entry-id={entry.id}
+          className={[
+            selectedId === entry.id ? "rounded-xl ring-2 ring-primary ring-offset-2" : "",
+            highlightedId === entry.id ? "rounded-xl bg-primary/10 transition-colors duration-300" : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
         >
           <QueueCard
             entry={entry}

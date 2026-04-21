@@ -60,8 +60,8 @@ class PatientProfile(models.Model):
         blank=True
     )
     account = models.ForeignKey(PatientAccount, related_name='profiles', on_delete=models.CASCADE)
-    first_name = models.CharField(max_length=255,default="")
-    last_name = models.CharField(max_length=255,default="")
+    first_name = models.CharField(max_length=255, default="", db_index=True)
+    last_name = models.CharField(max_length=255, default="", db_index=True)
     relation = models.CharField(max_length=10, choices=RELATION_CHOICES,default='self')
     gender = models.CharField(max_length=10, choices=GENDER_CHOICES, blank=True)
     date_of_birth = models.DateField(blank=True, null=True)

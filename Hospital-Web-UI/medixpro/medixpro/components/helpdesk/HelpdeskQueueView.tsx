@@ -92,6 +92,7 @@ export function HelpdeskQueueView() {
   const setPreConsultTargetId = useHelpdeskQueueStore((s) => s.setPreConsultTargetId);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
 
   const selected = useMemo(() => entries.find((e) => e.id === selectedId) ?? null, [entries, selectedId]);
@@ -99,9 +100,24 @@ export function HelpdeskQueueView() {
   useEffect(() => {
     if (!preConsultTargetId) return;
     setSelectedId(preConsultTargetId);
+    setHighlightedId(preConsultTargetId);
+    if (typeof window !== "undefined") {
+      window.requestAnimationFrame(() => {
+        const el = document.querySelector(`[data-queue-entry-id="${preConsultTargetId}"]`);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      });
+    }
     if (isMobile) setSheetOpen(true);
     setPreConsultTargetId(null);
   }, [preConsultTargetId, isMobile, setPreConsultTargetId]);
+
+  useEffect(() => {
+    if (!highlightedId) return;
+    const timer = window.setTimeout(() => setHighlightedId(null), 1800);
+    return () => window.clearTimeout(timer);
+  }, [highlightedId]);
 
   const handleCheckIn = (id: string) => {
     checkIn(id);
@@ -148,6 +164,7 @@ export function HelpdeskQueueView() {
       {queueHeading}
       <ActiveQueueList
         selectedId={selectedId}
+        highlightedId={highlightedId}
         onSelect={handleSelect}
         onCheckIn={handleCheckIn}
         onOpenVitals={handleOpenVitals}

@@ -17,6 +17,7 @@ export interface Vitals {
 
 export interface QueueEntry {
   id: string;
+  patientProfileId?: string;
   name: string;
   mobile: string;
   status: QueueStatus;
@@ -39,6 +40,10 @@ function maskMobile(m: string): string {
   return `${d.slice(0, 2)}XXXXXX${d.slice(-2)}`;
 }
 
+function normalizeMobile(value?: string | null): string {
+  return (value ?? "").replace(/\D/g, "");
+}
+
 interface HelpdeskQueueState {
   entries: QueueEntry[];
   headerSearch: string;
@@ -49,6 +54,8 @@ interface HelpdeskQueueState {
   /** Bottom nav / sidebar: focus first pre-consult patient vitals */
   openPreConsultFlow: () => void;
   addPatient: (name: string, mobile: string) => string;
+  addPatientFromSearch: (patient: { id: string; full_name: string; mobile?: string | null }) => string;
+  findEntryByPatient: (patient: { id: string; mobile?: string | null }) => QueueEntry | null;
   moveToTop: (id: string) => void;
   checkIn: (id: string) => void;
   updateVitals: (id: string, vitals: Partial<Vitals>, sendToDoctor?: boolean) => void;
@@ -58,9 +65,9 @@ let idCounter = 100;
 
 export const useHelpdeskQueueStore = create<HelpdeskQueueState>((set, get) => ({
   entries: [
-    { id: "q1", name: "Rahul Sharma", mobile: "9876543212", status: "waiting", priority: 3 },
-    { id: "q2", name: "Priya Patel", mobile: "9123456780", status: "pre_consult", priority: 2 },
-    { id: "q3", name: "Amit Kumar", mobile: "9988776655", status: "waiting", priority: 1 },
+    { id: "q1", patientProfileId: "seed-q1", name: "Rahul Sharma", mobile: "9876543212", status: "waiting", priority: 3 },
+    { id: "q2", patientProfileId: "seed-q2", name: "Priya Patel", mobile: "9123456780", status: "pre_consult", priority: 2 },
+    { id: "q3", patientProfileId: "seed-q3", name: "Amit Kumar", mobile: "9988776655", status: "waiting", priority: 1 },
   ],
   headerSearch: "",
   preConsultTargetId: null,
@@ -88,6 +95,7 @@ export const useHelpdeskQueueStore = create<HelpdeskQueueState>((set, get) => ({
           ...s.entries,
           {
             id,
+            patientProfileId: undefined,
             name: name.trim(),
             mobile: mobile.trim(),
             status: "waiting" as const,
@@ -97,6 +105,42 @@ export const useHelpdeskQueueStore = create<HelpdeskQueueState>((set, get) => ({
       };
     });
     return id;
+  },
+
+  addPatientFromSearch: (patient) => {
+    const existing = get().findEntryByPatient(patient);
+    if (existing) return existing.id;
+
+    const id = `hq-${++idCounter}`;
+    set((s) => {
+      const maxP = s.entries.reduce((m, e) => Math.max(m, e.priority), 0);
+      return {
+        entries: [
+          ...s.entries,
+          {
+            id,
+            patientProfileId: patient.id,
+            name: (patient.full_name || "").trim() || "Unnamed Patient",
+            mobile: (patient.mobile || "").trim(),
+            status: "waiting" as const,
+            priority: maxP + 1,
+          },
+        ],
+      };
+    });
+    return id;
+  },
+
+  findEntryByPatient: (patient) => {
+    const targetMobile = normalizeMobile(patient.mobile);
+    const entries = get().entries;
+    return (
+      entries.find((entry) => entry.patientProfileId && entry.patientProfileId === patient.id) ??
+      (targetMobile
+        ? entries.find((entry) => normalizeMobile(entry.mobile) === targetMobile)
+        : null) ??
+      null
+    );
   },
 
   moveToTop: (id) =>

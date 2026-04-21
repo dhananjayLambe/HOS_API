@@ -2,31 +2,68 @@
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useHelpdeskQueueStore } from "@/lib/helpdeskQueueStore";
 import { maskMobile } from "@/lib/helpdeskQueueStore";
-import { Search, UserPlus } from "lucide-react";
-import { useMemo, useState } from "react";
+import axiosClient from "@/lib/axiosClient";
+import { Loader2, Search, UserPlus } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+
+interface HelpdeskSearchPatient {
+  id: string;
+  full_name: string;
+  first_name?: string;
+  last_name?: string;
+  mobile?: string;
+}
 
 interface HelpdeskPatientSearchProps {
   onAddNew: () => void;
-  onSelectPatient?: (id: string) => void;
+  onSelectPatient?: (patient: HelpdeskSearchPatient) => void;
+  initialQuery?: string;
 }
 
-export function HelpdeskPatientSearch({ onAddNew, onSelectPatient }: HelpdeskPatientSearchProps) {
-  const entries = useHelpdeskQueueStore((s) => s.entries);
-  const [q, setQ] = useState("");
+export function HelpdeskPatientSearch({ onAddNew, onSelectPatient, initialQuery = "" }: HelpdeskPatientSearchProps) {
+  const [q, setQ] = useState(initialQuery);
+  const [results, setResults] = useState<HelpdeskSearchPatient[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+  const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
-  const results = useMemo(() => {
-    const t = q.trim().toLowerCase();
-    if (!t) return [];
-    return entries.filter(
-      (e) =>
-        e.name.toLowerCase().includes(t) ||
-        e.mobile.replace(/\D/g, "").includes(t.replace(/\D/g, ""))
-    );
-  }, [entries, q]);
+  useEffect(() => {
+    setQ(initialQuery);
+  }, [initialQuery]);
 
-  const showEmpty = q.trim().length > 0 && results.length === 0;
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    const term = q.trim();
+    if (term.length < 2) {
+      setResults([]);
+      setLoading(false);
+      setErrorMsg("");
+      return;
+    }
+
+    debounceRef.current = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const response = await axiosClient.get("/patients/search/", {
+          params: { query: term },
+        });
+        setResults(Array.isArray(response.data) ? response.data.slice(0, 10) : []);
+        setErrorMsg("");
+      } catch {
+        setResults([]);
+        setErrorMsg("Search failed. Please re-login and try again.");
+      } finally {
+        setLoading(false);
+      }
+    }, 300);
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [q]);
+
+  const showEmpty = q.trim().length >= 2 && !loading && results.length === 0;
 
   return (
     <div className="space-y-4">
@@ -35,27 +72,41 @@ export function HelpdeskPatientSearch({ onAddNew, onSelectPatient }: HelpdeskPat
         <Input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search by name or mobile"
+          placeholder="Search by name or mobile (min 2 chars)"
           className="h-11 pl-9"
           inputMode="search"
         />
       </div>
 
+      {loading && (
+        <div className="flex items-center justify-center rounded-lg border bg-card px-4 py-6">
+          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+        </div>
+      )}
+
       {results.length > 0 && (
         <ul className="divide-y rounded-lg border bg-card">
-          {results.map((e) => (
-            <li key={e.id}>
+          {results.map((patient) => (
+            <li key={patient.id}>
               <button
                 type="button"
                 className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-accent/50"
-                onClick={() => onSelectPatient?.(e.id)}
+                onClick={() => onSelectPatient?.(patient)}
               >
-                <span className="font-medium">{e.name}</span>
-                <span className="text-sm text-muted-foreground tabular-nums">{maskMobile(e.mobile)}</span>
+                <span className="font-medium">
+                  {patient.full_name || `${patient.first_name || ""} ${patient.last_name || ""}`.trim()}
+                </span>
+                <span className="text-sm text-muted-foreground tabular-nums">{maskMobile(patient.mobile || "")}</span>
               </button>
             </li>
           ))}
         </ul>
+      )}
+
+      {errorMsg && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+          {errorMsg}
+        </div>
       )}
 
       {showEmpty && (
