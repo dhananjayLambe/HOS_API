@@ -118,7 +118,10 @@ class CreatePatientSerializer(serializers.Serializer):
     first_name = serializers.CharField(max_length=255, required=True)
     last_name = serializers.CharField(max_length=255, required=True)
     gender = serializers.ChoiceField(choices=PatientProfile.GENDER_CHOICES, required=True)
-    date_of_birth = serializers.DateField(required=True)
+    date_of_birth = serializers.DateField(required=False, allow_null=True)
+    age_years = serializers.IntegerField(required=False, allow_null=True, min_value=0, max_value=150)
+    age_months = serializers.IntegerField(required=False, allow_null=True, min_value=0, max_value=11)
+    is_minor_self_override = serializers.BooleanField(required=False, default=False)
     
     def validate_mobile(self, value):
         """Validate and normalize mobile number"""
@@ -136,6 +139,23 @@ class CreatePatientSerializer(serializers.Serializer):
         """Additional validation"""
         logger.debug(f"CreatePatientSerializer validate called with: {attrs}")
         logger.debug(f"Gender choices available: {PatientProfile.GENDER_CHOICES}")
+
+        date_of_birth = attrs.get("date_of_birth")
+        age_years = attrs.get("age_years")
+        age_months = attrs.get("age_months")
+
+        has_dob = date_of_birth is not None
+        has_age = age_years is not None
+
+        if has_dob and has_age:
+            raise serializers.ValidationError("Provide either date_of_birth or age, not both.")
+
+        if not has_dob and not has_age:
+            raise serializers.ValidationError("Enter Age or DOB")
+
+        if age_months is not None and age_years is None:
+            raise serializers.ValidationError("age_years is required if age_months is provided.")
+
         return attrs
 
 

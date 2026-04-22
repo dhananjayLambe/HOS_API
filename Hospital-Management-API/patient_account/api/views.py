@@ -11,6 +11,7 @@ from django.core.cache import cache
 import random
 import time
 import logging
+from datetime import date
 from patient_account.models import OTP
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenRefreshView
@@ -516,9 +517,32 @@ class CreatePatientView(APIView):
             first_name = serializer.validated_data['first_name']
             last_name = serializer.validated_data['last_name']
             gender = serializer.validated_data['gender']
-            date_of_birth = serializer.validated_data['date_of_birth']
+            date_of_birth = serializer.validated_data.get('date_of_birth')
+            age_years = serializer.validated_data.get('age_years')
+            age_months = serializer.validated_data.get('age_months')
+            is_minor_self_override = serializer.validated_data.get('is_minor_self_override', False)
             
-            logger.info(f"Extracted data - Mobile: {mobile}, Name: {first_name} {last_name}, Gender: {gender}, DOB: {date_of_birth}")
+            logger.info(
+                f"Extracted data - Mobile: {mobile}, Name: {first_name} {last_name}, "
+                f"Gender: {gender}, DOB: {date_of_birth}, Age: {age_years}y {age_months}m, "
+                f"MinorOverride: {is_minor_self_override}"
+            )
+
+            computed_age_years = age_years
+            if computed_age_years is None and date_of_birth:
+                today = date.today()
+                computed_age_years = today.year - date_of_birth.year
+                if (today.month, today.day) < (date_of_birth.month, date_of_birth.day):
+                    computed_age_years -= 1
+
+            if computed_age_years is not None and computed_age_years < 18:
+                logger.info(
+                    "Minor created as self profile | mobile=%s | age_years=%s | override=%s | created_by=%s",
+                    mobile,
+                    computed_age_years,
+                    is_minor_self_override,
+                    request.user.id,
+                )
 
             # Step 2: Check/Create User
             logger.info("Step 2: Checking/Creating User...")
@@ -750,7 +774,9 @@ class CreatePatientView(APIView):
                     last_name=last_name,
                     relation='self',
                     gender=gender,
-                    date_of_birth=date_of_birth
+                    date_of_birth=date_of_birth,
+                    age_years=age_years,
+                    age_months=age_months
                 )
                 logger.info(f"PatientProfile created successfully: {profile.id}")
             except Exception as e:
@@ -768,7 +794,9 @@ class CreatePatientView(APIView):
                             "first_name": first_name,
                             "last_name": last_name,
                             "gender": gender,
-                            "date_of_birth": str(date_of_birth) if date_of_birth else None
+                            "date_of_birth": str(date_of_birth) if date_of_birth else None,
+                            "age_years": age_years,
+                            "age_months": age_months,
                         }
                     }
                 }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

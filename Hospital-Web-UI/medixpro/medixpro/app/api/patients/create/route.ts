@@ -9,7 +9,21 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
 
     // Validate required fields based on CreatePatientSerializer
-    if (!body.mobile || !body.first_name || !body.gender || !body.date_of_birth) {
+    const hasDob = Boolean(body.date_of_birth);
+    const hasAgeYears =
+      body.age_years !== undefined &&
+      body.age_years !== null &&
+      String(body.age_years).trim() !== "";
+    const hasAgeMonths =
+      body.age_months !== undefined &&
+      body.age_months !== null &&
+      String(body.age_months).trim() !== "";
+
+    const hasValidAge = hasAgeYears || hasAgeMonths;
+    const missingAgeOrDob = !hasDob && !hasValidAge;
+    const hasBothAgeAndDob = hasDob && hasValidAge;
+
+    if (!body.mobile || !body.first_name || !body.gender || missingAgeOrDob || hasBothAgeAndDob) {
       return NextResponse.json(
         { 
           status: "error",
@@ -18,7 +32,8 @@ export async function POST(request: NextRequest) {
             mobile: body.mobile ? undefined : "Mobile is required",
             first_name: body.first_name ? undefined : "First name is required",
             gender: body.gender ? undefined : "Gender is required",
-            date_of_birth: body.date_of_birth ? undefined : "Date of birth is required"
+            ...(missingAgeOrDob ? { age_or_dob: "Enter Age or DOB" } : {}),
+            ...(hasBothAgeAndDob ? { age_or_dob: "Provide either DOB or Age, not both" } : {}),
           }
         },
         { status: 400 }

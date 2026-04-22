@@ -3,6 +3,7 @@ from django.db import models
 from account.models import User
 from clinic.models import Clinic
 from django.core.exceptions import ValidationError
+from datetime import date
 # Choices for common fields
 GENDER_CHOICES = [('Male', 'Male'), ('Female', 'Female'), ('Other', 'Other')]
 BLOOD_GROUP_CHOICES = [
@@ -65,26 +66,69 @@ class PatientProfile(models.Model):
     relation = models.CharField(max_length=10, choices=RELATION_CHOICES,default='self')
     gender = models.CharField(max_length=10, choices=GENDER_CHOICES, blank=True)
     date_of_birth = models.DateField(blank=True, null=True)
+    age_years = models.PositiveIntegerField(null=True, blank=True)
+    age_months = models.PositiveIntegerField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-
+    @property
+    def age(self):
+        if not self.date_of_birth:
+            return None
+        today = date.today()
+        years = today.year - self.date_of_birth.year
+        if (today.month, today.day) < (self.date_of_birth.month, self.date_of_birth.day):
+            years -= 1
+        return years
     def __str__(self):
         return f"{self.first_name} ({self.relation})"
     def get_full_name(self):
         return f"{self.first_name} {self.last_name}"
     def clean(self):
+        # ✅ Only one self per account
         if self.relation == "self":
             if PatientProfile.objects.filter(
-                account=self.account, relation="self"
+                account=self.account,
+                relation="self"
             ).exclude(id=self.id).exists():
                 raise ValidationError("Only one self profile allowed.")
+        # ✅ Either DOB OR Age required
+        if not self.date_of_birth and self.age_years is None:
+            raise ValidationError("Either date_of_birth or age_years is required.")
+        # ❌ Prevent invalid partial age
+        if self.age_years is None and self.age_months is not None:
+            raise ValidationError("age_years is required if age_months is provided.")
+        # ❌ Prevent both provided (avoid confusion)
+        if self.date_of_birth and self.age_years is not None:
+            raise ValidationError("Provide either date_of_birth or age, not both.")
     def save(self, *args, **kwargs):
         from account.services.business_id_service import BusinessIDService
+        from datetime import date
+        from calendar import monthrange
+        # ✅ Run validations
+        self.full_clean()
+        # 🔒 Prevent public_id change
         if self.pk:
             old = PatientProfile.objects.filter(pk=self.pk).first()
             if old and old.public_id and old.public_id != self.public_id:
                 raise ValidationError("Patient ID cannot be modified.")
+        # 🧼 Clean names
+        self.first_name = self.first_name.strip()
+        self.last_name = self.last_name.strip()
+        # 🧠 Convert age → DOB safely
+        if not self.date_of_birth and self.age_years is not None:
+            today = date.today()
+            years = self.age_years or 0
+            months = self.age_months or 0
+            dob_year = today.year - years
+            dob_month = today.month - months
+            if dob_month <= 0:
+                dob_year -= 1
+                dob_month += 12
+            last_day = monthrange(dob_year, dob_month)[1]
+            day = min(today.day, last_day)
+            self.date_of_birth = date(dob_year, dob_month, day)
+        # 🆔 Generate public ID
         if not self.public_id:
             self.public_id = BusinessIDService.generate_id("PAT", 6)
         super().save(*args, **kwargs)

@@ -2,12 +2,21 @@
 
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { Loader2, UserPlus, CheckCircle2 } from "lucide-react";
+import { Loader2, CheckCircle2 } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import axiosClient from "@/lib/axiosClient";
@@ -27,6 +36,8 @@ interface PatientFormData {
   mobile: string;
   gender: string;
   date_of_birth: string;
+  age_years: string;
+  age_months: string;
 }
 
 interface PatientProfile {
@@ -38,6 +49,7 @@ interface PatientProfile {
 }
 
 type DialogStep = "form" | "exists";
+type AgeInputMode = "age" | "dob";
 
 export function AddPatientDialog({ open, onOpenChange, onPatientAdded }: AddPatientDialogProps) {
   const { setSelectedPatient } = usePatient();
@@ -47,6 +59,9 @@ export function AddPatientDialog({ open, onOpenChange, onPatientAdded }: AddPati
   const [patientAccountId, setPatientAccountId] = useState<string | null>(null);
   const [profiles, setProfiles] = useState<PatientProfile[]>([]);
   const [checkedMobile, setCheckedMobile] = useState<string>("");
+  const [ageInputMode, setAgeInputMode] = useState<AgeInputMode>("age");
+  const [showMinorWarning, setShowMinorWarning] = useState(false);
+  const [pendingSubmitData, setPendingSubmitData] = useState<PatientFormData | null>(null);
 
   const {
     register,
@@ -54,6 +69,8 @@ export function AddPatientDialog({ open, onOpenChange, onPatientAdded }: AddPati
     formState: { errors },
     reset,
     setValue,
+    setError,
+    clearErrors,
     watch,
   } = useForm<PatientFormData>({
     defaultValues: {
@@ -62,12 +79,13 @@ export function AddPatientDialog({ open, onOpenChange, onPatientAdded }: AddPati
       mobile: "",
       gender: "",
       date_of_birth: "",
+      age_years: "",
+      age_months: "",
     },
     mode: "onChange",
   });
 
   const gender = watch("gender");
-  const mobile = watch("mobile");
 
   // Extract error message following the priority-based algorithm from documentation
   const extractErrorMessage = (error: any): string => {
@@ -107,18 +125,35 @@ export function AddPatientDialog({ open, onOpenChange, onPatientAdded }: AddPati
     return "An error occurred. Please try again.";
   };
 
-  // Main submit handler - checks if patient exists first, then creates or selects
-  const onSubmit = async (data: PatientFormData) => {
-    if (!data.gender) {
-      toast.error("Please select a gender");
-      return;
+  const getAgeYearsFromDob = (dobString: string): number | null => {
+    if (!dobString) return null;
+    const dob = new Date(dobString);
+    if (Number.isNaN(dob.getTime())) return null;
+    const today = new Date();
+    let ageYears = today.getFullYear() - dob.getFullYear();
+    const m = today.getMonth() - dob.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) {
+      ageYears -= 1;
     }
-    
-    if (!data.date_of_birth) {
-      toast.error("Date of birth is required");
-      return;
-    }
+    return ageYears >= 0 ? ageYears : null;
+  };
 
+  const getComputedAgeYears = (data: PatientFormData): number | null => {
+    if (ageInputMode === "age") {
+      if (!data.age_years) return null;
+      const years = Number(data.age_years);
+      return Number.isFinite(years) ? years : null;
+    }
+    return getAgeYearsFromDob(data.date_of_birth);
+  };
+
+  const isMinorSelfProfile = (data: PatientFormData): boolean => {
+    // Relation is fixed to `self` in current add-patient flow.
+    const computedAgeYears = getComputedAgeYears(data);
+    return computedAgeYears !== null && computedAgeYears < 18;
+  };
+
+  const submitPatientFlow = async (data: PatientFormData, isMinorOverride = false) => {
     setIsSubmitting(true);
     try {
       const normalizedMobile = data.mobile.replace(/\D/g, '');
@@ -151,11 +186,11 @@ export function AddPatientDialog({ open, onOpenChange, onPatientAdded }: AddPati
           }
         } else {
           // No profiles found - create new profile
-          await handleCreatePatient(data, normalizedMobile);
+          await handleCreatePatient(data, normalizedMobile, isMinorOverride);
         }
       } else {
         // Patient does not exist - create new patient
-        await handleCreatePatient(data, normalizedMobile);
+        await handleCreatePatient(data, normalizedMobile, isMinorOverride);
       }
     } catch (error: any) {
       console.error("Error in patient flow:", error);
@@ -164,6 +199,34 @@ export function AddPatientDialog({ open, onOpenChange, onPatientAdded }: AddPati
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  // Main submit handler - checks if patient exists first, then creates or selects
+  const onSubmit = async (data: PatientFormData) => {
+    if (!data.gender) {
+      setError("gender", { type: "manual", message: "Gender is required" });
+      return;
+    }
+
+    const hasDob = Boolean(data.date_of_birth);
+    const hasAgeYears = data.age_years !== "" && data.age_years !== null;
+
+    if ((hasDob && hasAgeYears) || (!hasDob && !hasAgeYears)) {
+      if (ageInputMode === "age") {
+        setError("age_years", { type: "manual", message: "Enter Age or DOB" });
+      } else {
+        setError("date_of_birth", { type: "manual", message: "Enter Age or DOB" });
+      }
+      return;
+    }
+
+    if (isMinorSelfProfile(data)) {
+      setPendingSubmitData(data);
+      setShowMinorWarning(true);
+      return;
+    }
+
+    await submitPatientFlow(data, false);
   };
 
   // Select existing profile
@@ -221,7 +284,7 @@ export function AddPatientDialog({ open, onOpenChange, onPatientAdded }: AddPati
   };
 
   // Create new patient
-  const handleCreatePatient = async (data: PatientFormData, normalizedMobile: string) => {
+  const handleCreatePatient = async (data: PatientFormData, normalizedMobile: string, isMinorOverride = false) => {
     try {
       // Prepare request body - backend requires all fields per CreatePatientSerializer
       const requestBody = {
@@ -229,7 +292,13 @@ export function AddPatientDialog({ open, onOpenChange, onPatientAdded }: AddPati
         first_name: data.first_name,
         last_name: data.last_name || "",
         gender: data.gender.toLowerCase(),
-        date_of_birth: data.date_of_birth,
+        ...(isMinorOverride ? { is_minor_self_override: true } : {}),
+        ...(ageInputMode === "dob"
+          ? { date_of_birth: data.date_of_birth }
+          : {
+              age_years: Number(data.age_years),
+              age_months: data.age_months === "" ? 0 : Number(data.age_months),
+            }),
       };
 
       const response = await axiosClient.post("/patients/create/", requestBody);
@@ -292,6 +361,9 @@ export function AddPatientDialog({ open, onOpenChange, onPatientAdded }: AddPati
   const handleClose = () => {
     if (!isSubmitting) {
       reset();
+      setAgeInputMode("age");
+      setShowMinorWarning(false);
+      setPendingSubmitData(null);
       setStep("form");
       setPatientAccountId(null);
       setProfiles([]);
@@ -305,6 +377,34 @@ export function AddPatientDialog({ open, onOpenChange, onPatientAdded }: AddPati
     setPatientAccountId(null);
     setProfiles([]);
     setCheckedMobile("");
+  };
+
+  const handleMinorContinue = async () => {
+    if (!pendingSubmitData) return;
+    setShowMinorWarning(false);
+    await submitPatientFlow(pendingSubmitData, true);
+    setPendingSubmitData(null);
+  };
+
+  const handleMinorAddGuardian = () => {
+    setShowMinorWarning(false);
+    setPendingSubmitData(null);
+    reset();
+    setAgeInputMode("age");
+    toast.info("Please add guardian details first.");
+  };
+
+  const switchInputMode = (nextMode: AgeInputMode) => {
+    if (nextMode === ageInputMode) return;
+    if (nextMode === "dob") {
+      setValue("age_years", "", { shouldValidate: true });
+      setValue("age_months", "", { shouldValidate: true });
+      clearErrors("age_years");
+    } else {
+      setValue("date_of_birth", "", { shouldValidate: true });
+      clearErrors("date_of_birth");
+    }
+    setAgeInputMode(nextMode);
   };
 
   const getInitials = (name: string) => {
@@ -337,7 +437,7 @@ export function AddPatientDialog({ open, onOpenChange, onPatientAdded }: AddPati
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[550px]">
+      <DialogContent className="sm:max-w-[520px] rounded-2xl border-border/60 shadow-2xl">
         <DialogHeader>
           <DialogTitle>
             {step === "form" && "Add Patient"}
@@ -351,8 +451,8 @@ export function AddPatientDialog({ open, onOpenChange, onPatientAdded }: AddPati
 
         {/* Main Form */}
         {step === "form" && (
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            <div className="space-y-2">
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
+            <div className="space-y-1.5">
               <Label htmlFor="mobile">
                 Mobile Number <span className="text-destructive">*</span>
               </Label>
@@ -378,19 +478,20 @@ export function AddPatientDialog({ open, onOpenChange, onPatientAdded }: AddPati
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <Label htmlFor="first_name">
                   First Name <span className="text-destructive">*</span>
                 </Label>
                 <Input
                   id="first_name"
-                  {...register("first_name", { required: "First name is required" })}
+                  {...register("first_name", { required: "First Name is required" })}
                   placeholder="John"
+                  autoFocus
                   disabled={isSubmitting}
                 />
                 {errors.first_name && <p className="text-xs text-destructive">{errors.first_name.message}</p>}
               </div>
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <Label htmlFor="last_name">Last Name</Label>
                 <Input
                   id="last_name"
@@ -401,49 +502,123 @@ export function AddPatientDialog({ open, onOpenChange, onPatientAdded }: AddPati
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="gender">
-                  Gender <span className="text-destructive">*</span>
-                </Label>
-                <Select
-                  value={gender}
-                  onValueChange={(value) => {
-                    setValue("gender", value, { shouldValidate: true });
-                  }}
-                  disabled={isSubmitting}
-                >
-                  <SelectTrigger id="gender">
-                    <SelectValue placeholder="Select" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="male">Male</SelectItem>
-                    <SelectItem value="female">Female</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-                {errors.gender && <p className="text-xs text-destructive">{errors.gender.message}</p>}
+            <div className="space-y-1.5">
+              <Label>
+                Gender <span className="text-destructive">*</span>
+              </Label>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { label: "Male", value: "male" },
+                  { label: "Female", value: "female" },
+                  { label: "Other", value: "other" },
+                ].map((option) => (
+                  <Button
+                    key={option.value}
+                    type="button"
+                    variant="outline"
+                    className={cn(
+                      "h-10 justify-center rounded-xl border-border/70 bg-background font-medium transition-all",
+                      "hover:border-purple-300 hover:bg-purple-50/60 dark:hover:border-purple-700 dark:hover:bg-purple-900/20",
+                      gender === option.value &&
+                        "border-purple-600 bg-purple-50 text-purple-700 shadow-sm dark:bg-purple-900/30 dark:text-purple-300"
+                    )}
+                    onClick={() => {
+                      setValue("gender", option.value, { shouldValidate: true });
+                      clearErrors("gender");
+                    }}
+                    disabled={isSubmitting}
+                  >
+                    {option.label}
+                  </Button>
+                ))}
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="date_of_birth">
-                  Date of Birth <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  id="date_of_birth"
-                  type="date"
-                  {...register("date_of_birth", { required: "Date of birth is required" })}
-                  max={new Date().toISOString().split("T")[0]}
-                  disabled={isSubmitting}
-                />
-                {errors.date_of_birth && <p className="text-xs text-destructive">{errors.date_of_birth.message}</p>}
-              </div>
+              {errors.gender && <p className="text-xs text-destructive">{errors.gender.message}</p>}
             </div>
 
-            <DialogFooter>
+            <div className="space-y-3 rounded-xl border border-border/70 bg-muted/20 p-3">
+              {ageInputMode === "age" ? (
+                <>
+                  <Label htmlFor="age_years">
+                    Age <span className="text-destructive">*</span>
+                  </Label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Input
+                        id="age_years"
+                        type="number"
+                        min={0}
+                        placeholder="25"
+                        {...register("age_years", {
+                          onChange: (e) => {
+                            const sanitized = e.target.value.replace(/\D/g, "").slice(0, 3);
+                            setValue("age_years", sanitized, { shouldValidate: true });
+                          },
+                        })}
+                        disabled={isSubmitting}
+                      />
+                      <p className="text-xs text-muted-foreground">Years</p>
+                    </div>
+                    <div className="space-y-1">
+                      <Input
+                        id="age_months"
+                        type="number"
+                        min={0}
+                        max={11}
+                        placeholder="0"
+                        {...register("age_months", {
+                          onChange: (e) => {
+                            const sanitized = e.target.value.replace(/\D/g, "").slice(0, 2);
+                            setValue("age_months", sanitized, { shouldValidate: true });
+                          },
+                        })}
+                        disabled={isSubmitting}
+                      />
+                      <p className="text-xs text-muted-foreground">Months</p>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="h-auto w-fit rounded-md px-2 py-1 text-sm text-purple-700 hover:bg-purple-100/60 hover:text-purple-800 dark:text-purple-300 dark:hover:bg-purple-900/30"
+                    onClick={() => switchInputMode("dob")}
+                    disabled={isSubmitting}
+                  >
+                    Switch to DOB
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Label htmlFor="date_of_birth">
+                    DOB <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="date_of_birth"
+                    type="date"
+                    {...register("date_of_birth")}
+                    max={new Date().toISOString().split("T")[0]}
+                    disabled={isSubmitting}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="h-auto w-fit rounded-md px-2 py-1 text-sm text-purple-700 hover:bg-purple-100/60 hover:text-purple-800 dark:text-purple-300 dark:hover:bg-purple-900/30"
+                    onClick={() => switchInputMode("age")}
+                    disabled={isSubmitting}
+                  >
+                    Switch to Age
+                  </Button>
+                </>
+              )}
+              {(errors.age_years?.message === "Enter Age or DOB" || errors.date_of_birth?.message === "Enter Age or DOB") && (
+                <p className="text-xs text-destructive">Enter Age or DOB</p>
+              )}
+            </div>
+
+            <DialogFooter className="gap-2 pt-1">
               <Button type="button" variant="outline" onClick={handleClose} disabled={isSubmitting}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={isSubmitting}>
+              <Button type="submit" className="bg-purple-700 hover:bg-purple-800 dark:bg-purple-600 dark:hover:bg-purple-700" disabled={isSubmitting}>
                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Add Patient
               </Button>
@@ -514,6 +689,26 @@ export function AddPatientDialog({ open, onOpenChange, onPatientAdded }: AddPati
           </div>
         )}
       </DialogContent>
+
+      <AlertDialog open={showMinorWarning} onOpenChange={setShowMinorWarning}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Patient appears under 18</AlertDialogTitle>
+            <AlertDialogDescription>
+              This patient appears to be under 18 and is being added as self profile.
+              It is recommended to add a guardian profile first. You can still continue.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleMinorAddGuardian}>
+              Add Guardian
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={handleMinorContinue}>
+              Continue
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 }
