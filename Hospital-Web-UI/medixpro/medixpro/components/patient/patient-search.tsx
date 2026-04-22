@@ -5,20 +5,29 @@ import { Search, UserPlus, Loader2, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { usePatient, type Patient } from "@/lib/patientContext";
 import { useMobile } from "@/hooks/use-mobile";
 import axiosClient from "@/lib/axiosClient";
 import { cn } from "@/lib/utils";
 import { AddPatientDialog } from "./add-patient-dialog";
+import { useToastNotification } from "@/hooks/use-toast-notification";
 
 interface PatientSearchResult extends Patient {
   age?: number;
 }
 
+interface AddDialogContext {
+  prefillMobile?: string;
+  isExistingAccount?: boolean;
+  existingRelations?: string[];
+  existingPatientAccountId?: string;
+}
+
 export function PatientSearch() {
   const { selectedPatient, setSelectedPatient, isLocked, highlightSearch, clearSearchHighlight } = usePatient();
+  const toast = useToastNotification();
   const isMobile = useMobile();
   const [searchQuery, setSearchQuery] = useState("");
   const [results, setResults] = useState<PatientSearchResult[]>([]);
@@ -26,6 +35,7 @@ export function PatientSearch() {
   const [isOpen, setIsOpen] = useState(false);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showMobileModal, setShowMobileModal] = useState(false);
+  const [addDialogContext, setAddDialogContext] = useState<AddDialogContext>({});
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   
@@ -97,6 +107,51 @@ export function PatientSearch() {
   };
 
   const handleAddPatient = () => {
+    setAddDialogContext({});
+    setShowAddDialog(true);
+    setIsOpen(false);
+  };
+
+  const handleAddProfile = async (patient: PatientSearchResult) => {
+    if (!patient.mobile) return;
+
+    const normalizedMobile = patient.mobile.replace(/\D/g, "").slice(-10);
+    if (normalizedMobile.length !== 10) {
+      toast.error("Invalid mobile number for selected patient.");
+      return;
+    }
+
+    let existingPatientAccountId: string | undefined;
+    let existingRelations: string[] = [];
+    try {
+      const checkResponse = await axiosClient.post("/patients/check-mobile/", {
+        mobile: normalizedMobile,
+      });
+      if (checkResponse.data?.exists && checkResponse.data?.patient_account_id) {
+        existingPatientAccountId = checkResponse.data.patient_account_id;
+        existingRelations = Array.from(
+          new Set(
+            (checkResponse.data?.profiles || [])
+              .map((profile: { relation?: string }) => profile?.relation?.toLowerCase())
+              .filter((relation: string | undefined): relation is string => Boolean(relation))
+          )
+        );
+      }
+    } catch (error) {
+      console.error("Failed to resolve patient account for add profile:", error);
+    }
+
+    if (!existingPatientAccountId) {
+      toast.error("Could not load account for this mobile. Please try again.");
+      return;
+    }
+
+    setAddDialogContext({
+      prefillMobile: normalizedMobile,
+      isExistingAccount: true,
+      existingRelations,
+      existingPatientAccountId,
+    });
     setShowAddDialog(true);
     setIsOpen(false);
   };
@@ -184,7 +239,7 @@ export function PatientSearch() {
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </div>
       ) : results.length > 0 ? (
-        <ScrollArea className="max-h-[300px]">
+        <ScrollArea className="max-h-[420px]">
           <div className="p-2">
             {results.map((patient) => {
               const age = calculateAge(patient.date_of_birth);
@@ -192,30 +247,48 @@ export function PatientSearch() {
                 ? `${age}${patient.gender?.[0]?.toUpperCase() || ""}`
                 : patient.gender?.[0]?.toUpperCase() || "";
               return (
-                <button
-                  key={patient.id}
-                  onClick={() => handleSelectPatient(patient)}
-                  className="w-full rounded-lg px-4 py-3 text-left hover:bg-purple-50 dark:hover:bg-purple-900/20 hover:border-purple-200 dark:hover:border-purple-700 border border-transparent transition-all duration-200 group"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-sm truncate group-hover:text-purple-700 dark:group-hover:text-purple-400 transition-colors">
-                        {patient.full_name || `${patient.first_name} ${patient.last_name}`.trim()}
-                      </p>
-                      <div className="flex items-center gap-2 mt-1.5 text-xs text-muted-foreground">
-                        {ageGender && <span className="px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300">{ageGender}</span>}
-                        {patient.mobile && (
-                          <>
-                            <span>{maskMobile(patient.mobile)}</span>
-                          </>
-                        )}
+                <div key={patient.id} className="mb-2 last:mb-0 rounded-lg border border-purple-100 dark:border-purple-900/60">
+                  <button
+                    onClick={() => handleSelectPatient(patient)}
+                    className="w-full rounded-t-lg px-4 py-3 text-left hover:bg-purple-50 dark:hover:bg-purple-900/20 hover:border-purple-200 dark:hover:border-purple-700 border border-transparent transition-all duration-200 group"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-sm truncate group-hover:text-purple-700 dark:group-hover:text-purple-400 transition-colors">
+                          {patient.full_name || `${patient.first_name} ${patient.last_name}`.trim()}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1.5 text-xs text-muted-foreground">
+                          {patient.relation && (
+                            <span className="px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 capitalize">
+                              {patient.relation}
+                            </span>
+                          )}
+                          {ageGender && <span>{ageGender}</span>}
+                          {patient.mobile && <span>{maskMobile(patient.mobile)}</span>}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </button>
+                  </button>
+                  {patient.mobile && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="w-full justify-start rounded-t-none border-t border-purple-100 px-4 py-2 text-sm font-medium text-purple-700 hover:bg-purple-50 hover:text-purple-800 dark:border-purple-900/60 dark:text-purple-300 dark:hover:bg-purple-900/20"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleAddProfile(patient);
+                      }}
+                      disabled={isLocked}
+                    >
+                      + Add Profile
+                    </Button>
+                  )}
+                </div>
               );
             })}
           </div>
+          <ScrollBar orientation="vertical" />
         </ScrollArea>
       ) : searchQuery.trim().length >= 2 ? (
         <div className="py-8 text-center">
@@ -295,6 +368,10 @@ export function PatientSearch() {
           open={showAddDialog}
           onOpenChange={setShowAddDialog}
           onPatientAdded={handlePatientAdded}
+          prefillMobile={addDialogContext.prefillMobile}
+          isExistingAccount={addDialogContext.isExistingAccount}
+          existingRelations={addDialogContext.existingRelations}
+          existingPatientAccountId={addDialogContext.existingPatientAccountId}
         />
       </>
     );
@@ -402,6 +479,10 @@ export function PatientSearch() {
         open={showAddDialog}
         onOpenChange={setShowAddDialog}
         onPatientAdded={handlePatientAdded}
+        prefillMobile={addDialogContext.prefillMobile}
+        isExistingAccount={addDialogContext.isExistingAccount}
+        existingRelations={addDialogContext.existingRelations}
+        existingPatientAccountId={addDialogContext.existingPatientAccountId}
       />
     </>
   );

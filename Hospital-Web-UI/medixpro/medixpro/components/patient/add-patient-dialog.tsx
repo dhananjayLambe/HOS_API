@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { Loader2, CheckCircle2 } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -17,6 +17,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import axiosClient from "@/lib/axiosClient";
@@ -28,6 +29,10 @@ interface AddPatientDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onPatientAdded: (patient: Patient) => void;
+  prefillMobile?: string;
+  isExistingAccount?: boolean;
+  existingRelations?: string[];
+  existingPatientAccountId?: string;
 }
 
 interface PatientFormData {
@@ -35,6 +40,7 @@ interface PatientFormData {
   last_name: string;
   mobile: string;
   gender: string;
+  relation: string;
   date_of_birth: string;
   age_years: string;
   age_months: string;
@@ -51,7 +57,15 @@ interface PatientProfile {
 type DialogStep = "form" | "exists";
 type AgeInputMode = "age" | "dob";
 
-export function AddPatientDialog({ open, onOpenChange, onPatientAdded }: AddPatientDialogProps) {
+export function AddPatientDialog({
+  open,
+  onOpenChange,
+  onPatientAdded,
+  prefillMobile,
+  isExistingAccount = false,
+  existingRelations = [],
+  existingPatientAccountId,
+}: AddPatientDialogProps) {
   const { setSelectedPatient } = usePatient();
   const toast = useToastNotification();
   const [step, setStep] = useState<DialogStep>("form");
@@ -78,6 +92,7 @@ export function AddPatientDialog({ open, onOpenChange, onPatientAdded }: AddPati
       last_name: "",
       mobile: "",
       gender: "",
+      relation: "self",
       date_of_birth: "",
       age_years: "",
       age_months: "",
@@ -86,6 +101,28 @@ export function AddPatientDialog({ open, onOpenChange, onPatientAdded }: AddPati
   });
 
   const gender = watch("gender");
+  const relation = watch("relation");
+  const normalizedExistingRelations = useMemo(
+    () => existingRelations.map((value) => value.toLowerCase()),
+    [existingRelations]
+  );
+  const hasSelfProfile = normalizedExistingRelations.includes("self");
+  const hasSpouseProfile = normalizedExistingRelations.includes("spouse");
+  const hasFatherProfile = normalizedExistingRelations.includes("father");
+  const hasMotherProfile = normalizedExistingRelations.includes("mother");
+
+  useEffect(() => {
+    if (!open) return;
+
+    if (isExistingAccount && prefillMobile) {
+      setValue("mobile", prefillMobile, { shouldValidate: true });
+      setValue("relation", hasSelfProfile ? "child" : "self", { shouldValidate: true });
+      return;
+    }
+
+    setValue("mobile", "", { shouldValidate: false });
+    setValue("relation", "self", { shouldValidate: false });
+  }, [open, isExistingAccount, prefillMobile, hasSelfProfile, setValue]);
 
   // Extract error message following the priority-based algorithm from documentation
   const extractErrorMessage = (error: any): string => {
@@ -138,6 +175,19 @@ export function AddPatientDialog({ open, onOpenChange, onPatientAdded }: AddPati
     return ageYears >= 0 ? ageYears : null;
   };
 
+  const getDobFromAgeInputs = (yearsInput: string, monthsInput: string): string | null => {
+    const years = Number(yearsInput);
+    const months = monthsInput === "" ? 0 : Number(monthsInput);
+    if (!Number.isFinite(years) || years < 0 || !Number.isFinite(months) || months < 0) {
+      return null;
+    }
+    const today = new Date();
+    const dob = new Date(today);
+    dob.setFullYear(today.getFullYear() - years);
+    dob.setMonth(today.getMonth() - months);
+    return dob.toISOString().split("T")[0];
+  };
+
   const getComputedAgeYears = (data: PatientFormData): number | null => {
     if (ageInputMode === "age") {
       if (!data.age_years) return null;
@@ -148,7 +198,7 @@ export function AddPatientDialog({ open, onOpenChange, onPatientAdded }: AddPati
   };
 
   const isMinorSelfProfile = (data: PatientFormData): boolean => {
-    // Relation is fixed to `self` in current add-patient flow.
+    if (data.relation !== "self") return false;
     const computedAgeYears = getComputedAgeYears(data);
     return computedAgeYears !== null && computedAgeYears < 18;
   };
@@ -161,6 +211,15 @@ export function AddPatientDialog({ open, onOpenChange, onPatientAdded }: AddPati
       if (normalizedMobile.length !== 10) {
         toast.error("Mobile number must be exactly 10 digits");
         setIsSubmitting(false);
+        return;
+      }
+
+      if (isExistingAccount) {
+        if (!existingPatientAccountId) {
+          toast.error("Could not resolve existing patient account");
+          return;
+        }
+        await handleAddProfileToExistingAccount(data, normalizedMobile, existingPatientAccountId, isMinorOverride);
         return;
       }
 
@@ -205,6 +264,11 @@ export function AddPatientDialog({ open, onOpenChange, onPatientAdded }: AddPati
   const onSubmit = async (data: PatientFormData) => {
     if (!data.gender) {
       setError("gender", { type: "manual", message: "Gender is required" });
+      return;
+    }
+
+    if (isExistingAccount && !data.relation) {
+      setError("relation", { type: "manual", message: "Relation is required" });
       return;
     }
 
@@ -358,12 +422,98 @@ export function AddPatientDialog({ open, onOpenChange, onPatientAdded }: AddPati
     }
   };
 
+  const handleAddProfileToExistingAccount = async (
+    data: PatientFormData,
+    normalizedMobile: string,
+    accountId: string,
+    isMinorOverride = false
+  ) => {
+    const normalizeRelation = (value: string | null | undefined) => (value || "").trim().toLowerCase();
+    const normalizeText = (value: string | null | undefined) => (value || "").trim().toLowerCase();
+
+    const dateOfBirth =
+      ageInputMode === "dob"
+        ? data.date_of_birth
+        : getDobFromAgeInputs(data.age_years, data.age_months);
+
+    if (!dateOfBirth) {
+      throw new Error("Enter valid Age or DOB");
+    }
+
+    const payload = {
+      first_name: data.first_name,
+      last_name: data.last_name || "",
+      relation: data.relation,
+      gender: data.gender.toLowerCase(),
+      date_of_birth: dateOfBirth,
+      ...(isMinorOverride ? { is_minor_self_override: true } : {}),
+    };
+
+    const response = await axiosClient.post(`/patients/${accountId}/profiles/`, payload);
+    if (response.data?.status !== "success") {
+      throw new Error(response.data?.message || "Failed to add profile");
+    }
+
+    const createdProfileId =
+      response.data?.profile_id ??
+      response.data?.id ??
+      response.data?.data?.profile_id ??
+      response.data?.data?.id ??
+      null;
+    const searchResponse = await axiosClient.get("/patients/search/", {
+      params: { query: normalizedMobile },
+    });
+
+    let createdProfile: any | null = null;
+    if (Array.isArray(searchResponse.data)) {
+      if (createdProfileId) {
+        createdProfile =
+          searchResponse.data.find(
+            (profile: any) => String(profile.id || profile.profile_id || "") === String(createdProfileId)
+          ) || null;
+      }
+      if (!createdProfile) {
+        const targetFirstName = normalizeText(data.first_name);
+        const targetLastName = normalizeText(data.last_name || "");
+        const targetRelation = normalizeRelation(data.relation);
+        createdProfile =
+          searchResponse.data.find(
+            (profile: any) =>
+              normalizeText(profile.first_name) === targetFirstName &&
+              normalizeText(profile.last_name || "") === targetLastName &&
+              normalizeRelation(profile.relation) === targetRelation
+          ) || searchResponse.data[0] || null;
+      }
+    }
+
+    if (!createdProfile) {
+      throw new Error("Profile added but unable to fetch profile details");
+    }
+
+    const newPatient: Patient = {
+      id: createdProfile.id,
+      first_name: createdProfile.first_name,
+      last_name: createdProfile.last_name || "",
+      full_name: createdProfile.full_name || `${data.first_name} ${data.last_name}`.trim(),
+      gender: createdProfile.gender || data.gender,
+      date_of_birth: createdProfile.date_of_birth || dateOfBirth,
+      mobile: createdProfile.mobile || normalizedMobile,
+      relation: createdProfile.relation || data.relation,
+    };
+
+    setSelectedPatient(newPatient);
+    onPatientAdded(newPatient);
+    handleClose();
+    toast.success("Profile added and selected successfully");
+  };
+
   const handleClose = () => {
     if (!isSubmitting) {
       reset();
       setAgeInputMode("age");
       setShowMinorWarning(false);
       setPendingSubmitData(null);
+      setValue("relation", "self", { shouldValidate: false });
       setStep("form");
       setPatientAccountId(null);
       setProfiles([]);
@@ -471,11 +621,50 @@ export function AddPatientDialog({ open, onOpenChange, onPatientAdded }: AddPati
                     setValue("mobile", value, { shouldValidate: true });
                   },
                 })}
-                disabled={isSubmitting}
+                disabled={isSubmitting || isExistingAccount}
                 maxLength={10}
               />
               {errors.mobile && <p className="text-xs text-destructive">{errors.mobile.message}</p>}
+              {isExistingAccount && (
+                <p className="text-xs text-muted-foreground">Adding new profile for this number</p>
+              )}
             </div>
+
+            {isExistingAccount && (
+              <div className="space-y-1.5">
+                <Label htmlFor="relation">
+                  Relation <span className="text-destructive">*</span>
+                </Label>
+                <Select
+                  value={relation}
+                  onValueChange={(value) => {
+                    setValue("relation", value, { shouldValidate: true });
+                    clearErrors("relation");
+                  }}
+                  disabled={isSubmitting}
+                >
+                  <SelectTrigger id="relation">
+                    <SelectValue placeholder="Select relation" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="self" disabled={hasSelfProfile}>
+                      {hasSelfProfile ? "Self (already exists)" : "Self"}
+                    </SelectItem>
+                  <SelectItem value="child">Child</SelectItem>
+                  <SelectItem value="spouse" disabled={hasSpouseProfile}>
+                    {hasSpouseProfile ? "Spouse (already exists)" : "Spouse"}
+                  </SelectItem>
+                  <SelectItem value="father" disabled={hasFatherProfile}>
+                    {hasFatherProfile ? "Father (already exists)" : "Father"}
+                  </SelectItem>
+                  <SelectItem value="mother" disabled={hasMotherProfile}>
+                    {hasMotherProfile ? "Mother (already exists)" : "Mother"}
+                  </SelectItem>
+                  </SelectContent>
+                </Select>
+                {errors.relation && <p className="text-xs text-destructive">{errors.relation.message}</p>}
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
