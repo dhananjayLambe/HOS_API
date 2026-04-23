@@ -391,7 +391,7 @@ class PatientProfileSearchView(ListAPIView):
             Q(account__user__username__icontains=query)
         )
 
-        queryset = queryset.distinct().order_by('first_name', 'last_name')[:10]
+        queryset = queryset.distinct().order_by('first_name', 'last_name')[:50]
 
         serializer = self.get_serializer(queryset, many=True)
         data = serializer.data

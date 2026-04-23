@@ -5,7 +5,6 @@ import { Search, UserPlus, Loader2, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { usePatient, type Patient } from "@/lib/patientContext";
 import { useMobile } from "@/hooks/use-mobile";
@@ -86,7 +85,7 @@ export function PatientSearch() {
       const response = await axiosClient.get("/patients/search/", {
         params: { query: query.trim() },
       });
-      setResults(response.data.slice(0, 5)); // Limit to 5 results
+      setResults(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
       console.error("Patient search error:", error);
       setResults([]);
@@ -239,57 +238,61 @@ export function PatientSearch() {
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </div>
       ) : results.length > 0 ? (
-        <ScrollArea className="max-h-[420px]">
-          <div className="p-2">
-            {results.map((patient) => {
-              const age = calculateAge(patient.date_of_birth);
-              const ageGender = age
-                ? `${age}${patient.gender?.[0]?.toUpperCase() || ""}`
-                : patient.gender?.[0]?.toUpperCase() || "";
-              return (
-                <div key={patient.id} className="mb-2 last:mb-0 rounded-lg border border-purple-100 dark:border-purple-900/60">
-                  <button
-                    onClick={() => handleSelectPatient(patient)}
-                    className="w-full rounded-t-lg px-4 py-3 text-left hover:bg-purple-50 dark:hover:bg-purple-900/20 hover:border-purple-200 dark:hover:border-purple-700 border border-transparent transition-all duration-200 group"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-sm truncate group-hover:text-purple-700 dark:group-hover:text-purple-400 transition-colors">
-                          {patient.full_name || `${patient.first_name} ${patient.last_name}`.trim()}
-                        </p>
-                        <div className="flex items-center gap-2 mt-1.5 text-xs text-muted-foreground">
-                          {patient.relation && (
-                            <span className="px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 capitalize">
-                              {patient.relation}
-                            </span>
-                          )}
-                          {ageGender && <span>{ageGender}</span>}
-                          {patient.mobile && <span>{maskMobile(patient.mobile)}</span>}
-                        </div>
+        <div
+          className={cn(
+            "max-h-[min(50vh,360px)] min-h-0 overflow-y-auto overflow-x-hidden overscroll-y-contain p-2 pr-1.5",
+            "[scrollbar-gutter:stable] [scrollbar-width:thin]",
+            "[&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-purple-100/60 dark:[&::-webkit-scrollbar-track]:bg-purple-950/50",
+            "[&::-webkit-scrollbar-thumb]:min-h-[40px] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-purple-300 dark:[&::-webkit-scrollbar-thumb]:bg-purple-700"
+          )}
+        >
+          {results.map((patient) => {
+            const age = calculateAge(patient.date_of_birth);
+            const ageGender = age
+              ? `${age}${patient.gender?.[0]?.toUpperCase() || ""}`
+              : patient.gender?.[0]?.toUpperCase() || "";
+            return (
+              <div key={patient.id} className="mb-2 last:mb-0 rounded-lg border border-purple-100 dark:border-purple-900/60">
+                <button
+                  onClick={() => handleSelectPatient(patient)}
+                  className="w-full rounded-t-lg px-4 py-3 text-left hover:bg-purple-50 dark:hover:bg-purple-900/20 hover:border-purple-200 dark:hover:border-purple-700 border border-transparent transition-all duration-200 group"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-sm truncate group-hover:text-purple-700 dark:group-hover:text-purple-400 transition-colors">
+                        {patient.full_name || `${patient.first_name} ${patient.last_name}`.trim()}
+                      </p>
+                      <div className="flex items-center gap-2 mt-1.5 text-xs text-muted-foreground">
+                        {patient.relation && (
+                          <span className="px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 capitalize">
+                            {patient.relation}
+                          </span>
+                        )}
+                        {ageGender && <span>{ageGender}</span>}
+                        {patient.mobile && <span>{maskMobile(patient.mobile)}</span>}
                       </div>
                     </div>
-                  </button>
-                  {patient.mobile && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className="w-full justify-start rounded-t-none border-t border-purple-100 px-4 py-2 text-sm font-medium text-purple-700 hover:bg-purple-50 hover:text-purple-800 dark:border-purple-900/60 dark:text-purple-300 dark:hover:bg-purple-900/20"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        handleAddProfile(patient);
-                      }}
-                      disabled={isLocked}
-                    >
-                      + Add Profile
-                    </Button>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-          <ScrollBar orientation="vertical" />
-        </ScrollArea>
+                  </div>
+                </button>
+                {patient.mobile && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="w-full justify-start rounded-t-none border-t border-purple-100 px-4 py-2 text-sm font-medium text-purple-700 hover:bg-purple-50 hover:text-purple-800 dark:border-purple-900/60 dark:text-purple-300 dark:hover:bg-purple-900/20"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleAddProfile(patient);
+                    }}
+                    disabled={isLocked}
+                  >
+                    + Add Profile
+                  </Button>
+                )}
+              </div>
+            );
+          })}
+        </div>
       ) : searchQuery.trim().length >= 2 ? (
         <div className="py-8 text-center">
           <p className="text-sm text-muted-foreground mb-2">No patient found</p>
