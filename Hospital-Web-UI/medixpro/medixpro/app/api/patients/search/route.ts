@@ -1,8 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { getDjangoApiBase } from "@/lib/get-django-api-base";
 
-const DJANGO_API_URL = process.env.DJANGO_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/";
-
-// GET - Search patients
+// GET - Search patients (BFF → Django; browser uses same-origin /api + JWT)
 export async function GET(request: NextRequest) {
   try {
     const authHeader = request.headers.get("authorization") || request.headers.get("Authorization");
@@ -13,7 +12,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json([], { status: 200 });
     }
 
-    const url = `${DJANGO_API_URL}patients/search/?query=${encodeURIComponent(query.trim())}`;
+    const djangoBase = getDjangoApiBase();
+    const url = `${djangoBase}patients/search/?query=${encodeURIComponent(query.trim())}`;
 
     const response = await fetch(url, {
       method: "GET",

@@ -1,6 +1,7 @@
 "use client";
 
 import axios, { AxiosInstance, InternalAxiosRequestConfig, AxiosError } from "axios";
+import { extractAuthTokens } from "./auth-token-utils";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
 /** Base for Django REST paths. Prefer same-origin `/api/` + Next rewrites (see next.config.mjs) so the browser hits :3000, not :8000. Override with NEXT_PUBLIC_BACKEND_URL for direct-to-Django. */
@@ -118,9 +119,9 @@ axiosClient.interceptors.response.use(
           refresh_token: refreshToken,
         });
 
-        const { tokens } = response.data;
-        const newAccessToken = tokens?.access || response.data.access;
-        const newRefreshToken = tokens?.refresh || response.data.refresh;
+        const parsedTokens = extractAuthTokens(response.data);
+        const newAccessToken = parsedTokens.access;
+        const newRefreshToken = parsedTokens.refresh;
 
         // Store new tokens
         if (newAccessToken) {
@@ -278,8 +279,8 @@ backendAxiosClient.interceptors.response.use(
           const response = await refreshAxios.post("/api/refresh-token/", {
             refresh_token: refreshToken,
           });
-          const { tokens } = response.data;
-          const newAccessToken = tokens?.access || response.data.access;
+          const parsedTokens = extractAuthTokens(response.data);
+          const newAccessToken = parsedTokens.access;
           if (newAccessToken) {
             localStorage.setItem(ACCESS_TOKEN_KEY, newAccessToken);
             if (originalRequest.headers) {

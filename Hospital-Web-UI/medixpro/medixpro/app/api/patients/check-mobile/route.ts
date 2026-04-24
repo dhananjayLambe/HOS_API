@@ -1,6 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
-
-const DJANGO_API_URL = process.env.DJANGO_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/";
+import { getDjangoApiBase } from "@/lib/get-django-api-base";
 
 // POST - Check if patient exists by mobile number
 export async function POST(request: NextRequest) {
@@ -19,7 +18,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const url = `${DJANGO_API_URL}patients/check-mobile/`;
+    const url = `${getDjangoApiBase()}patients/check-mobile/`;
 
     const response = await fetch(url, {
       method: "POST",

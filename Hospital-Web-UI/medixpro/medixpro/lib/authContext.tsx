@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import axiosClient, { ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY, ROLE_KEY } from "./axiosClient";
 import { isTokenValid, getRoleRedirectPath } from "./jwtUtils";
+import { extractAuthTokens } from "./auth-token-utils";
 
 interface UserInfo {
   user_id: string | null;
@@ -122,10 +123,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const data = res.data;
       
-      // Update tokens if provided
-      if (data.tokens) {
-        localStorage.setItem(ACCESS_TOKEN_KEY, data.tokens.access);
-        localStorage.setItem(REFRESH_TOKEN_KEY, data.tokens.refresh);
+      // Update tokens if provided (supports nested and flat token payloads)
+      const tokens = extractAuthTokens(data);
+      if (tokens.access) {
+        localStorage.setItem(ACCESS_TOKEN_KEY, tokens.access);
+      }
+      if (tokens.refresh) {
+        localStorage.setItem(REFRESH_TOKEN_KEY, tokens.refresh);
       }
       
       // Update role

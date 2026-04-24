@@ -36,7 +36,7 @@ from django.db.models import Q
 from rest_framework.generics import ListAPIView
 from django.db import transaction
 from django.db.models import F, Value, CharField
-from django.db.models.functions import Concat
+from django.db.models.functions import Concat, Replace
 from django.utils import timezone
 import traceback
 
@@ -335,6 +335,7 @@ class PatientProfileSearchView(ListAPIView):
 
     def _get_user_clinic_ids(self, user):
         """Return clinic ids for doctor/helpdesk users to keep results clinic-scoped."""
+        print("PatientProfileSearchView: Getting user clinic ids")
         clinic_ids = set()
         if hasattr(user, "doctor"):
             clinic_ids.update(user.doctor.clinics.values_list("id", flat=True))
@@ -353,8 +354,12 @@ class PatientProfileSearchView(ListAPIView):
         if len(query) > 50:
             query = query[:50]
 
+        normalized_query = " ".join(query.split())
+        query_tokens = [token for token in normalized_query.split(" ") if token]
+        digit_query = "".join(ch for ch in normalized_query if ch.isdigit())
+
         # Patient search is global for doctor/helpdesk and should not depend on clinic.
-        cache_key = f"patient_search_v3_all_{query.lower()}"
+        cache_key = f"patient_search_v4_all_{normalized_query.lower()}"
         cached_data = None
 
         # Safely try cache get – if Redis is down, log and ignore errors
@@ -367,7 +372,9 @@ class PatientProfileSearchView(ListAPIView):
         if cached_data:
             return Response(cached_data)
 
-        # Basic icontains search across first name, last name, and mobile (username)
+        # Fuzzy-friendly search:
+        # - tokenized name matching ("rah sh" should match Rahul Sharma)
+        # - digit-normalized mobile matching (+91/space/hyphen differences)
         queryset = PatientProfile.objects.select_related('account__user').annotate(
             full_name_search=Concat(
                 F('first_name'),
@@ -381,15 +388,44 @@ class PatientProfileSearchView(ListAPIView):
                 F('account__user__last_name'),
                 output_field=CharField(),
             ),
-        ).filter(
-            Q(first_name__icontains=query) |
-            Q(last_name__icontains=query) |
-            Q(full_name_search__icontains=query) |
-            Q(account__user__first_name__icontains=query) |
-            Q(account__user__last_name__icontains=query) |
-            Q(user_full_name_search__icontains=query) |
-            Q(account__user__username__icontains=query)
+            mobile_digits=Replace(
+                Replace(
+                    Replace(
+                        Replace(F('account__user__username'), Value('+'), Value('')),
+                        Value('-'),
+                        Value(''),
+                    ),
+                    Value(' '),
+                    Value(''),
+                ),
+                Value('('),
+                Value(''),
+            ),
         )
+
+        token_filter = Q()
+        for token in query_tokens:
+            token_filter &= (
+                Q(first_name__icontains=token) |
+                Q(last_name__icontains=token) |
+                Q(full_name_search__icontains=token) |
+                Q(account__user__first_name__icontains=token) |
+                Q(account__user__last_name__icontains=token) |
+                Q(user_full_name_search__icontains=token) |
+                Q(account__user__username__icontains=token)
+            )
+
+        if digit_query:
+            token_filter |= (
+                Q(account__user__username__icontains=digit_query) |
+                Q(mobile_digits__icontains=digit_query)
+            )
+
+            # Last 4-6 digits should also work fast for helpdesk lookup.
+            if len(digit_query) <= 6:
+                token_filter |= Q(mobile_digits__endswith=digit_query)
+
+        queryset = queryset.filter(token_filter)
 
         queryset = queryset.distinct().order_by('first_name', 'last_name')[:50]
 

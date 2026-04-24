@@ -1,15 +1,19 @@
 "use client";
 
-import { AddPatientMinimalForm } from "./AddPatientMinimalForm";
+import { AddPatientDialog } from "@/components/patient/add-patient-dialog";
+import type { Patient } from "@/lib/patientContext";
+import { useIsMobile } from "@/components/ui/use-mobile";
+import { HelpdeskHeaderLiveSearch } from "./HelpdeskHeaderLiveSearch";
 import { helpdeskBottomNavItems, helpdeskNavItems, type HelpdeskNavItem } from "./helpdeskNavConfig";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useAuth } from "@/lib/authContext";
+import axiosClient from "@/lib/axiosClient";
 import { getRoleRedirectPath } from "@/lib/jwtUtils";
 import { useHelpdeskQueueStore } from "@/lib/helpdeskQueueStore";
 import { cn } from "@/lib/utils";
-import { Menu, Mic, Plus, Search } from "lucide-react";
+import type { PatientSearchRow } from "@/lib/patientSearchDisplay";
+import { Menu, Plus } from "lucide-react";
 import { NotificationDropdown } from "@/components/notification-dropdown";
 import { UserNav } from "@/components/user-nav";
 import Link from "next/link";
@@ -103,13 +107,20 @@ export function HelpdeskLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const { role, sessionChecked } = useAuth();
-  const setHeaderSearch = useHelpdeskQueueStore((s) => s.setHeaderSearch);
-  const headerSearch = useHelpdeskQueueStore((s) => s.headerSearch);
-  const addPatient = useHelpdeskQueueStore((s) => s.addPatient);
+  const addPatientFromSearch = useHelpdeskQueueStore((s) => s.addPatientFromSearch);
+  const findEntryByPatient = useHelpdeskQueueStore((s) => s.findEntryByPatient);
+  const setPreConsultTargetId = useHelpdeskQueueStore((s) => s.setPreConsultTargetId);
   const openPreConsultFlow = useHelpdeskQueueStore((s) => s.openPreConsultFlow);
+  const isMobile = useIsMobile();
 
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [addPatientOpen, setAddPatientOpen] = useState(false);
+  const [addDialogContext, setAddDialogContext] = useState<{
+    prefillMobile?: string;
+    isExistingAccount?: boolean;
+    existingRelations?: string[];
+    existingPatientAccountId?: string;
+  }>({});
 
   useEffect(() => {
     if (!sessionChecked) return;
@@ -131,6 +142,62 @@ export function HelpdeskLayout({ children }: { children: React.ReactNode }) {
   const isActive = (item: HelpdeskNavItem) => {
     if (item.href === "/helpdesk/queue") return pathname === "/helpdesk/queue";
     return pathname === item.href || pathname.startsWith(item.href + "/");
+  };
+
+  const handleLiveSelect = (patient: PatientSearchRow) => {
+    const existing = findEntryByPatient({ id: patient.id, mobile: patient.mobile });
+    const queueEntryId = existing ? existing.id : addPatientFromSearch(patient);
+    if (existing) {
+      toast.message("Already in queue");
+    } else {
+      toast.success("Added to queue");
+    }
+    setPreConsultTargetId(queueEntryId);
+    router.push("/helpdesk/queue");
+  };
+
+  const handleOpenAddNew = () => {
+    setAddDialogContext({});
+    setAddPatientOpen(true);
+  };
+
+  const handleAddProfileFromSearch = async (patient: PatientSearchRow) => {
+    if (!patient.mobile) return;
+    const normalizedMobile = patient.mobile.replace(/\D/g, "").slice(-10);
+    if (normalizedMobile.length !== 10) {
+      toast.error("Invalid mobile number for selected patient.");
+      return;
+    }
+
+    try {
+      const checkResponse = await axiosClient.post("/patients/check-mobile/", {
+        mobile: normalizedMobile,
+      });
+
+      const existingPatientAccountId = checkResponse.data?.patient_account_id;
+      if (!checkResponse.data?.exists || !existingPatientAccountId) {
+        toast.error("Could not load account for this mobile. Please try again.");
+        return;
+      }
+
+      const existingRelations = Array.from(
+        new Set(
+          (checkResponse.data?.profiles || [])
+            .map((profile: { relation?: string }) => profile?.relation?.toLowerCase())
+            .filter((relation: string | undefined): relation is string => Boolean(relation))
+        )
+      );
+
+      setAddDialogContext({
+        prefillMobile: normalizedMobile,
+        isExistingAccount: true,
+        existingRelations,
+        existingPatientAccountId,
+      });
+      setAddPatientOpen(true);
+    } catch {
+      toast.error("Failed to load profile details. Please try again.");
+    }
   };
 
   if (!sessionChecked) {
@@ -167,38 +234,17 @@ export function HelpdeskLayout({ children }: { children: React.ReactNode }) {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <div className="relative min-w-0 flex-1">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-              <Input
-                placeholder="Search queue (press Enter for all patients)"
-                value={headerSearch}
-                onChange={(e) => setHeaderSearch(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key !== "Enter") return;
-                  const q = headerSearch.trim();
-                  if (q.length < 2) {
-                    toast.message("Type at least 2 characters");
-                    return;
-                  }
-                  router.push(`/helpdesk/patients?q=${encodeURIComponent(q)}`);
-                }}
-                className="h-11 flex-1 rounded-full border-border bg-background pl-9 pr-11 shadow-sm"
-                aria-label="Search patient"
-              />
-              <button
-                type="button"
-                className="absolute right-1.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                aria-label="Voice search (coming soon)"
-              >
-                <Mic className="h-4 w-4" />
-              </button>
-            </div>
+            <HelpdeskHeaderLiveSearch
+              onSelectPatient={handleLiveSelect}
+              onAddNew={handleOpenAddNew}
+              onAddProfile={handleAddProfileFromSearch}
+            />
             <Button
               type="button"
               size="icon"
               className="h-11 w-11 shrink-0 rounded-full"
               aria-label="Add patient"
-              onClick={() => setAddPatientOpen(true)}
+              onClick={handleOpenAddNew}
             >
               <Plus className="h-5 w-5" />
             </Button>
@@ -258,23 +304,31 @@ export function HelpdeskLayout({ children }: { children: React.ReactNode }) {
         </div>
       </nav>
 
-      <Sheet open={addPatientOpen} onOpenChange={setAddPatientOpen}>
-        <SheetContent side="bottom" className="rounded-t-2xl">
-          <SheetHeader>
-            <SheetTitle>Add patient</SheetTitle>
-          </SheetHeader>
-          <div className="mt-4">
-            <AddPatientMinimalForm
-              onSubmit={(name, mobile) => {
-                addPatient(name, mobile);
-                toast.success("Added to queue");
-                setAddPatientOpen(false);
-                router.push("/helpdesk/queue");
-              }}
-            />
-          </div>
-        </SheetContent>
-      </Sheet>
+      <AddPatientDialog
+        open={addPatientOpen}
+        onOpenChange={(open) => {
+          setAddPatientOpen(open);
+          if (!open) setAddDialogContext({});
+        }}
+        onPatientAdded={(patient: Patient) => {
+          const existing = findEntryByPatient({ id: patient.id, mobile: patient.mobile });
+          const queueEntryId = existing ? existing.id : addPatientFromSearch(patient);
+          if (existing) {
+            toast.message("Already in queue");
+          } else {
+            toast.success("Added to queue");
+          }
+          setPreConsultTargetId(queueEntryId);
+          router.push("/helpdesk/queue");
+        }}
+        syncGlobalPatientContext={false}
+        submitLabel="+ Add to Queue"
+        presentation={isMobile ? "bottom-sheet" : "default"}
+        prefillMobile={addDialogContext.prefillMobile}
+        isExistingAccount={addDialogContext.isExistingAccount}
+        existingRelations={addDialogContext.existingRelations}
+        existingPatientAccountId={addDialogContext.existingPatientAccountId}
+      />
     </div>
   );
 }

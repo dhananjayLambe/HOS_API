@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { Search, UserPlus, Loader2, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
@@ -12,10 +12,9 @@ import axiosClient from "@/lib/axiosClient";
 import { cn } from "@/lib/utils";
 import { AddPatientDialog } from "./add-patient-dialog";
 import { useToastNotification } from "@/hooks/use-toast-notification";
-
-interface PatientSearchResult extends Patient {
-  age?: number;
-}
+import { usePatientSearchQuery } from "@/hooks/use-patient-search-query";
+import { PatientSearchResultList } from "./patient-search-result-list";
+import type { PatientSearchRow } from "@/lib/patientSearchDisplay";
 
 interface AddDialogContext {
   prefillMobile?: string;
@@ -28,78 +27,29 @@ export function PatientSearch() {
   const { selectedPatient, setSelectedPatient, isLocked, highlightSearch, clearSearchHighlight } = usePatient();
   const toast = useToastNotification();
   const isMobile = useMobile();
-  const [searchQuery, setSearchQuery] = useState("");
-  const [results, setResults] = useState<PatientSearchResult[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const isSearchDisabled = !!selectedPatient;
+
+  const { query, setQuery, results, isLoading, error, reset } = usePatientSearchQuery(!isSearchDisabled);
+
   const [isOpen, setIsOpen] = useState(false);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showMobileModal, setShowMobileModal] = useState(false);
   const [addDialogContext, setAddDialogContext] = useState<AddDialogContext>({});
   const inputRef = useRef<HTMLInputElement>(null);
-  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
-  
-  // Disable search when patient is selected
-  const isSearchDisabled = !!selectedPatient;
 
-  // Handle search highlight - focus input when highlighted
   useEffect(() => {
     if (highlightSearch && inputRef.current && !isSearchDisabled) {
       inputRef.current.focus();
       setIsOpen(true);
-      // Scroll to search bar smoothly
       inputRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
     }
   }, [highlightSearch, isSearchDisabled]);
 
-  // Debounced search - only if search is not disabled
-  useEffect(() => {
-    if (isSearchDisabled) {
-      setSearchQuery("");
-      setResults([]);
-      setIsOpen(false);
-      return;
-    }
-
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
-    }
-
-    if (searchQuery.trim().length >= 2) {
-      debounceTimerRef.current = setTimeout(() => {
-        performSearch(searchQuery);
-      }, 300);
-    } else {
-      setResults([]);
-    }
-
-    return () => {
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
-      }
-    };
-  }, [searchQuery, isSearchDisabled]);
-
-  const performSearch = async (query: string) => {
-    setIsLoading(true);
-    try {
-      const response = await axiosClient.get("/patients/search/", {
-        params: { query: query.trim() },
-      });
-      setResults(Array.isArray(response.data) ? response.data : []);
-    } catch (error) {
-      console.error("Patient search error:", error);
-      setResults([]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleSelectPatient = (patient: PatientSearchResult) => {
-    setSelectedPatient(patient);
+  const handleSelectPatient = (patient: PatientSearchRow) => {
+    setSelectedPatient(patient as Patient);
     setIsOpen(false);
-    setSearchQuery("");
-    setResults([]);
-    // Clear highlight when patient is selected
+    setShowMobileModal(false);
+    reset();
     if (highlightSearch) {
       clearSearchHighlight();
     }
@@ -109,9 +59,10 @@ export function PatientSearch() {
     setAddDialogContext({});
     setShowAddDialog(true);
     setIsOpen(false);
+    setShowMobileModal(false);
   };
 
-  const handleAddProfile = async (patient: PatientSearchResult) => {
+  const handleAddProfile = async (patient: PatientSearchRow) => {
     if (!patient.mobile) return;
 
     const normalizedMobile = patient.mobile.replace(/\D/g, "").slice(-10);
@@ -136,8 +87,8 @@ export function PatientSearch() {
           )
         );
       }
-    } catch (error) {
-      console.error("Failed to resolve patient account for add profile:", error);
+    } catch (err) {
+      console.error("Failed to resolve patient account for add profile:", err);
     }
 
     if (!existingPatientAccountId) {
@@ -153,15 +104,7 @@ export function PatientSearch() {
     });
     setShowAddDialog(true);
     setIsOpen(false);
-  };
-
-  const handleClosePopover = () => {
-    setIsOpen(false);
-    // Clear search only if no patient was selected
-    if (!selectedPatient) {
-      setSearchQuery("");
-      setResults([]);
-    }
+    setShowMobileModal(false);
   };
 
   const handlePatientAdded = (patient: Patient) => {
@@ -169,34 +112,23 @@ export function PatientSearch() {
     setShowAddDialog(false);
   };
 
-  const maskMobile = (mobile?: string) => {
-    if (!mobile) return "N/A";
-    if (mobile.length <= 4) return mobile;
-    const last4 = mobile.slice(-4);
-    return `+91-XXXX${last4}`;
-  };
+  const listProps = {
+    query,
+    results,
+    isLoading,
+    error,
+    onSelect: handleSelectPatient,
+    onAddNew: handleAddPatient,
+    onAddProfile: handleAddProfile,
+    addProfileDisabled: isLocked,
+    addNewDisabled: isLocked,
+    showAddProfile: true,
+  } as const;
 
-  const calculateAge = (dateOfBirth?: string) => {
-    if (!dateOfBirth) return null;
-    try {
-      const birthDate = new Date(dateOfBirth);
-      const today = new Date();
-      let age = today.getFullYear() - birthDate.getFullYear();
-      const monthDiff = today.getMonth() - birthDate.getMonth();
-      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-        age--;
-      }
-      return age;
-    } catch {
-      return null;
-    }
-  };
-
-  // If patient is selected, show disabled search
   if (selectedPatient) {
     return (
       <div className="relative w-full min-w-[400px]">
-        <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground/50 z-10 pointer-events-none" />
+        <Search className="pointer-events-none absolute left-4 top-1/2 z-10 h-5 w-5 -translate-y-1/2 text-muted-foreground/50" />
         <Input
           type="text"
           placeholder="Patient selected - Unselect to search"
@@ -204,129 +136,22 @@ export function PatientSearch() {
           disabled={true}
           readOnly={true}
           className={cn(
-            "w-full h-11 rounded-lg pl-12 pr-4 text-base",
-            "bg-muted border-2 border-muted",
-            "cursor-not-allowed opacity-60",
-            "text-muted-foreground"
+            "h-11 w-full cursor-not-allowed rounded-lg border-2 border-muted bg-muted pl-12 pr-4 text-base",
+            "text-muted-foreground opacity-60"
           )}
         />
       </div>
     );
   }
 
-  const SearchResults = () => (
-    <div className="flex flex-col">
-      {/* Header with close button */}
-      <div className="flex items-center justify-between p-3 border-b border-purple-200 dark:border-purple-800">
-        <span className="text-sm font-medium text-foreground">Search Results</span>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-6 w-6"
-          onClick={() => {
-            setIsOpen(false);
-            setSearchQuery("");
-            setResults([]);
-          }}
-        >
-          <X className="h-4 w-4" />
-        </Button>
-      </div>
-      
-      {isLoading ? (
-        <div className="flex items-center justify-center py-8">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        </div>
-      ) : results.length > 0 ? (
-        <div
-          className={cn(
-            "max-h-[min(50vh,360px)] min-h-0 overflow-y-auto overflow-x-hidden overscroll-y-contain p-2 pr-1.5",
-            "[scrollbar-gutter:stable] [scrollbar-width:thin]",
-            "[&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-purple-100/60 dark:[&::-webkit-scrollbar-track]:bg-purple-950/50",
-            "[&::-webkit-scrollbar-thumb]:min-h-[40px] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-purple-300 dark:[&::-webkit-scrollbar-thumb]:bg-purple-700"
-          )}
-        >
-          {results.map((patient) => {
-            const age = calculateAge(patient.date_of_birth);
-            const ageGender = age
-              ? `${age}${patient.gender?.[0]?.toUpperCase() || ""}`
-              : patient.gender?.[0]?.toUpperCase() || "";
-            return (
-              <div key={patient.id} className="mb-2 last:mb-0 rounded-lg border border-purple-100 dark:border-purple-900/60">
-                <button
-                  onClick={() => handleSelectPatient(patient)}
-                  className="w-full rounded-t-lg px-4 py-3 text-left hover:bg-purple-50 dark:hover:bg-purple-900/20 hover:border-purple-200 dark:hover:border-purple-700 border border-transparent transition-all duration-200 group"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-sm truncate group-hover:text-purple-700 dark:group-hover:text-purple-400 transition-colors">
-                        {patient.full_name || `${patient.first_name} ${patient.last_name}`.trim()}
-                      </p>
-                      <div className="flex items-center gap-2 mt-1.5 text-xs text-muted-foreground">
-                        {patient.relation && (
-                          <span className="px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 capitalize">
-                            {patient.relation}
-                          </span>
-                        )}
-                        {ageGender && <span>{ageGender}</span>}
-                        {patient.mobile && <span>{maskMobile(patient.mobile)}</span>}
-                      </div>
-                    </div>
-                  </div>
-                </button>
-                {patient.mobile && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    className="w-full justify-start rounded-t-none border-t border-purple-100 px-4 py-2 text-sm font-medium text-purple-700 hover:bg-purple-50 hover:text-purple-800 dark:border-purple-900/60 dark:text-purple-300 dark:hover:bg-purple-900/20"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      handleAddProfile(patient);
-                    }}
-                    disabled={isLocked}
-                  >
-                    + Add Profile
-                  </Button>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      ) : searchQuery.trim().length >= 2 ? (
-        <div className="py-8 text-center">
-          <p className="text-sm text-muted-foreground mb-2">No patient found</p>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleAddPatient}
-            disabled={isLocked}
-            className="gap-2"
-          >
-            <UserPlus className="h-4 w-4" />
-            <span>Add New Patient</span>
-          </Button>
-        </div>
-      ) : (
-        <div className="py-6 text-center">
-          <p className="text-sm text-muted-foreground">Start typing to search for patients...</p>
-        </div>
-      )}
-      <div className="border-t border-purple-200 dark:border-purple-800 bg-purple-50/50 dark:bg-purple-900/10 p-3">
-        <Button
-          variant="ghost"
-          className="w-full justify-start gap-2 hover:bg-purple-100 dark:hover:bg-purple-900/30 hover:text-purple-700 dark:hover:text-purple-400 font-medium"
-          onClick={handleAddPatient}
-          disabled={isLocked}
-        >
-          <UserPlus className="h-4 w-4" />
-          <span>Add New Patient</span>
-        </Button>
-      </div>
-    </div>
+  const SearchResults = ({ variant, onClose }: { variant: "popover" | "inline"; onClose?: () => void }) => (
+    <PatientSearchResultList
+      variant={variant}
+      {...listProps}
+      onClose={onClose}
+    />
   );
 
-  // Mobile: Show search icon button that opens modal
   if (isMobile) {
     return (
       <>
@@ -336,34 +161,45 @@ export function PatientSearch() {
           onClick={() => !isLocked && !isSearchDisabled && setShowMobileModal(true)}
           disabled={isLocked || isSearchDisabled}
           className={cn(
-            "h-11 w-11 border-2 border-purple-300 dark:border-purple-700",
-            "bg-purple-50 dark:bg-purple-900/20",
-            "hover:bg-purple-100 dark:hover:bg-purple-900/30",
-            "shadow-sm hover:shadow-md transition-all",
+            "h-11 w-11 border-2 border-purple-300 bg-purple-50 shadow-sm transition-all hover:bg-purple-100 dark:border-purple-700 dark:bg-purple-900/20 dark:hover:bg-purple-900/30",
+            "hover:shadow-md",
             (isLocked || isSearchDisabled) && "cursor-not-allowed opacity-50"
           )}
         >
           <Search className="h-5 w-5 text-purple-700 dark:text-purple-400" />
         </Button>
-        <Dialog open={showMobileModal} onOpenChange={setShowMobileModal}>
-          <DialogContent className="sm:max-w-[425px] p-0 gap-0">
-            <div className="p-4 border-b bg-primary/5">
+        <Dialog
+          open={showMobileModal}
+          onOpenChange={(open) => {
+            setShowMobileModal(open);
+            if (!open) reset();
+          }}
+        >
+          <DialogContent className="flex max-h-[min(90dvh,640px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[425px]">
+            <div className="border-b bg-primary/5 p-4">
+              <p className="mb-2 text-sm font-semibold text-foreground">Search Patient</p>
               <div className="relative">
-                <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-purple-600 dark:text-purple-400 z-10" />
+                <Search className="absolute left-4 top-1/2 z-10 h-5 w-5 -translate-y-1/2 text-purple-600 dark:text-purple-400" />
                 <Input
                   ref={inputRef}
                   type="text"
-                  placeholder="Search patient by name, mobile, or ID"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search by name / mobile"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
                   disabled={isLocked}
-                  className="w-full h-11 rounded-lg pl-12 pr-4 text-base border-2 border-purple-300 dark:border-purple-700 focus:border-purple-600 dark:focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 dark:focus:ring-purple-400/20 shadow-sm"
+                  className="h-11 w-full rounded-lg border-2 border-purple-300 pl-12 pr-4 text-base shadow-sm focus:border-purple-600 focus:ring-2 focus:ring-purple-500/20 dark:border-purple-700 dark:focus:border-purple-500 dark:focus:ring-purple-400/20"
                   autoFocus
                 />
               </div>
             </div>
-            <div className="max-h-[60vh] overflow-auto">
-              <SearchResults />
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <SearchResults
+                variant="inline"
+                onClose={() => {
+                  setShowMobileModal(false);
+                  reset();
+                }}
+              />
             </div>
           </DialogContent>
         </Dialog>
@@ -380,102 +216,89 @@ export function PatientSearch() {
     );
   }
 
-  // Desktop: Show full search input with popover
   return (
     <>
-      <Popover 
-        open={isOpen && !isLocked && !isSearchDisabled} 
+      <Popover
+        open={isOpen && !isLocked && !isSearchDisabled}
         onOpenChange={(open) => {
-          // Don't allow opening if search is disabled
           if (isSearchDisabled) {
             setIsOpen(false);
             return;
           }
-          // Always allow opening
           if (open) {
             setIsOpen(true);
-          } else {
-            // Only close if search query is empty, otherwise keep it open
-            // This prevents closing when there are no results
-            if (searchQuery.trim().length === 0) {
-              setIsOpen(false);
-            }
+          } else if (query.trim().length === 0) {
+            setIsOpen(false);
           }
         }}
         modal={false}
       >
         <PopoverTrigger asChild>
           <div className="relative w-full min-w-[400px]">
-            <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-purple-600 dark:text-purple-400 z-10 pointer-events-none" />
+            <Search className="pointer-events-none absolute left-4 top-1/2 z-10 h-5 w-5 -translate-y-1/2 text-purple-600 dark:text-purple-400" />
             <Input
               ref={inputRef}
               type="text"
               placeholder="Search patient by name, mobile, or ID"
-              value={searchQuery}
+              value={query}
               onChange={(e) => {
                 const value = e.target.value;
-                setSearchQuery(value);
-                // Clear highlight when user starts typing
+                setQuery(value);
                 if (highlightSearch) {
                   clearSearchHighlight();
                 }
-                // Open popover when user starts typing
                 if (value.trim().length > 0 && !isOpen) {
                   setIsOpen(true);
                 }
               }}
               onFocus={(e) => {
                 e.stopPropagation();
-                if (searchQuery.trim().length > 0 || !isOpen) {
+                if (query.trim().length > 0 || !isOpen) {
                   setIsOpen(true);
                 }
               }}
-              onClick={(e) => {
-                e.stopPropagation();
-              }}
+              onClick={(e) => e.stopPropagation()}
               onKeyDown={(e) => {
-                // Allow Escape to close
                 if (e.key === "Escape") {
                   setIsOpen(false);
-                  setSearchQuery("");
-                  setResults([]);
+                  reset();
                 }
-                // Prevent event bubbling that might close popover
                 e.stopPropagation();
               }}
               disabled={isLocked || isSearchDisabled}
-              readOnly={false}
               className={cn(
-                "w-full h-11 rounded-lg pl-12 pr-4 text-base",
-                "bg-background border-2 border-purple-300 dark:border-purple-700",
-                "focus:border-purple-600 dark:focus:border-purple-500",
-                "focus:ring-2 focus:ring-purple-500/20 dark:focus:ring-purple-400/20",
-                "shadow-sm hover:shadow-md hover:border-purple-400 dark:hover:border-purple-600",
-                "transition-all duration-200",
+                "h-11 w-full rounded-lg border-2 border-purple-300 bg-background pl-12 pr-4 text-base shadow-sm transition-all duration-200",
+                "hover:border-purple-400 hover:shadow-md dark:border-purple-700 dark:hover:border-purple-600",
+                "focus:border-purple-600 focus:ring-2 focus:ring-purple-500/20 dark:focus:border-purple-500 dark:focus:ring-purple-400/20",
                 "placeholder:text-muted-foreground/60",
-                highlightSearch && "border-purple-600 dark:border-purple-400 ring-4 ring-purple-500/30 dark:ring-purple-400/30 shadow-lg animate-pulse",
+                highlightSearch &&
+                  "animate-pulse border-purple-600 shadow-lg ring-4 ring-purple-500/30 dark:border-purple-400 dark:ring-purple-400/30",
                 (isLocked || isSearchDisabled) && "cursor-not-allowed opacity-50"
               )}
             />
           </div>
         </PopoverTrigger>
-        <PopoverContent 
-          className="w-[500px] p-0 shadow-xl border-2 border-purple-200 dark:border-purple-800" 
+        <PopoverContent
+          className="w-[500px] border-2 border-purple-200 p-0 shadow-xl dark:border-purple-800"
           align="start"
           onOpenAutoFocus={(e) => {
-            // Prevent auto-focus on popover open, keep focus on input
             e.preventDefault();
             inputRef.current?.focus();
           }}
           onInteractOutside={(e) => {
-            // Don't close if clicking on the input
             const target = e.target as HTMLElement;
             if (target.closest('input[type="text"]')) {
               e.preventDefault();
             }
           }}
         >
-          <SearchResults />
+          <SearchResults
+            variant="popover"
+            onClose={() => {
+              setIsOpen(false);
+              reset();
+            }}
+          />
         </PopoverContent>
       </Popover>
       <AddPatientDialog
@@ -490,4 +313,3 @@ export function PatientSearch() {
     </>
   );
 }
-

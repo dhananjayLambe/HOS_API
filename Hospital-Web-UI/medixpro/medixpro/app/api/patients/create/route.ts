@@ -1,6 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
-
-const DJANGO_API_URL = process.env.DJANGO_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/";
+import { getDjangoApiBase } from "@/lib/get-django-api-base";
 
 // POST - Create a new patient (Doctor EMR Flow)
 export async function POST(request: NextRequest) {
@@ -40,7 +39,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const url = `${DJANGO_API_URL}patients/create/`;
+    const url = `${getDjangoApiBase()}patients/create/`;
 
     const response = await fetch(url, {
       method: "POST",

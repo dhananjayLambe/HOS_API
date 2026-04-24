@@ -25,6 +25,8 @@ import { usePatient, type Patient } from "@/lib/patientContext";
 import { useToastNotification } from "@/hooks/use-toast-notification";
 import { cn } from "@/lib/utils";
 
+export type AddPatientDialogPresentation = "default" | "bottom-sheet";
+
 interface AddPatientDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -33,6 +35,12 @@ interface AddPatientDialogProps {
   isExistingAccount?: boolean;
   existingRelations?: string[];
   existingPatientAccountId?: string;
+  /** When false (helpdesk), do not set global selected patient or touch localStorage via context. */
+  syncGlobalPatientContext?: boolean;
+  /** Primary submit button label (e.g. helpdesk: "+ Add to Queue"). */
+  submitLabel?: string;
+  /** bottom-sheet: full-height mobile layout with sticky footer. */
+  presentation?: AddPatientDialogPresentation;
 }
 
 interface PatientFormData {
@@ -65,9 +73,17 @@ export function AddPatientDialog({
   isExistingAccount = false,
   existingRelations = [],
   existingPatientAccountId,
+  syncGlobalPatientContext = true,
+  submitLabel = "Add Patient",
+  presentation = "default",
 }: AddPatientDialogProps) {
   const { setSelectedPatient } = usePatient();
   const toast = useToastNotification();
+
+  const syncContext = syncGlobalPatientContext;
+  const maybeSelectPatient = (patient: Patient) => {
+    if (syncContext) setSelectedPatient(patient);
+  };
   const [step, setStep] = useState<DialogStep>("form");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [patientAccountId, setPatientAccountId] = useState<string | null>(null);
@@ -317,10 +333,10 @@ export function AddPatientDialog({
           mobile: selectedProfile.mobile || mobileNumber,
         };
 
-        setSelectedPatient(patient);
+        maybeSelectPatient(patient);
         onPatientAdded(patient);
         handleClose();
-        toast.success("Patient selected successfully");
+        if (syncContext) toast.success("Patient selected successfully");
       } else {
         // Fallback: use profile data directly
         const patient: Patient = {
@@ -333,10 +349,10 @@ export function AddPatientDialog({
           mobile: mobileNumber,
         };
 
-        setSelectedPatient(patient);
+        maybeSelectPatient(patient);
         onPatientAdded(patient);
         handleClose();
-        toast.success("Patient selected successfully");
+        if (syncContext) toast.success("Patient selected successfully");
       }
     } catch (error: any) {
       console.error("Error selecting profile:", error);
@@ -388,10 +404,10 @@ export function AddPatientDialog({
             mobile: createdProfile.mobile || normalizedMobile,
           };
 
-          setSelectedPatient(newPatient);
+          maybeSelectPatient(newPatient);
           onPatientAdded(newPatient);
           handleClose();
-          toast.success("Patient created and selected successfully");
+          if (syncContext) toast.success("Patient created and selected successfully");
         } else {
           // Fallback: create patient object from response
           const newPatient: Patient = {
@@ -404,10 +420,10 @@ export function AddPatientDialog({
             mobile: normalizedMobile,
           };
 
-          setSelectedPatient(newPatient);
+          maybeSelectPatient(newPatient);
           onPatientAdded(newPatient);
           handleClose();
-          toast.success("Patient created and selected successfully");
+          if (syncContext) toast.success("Patient created and selected successfully");
         }
       } else {
         // Handle unexpected response structure
@@ -501,10 +517,10 @@ export function AddPatientDialog({
       relation: createdProfile.relation || data.relation,
     };
 
-    setSelectedPatient(newPatient);
+    maybeSelectPatient(newPatient);
     onPatientAdded(newPatient);
     handleClose();
-    toast.success("Profile added and selected successfully");
+    if (syncContext) toast.success("Profile added and selected successfully");
   };
 
   const handleClose = () => {
@@ -585,10 +601,23 @@ export function AddPatientDialog({
     return labels[relation] || relation;
   };
 
+  const isBottomSheet = presentation === "bottom-sheet";
+
+  const handleDialogOpenChange = (next: boolean) => {
+    if (!next) handleClose();
+  };
+
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[520px] rounded-2xl border-border/60 shadow-2xl">
-        <DialogHeader>
+    <Dialog open={open} onOpenChange={handleDialogOpenChange}>
+      <DialogContent
+        className={cn(
+          "gap-0 shadow-2xl",
+          isBottomSheet
+            ? "fixed bottom-0 left-0 right-0 top-auto z-50 flex max-h-[100dvh] w-full max-w-lg translate-x-0 translate-y-0 flex-col overflow-hidden rounded-b-none rounded-t-2xl border border-border/60 p-0 sm:left-[50%] sm:translate-x-[-50%] data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom"
+            : "max-h-[90vh] overflow-y-auto rounded-2xl border-border/60 p-6 sm:max-w-[520px]"
+        )}
+      >
+        <DialogHeader className={cn(isBottomSheet ? "shrink-0 space-y-1 border-b px-4 pb-3 pt-4 text-left" : "")}>
           <DialogTitle>
             {step === "form" && "Add Patient"}
             {step === "exists" && "Select Patient Profile"}
@@ -601,7 +630,11 @@ export function AddPatientDialog({
 
         {/* Main Form */}
         {step === "form" && (
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
+          <form
+            onSubmit={handleSubmit(onSubmit)}
+            className={cn(isBottomSheet && "flex min-h-0 flex-1 flex-col")}
+          >
+            <div className={cn("space-y-3", isBottomSheet && "min-h-0 flex-1 overflow-y-auto px-4 py-3")}>
             <div className="space-y-1.5">
               <Label htmlFor="mobile">
                 Mobile Number <span className="text-destructive">*</span>
@@ -802,14 +835,22 @@ export function AddPatientDialog({
                 <p className="text-xs text-destructive">Enter Age or DOB</p>
               )}
             </div>
+            </div>
 
-            <DialogFooter className="gap-2 pt-1">
+            <DialogFooter
+              className={cn(
+                "gap-2",
+                isBottomSheet
+                  ? "mt-0 shrink-0 border-t bg-background px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+                  : "pt-1"
+              )}
+            >
               <Button type="button" variant="outline" onClick={handleClose} disabled={isSubmitting}>
                 Cancel
               </Button>
               <Button type="submit" className="bg-purple-700 hover:bg-purple-800 dark:bg-purple-600 dark:hover:bg-purple-700" disabled={isSubmitting}>
                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Add Patient
+                {submitLabel}
               </Button>
             </DialogFooter>
           </form>
@@ -817,7 +858,7 @@ export function AddPatientDialog({
 
         {/* Patient Exists - Show Profiles */}
         {step === "exists" && (
-          <div className="space-y-4 py-4">
+          <div className={cn("space-y-4 py-4", isBottomSheet ? "min-h-0 flex-1 overflow-y-auto px-4" : "")}>
             <div className="flex items-center justify-between">
               <p className="text-sm font-medium">Mobile: {checkedMobile}</p>
               <Button variant="ghost" size="sm" onClick={handleBack} disabled={isSubmitting}>

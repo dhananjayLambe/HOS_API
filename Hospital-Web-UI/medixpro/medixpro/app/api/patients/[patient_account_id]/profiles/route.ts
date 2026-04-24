@@ -1,6 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
-
-const DJANGO_API_URL = process.env.DJANGO_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/";
+import { getDjangoApiBase } from "@/lib/get-django-api-base";
 
 // GET - Get patient profiles by account ID
 export async function GET(
@@ -21,7 +20,7 @@ export async function GET(
       );
     }
 
-    const url = `${DJANGO_API_URL}patients/${patient_account_id}/profiles/`;
+    const url = `${getDjangoApiBase()}patients/${patient_account_id}/profiles/`;
 
     const response = await fetch(url, {
       method: "GET",
@@ -90,7 +89,7 @@ export async function POST(
       );
     }
 
-    const url = `${DJANGO_API_URL}patients/${patient_account_id}/profiles/`;
+    const url = `${getDjangoApiBase()}patients/${patient_account_id}/profiles/`;
 
     const response = await fetch(url, {
       method: "POST",

@@ -17,6 +17,7 @@ import { useRouter } from "next/navigation";
 import { isTokenValid } from "@/lib/jwtUtils";
 import { ACCESS_TOKEN_KEY } from "@/lib/axiosClient";
 import { useAuth } from "@/lib/authContext";
+import { extractAuthTokens } from "@/lib/auth-token-utils";
 const RESEND_COOLDOWN = 30; // 30 seconds cooldown
 
 const Button = ({
@@ -180,13 +181,16 @@ export default function OTPLoginPage() {
             const data = await res.json();
             const refreshedRole = data.role?.toLowerCase();
 
-            // Store tokens if provided
-            if (data.tokens) {
-              localStorage.setItem("access_token", data.tokens.access);
-              localStorage.setItem("refresh_token", data.tokens.refresh);
-              if (data.role) {
-                localStorage.setItem("role", data.role);
-              }
+            // Store tokens if provided (supports both nested and flat response shapes)
+            const refreshedTokens = extractAuthTokens(data);
+            if (refreshedTokens.access) {
+              localStorage.setItem("access_token", refreshedTokens.access);
+            }
+            if (refreshedTokens.refresh) {
+              localStorage.setItem("refresh_token", refreshedTokens.refresh);
+            }
+            if (data.role) {
+              localStorage.setItem("role", data.role);
             }
 
             // Store user info if provided in refresh response
@@ -310,10 +314,13 @@ export default function OTPLoginPage() {
         // ✅ Success
         setSuccessMessage(data.message || "OTP verified successfully. Logged in.");
         
-        // 🔑 Save JWT tokens to localStorage
-        if (data.tokens) {
-          localStorage.setItem("access_token", data.tokens.access);
-          localStorage.setItem("refresh_token", data.tokens.refresh);
+        // 🔑 Save JWT tokens to localStorage (supports nested and flat payloads)
+        const loginTokens = extractAuthTokens(data);
+        if (loginTokens.access) {
+          localStorage.setItem("access_token", loginTokens.access);
+        }
+        if (loginTokens.refresh) {
+          localStorage.setItem("refresh_token", loginTokens.refresh);
         }
         if (data.role) {
           localStorage.setItem("role", data.role);

@@ -1,13 +1,14 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
+import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { maskMobile } from "@/lib/helpdeskQueueStore";
-import axiosClient from "@/lib/axiosClient";
-import { Loader2, Search, UserPlus } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { usePatientSearchQuery } from "@/hooks/use-patient-search-query";
+import { PatientSearchResultList } from "@/components/patient/patient-search-result-list";
+import type { PatientSearchRow } from "@/lib/patientSearchDisplay";
+import { useEffect, useRef } from "react";
+import { cn } from "@/lib/utils";
 
-interface HelpdeskSearchPatient {
+export interface HelpdeskSearchPatient {
   id: string;
   full_name: string;
   first_name?: string;
@@ -18,106 +19,84 @@ interface HelpdeskSearchPatient {
 interface HelpdeskPatientSearchProps {
   onAddNew: () => void;
   onSelectPatient?: (patient: HelpdeskSearchPatient) => void;
+  onAddProfile?: (patient: HelpdeskSearchPatient) => void;
   initialQuery?: string;
+  /** Autofocus search on mount (e.g. patients page). */
+  autoFocus?: boolean;
+  className?: string;
 }
 
-export function HelpdeskPatientSearch({ onAddNew, onSelectPatient, initialQuery = "" }: HelpdeskPatientSearchProps) {
-  const [q, setQ] = useState(initialQuery);
-  const [results, setResults] = useState<HelpdeskSearchPatient[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState("");
-  const debounceRef = useRef<NodeJS.Timeout | null>(null);
+function toHelpdeskPatient(p: PatientSearchRow): HelpdeskSearchPatient {
+  return {
+    id: p.id,
+    full_name: p.full_name || `${p.first_name || ""} ${p.last_name || ""}`.trim(),
+    first_name: p.first_name,
+    last_name: p.last_name,
+    mobile: p.mobile,
+  };
+}
+
+export function HelpdeskPatientSearch({
+  onAddNew,
+  onSelectPatient,
+  onAddProfile,
+  initialQuery = "",
+  autoFocus = false,
+  className,
+}: HelpdeskPatientSearchProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const { query, setQuery, results, isLoading, error, reset } = usePatientSearchQuery(true);
 
   useEffect(() => {
-    setQ(initialQuery);
-  }, [initialQuery]);
+    setQuery(initialQuery);
+  }, [initialQuery, setQuery]);
 
   useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    const term = q.trim();
-    if (term.length < 2) {
-      setResults([]);
-      setLoading(false);
-      setErrorMsg("");
-      return;
+    if (autoFocus) {
+      const t = window.setTimeout(() => inputRef.current?.focus(), 100);
+      return () => window.clearTimeout(t);
     }
-
-    debounceRef.current = setTimeout(async () => {
-      setLoading(true);
-      try {
-        const response = await axiosClient.get("/patients/search/", {
-          params: { query: term },
-        });
-        setResults(Array.isArray(response.data) ? response.data.slice(0, 10) : []);
-        setErrorMsg("");
-      } catch {
-        setResults([]);
-        setErrorMsg("Search failed. Please re-login and try again.");
-      } finally {
-        setLoading(false);
-      }
-    }, 300);
-
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, [q]);
-
-  const showEmpty = q.trim().length >= 2 && !loading && results.length === 0;
+  }, [autoFocus]);
 
   return (
-    <div className="space-y-4">
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search by name or mobile (min 2 chars)"
-          className="h-11 pl-9"
-          inputMode="search"
-        />
+    <div className={cn("space-y-4", className)}>
+      <div>
+        <p className="mb-2 flex items-center gap-2 text-sm font-semibold text-foreground">
+          <Search className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+          Search Patient
+        </p>
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            ref={inputRef}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search by name / mobile"
+            className="h-11 pl-9"
+            inputMode="search"
+            autoComplete="off"
+            autoCorrect="off"
+            spellCheck={false}
+          />
+        </div>
       </div>
 
-      {loading && (
-        <div className="flex items-center justify-center rounded-lg border bg-card px-4 py-6">
-          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-        </div>
-      )}
-
-      {results.length > 0 && (
-        <ul className="divide-y rounded-lg border bg-card">
-          {results.map((patient) => (
-            <li key={patient.id}>
-              <button
-                type="button"
-                className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-accent/50"
-                onClick={() => onSelectPatient?.(patient)}
-              >
-                <span className="font-medium">
-                  {patient.full_name || `${patient.first_name || ""} ${patient.last_name || ""}`.trim()}
-                </span>
-                <span className="text-sm text-muted-foreground tabular-nums">{maskMobile(patient.mobile || "")}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {errorMsg && (
-        <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-          {errorMsg}
-        </div>
-      )}
-
-      {showEmpty && (
-        <div className="rounded-lg border border-dashed bg-muted/30 px-4 py-8 text-center">
-          <p className="text-sm text-muted-foreground">No patient found</p>
-          <Button type="button" variant="secondary" className="mt-4 gap-2" onClick={onAddNew}>
-            <UserPlus className="h-4 w-4" />
-            Add New Patient
-          </Button>
-        </div>
-      )}
+      <PatientSearchResultList
+        variant="inline"
+        query={query}
+        results={results}
+        isLoading={isLoading}
+        error={error}
+        onSelect={(p) => onSelectPatient?.(toHelpdeskPatient(p))}
+        onAddNew={onAddNew}
+        onAddProfile={(p) => {
+          if (onAddProfile) onAddProfile(toHelpdeskPatient(p));
+        }}
+        onClose={() => reset()}
+        addProfileDisabled={false}
+        addNewDisabled={false}
+        showAddProfile={Boolean(onAddProfile)}
+      />
     </div>
   );
 }
