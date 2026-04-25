@@ -2,10 +2,16 @@
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import type { QueueEntry, QueueStatus } from "@/lib/helpdeskQueueStore";
-import { maskMobile } from "@/lib/helpdeskQueueStore";
-import { ArrowUp, Phone } from "lucide-react";
+import { maskMobile, vitalsPreviewLine } from "@/lib/helpdeskQueueStore";
+import { ArrowUp, MoreVertical, Play, Stethoscope } from "lucide-react";
 
 function initialsFromName(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -21,82 +27,66 @@ function ordinalInQueue(n: number) {
   return `${n}${suf} in queue`;
 }
 
-function positionBadgeClass(n: number) {
-  if (n === 1) {
-    return "border-violet-200/80 bg-violet-100 text-violet-900 dark:border-violet-800/60 dark:bg-violet-950/50 dark:text-violet-100";
-  }
-  if (n === 2) {
-    return "border-emerald-200/80 bg-emerald-50 text-emerald-900 dark:border-emerald-800/50 dark:bg-emerald-950/40 dark:text-emerald-100";
-  }
-  if (n <= 4) {
-    return "border-slate-200 bg-slate-100 text-slate-800 dark:border-slate-700 dark:bg-slate-800/70 dark:text-slate-100";
-  }
-  return "border-rose-200/90 bg-rose-50 text-rose-900 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-100";
-}
-
-function visitBadge(status: QueueStatus) {
+function statusBadge(status: QueueStatus): { label: string; className: string } {
   switch (status) {
     case "waiting":
       return {
-        label: "Check-up",
+        label: "Waiting",
         className:
-          "border-emerald-200/80 bg-emerald-50 text-emerald-900 dark:border-emerald-800/50 dark:bg-emerald-950/40 dark:text-emerald-100",
+          "border-muted-foreground/25 bg-muted text-muted-foreground dark:bg-muted/80",
       };
-    case "pre_consult":
+    case "vitals_done":
       return {
-        label: "Pre-consult",
+        label: "Vitals done",
         className:
-          "border-slate-200 bg-slate-100 text-slate-800 dark:border-slate-700 dark:bg-slate-800/70 dark:text-slate-100",
+          "border-amber-300/80 bg-amber-50 text-amber-950 dark:border-amber-700/60 dark:bg-amber-950/40 dark:text-amber-50",
       };
-    case "with_doctor":
+    case "in_consultation":
       return {
-        label: "Consultation",
+        label: "In consultation",
         className:
-          "border-violet-200/80 bg-violet-100 text-violet-900 dark:border-violet-800/60 dark:bg-violet-950/50 dark:text-violet-100",
+          "border-sky-300/80 bg-sky-50 text-sky-950 dark:border-sky-700/60 dark:bg-sky-950/40 dark:text-sky-50",
+      };
+    case "completed":
+      return {
+        label: "Completed",
+        className:
+          "border-emerald-300/80 bg-emerald-50 text-emerald-950 dark:border-emerald-800/50 dark:bg-emerald-950/40 dark:text-emerald-50",
       };
   }
+}
+
+function ageGenderLine(entry: QueueEntry): string {
+  const age = entry.age != null ? `${entry.age}y` : "—";
+  const g = entry.gender?.trim() || "—";
+  return `${age} · ${g}`;
 }
 
 interface QueueCardProps {
   entry: QueueEntry;
   position: number;
-  onCheckIn: () => void;
-  onOpenVitals: () => void;
+  onVitals: () => void;
+  onStart: () => void;
   onUrgent: () => void;
+  onRemove: () => void;
   onOpen: () => void;
   className?: string;
 }
 
-export function QueueCard({ entry, position, onCheckIn, onOpenVitals, onUrgent, onOpen, className }: QueueCardProps) {
-  const visit = visitBadge(entry.status);
-
-  const primary =
-    entry.status === "waiting" ? (
-      <Button
-        type="button"
-        size="sm"
-        className="h-9 min-w-[5.5rem] rounded-lg"
-        onClick={(e) => {
-          e.stopPropagation();
-          onCheckIn();
-        }}
-      >
-        Check-In
-      </Button>
-    ) : entry.status === "pre_consult" ? (
-      <Button
-        type="button"
-        size="sm"
-        className="h-9 min-w-[5.5rem] rounded-lg"
-        variant="default"
-        onClick={(e) => {
-          e.stopPropagation();
-          onOpenVitals();
-        }}
-      >
-        Vitals
-      </Button>
-    ) : null;
+export function QueueCard({
+  entry,
+  position,
+  onVitals,
+  onStart,
+  onUrgent,
+  onRemove,
+  onOpen,
+  className,
+}: QueueCardProps) {
+  const badge = statusBadge(entry.status);
+  const preview = vitalsPreviewLine(entry.vitals);
+  const token = entry.token?.trim() || `#${position}`;
+  const canFlow = entry.status === "waiting" || entry.status === "vitals_done";
 
   return (
     <div
@@ -125,58 +115,98 @@ export function QueueCard({ entry, position, onCheckIn, onOpenVitals, onUrgent, 
         <div className="min-w-0 flex-1 space-y-2">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="truncate text-base font-semibold leading-tight text-foreground">{entry.name}</span>
-              </div>
-              <div className="mt-0.5 flex items-center gap-1.5 text-sm text-muted-foreground">
-                <Phone className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                <span className="tabular-nums">{maskMobile(entry.mobile)}</span>
-              </div>
+              <p className="truncate text-base font-semibold leading-tight text-foreground">{entry.name}</p>
+              <p className="mt-0.5 text-sm text-muted-foreground">{ageGenderLine(entry)}</p>
+              <p className="text-xs text-muted-foreground tabular-nums">Token {token}</p>
             </div>
 
-            <div className="flex shrink-0 flex-col items-end gap-2">
-              {primary}
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-9 min-w-[4.5rem] rounded-lg border-border bg-background"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onOpen();
-                }}
-              >
-                View
-              </Button>
+            <div className="flex shrink-0 items-start gap-1">
+              {canFlow ? (
+                <>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="secondary"
+                    className="h-9 w-9 shrink-0 rounded-lg"
+                    title="Vitals"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onVitals();
+                    }}
+                  >
+                    <Stethoscope className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    type="button"
+                    size="icon"
+                    className="h-9 w-9 shrink-0 rounded-lg"
+                    title="Start consultation"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onStart();
+                    }}
+                  >
+                    <Play className="h-4 w-4" />
+                  </Button>
+                </>
+              ) : null}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="outline"
+                    className="h-9 w-9 shrink-0 rounded-lg"
+                    title="More"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                  {canFlow ? (
+                    <DropdownMenuItem
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onUrgent();
+                      }}
+                    >
+                      <ArrowUp className="mr-2 h-4 w-4" />
+                      Urgent
+                    </DropdownMenuItem>
+                  ) : null}
+                  {entry.status !== "completed" ? (
+                    <DropdownMenuItem
+                      className="text-destructive focus:text-destructive"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onRemove();
+                      }}
+                    >
+                      Remove from queue
+                    </DropdownMenuItem>
+                  ) : null}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 pt-0.5">
-            <Badge variant="outline" className={cn("border font-medium", positionBadgeClass(position))}>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline" className="border font-medium tabular-nums">
               {ordinalInQueue(position)}
             </Badge>
-            <Badge variant="outline" className={cn("border font-medium", visit.className)}>
-              {visit.label}
+            <Badge variant="outline" className={cn("border font-medium", badge.className)}>
+              {badge.label}
             </Badge>
           </div>
 
-          {entry.status !== "with_doctor" && (
-            <div className="flex flex-wrap gap-2 pt-1">
-              <Button
-                type="button"
-                size="sm"
-                variant="secondary"
-                className="h-8 gap-1 rounded-lg"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onUrgent();
-                }}
-              >
-                <ArrowUp className="h-4 w-4" aria-hidden />
-                Urgent
-              </Button>
-            </div>
+          {preview ? (
+            <p className="text-xs text-muted-foreground tabular-nums line-clamp-2">{preview}</p>
+          ) : (
+            <p className="text-xs text-muted-foreground">No vitals yet</p>
           )}
+
+          <p className="text-xs text-muted-foreground tabular-nums">{maskMobile(entry.mobile)}</p>
         </div>
       </div>
     </div>

@@ -1,14 +1,5 @@
-import { Suspense } from "react";
-import { HelpdeskPreConsultFallback } from "./pre-consult-client";
+import { redirect } from "next/navigation";
 
-export default function HelpdeskPreConsultFallbackPage() {
-  return (
-    <Suspense
-      fallback={
-        <div className="flex min-h-[30vh] items-center justify-center text-sm text-muted-foreground">Loading…</div>
-      }
-    >
-      <HelpdeskPreConsultFallback />
-    </Suspense>
-  );
+export default function HelpdeskPreConsultLegacyPage() {
+  redirect("/helpdesk/queue");
 }

@@ -1,16 +1,26 @@
 from django.urls import path
 from queue_management.api.views import (
-    CheckInQueueAPIView, DoctorQueueAPIView, StartConsultationAPIView, 
-    CompleteConsultationAPIView, SkipPatientAPIView, UrgentPatientAPIView, 
-    QueueDetailsView, UpdateQueuePositionView,
-    QueueReorderAPIView, MarkPatientNotAvailableAPIView, CancelAppointmentAPIView,
-    QueuePatientView, CancelAppointmentView
+    CheckInQueueAPIView,
+    DoctorQueueAPIView,
+    HelpdeskClinicQueueAPIView,
+    StartConsultationAPIView,
+    CompleteConsultationAPIView,
+    SkipPatientAPIView,
+    UrgentPatientAPIView,
+    QueueDetailsView,
+    UpdateQueuePositionView,
+    QueueReorderAPIView,
+    MarkPatientNotAvailableAPIView,
+    CancelAppointmentAPIView,
+    QueuePatientView,
+    CancelAppointmentView,
 )
 
 urlpatterns = [
     #queue management
     path("check-in/", CheckInQueueAPIView.as_view(), name="queue-check-in"),
     path("doctor/<uuid:doctor_id>/<uuid:clinic_id>/", DoctorQueueAPIView.as_view(), name="doctor-queue"),
+    path("helpdesk/today/", HelpdeskClinicQueueAPIView.as_view(), name="helpdesk-clinic-queue-today"),
     path("start/", StartConsultationAPIView.as_view(), name="queue-start"),
     path("complete/", CompleteConsultationAPIView.as_view(), name="queue-complete"),
     path("skip/", SkipPatientAPIView.as_view(), name="queue-skip"),

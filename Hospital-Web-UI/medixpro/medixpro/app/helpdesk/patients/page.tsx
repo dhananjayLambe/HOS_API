@@ -21,7 +21,7 @@ export default function HelpdeskPatientsPage() {
 
   const addPatientFromSearch = useHelpdeskQueueStore((s) => s.addPatientFromSearch);
   const findEntryByPatient = useHelpdeskQueueStore((s) => s.findEntryByPatient);
-  const setPreConsultTargetId = useHelpdeskQueueStore((s) => s.setPreConsultTargetId);
+  const setHighlightQueueEntryId = useHelpdeskQueueStore((s) => s.setHighlightQueueEntryId);
 
   const [addOpen, setAddOpen] = useState(false);
   const [addDialogContext, setAddDialogContext] = useState<{
@@ -40,10 +40,10 @@ export default function HelpdeskPatientsPage() {
       } else {
         toast.success("Added to queue");
       }
-      setPreConsultTargetId(queueEntryId);
+      setHighlightQueueEntryId(queueEntryId);
       router.push("/helpdesk/queue");
     },
-    [router, setPreConsultTargetId]
+    [router, setHighlightQueueEntryId]
   );
 
   const handleSelectFromSearch = (patient: HelpdeskSearchPatient) => {

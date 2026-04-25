@@ -15,8 +15,17 @@ class Queue(models.Model):
     patient = models.ForeignKey(PatientProfile, on_delete=models.CASCADE, related_name="queue")
     appointment = models.OneToOneField(Appointment, on_delete=models.CASCADE, related_name="queue", null=True, blank=True)
     
+    encounter = models.ForeignKey(
+        'consultations_core.ClinicalEncounter',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='queue_entries',
+    )
+
     status = models.CharField(max_length=20, choices=[
         ('waiting', 'Waiting'),
+        ('vitals_done', 'Vitals Done'),
         ('in_consultation', 'In Consultation'),
         ('completed', 'Completed'),
         ('skipped', 'Skipped'),

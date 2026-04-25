@@ -30,6 +30,9 @@ from consultations_core.services.preconsultation_service import (
     PreConsultationService,
     PreConsultationAlreadyExistsError,
 )
+from consultations_core.services.preconsultation_lifecycle import (
+    get_or_create_preconsultation_for_start as _get_or_create_preconsultation_for_start,
+)
 from consultations_core.services.preconsultation_section_service import PreConsultationSectionService
 from consultations_core.services.encounter_service import EncounterService
 from consultations_core.services.encounter_state_machine import EncounterStateMachine
@@ -1109,36 +1112,6 @@ class EncounterDetailAPIView(APIView):
             "cancelled_by": str(encounter.cancelled_by_id) if (getattr(encounter, "cancelled_by_id", None) is not None and encounter.cancelled_by_id) else None,
         }
         return Response(payload, status=status.HTTP_200_OK)
-
-
-def _get_or_create_preconsultation_for_start(encounter, created_by):
-    """Get or create PreConsultation for an encounter (for start-consultation flow). Pre must exist before starting."""
-    try:
-        return encounter.pre_consultation
-    except PreConsultation.DoesNotExist:
-        pass
-    pc = PreConsultation.objects.filter(encounter=encounter).first()
-    if pc is not None:
-        return pc
-    # Serialize creation so concurrent requests (e.g. double-submit after cancel) don't both create → 409
-    with transaction.atomic():
-        encounter = ClinicalEncounter.objects.select_for_update().get(pk=encounter.pk)
-        pc = PreConsultation.objects.filter(encounter=encounter).first()
-        if pc is not None:
-            return pc
-        doctor = encounter.doctor
-        if not doctor:
-            raise ValueError("Encounter must have a doctor to create pre-consultation")
-        specialty_code = (getattr(doctor, "primary_specialization", None) or "").strip().lower()
-        if not specialty_code:
-            specialty_code = "general"
-        return PreConsultationService.create_preconsultation(
-            encounter=encounter,
-            specialty_code=specialty_code,
-            template_version="v1",
-            entry_mode="doctor",
-            created_by=created_by,
-        )
 
 
 class StartConsultationAPIView(APIView):

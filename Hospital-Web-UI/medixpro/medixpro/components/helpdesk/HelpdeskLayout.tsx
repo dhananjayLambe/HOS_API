@@ -21,30 +21,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
-function NavLinkButton({
-  item,
-  active,
-  onNavigate,
-}: {
-  item: HelpdeskNavItem;
-  active: boolean;
-  onNavigate: (item: HelpdeskNavItem) => void;
-}) {
-  if (item.action === "preconsult") {
-    return (
-      <button
-        type="button"
-        onClick={() => onNavigate(item)}
-        className={cn(
-          "flex flex-1 flex-col items-center justify-center gap-1 rounded-xl py-2 text-[11px] font-medium text-muted-foreground transition-colors",
-          active && "bg-primary/10 text-primary"
-        )}
-      >
-        <item.icon className="h-5 w-5 shrink-0" aria-hidden />
-        <span className="leading-none">{item.label}</span>
-      </button>
-    );
-  }
+function NavLinkButton({ item, active }: { item: HelpdeskNavItem; active: boolean }) {
   return (
     <Link
       href={item.href}
@@ -62,32 +39,12 @@ function NavLinkButton({
 function SidebarLink({
   item,
   active,
-  onNavigate,
   onAfterNavigate,
 }: {
   item: HelpdeskNavItem;
   active: boolean;
-  onNavigate: (item: HelpdeskNavItem) => void;
   onAfterNavigate?: () => void;
 }) {
-  if (item.action === "preconsult") {
-    return (
-      <button
-        type="button"
-        onClick={() => {
-          onNavigate(item);
-          onAfterNavigate?.();
-        }}
-        className={cn(
-          "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-accent",
-          active && "bg-primary/10 text-primary"
-        )}
-      >
-        <item.icon className="h-4 w-4 shrink-0" />
-        {item.label}
-      </button>
-    );
-  }
   return (
     <Link
       href={item.href}
@@ -109,8 +66,7 @@ export function HelpdeskLayout({ children }: { children: React.ReactNode }) {
   const { role, sessionChecked } = useAuth();
   const addPatientFromSearch = useHelpdeskQueueStore((s) => s.addPatientFromSearch);
   const findEntryByPatient = useHelpdeskQueueStore((s) => s.findEntryByPatient);
-  const setPreConsultTargetId = useHelpdeskQueueStore((s) => s.setPreConsultTargetId);
-  const openPreConsultFlow = useHelpdeskQueueStore((s) => s.openPreConsultFlow);
+  const setHighlightQueueEntryId = useHelpdeskQueueStore((s) => s.setHighlightQueueEntryId);
   const isMobile = useIsMobile();
 
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -129,16 +85,6 @@ export function HelpdeskLayout({ children }: { children: React.ReactNode }) {
     }
   }, [role, sessionChecked, router]);
 
-  const handleNav = (item: HelpdeskNavItem) => {
-    if (item.action === "preconsult") {
-      router.push("/helpdesk/queue");
-      openPreConsultFlow();
-    } else {
-      router.push(item.href);
-    }
-    setMobileSidebarOpen(false);
-  };
-
   const isActive = (item: HelpdeskNavItem) => {
     if (item.href === "/helpdesk/queue") return pathname === "/helpdesk/queue";
     return pathname === item.href || pathname.startsWith(item.href + "/");
@@ -152,7 +98,7 @@ export function HelpdeskLayout({ children }: { children: React.ReactNode }) {
     } else {
       toast.success("Added to queue");
     }
-    setPreConsultTargetId(queueEntryId);
+    setHighlightQueueEntryId(queueEntryId);
     router.push("/helpdesk/queue");
   };
 
@@ -180,7 +126,7 @@ export function HelpdeskLayout({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      const existingRelations = Array.from(
+      const existingRelations: string[] = Array.from(
         new Set(
           (checkResponse.data?.profiles || [])
             .map((profile: { relation?: string }) => profile?.relation?.toLowerCase())
@@ -256,12 +202,7 @@ export function HelpdeskLayout({ children }: { children: React.ReactNode }) {
         <aside className="hidden w-56 shrink-0 flex-col border-r border-border/80 bg-background py-4 lg:flex">
           <nav className="flex flex-col gap-1 px-2">
             {helpdeskNavItems.map((item) => (
-              <SidebarLink
-                key={item.label}
-                item={item}
-                active={isActive(item)}
-                onNavigate={handleNav}
-              />
+              <SidebarLink key={item.label} item={item} active={isActive(item)} />
             ))}
           </nav>
         </aside>
@@ -277,7 +218,6 @@ export function HelpdeskLayout({ children }: { children: React.ReactNode }) {
                   key={item.label}
                   item={item}
                   active={isActive(item)}
-                  onNavigate={handleNav}
                   onAfterNavigate={() => setMobileSidebarOpen(false)}
                 />
               ))}
@@ -292,14 +232,9 @@ export function HelpdeskLayout({ children }: { children: React.ReactNode }) {
         className="fixed bottom-0 left-0 right-0 z-40 border-t bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden"
         aria-label="Helpdesk"
       >
-        <div className="flex h-14 max-w-lg mx-auto">
+        <div className="mx-auto flex h-14 max-w-lg">
           {helpdeskBottomNavItems.map((item) => (
-            <NavLinkButton
-              key={item.label}
-              item={item}
-              active={item.action !== "preconsult" && isActive(item)}
-              onNavigate={handleNav}
-            />
+            <NavLinkButton key={item.label} item={item} active={isActive(item)} />
           ))}
         </div>
       </nav>
@@ -318,7 +253,7 @@ export function HelpdeskLayout({ children }: { children: React.ReactNode }) {
           } else {
             toast.success("Added to queue");
           }
-          setPreConsultTargetId(queueEntryId);
+          setHighlightQueueEntryId(queueEntryId);
           router.push("/helpdesk/queue");
         }}
         syncGlobalPatientContext={false}

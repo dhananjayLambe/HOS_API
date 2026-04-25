@@ -15,6 +15,8 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+
+from consultations_core.api.views.visit_vitals import VisitVitalsAPIView
 from django.conf import settings
 from django.conf.urls.static import static
 
@@ -46,6 +48,7 @@ urlpatterns = [
     path('api/helpdesk/', include('helpdesk.api.urls')),
     path('api/appointments/', include('appointments.api.urls')),
     path('api/queue/', include('queue_management.api.urls')),
+    path('api/visits/<uuid:visit_id>/vitals/', VisitVitalsAPIView.as_view(), name='visit-vitals'),
     path('api/consultations/', include('consultations_core.api.urls')),
     path('api/investigations/', include('consultations_core.api.investigation_urls')),
     path('api/consultation/', include('consultation_config.api.urls')),

@@ -1,27 +1,29 @@
 "use client";
 
 import { QueueCard } from "./QueueCard";
+import { HelpdeskQueueDesktopTable } from "./HelpdeskQueueDesktopTable";
 import { useFilteredQueueEntries } from "@/lib/helpdeskQueueStore";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface ActiveQueueListProps {
   selectedId: string | null;
   highlightedId?: string | null;
-  onSelect: (id: string) => void;
-  onCheckIn: (id: string) => void;
-  onOpenVitals: (id: string) => void;
-  onUrgent: (id: string) => void;
-  /** Phase 1: instant — reserved for future fetch */
+  onSelectRow: (id: string) => void;
+  onVitals: (id: string) => void;
+  onStart: (id: string) => void | Promise<void>;
+  onUrgent: (id: string) => void | Promise<void>;
+  onRemove: (id: string) => void | Promise<void>;
   isLoading?: boolean;
 }
 
 export function ActiveQueueList({
   selectedId,
   highlightedId = null,
-  onSelect,
-  onCheckIn,
-  onOpenVitals,
+  onSelectRow,
+  onVitals,
+  onStart,
   onUrgent,
+  onRemove,
   isLoading = false,
 }: ActiveQueueListProps) {
   const list = useFilteredQueueEntries();
@@ -46,28 +48,43 @@ export function ActiveQueueList({
   }
 
   return (
-    <div className="space-y-3">
-      {list.map((entry, index) => (
-        <div
-          key={entry.id}
-          data-queue-entry-id={entry.id}
-          className={[
-            selectedId === entry.id ? "rounded-xl ring-2 ring-primary ring-offset-2" : "",
-            highlightedId === entry.id ? "rounded-xl bg-primary/10 transition-colors duration-300" : "",
-          ]
-            .filter(Boolean)
-            .join(" ")}
-        >
-          <QueueCard
-            entry={entry}
-            position={index + 1}
-            onOpen={() => onSelect(entry.id)}
-            onCheckIn={() => onCheckIn(entry.id)}
-            onOpenVitals={() => onOpenVitals(entry.id)}
-            onUrgent={() => onUrgent(entry.id)}
-          />
-        </div>
-      ))}
-    </div>
+    <>
+      <div className="hidden space-y-3 lg:block">
+        <HelpdeskQueueDesktopTable
+          entries={list}
+          selectedId={selectedId}
+          highlightedId={highlightedId}
+          onSelectRow={onSelectRow}
+          onVitals={onVitals}
+          onStart={onStart}
+          onUrgent={onUrgent}
+          onRemove={onRemove}
+        />
+      </div>
+      <div className="space-y-3 lg:hidden">
+        {list.map((entry, index) => (
+          <div
+            key={entry.id}
+            data-queue-entry-id={entry.id}
+            className={[
+              selectedId === entry.id ? "rounded-xl ring-2 ring-primary ring-offset-2" : "",
+              highlightedId === entry.id ? "rounded-xl bg-primary/10 transition-colors duration-300" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+          >
+            <QueueCard
+              entry={entry}
+              position={index + 1}
+              onOpen={() => onSelectRow(entry.id)}
+              onVitals={() => onVitals(entry.id)}
+              onStart={() => onStart(entry.id)}
+              onUrgent={() => onUrgent(entry.id)}
+              onRemove={() => onRemove(entry.id)}
+            />
+          </div>
+        ))}
+      </div>
+    </>
   );
 }

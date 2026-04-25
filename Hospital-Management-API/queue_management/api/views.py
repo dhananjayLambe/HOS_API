@@ -7,13 +7,21 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
+from appointments.models import Appointment
+from consultations_core.services.encounter_service import EncounterService
+from consultations_core.services.queue_consultation_bridge import start_consultation_from_queue_entry
+from doctor.models import doctor as DoctorModel
 from queue_management.models import Queue
 from patient_account.models import PatientAccount, PatientProfile
 from rest_framework.generics import get_object_or_404,RetrieveAPIView
 from clinic.models import Clinic
 from queue_management.api.serializers import (
-    QueueSerializer, QueueUpdateSerializer,QueuePatientSerializer,
-    QueueReorderSerializer)
+    HelpdeskQueueRowSerializer,
+    QueueSerializer,
+    QueueUpdateSerializer,
+    QueuePatientSerializer,
+    QueueReorderSerializer,
+)
 from account.permissions import IsDoctorOrHelpdesk,IsHelpdesk
 from django.db import transaction
 
@@ -55,16 +63,48 @@ class CheckInQueueAPIView(APIView):
         last_position = Queue.objects.filter(doctor_id=doctor_id, clinic_id=clinic_id, status='waiting', created_at__date=today).count()
         new_position = last_position + 1
 
-        queue_entry = Queue.objects.create(
-            doctor_id=doctor_id,
-            clinic=clinic,
-            patient_account=patient_account,
-            patient=patient_profile,
-            appointment_id=appointment_id,
-            position_in_queue=new_position,
-            status="waiting"
-        )
-        return Response(QueueSerializer(queue_entry).data, status=status.HTTP_201_CREATED)
+        doctor_obj = get_object_or_404(DoctorModel, id=doctor_id)
+        appointment = None
+        if appointment_id:
+            appointment = Appointment.objects.filter(id=appointment_id).first()
+
+        with transaction.atomic():
+            encounter, _enc_created = EncounterService.get_or_create_encounter(
+                clinic=clinic,
+                patient_account=patient_account,
+                patient_profile=patient_profile,
+                doctor=doctor_obj,
+                appointment=appointment,
+                encounter_type="walk_in",
+                entry_mode="helpdesk",
+                created_by=request.user,
+                consultation_type="FULL",
+            )
+            update_fields = []
+            if encounter.doctor_id != doctor_obj.id:
+                encounter.doctor = doctor_obj
+                update_fields.append("doctor")
+            appt_id = appointment.id if appointment else None
+            if encounter.appointment_id != appt_id:
+                encounter.appointment = appointment
+                update_fields.append("appointment")
+            if update_fields:
+                encounter.updated_by = request.user
+                encounter.save(update_fields=update_fields + ["updated_by"])
+
+            queue_entry = Queue.objects.create(
+                doctor_id=doctor_id,
+                clinic=clinic,
+                patient_account=patient_account,
+                patient=patient_profile,
+                appointment_id=appointment_id,
+                encounter=encounter,
+                position_in_queue=new_position,
+                status="waiting",
+            )
+
+        queue_entry = Queue.objects.select_related("patient", "appointment", "encounter").get(pk=queue_entry.pk)
+        return Response(HelpdeskQueueRowSerializer(queue_entry).data, status=status.HTTP_201_CREATED)
 
 # 2. GET /queue/doctor/{id}/ – Get today’s live queue for a doctor at a clinic
 class DoctorQueueAPIView(APIView):
@@ -73,8 +113,50 @@ class DoctorQueueAPIView(APIView):
 
     def get(self, request, doctor_id, clinic_id):
         today = localdate()
-        queue = Queue.objects.filter(doctor_id=doctor_id, clinic_id=clinic_id, created_at__date=today).order_by("position_in_queue")
-        return Response(QueueSerializer(queue, many=True).data)
+        queue = (
+            Queue.objects.filter(doctor_id=doctor_id, clinic_id=clinic_id, created_at__date=today)
+            .select_related("patient", "appointment", "encounter")
+            .order_by("position_in_queue")
+        )
+        return Response(HelpdeskQueueRowSerializer(queue, many=True).data)
+
+
+class HelpdeskClinicQueueAPIView(APIView):
+    """
+    GET /queue/helpdesk/today/ — today's queue rows for the helpdesk user's clinic
+    (all approved doctors at that clinic). No hardcoded doctor/clinic in the client.
+    """
+
+    permission_classes = [IsAuthenticated, IsHelpdesk]
+    authentication_classes = [JWTAuthentication]
+
+    def get(self, request):
+        hp = getattr(request.user, "helpdesk_profile", None)
+        if hp is None:
+            return Response(
+                {"detail": "No helpdesk clinic assignment for this user."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        clinic = hp.clinic
+        doctor_ids = list(
+            DoctorModel.objects.filter(clinics__id=clinic.id, is_approved=True)
+            .values_list("id", flat=True)
+            .distinct()
+        )
+        today = localdate()
+        if not doctor_ids:
+            return Response([], status=status.HTTP_200_OK)
+        queue = (
+            Queue.objects.filter(
+                clinic_id=clinic.id,
+                doctor_id__in=doctor_ids,
+                created_at__date=today,
+            )
+            .select_related("patient", "appointment", "encounter", "patient_account__user")
+            .order_by("doctor_id", "position_in_queue")
+        )
+        return Response(HelpdeskQueueRowSerializer(queue, many=True).data)
+
 
 # 3. PATCH /queue/start/ – Mark a patient as In Consultation
 class StartConsultationAPIView(APIView):
@@ -90,12 +172,22 @@ class StartConsultationAPIView(APIView):
 
         today = localdate()
         try:
-            queue_entry = Queue.objects.get(id=queue_id, clinic_id=clinic_id,created_at__date=today, status="waiting")
-            queue_entry.status = "in_consultation"
-            queue_entry.save()
+            with transaction.atomic():
+                queue_entry = Queue.objects.select_related("encounter").select_for_update().get(
+                    id=queue_id,
+                    clinic_id=clinic_id,
+                    created_at__date=today,
+                    status__in=("waiting", "vitals_done"),
+                )
+                queue_entry.status = "in_consultation"
+                queue_entry.save()
+                start_consultation_from_queue_entry(queue_entry, request.user)
             return Response({"message": "Patient is now in consultation."}, status=status.HTTP_200_OK)
         except Queue.DoesNotExist:
-            return Response({"error": "Patient not found or not in waiting status."}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": "Patient not found or not in waiting / vitals-done status."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
 # 4. PATCH /queue/complete/ – Mark consultation as Completed
 class CompleteConsultationAPIView(APIView):
@@ -129,12 +221,15 @@ class SkipPatientAPIView(APIView):
             return Response({"error": "Queue ID is required."}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            queue_entry = Queue.objects.get(id=queue_id, status="waiting")
+            queue_entry = Queue.objects.get(id=queue_id, status__in=("waiting", "vitals_done"))
             queue_entry.status = "skipped"
             queue_entry.save()
             return Response({"message": "Patient skipped."}, status=status.HTTP_200_OK)
         except Queue.DoesNotExist:
-            return Response({"error": "Patient not found or not in waiting status."}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": "Patient not found or not in waiting / vitals-done status."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
 
 # 6. PATCH /queue/urgent/ – Prioritize an urgent patient in the queue
@@ -148,13 +243,13 @@ class UrgentPatientAPIView(APIView):
             return Response({"error": "Queue ID is required."}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            queue_entry = Queue.objects.get(id=queue_id, status="waiting")
+            queue_entry = Queue.objects.get(id=queue_id, status__in=("waiting", "vitals_done"))
 
             # Shift existing patients down
             Queue.objects.filter(
-                doctor_id=queue_entry.doctor_id, 
-                status="waiting", 
-                position_in_queue__lt=queue_entry.position_in_queue
+                doctor_id=queue_entry.doctor_id,
+                status__in=("waiting", "vitals_done"),
+                position_in_queue__lt=queue_entry.position_in_queue,
             ).update(position_in_queue=F("position_in_queue") + 1)
 
             # Move urgent patient to the top
@@ -163,7 +258,10 @@ class UrgentPatientAPIView(APIView):
 
             return Response({"message": "Patient moved to urgent priority."}, status=status.HTTP_200_OK)
         except Queue.DoesNotExist:
-            return Response({"error": "Patient not found or not in waiting status."}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": "Patient not found or not in waiting / vitals-done status."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
 class QueueDetailsView(APIView):
     permission_classes = [IsAuthenticated, IsDoctorOrHelpdesk]
@@ -221,7 +319,7 @@ class MarkPatientNotAvailableAPIView(APIView):
     def patch(self, request, id, *args, **kwargs):
         queue_entry = get_object_or_404(Queue, id=id)
 
-        if queue_entry.status not in ["waiting", "in_consultation"]:
+        if queue_entry.status not in ["waiting", "vitals_done", "in_consultation"]:
             return Response({"error": "Cannot mark as not available in the current status"},
                             status=status.HTTP_400_BAD_REQUEST)
 

@@ -3,36 +3,58 @@
 import { create } from "zustand";
 import { useMemo } from "react";
 import { toast } from "sonner";
+import axiosClient, { backendAxiosClient } from "@/lib/axiosClient";
 
-export type QueueStatus = "waiting" | "pre_consult" | "with_doctor";
+export type QueueStatus = "waiting" | "vitals_done" | "in_consultation" | "completed";
 
-export interface Vitals {
-  bp: string;
-  pulse: string;
-  temp: string;
-  weight: string;
-  height: string;
-  notes: string;
+/** Persisted vitals shape (aligned with POST /api/visits/{visit_id}/vitals/) */
+export interface HelpdeskVitalsPayload {
+  bp_systolic?: number;
+  bp_diastolic?: number;
+  weight?: number;
+  height?: number;
+  temperature?: number;
 }
 
 export interface QueueEntry {
   id: string;
+  /** ClinicalEncounter UUID when linked from server check-in */
+  visitId: string | null;
   patientProfileId?: string;
   name: string;
   mobile: string;
+  age?: number;
+  gender?: string;
+  /** Display token (e.g. appointment token); falls back to queue position in UI */
+  token?: string;
   status: QueueStatus;
   priority: number;
-  vitals?: Partial<Vitals>;
+  vitals: HelpdeskVitalsPayload | null;
+  /** Present for server-backed rows — used for queue mutations */
+  clinicId?: string | null;
+  doctorId?: string | null;
 }
 
-const emptyVitals = (): Vitals => ({
-  bp: "",
-  pulse: "",
-  temp: "",
-  weight: "",
-  height: "",
-  notes: "",
-});
+export function vitalsPreviewLine(vitals: HelpdeskVitalsPayload | null | undefined): string | null {
+  if (!vitals) return null;
+  const parts: string[] = [];
+  const sys = vitals.bp_systolic;
+  const dia = vitals.bp_diastolic;
+  if (sys != null && dia != null) parts.push(`BP: ${sys}/${dia}`);
+  if (vitals.weight != null) parts.push(`W: ${vitals.weight}kg`);
+  if (vitals.height != null) parts.push(`H: ${vitals.height}ft`);
+  if (vitals.temperature != null) parts.push(`T: ${vitals.temperature}`);
+  return parts.length ? parts.join(" | ") : null;
+}
+
+export function hasMeaningfulVitals(v: HelpdeskVitalsPayload | null | undefined): boolean {
+  if (!v) return false;
+  const bpPair = v.bp_systolic != null && v.bp_diastolic != null;
+  const bpPartial = v.bp_systolic != null || v.bp_diastolic != null;
+  if (bpPartial && !bpPair) return false;
+  const other = v.weight != null || v.height != null || v.temperature != null;
+  return bpPair || other;
+}
 
 function maskMobile(m: string): string {
   const d = m.replace(/\D/g, "");
@@ -44,46 +66,191 @@ function normalizeMobile(value?: string | null): string {
   return (value ?? "").replace(/\D/g, "");
 }
 
+/** sessionStorage key — tracks which calendar day the helpdesk queue UI was last aligned to (local timezone). */
+const HELPDESK_QUEUE_DAY_KEY = "medixpro_helpdesk_queue_calendar_day";
+
+/** Local calendar date `YYYY-MM-DD` for “today’s queue” boundaries. */
+export function helpdeskQueueCalendarDayLocal(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/** True when the browser tab has a stored day that is not today (e.g. tab left open past midnight). */
+export function isHelpdeskQueueCalendarDayStale(): boolean {
+  if (typeof sessionStorage === "undefined") return false;
+  const stored = sessionStorage.getItem(HELPDESK_QUEUE_DAY_KEY);
+  if (stored === null) return false;
+  return stored !== helpdeskQueueCalendarDayLocal();
+}
+
+/** Raw row from `HelpdeskQueueRowSerializer` (GET queue/helpdesk/today/). */
+interface HelpdeskQueueRowApi {
+  id: string;
+  visit_id: string | null;
+  patient?: string | null;
+  patient_name?: string | null;
+  patient_mobile?: string | null;
+  age?: number | null;
+  gender?: string | null;
+  token?: string | null;
+  vitals?: Record<string, unknown> | null;
+  status: string;
+  position_in_queue?: number | null;
+  doctor?: string | null;
+  clinic?: string | null;
+}
+
+function mapApiStatus(raw: string): QueueStatus {
+  if (raw === "waiting" || raw === "vitals_done" || raw === "in_consultation" || raw === "completed") {
+    return raw;
+  }
+  return "completed";
+}
+
+function vitalsFromPreview(vitals: Record<string, unknown> | null | undefined): HelpdeskVitalsPayload | null {
+  if (!vitals || typeof vitals !== "object") return null;
+  const out: HelpdeskVitalsPayload = {};
+  const bp = vitals.bp;
+  if (typeof bp === "string") {
+    const m = /^(\d+)\s*\/\s*(\d+)$/.exec(bp.trim());
+    if (m) {
+      out.bp_systolic = Number(m[1]);
+      out.bp_diastolic = Number(m[2]);
+    }
+  }
+  const w = vitals.weight;
+  if (typeof w === "number") out.weight = w;
+  else if (typeof w === "string" && w.trim() !== "") {
+    const n = Number(w);
+    if (!Number.isNaN(n)) out.weight = n;
+  }
+  const h = vitals.height;
+  if (typeof h === "number") out.height = h;
+  else if (typeof h === "string" && h.trim() !== "") {
+    const n = Number(h);
+    if (!Number.isNaN(n)) out.height = n;
+  }
+  const t = vitals.temperature;
+  if (typeof t === "number") out.temperature = t;
+  else if (typeof t === "string" && t.trim() !== "") {
+    const n = Number(t);
+    if (!Number.isNaN(n)) out.temperature = n;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+function mapHelpdeskQueueRowToEntry(row: HelpdeskQueueRowApi): QueueEntry {
+  const pos = row.position_in_queue ?? 0;
+  const status = mapApiStatus(row.status);
+  return {
+    id: row.id,
+    visitId: row.visit_id,
+    patientProfileId: row.patient ?? undefined,
+    name: (row.patient_name || "").trim() || "Patient",
+    mobile: (row.patient_mobile || "").trim(),
+    age: row.age ?? undefined,
+    gender: row.gender ?? undefined,
+    token: row.token ?? undefined,
+    status,
+    priority: 10_000 - pos,
+    vitals: vitalsFromPreview(row.vitals ?? undefined),
+    clinicId: row.clinic ?? null,
+    doctorId: row.doctor ?? null,
+  };
+}
+
+function mapHelpdeskQueueApiResponse(rows: unknown): QueueEntry[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.map((r) => mapHelpdeskQueueRowToEntry(r as HelpdeskQueueRowApi));
+}
+
 interface HelpdeskQueueState {
   entries: QueueEntry[];
   headerSearch: string;
-  /** Cross-page: open vitals for this queue id (e.g. bottom nav Pre-Consult) */
-  preConsultTargetId: string | null;
+  /** Scroll/highlight a row after add-to-queue */
+  highlightQueueEntryId: string | null;
   setHeaderSearch: (q: string) => void;
-  setPreConsultTargetId: (id: string | null) => void;
-  /** Bottom nav / sidebar: focus first pre-consult patient vitals */
-  openPreConsultFlow: () => void;
+  setHighlightQueueEntryId: (id: string | null) => void;
+  hydrateFromServer: (serverEntries: QueueEntry[]) => void;
+  fetchTodayQueue: () => Promise<{ rolledOver: boolean }>;
   addPatient: (name: string, mobile: string) => string;
   addPatientFromSearch: (patient: { id: string; full_name: string; mobile?: string | null }) => string;
   findEntryByPatient: (patient: { id: string; mobile?: string | null }) => QueueEntry | null;
-  moveToTop: (id: string) => void;
-  checkIn: (id: string) => void;
-  updateVitals: (id: string, vitals: Partial<Vitals>, sendToDoctor?: boolean) => void;
+  moveToTop: (id: string) => Promise<void>;
+  saveVitals: (id: string, vitals: HelpdeskVitalsPayload) => void;
+  startConsultation: (id: string) => Promise<void>;
+  removeFromQueue: (id: string) => Promise<void>;
 }
 
 let idCounter = 100;
 
+/** Coalesce overlapping refreshes (poll + day watch + visibility). */
+let fetchTodayQueueInFlight: Promise<{ rolledOver: boolean }> | null = null;
+
+function mockVisitIdForNewEntry(): string {
+  const hex = `${++idCounter}`.padStart(12, "0");
+  return `b0000000-0000-4000-8000-${hex.slice(0, 12)}`;
+}
+
 export const useHelpdeskQueueStore = create<HelpdeskQueueState>((set, get) => ({
-  entries: [
-    { id: "q1", patientProfileId: "seed-q1", name: "Rahul Sharma", mobile: "9876543212", status: "waiting", priority: 3 },
-    { id: "q2", patientProfileId: "seed-q2", name: "Priya Patel", mobile: "9123456780", status: "pre_consult", priority: 2 },
-    { id: "q3", patientProfileId: "seed-q3", name: "Amit Kumar", mobile: "9988776655", status: "waiting", priority: 1 },
-  ],
+  entries: [],
   headerSearch: "",
-  preConsultTargetId: null,
+  highlightQueueEntryId: null,
 
   setHeaderSearch: (q) => set({ headerSearch: q }),
-  setPreConsultTargetId: (id) => set({ preConsultTargetId: id }),
+  setHighlightQueueEntryId: (id) => set({ highlightQueueEntryId: id }),
 
-  openPreConsultFlow: () => {
-    const { entries } = get();
-    const sorted = [...entries].sort((a, b) => b.priority - a.priority);
-    const target = sorted.find((e) => e.status === "pre_consult");
-    if (!target) {
-      toast.message("No patient in Pre-Consult");
-      return;
-    }
-    set({ preConsultTargetId: target.id });
+  hydrateFromServer: (serverEntries) => {
+    set((s) => {
+      const locals = s.entries.filter((e) => e.id.startsWith("hq-"));
+      const mergedLocals = locals.filter(
+        (loc) =>
+          !serverEntries.some(
+            (se) =>
+              (loc.patientProfileId &&
+                se.patientProfileId &&
+                loc.patientProfileId === se.patientProfileId) ||
+              (normalizeMobile(loc.mobile).length >= 10 &&
+                normalizeMobile(loc.mobile) === normalizeMobile(se.mobile))
+          )
+      );
+      return { entries: [...serverEntries, ...mergedLocals] };
+    });
+  },
+
+  fetchTodayQueue: () => {
+    if (fetchTodayQueueInFlight) return fetchTodayQueueInFlight;
+    fetchTodayQueueInFlight = (async () => {
+      let rolledOver = false;
+      if (typeof sessionStorage !== "undefined") {
+        const today = helpdeskQueueCalendarDayLocal();
+        const prev = sessionStorage.getItem(HELPDESK_QUEUE_DAY_KEY);
+        if (prev !== null && prev !== today) {
+          rolledOver = true;
+          idCounter = 100;
+          set({
+            entries: [],
+            highlightQueueEntryId: null,
+            headerSearch: "",
+          });
+        }
+        sessionStorage.setItem(HELPDESK_QUEUE_DAY_KEY, today);
+      }
+
+      const { data } = await axiosClient.get<unknown>("/api/queue/helpdesk/today/");
+      const mapped = mapHelpdeskQueueApiResponse(data);
+      get().hydrateFromServer(mapped);
+      if (rolledOver && typeof window !== "undefined") {
+        toast.message("New day — today's queue was refreshed; yesterday's list was cleared.");
+      }
+      return { rolledOver };
+    })().finally(() => {
+      fetchTodayQueueInFlight = null;
+    });
+    return fetchTodayQueueInFlight;
   },
 
   addPatient: (name, mobile) => {
@@ -95,11 +262,18 @@ export const useHelpdeskQueueStore = create<HelpdeskQueueState>((set, get) => ({
           ...s.entries,
           {
             id,
+            visitId: mockVisitIdForNewEntry(),
             patientProfileId: undefined,
             name: name.trim(),
             mobile: mobile.trim(),
+            age: undefined,
+            gender: undefined,
+            token: undefined,
             status: "waiting" as const,
             priority: maxP + 1,
+            vitals: null,
+            clinicId: null,
+            doctorId: null,
           },
         ],
       };
@@ -119,11 +293,18 @@ export const useHelpdeskQueueStore = create<HelpdeskQueueState>((set, get) => ({
           ...s.entries,
           {
             id,
+            visitId: mockVisitIdForNewEntry(),
             patientProfileId: patient.id,
             name: (patient.full_name || "").trim() || "Unnamed Patient",
             mobile: (patient.mobile || "").trim(),
+            age: undefined,
+            gender: undefined,
+            token: undefined,
             status: "waiting" as const,
             priority: maxP + 1,
+            vitals: null,
+            clinicId: null,
+            doctorId: null,
           },
         ],
       };
@@ -143,42 +324,66 @@ export const useHelpdeskQueueStore = create<HelpdeskQueueState>((set, get) => ({
     );
   },
 
-  moveToTop: (id) =>
+  moveToTop: async (id) => {
+    const e = get().entries.find((x) => x.id === id);
+    if (!e || (e.status !== "waiting" && e.status !== "vitals_done")) return;
+    if (!e.id.startsWith("hq-")) {
+      await backendAxiosClient.patch("queue/urgent/", { queue_id: id });
+      await get().fetchTodayQueue();
+      return;
+    }
     set((s) => {
-      const maxP = s.entries.reduce((m, e) => Math.max(m, e.priority), 0);
+      const maxP = s.entries.reduce((m, x) => Math.max(m, x.priority), 0);
       return {
-        entries: s.entries.map((e) => (e.id === id ? { ...e, priority: maxP + 1 } : e)),
+        entries: s.entries.map((x) => (x.id === id ? { ...x, priority: maxP + 1 } : x)),
       };
-    }),
+    });
+  },
 
-  checkIn: (id) =>
-    set((s) => ({
-      entries: s.entries.map((e) =>
-        e.id === id ? { ...e, status: "pre_consult" as const, vitals: { ...e.vitals, ...emptyVitals() } } : e
-      ),
-      preConsultTargetId: id,
-    })),
-
-  updateVitals: (id, vitals, sendToDoctor = false) =>
+  saveVitals: (id, vitals) =>
     set((s) => ({
       entries: s.entries.map((e) => {
         if (e.id !== id) return e;
-        const merged = { ...emptyVitals(), ...e.vitals, ...vitals };
-        return {
-          ...e,
-          vitals: merged,
-          status: sendToDoctor ? ("with_doctor" as const) : e.status,
-        };
+        if (e.status === "in_consultation" || e.status === "completed") {
+          return { ...e, vitals: { ...(e.vitals ?? {}), ...vitals } };
+        }
+        const merged: HelpdeskVitalsPayload = { ...(e.vitals ?? {}), ...vitals };
+        const meaningful = hasMeaningfulVitals(merged);
+        const nextStatus: QueueStatus = meaningful ? "vitals_done" : "waiting";
+        return { ...e, vitals: merged, status: nextStatus };
       }),
     })),
+
+  startConsultation: async (id) => {
+    const e = get().entries.find((x) => x.id === id);
+    if (e?.clinicId) {
+      await backendAxiosClient.patch("queue/start/", { queue_id: id, clinic_id: e.clinicId });
+    }
+    set((s) => ({
+      entries: s.entries.map((row) => {
+        if (row.id !== id) return row;
+        if (row.status !== "waiting" && row.status !== "vitals_done") return row;
+        return { ...row, status: "in_consultation" as const };
+      }),
+    }));
+  },
+
+  removeFromQueue: async (id) => {
+    const e = get().entries.find((x) => x.id === id);
+    if (e && !e.id.startsWith("hq-")) {
+      await backendAxiosClient.patch("queue/skip/", { queue_id: id });
+    }
+    set((s) => ({
+      entries: s.entries.filter((row) => row.id !== id),
+    }));
+  },
 }));
 
-export { maskMobile, emptyVitals };
+export { maskMobile };
 
 /**
  * Sorted by priority; filtered by header search (name / mobile digits).
- * Must not return a new array from a raw Zustand selector each time — that triggers
- * useSyncExternalStore "getSnapshot" / infinite update loops in React 19.
+ * Active = not completed (completed rows optional in product; we still list for audit).
  */
 export function useFilteredQueueEntries(): QueueEntry[] {
   const entries = useHelpdeskQueueStore((s) => s.entries);

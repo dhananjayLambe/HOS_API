@@ -21,7 +21,13 @@ const nextConfig = {
   reactStrictMode: true,
   // Optimize bundle size
   experimental: {
-    optimizePackageImports: ['lucide-react', '@radix-ui/react-popover', '@radix-ui/react-tabs'],
+    optimizePackageImports: [
+      'lucide-react',
+      '@radix-ui/react-popover',
+      '@radix-ui/react-tabs',
+      '@radix-ui/react-dialog',
+      'react-resizable-panels',
+    ],
   },
   // beforeFiles: proxy to Django *before* App Router tries to resolve /api/... (which 404s with HTML).
   // Destination `:path*/` ensures Django receives a trailing slash (APPEND_SLASH). Without it, Next can strip
