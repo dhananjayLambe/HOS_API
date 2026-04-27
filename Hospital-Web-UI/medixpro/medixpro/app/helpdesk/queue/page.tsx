@@ -4,7 +4,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 const HelpdeskQueueView = dynamic(
   () => import("@/components/helpdesk/HelpdeskQueueView").then((m) => ({ default: m.HelpdeskQueueView })),
   {
-    ssr: false,
     loading: () => (
       <div className="flex min-h-0 flex-1 flex-col gap-4 p-1">
         <Skeleton className="h-9 w-64 max-w-full" />

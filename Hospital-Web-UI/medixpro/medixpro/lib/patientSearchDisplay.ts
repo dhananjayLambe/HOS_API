@@ -3,7 +3,9 @@ import type { Patient } from "@/lib/patientContext";
 export type PatientSearchRow = Pick<
   Patient,
   "id" | "first_name" | "last_name" | "full_name" | "gender" | "date_of_birth" | "mobile" | "relation"
->;
+> & {
+  patient_account_id?: string;
+};
 
 /** Mask for search result rows (matches doctor header search). */
 export function maskMobileForSearch(mobile?: string | null): string {

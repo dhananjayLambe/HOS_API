@@ -10,7 +10,6 @@ interface ActiveQueueListProps {
   highlightedId?: string | null;
   onSelectRow: (id: string) => void;
   onVitals: (id: string) => void;
-  onStart: (id: string) => void | Promise<void>;
   onUrgent: (id: string) => void | Promise<void>;
   onRemove: (id: string) => void | Promise<void>;
   isLoading?: boolean;
@@ -21,7 +20,6 @@ export function ActiveQueueList({
   highlightedId = null,
   onSelectRow,
   onVitals,
-  onStart,
   onUrgent,
   onRemove,
   isLoading = false,
@@ -56,7 +54,6 @@ export function ActiveQueueList({
           highlightedId={highlightedId}
           onSelectRow={onSelectRow}
           onVitals={onVitals}
-          onStart={onStart}
           onUrgent={onUrgent}
           onRemove={onRemove}
         />
@@ -78,7 +75,6 @@ export function ActiveQueueList({
               position={index + 1}
               onOpen={() => onSelectRow(entry.id)}
               onVitals={() => onVitals(entry.id)}
-              onStart={() => onStart(entry.id)}
               onUrgent={() => onUrgent(entry.id)}
               onRemove={() => onRemove(entry.id)}
             />

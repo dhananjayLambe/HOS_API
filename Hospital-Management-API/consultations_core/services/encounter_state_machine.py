@@ -26,11 +26,51 @@ EncounterStateMachine.transition(encounter, "in_consultation", user=request.user
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from django.db import transaction
+import logging
 
 from consultations_core.models.encounter import ClinicalEncounter
 from consultations_core.models.encounter import EncounterStatusLog
 from consultations_core.domain.audit import AuditService
+from consultations_core.domain.encounter_status import normalize_encounter_status
 from account.models import User
+
+logger = logging.getLogger(__name__)
+
+
+def _sync_queue_for_encounter_terminal(encounter, kind: str) -> None:
+    """
+    Best-effort: align linked Queue row(s) when the encounter becomes terminal
+    (helpdesk list is Queue.status–driven; encounter is the clinical source of truth).
+
+    kind: "completed" | "cancelled" | "no_show"
+    """
+    if encounter is None or not getattr(encounter, "pk", None):
+        return
+    try:
+        eid = encounter.id
+        if kind == "completed":
+            from queue_management.services.queue_encounter_sync import (
+                mark_queue_rows_for_encounter_completed,
+            )
+            mark_queue_rows_for_encounter_completed(eid)
+        elif kind == "cancelled":
+            from queue_management.services.queue_encounter_sync import (
+                mark_queue_rows_for_encounter_cancelled,
+            )
+            mark_queue_rows_for_encounter_cancelled(eid)
+        elif kind == "no_show":
+            from queue_management.services.queue_encounter_sync import (
+                mark_queue_rows_for_encounter_no_show,
+            )
+            mark_queue_rows_for_encounter_no_show(eid)
+    except Exception as exc:
+        logger.warning(
+            "encounter.lifecycle.queue_sync_failed kind=%s encounter_id=%s err=%s",
+            kind,
+            getattr(encounter, "id", None),
+            exc,
+            exc_info=True,
+        )
 
 
 # =====================================================
@@ -46,10 +86,6 @@ ALLOWED_TRANSITIONS = {
     "closed": [],
     "cancelled": [],
     "no_show": [],
-    # Legacy (existing rows)
-    "pre_consultation": ["pre_consultation_completed", "consultation_in_progress", "in_consultation", "cancelled"],
-    "in_consultation": ["consultation_completed", "completed", "cancelled"],
-    "completed": ["closed"],
 }
 
 
@@ -82,10 +118,19 @@ class EncounterStateMachine:
         if not isinstance(encounter, ClinicalEncounter):
             raise ValidationError("Invalid encounter instance.")
 
-        current_status = encounter.status
+        current_status = normalize_encounter_status(encounter.status)
+        new_status = normalize_encounter_status(new_status)
 
         # Prevent no-op transitions
         if current_status == new_status:
+            logger.info(
+                "encounter.lifecycle.transition.noop encounter_id=%s visit_pnr=%s status=%s source=%s user_id=%s",
+                encounter.id,
+                encounter.visit_pnr,
+                current_status,
+                source,
+                getattr(user, "id", None),
+            )
             return encounter
 
         # Validate transition
@@ -95,6 +140,15 @@ class EncounterStateMachine:
                 f"Invalid transition from '{current_status}' to '{new_status}'. "
                 f"Allowed: {allowed}"
             )
+        logger.info(
+            "encounter.lifecycle.transition.request encounter_id=%s visit_pnr=%s from_status=%s to_status=%s source=%s user_id=%s",
+            encounter.id,
+            encounter.visit_pnr,
+            current_status,
+            new_status,
+            source,
+            getattr(user, "id", None),
+        )
 
         # Apply lifecycle rules and timestamps
         now = timezone.now()
@@ -170,6 +224,14 @@ class EncounterStateMachine:
             source=source,
             reason=reason,
         )
+        logger.info(
+            "encounter.lifecycle.transition.success encounter_id=%s visit_pnr=%s from_status=%s to_status=%s is_active=%s",
+            encounter.id,
+            encounter.visit_pnr,
+            current_status,
+            new_status,
+            encounter.is_active,
+        )
 
         return encounter
 
@@ -201,16 +263,20 @@ class EncounterStateMachine:
     @staticmethod
     def complete_consultation(encounter, user=None):
         """CONSULTATION_IN_PROGRESS → CONSULTATION_COMPLETED"""
-        return EncounterStateMachine.transition(
+        result = EncounterStateMachine.transition(
             encounter, "consultation_completed", user
         )
+        _sync_queue_for_encounter_terminal(result, "completed")
+        return result
 
     @staticmethod
     def close_encounter(encounter, user=None):
         """CONSULTATION_COMPLETED → CLOSED"""
-        return EncounterStateMachine.transition(
+        result = EncounterStateMachine.transition(
             encounter, "closed", user
         )
+        _sync_queue_for_encounter_terminal(result, "completed")
+        return result
 
     @staticmethod
     def move_to_pre_consultation(encounter, user=None):
@@ -239,16 +305,22 @@ class EncounterStateMachine:
             return EncounterStateMachine.complete_consultation(encounter, user)
         if status == "consultation_completed":
             return EncounterStateMachine.close_encounter(encounter, user)
-        return EncounterStateMachine.transition(encounter, "completed", user)
+        result = EncounterStateMachine.transition(encounter, "completed", user)
+        _sync_queue_for_encounter_terminal(result, "completed")
+        return result
 
     @staticmethod
     def cancel(encounter, user=None):
-        return EncounterStateMachine.transition(
+        result = EncounterStateMachine.transition(
             encounter, "cancelled", user
         )
+        _sync_queue_for_encounter_terminal(result, "cancelled")
+        return result
 
     @staticmethod
     def mark_no_show(encounter, user=None):
-        return EncounterStateMachine.transition(
+        result = EncounterStateMachine.transition(
             encounter, "no_show", user
         )
+        _sync_queue_for_encounter_terminal(result, "no_show")
+        return result

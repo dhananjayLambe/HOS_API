@@ -135,10 +135,7 @@ class Consultation(models.Model):
 
         # Lock pre-consultation if it exists
         if hasattr(encounter, "pre_consultation"):
-            try:
-                encounter.pre_consultation.lock(reason="Consultation started")
-            except Exception:
-                pass  # already locked or no pre_consultation
+            encounter.pre_consultation.lock(reason="Consultation started")
 
         # Update encounter status via state machine (sets consultation_start_time etc.)
         EncounterStateMachine.start_consultation(encounter, user=None)

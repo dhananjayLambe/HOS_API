@@ -74,10 +74,11 @@ class PatientProfileDetailsSerializer(serializers.ModelSerializer):
 class PatientProfileSearchSerializer(serializers.ModelSerializer):
     mobile = serializers.SerializerMethodField()
     full_name = serializers.SerializerMethodField()
+    patient_account_id = serializers.UUIDField(source="account_id", read_only=True)
 
     class Meta:
         model = PatientProfile
-        fields = ['id', 'first_name', 'last_name', 'full_name', 'relation', 'gender', 'date_of_birth', 'mobile']
+        fields = ['id', 'first_name', 'last_name', 'full_name', 'relation', 'gender', 'date_of_birth', 'mobile', 'patient_account_id']
 
     def get_mobile(self, obj):
         try:

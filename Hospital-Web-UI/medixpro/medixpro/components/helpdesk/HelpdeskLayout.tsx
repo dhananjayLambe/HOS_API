@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useAuth } from "@/lib/authContext";
 import axiosClient from "@/lib/axiosClient";
+import { helpdeskCheckInOnServer, HELPDESK_DUPLICATE_NO_SYNCED_ROW } from "@/lib/helpdeskCheckIn";
 import { getRoleRedirectPath } from "@/lib/jwtUtils";
 import { useHelpdeskQueueStore } from "@/lib/helpdeskQueueStore";
 import { cn } from "@/lib/utils";
@@ -67,6 +68,7 @@ export function HelpdeskLayout({ children }: { children: React.ReactNode }) {
   const addPatientFromSearch = useHelpdeskQueueStore((s) => s.addPatientFromSearch);
   const findEntryByPatient = useHelpdeskQueueStore((s) => s.findEntryByPatient);
   const setHighlightQueueEntryId = useHelpdeskQueueStore((s) => s.setHighlightQueueEntryId);
+  const fetchTodayQueue = useHelpdeskQueueStore((s) => s.fetchTodayQueue);
   const isMobile = useIsMobile();
 
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -90,14 +92,59 @@ export function HelpdeskLayout({ children }: { children: React.ReactNode }) {
     return pathname === item.href || pathname.startsWith(item.href + "/");
   };
 
-  const handleLiveSelect = (patient: PatientSearchRow) => {
+  const handleLiveSelect = async (patient: PatientSearchRow) => {
     const existing = findEntryByPatient({ id: patient.id, mobile: patient.mobile });
-    const queueEntryId = existing ? existing.id : addPatientFromSearch(patient);
-    if (existing) {
+    const hasSyncedEncounter = Boolean(existing?.visitId && existing?.clinicId);
+    if (existing && hasSyncedEncounter) {
+      setHighlightQueueEntryId(existing.id);
       toast.message("Already in queue");
-    } else {
-      toast.success("Added to queue");
+      router.push("/helpdesk/queue");
+      return;
     }
+    if (!patient.patient_account_id) {
+      toast.error("Patient account is missing. Please reopen search and try again.");
+      return;
+    }
+    const checkIn = await helpdeskCheckInOnServer(axiosClient, {
+      patient_account_id: patient.patient_account_id,
+      patient_profile_id: patient.id,
+    });
+    if (!checkIn.ok) {
+      if (checkIn.kind === "duplicate_queue") {
+        await fetchTodayQueue().catch(() => undefined);
+        const afterSync = useHelpdeskQueueStore
+          .getState()
+          .findEntryByPatient({ id: patient.id, mobile: patient.mobile });
+        if (afterSync?.visitId && afterSync.clinicId) {
+          setHighlightQueueEntryId(afterSync.id);
+          toast.message("Already in today’s queue");
+          router.push("/helpdesk/queue");
+          return;
+        }
+        toast.message(`${checkIn.error}${HELPDESK_DUPLICATE_NO_SYNCED_ROW}`);
+        router.push("/helpdesk/queue");
+        return;
+      }
+      const localId = addPatientFromSearch(patient);
+      setHighlightQueueEntryId(localId);
+      toast.error(
+        checkIn.kind === "other"
+          ? `${checkIn.error} (Added locally; you can retry after fixing the issue.)`
+          : "Could not sync queue. Added locally; retry check-in."
+      );
+      router.push("/helpdesk/queue");
+      return;
+    }
+    try {
+      await fetchTodayQueue();
+    } catch {
+      toast.message("Check-in saved. Refresh the queue if the list looks out of date.");
+    }
+    const synced = useHelpdeskQueueStore
+      .getState()
+      .findEntryByPatient({ id: patient.id, mobile: patient.mobile });
+    const queueEntryId = synced ? synced.id : addPatientFromSearch(patient);
+    toast.success("Added to queue");
     setHighlightQueueEntryId(queueEntryId);
     router.push("/helpdesk/queue");
   };
@@ -245,16 +292,72 @@ export function HelpdeskLayout({ children }: { children: React.ReactNode }) {
           setAddPatientOpen(open);
           if (!open) setAddDialogContext({});
         }}
-        onPatientAdded={(patient: Patient) => {
+        onPatientAdded={async (patient: Patient) => {
           const existing = findEntryByPatient({ id: patient.id, mobile: patient.mobile });
-          const queueEntryId = existing ? existing.id : addPatientFromSearch(patient);
-          if (existing) {
+          const hasSyncedEncounter = Boolean(existing?.visitId && existing?.clinicId);
+          if (existing && hasSyncedEncounter) {
+            setHighlightQueueEntryId(existing.id);
             toast.message("Already in queue");
-          } else {
-            toast.success("Added to queue");
+            router.push("/helpdesk/queue");
+            return;
           }
-          setHighlightQueueEntryId(queueEntryId);
-          router.push("/helpdesk/queue");
+          try {
+            const { data: checkResponse } = await axiosClient.post("/patients/check-mobile/", {
+              mobile: (patient.mobile || "").replace(/\D/g, "").slice(-10),
+            });
+            const patientAccountId = checkResponse?.patient_account_id;
+            if (!patientAccountId) {
+              throw new Error("Missing patient_account_id");
+            }
+            const checkIn = await helpdeskCheckInOnServer(axiosClient, {
+              patient_account_id: patientAccountId,
+              patient_profile_id: patient.id,
+            });
+            if (!checkIn.ok) {
+              if (checkIn.kind === "duplicate_queue") {
+                await fetchTodayQueue().catch(() => undefined);
+                const afterSync = useHelpdeskQueueStore
+                  .getState()
+                  .findEntryByPatient({ id: patient.id, mobile: patient.mobile });
+                if (afterSync?.visitId && afterSync.clinicId) {
+                  setHighlightQueueEntryId(afterSync.id);
+                  toast.message("Already in today’s queue");
+                  router.push("/helpdesk/queue");
+                  return;
+                }
+                toast.message(`${checkIn.error}${HELPDESK_DUPLICATE_NO_SYNCED_ROW}`);
+                router.push("/helpdesk/queue");
+                return;
+              }
+              const localId = addPatientFromSearch(patient);
+              toast.error(
+                checkIn.kind === "other"
+                  ? `${checkIn.error} (Added locally; you can retry after fixing the issue.)`
+                  : "Could not sync queue. Added locally; retry check-in."
+              );
+              setHighlightQueueEntryId(localId);
+              router.push("/helpdesk/queue");
+              return;
+            }
+            try {
+              await fetchTodayQueue();
+            } catch {
+              toast.message("Check-in saved. Refresh the queue if the list looks out of date.");
+            }
+            const synced = useHelpdeskQueueStore
+              .getState()
+              .findEntryByPatient({ id: patient.id, mobile: patient.mobile });
+            const queueEntryId = synced ? synced.id : addPatientFromSearch(patient);
+            toast.success("Added to queue");
+            setHighlightQueueEntryId(queueEntryId);
+            router.push("/helpdesk/queue");
+          } catch (e) {
+            const localId = addPatientFromSearch(patient);
+            const msg = e instanceof Error ? e.message : "Check-in failed";
+            toast.error(`${msg}. Added locally; retry check-in.`);
+            setHighlightQueueEntryId(localId);
+            router.push("/helpdesk/queue");
+          }
         }}
         syncGlobalPatientContext={false}
         submitLabel="+ Add to Queue"

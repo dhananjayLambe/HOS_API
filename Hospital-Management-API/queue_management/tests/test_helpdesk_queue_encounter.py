@@ -15,7 +15,10 @@ from consultations_core.models.encounter import ClinicalEncounter
 from doctor.models import doctor as DoctorModel
 from patient_account.models import PatientAccount, PatientProfile
 from queue_management.models import Queue
+from queue_management.services.queue_encounter_sync import mark_queue_rows_for_encounter_completed
 from helpdesk.models import HelpdeskClinicUser
+from consultations_core.domain.encounter_status import normalize_encounter_status
+from consultations_core.services.encounter_state_machine import EncounterStateMachine
 
 User = get_user_model()
 
@@ -66,6 +69,7 @@ def _doctor_and_patient(clinic):
         last_name="Test",
         relation="self",
         gender="male",
+        age_years=30,
     )
     return doc, acct, profile
 
@@ -140,12 +144,107 @@ class HelpdeskQueueEncounterTests(TestCase):
             {"queue_id": str(qid), "clinic_id": str(self.clinic.id)},
             format="json",
         )
+        self.assertEqual(r2.status_code, status.HTTP_403_FORBIDDEN, r2.data)
+
+    def test_doctor_queue_start_from_waiting_creates_consultation(self):
+        r = self.client.post(
+            reverse("queue-check-in"),
+            {
+                "clinic_id": str(self.clinic.id),
+                "patient_account_id": str(self.patient_account.id),
+                "patient_profile_id": str(self.profile.id),
+                "doctor_id": str(self.doctor.id),
+            },
+            format="json",
+        )
+        qid = r.data["id"]
+        doc_client = _doctor_client(self.doctor.user)
+        start_url = reverse("queue-start")
+        r2 = doc_client.patch(
+            start_url,
+            {"queue_id": str(qid), "clinic_id": str(self.clinic.id)},
+            format="json",
+        )
         self.assertEqual(r2.status_code, status.HTTP_200_OK, r2.data)
         q = Queue.objects.get(id=qid)
         self.assertEqual(q.status, "in_consultation")
         enc = ClinicalEncounter.objects.get(id=q.encounter_id)
         self.assertTrue(Consultation.objects.filter(encounter=enc).exists())
         self.assertEqual(enc.status, "consultation_in_progress")
+
+    def test_doctor_queue_start_from_vitals_done_creates_consultation(self):
+        r = self.client.post(
+            reverse("queue-check-in"),
+            {
+                "clinic_id": str(self.clinic.id),
+                "patient_account_id": str(self.patient_account.id),
+                "patient_profile_id": str(self.profile.id),
+                "doctor_id": str(self.doctor.id),
+            },
+            format="json",
+        )
+        qid = r.data["id"]
+        q = Queue.objects.get(id=qid)
+        self.client.post(
+            reverse("visit-vitals", kwargs={"visit_id": str(q.encounter_id)}),
+            {"bp_systolic": 120, "bp_diastolic": 80},
+            format="json",
+        )
+        doc_client = _doctor_client(self.doctor.user)
+        start_url = reverse("queue-start")
+        r2 = doc_client.patch(
+            start_url,
+            {"queue_id": str(qid), "clinic_id": str(self.clinic.id)},
+            format="json",
+        )
+        self.assertEqual(r2.status_code, status.HTTP_200_OK, r2.data)
+
+    def test_doctor_section_vitals_get_after_helpdesk_post(self):
+        """Regression: helpdesk POST visit vitals must be readable on doctor GET pre-consult section."""
+        self.client.post(
+            reverse("queue-check-in"),
+            {
+                "clinic_id": str(self.clinic.id),
+                "patient_account_id": str(self.patient_account.id),
+                "patient_profile_id": str(self.profile.id),
+                "doctor_id": str(self.doctor.id),
+            },
+            format="json",
+        )
+        q = Queue.objects.latest("created_at")
+        visit_id = str(q.encounter_id)
+        self.client.post(
+            reverse("visit-vitals", kwargs={"visit_id": visit_id}),
+            {
+                "bp_systolic": 120,
+                "bp_diastolic": 80,
+                "weight": 70.5,
+                "height": 5.9,
+                "temperature": 37.2,
+            },
+            format="json",
+        )
+        doc_client = _doctor_client(self.doctor.user)
+        section_url = reverse(
+            "pre-consult-section",
+            kwargs={"encounter_id": visit_id, "section_code": "vitals"},
+        )
+        r = doc_client.get(section_url)
+        self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
+        self.assertTrue(r.data.get("status"))
+        data = r.data.get("data") or {}
+        self.assertIsInstance(data, dict)
+        bp = data.get("blood_pressure") or data.get("bp") or {}
+        if isinstance(bp, dict):
+            self.assertEqual(bp.get("systolic"), 120)
+            self.assertEqual(bp.get("diastolic"), 80)
+        hw = data.get("height_weight") or {}
+        self.assertAlmostEqual(float(hw.get("weight_kg", data.get("weight_kg", 0))), 70.5, places=3)
+        height_cm = hw.get("height_cm") or data.get("height_cm")
+        self.assertIsNotNone(height_cm)
+        temp = data.get("temperature")
+        if isinstance(temp, dict):
+            self.assertAlmostEqual(float(temp.get("value", 0)), 37.2, places=3)
 
     def test_doctor_preview_sees_helpdesk_vitals_same_encounter_and_pnr(self):
         self.client.post(
@@ -268,3 +367,72 @@ class HelpdeskQueueEncounterTests(TestCase):
         self.assertEqual(len(r.data), 1)
         self.assertEqual(r.data[0]["patient_name"], "Pat Test")
         self.assertEqual(r.data[0]["patient_mobile"], self.patient_account.user.username)
+
+    def test_helpdesk_today_hides_stale_vitals_done_when_encounter_completed(self):
+        """
+        Queue row can remain status=vitals_done if never reconciled; helpdesk list must
+        not show it when encounter is already terminal (defensive filter).
+        """
+        HelpdeskClinicUser.objects.create(
+            user=self.helpdesk_user,
+            clinic=self.clinic,
+            is_active=True,
+        )
+        self.client.post(
+            reverse("queue-check-in"),
+            {
+                "clinic_id": str(self.clinic.id),
+                "patient_account_id": str(self.patient_account.id),
+                "patient_profile_id": str(self.profile.id),
+                "doctor_id": str(self.doctor.id),
+            },
+            format="json",
+        )
+        q = Queue.objects.latest("created_at")
+        enc_id = q.encounter_id
+        q.status = "vitals_done"
+        q.save(update_fields=["status"])
+        ClinicalEncounter.objects.filter(pk=enc_id).update(status="consultation_completed", is_active=False)
+
+        url = reverse("helpdesk-clinic-queue-today")
+        r = self.client.get(url)
+        self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
+        self.assertEqual(len(r.data), 0, r.data)
+
+    def test_mark_queue_rows_for_encounter_completed_sets_queue_completed(self):
+        self.client.post(
+            reverse("queue-check-in"),
+            {
+                "clinic_id": str(self.clinic.id),
+                "patient_account_id": str(self.patient_account.id),
+                "patient_profile_id": str(self.profile.id),
+                "doctor_id": str(self.doctor.id),
+            },
+            format="json",
+        )
+        q = Queue.objects.latest("created_at")
+        self.assertIn(q.status, ("waiting", "vitals_done"))
+        n = mark_queue_rows_for_encounter_completed(q.encounter_id)
+        self.assertEqual(n, 1)
+        q.refresh_from_db()
+        self.assertEqual(q.status, "completed")
+
+    def test_complete_consultation_syncs_queue_status(self):
+        self.client.post(
+            reverse("queue-check-in"),
+            {
+                "clinic_id": str(self.clinic.id),
+                "patient_account_id": str(self.patient_account.id),
+                "patient_profile_id": str(self.profile.id),
+                "doctor_id": str(self.doctor.id),
+            },
+            format="json",
+        )
+        q = Queue.objects.latest("created_at")
+        enc = ClinicalEncounter.objects.get(id=q.encounter_id)
+        EncounterStateMachine.start_consultation(enc, user=self.doctor.user)
+        enc.refresh_from_db()
+        self.assertEqual(normalize_encounter_status(enc.status), "consultation_in_progress")
+        EncounterStateMachine.complete_consultation(enc, user=self.doctor.user)
+        q.refresh_from_db()
+        self.assertEqual(q.status, "completed")

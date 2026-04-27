@@ -1,12 +1,16 @@
 "use client";
 
-import { History, Activity, Stethoscope, AlertCircle } from "lucide-react";
+import { useState } from "react";
+import { History, Activity, Stethoscope, AlertCircle, RefreshCw } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useConsultationSectionScroll } from "@/components/consultations/consultation-section-scroll-context";
 import { useConsultationStore } from "@/store/consultationStore";
 import { cn } from "@/lib/utils";
+import { isUuidLike, loadPreConsultPreviewVitals } from "@/lib/loadPreConsultPreviewVitals";
+import { useToastNotification } from "@/hooks/use-toast-notification";
 
 /**
  * Left menu: Doctor Notes, Medical History, Vitals.
@@ -20,8 +24,24 @@ export function ConsultationRightMenu() {
     vitalsLoaded,
     setDoctorNotes,
     sectionValidationSoftWarnings,
+    encounterId,
   } = useConsultationStore();
   const { registerSectionRef } = useConsultationSectionScroll();
+  const notify = useToastNotification();
+  const [vitalsRefreshBusy, setVitalsRefreshBusy] = useState(false);
+
+  const handleRefreshVitalsFromServer = async () => {
+    if (!encounterId || !isUuidLike(encounterId)) return;
+    setVitalsRefreshBusy(true);
+    try {
+      await loadPreConsultPreviewVitals(encounterId, {
+        onSoftError: (msg) => notify.error(msg),
+      });
+      notify.info("Vitals updated from server.");
+    } finally {
+      setVitalsRefreshBusy(false);
+    }
+  };
 
   const renderValue = (value: unknown) => {
     if (value !== null && value !== undefined && String(value).trim() !== "") {
@@ -44,15 +64,14 @@ export function ConsultationRightMenu() {
     return String(value);
   };
 
-  /** Format temperature for display: up to 3 decimal places. */
+  /** Temperature is stored/displayed here in Celsius for doctor-side UI. */
   const renderTemperature = (value: unknown) => {
     if (value === null || value === undefined || String(value).trim() === "") {
       return <span className="text-muted-foreground">-</span>;
     }
-    const numF = Number(value);
-    if (!Number.isNaN(numF)) {
-      const celsius = ((numF - 32) * 5) / 9;
-      return celsius.toFixed(3);
+    const numC = Number(value);
+    if (!Number.isNaN(numC)) {
+      return numC.toFixed(2);
     }
     return String(value);
   };
@@ -144,9 +163,25 @@ export function ConsultationRightMenu() {
             "border-amber-500/50 bg-amber-500/[0.04] dark:bg-amber-500/10"
         )}
       >
-        <CardHeader className="flex flex-row items-center gap-2 py-4 pb-3">
-          <Activity className="h-4 w-4 text-muted-foreground" />
-          <h3 className="font-bold text-sm">Vitals</h3>
+        <CardHeader className="flex flex-row items-center justify-between gap-2 py-4 pb-3">
+          <div className="flex flex-row items-center gap-2 min-w-0">
+            <Activity className="h-4 w-4 text-muted-foreground shrink-0" />
+            <h3 className="font-bold text-sm">Vitals</h3>
+          </div>
+          {encounterId && isUuidLike(encounterId) && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 shrink-0 gap-1.5 text-xs"
+              disabled={vitalsRefreshBusy}
+              onClick={() => void handleRefreshVitalsFromServer()}
+              aria-label="Refresh vitals from server"
+            >
+              <RefreshCw className={cn("h-3.5 w-3.5", vitalsRefreshBusy && "animate-spin")} />
+              Refresh
+            </Button>
+          )}
         </CardHeader>
         <CardContent className="pt-0 pb-5 space-y-3">
           <div className="grid grid-cols-2 gap-3 sm:gap-3">

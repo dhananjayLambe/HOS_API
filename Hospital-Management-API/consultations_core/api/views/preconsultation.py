@@ -30,13 +30,12 @@ from consultations_core.services.preconsultation_service import (
     PreConsultationService,
     PreConsultationAlreadyExistsError,
 )
-from consultations_core.services.preconsultation_lifecycle import (
-    get_or_create_preconsultation_for_start as _get_or_create_preconsultation_for_start,
-)
 from consultations_core.services.preconsultation_section_service import PreConsultationSectionService
+from consultations_core.services.consultation_start_service import start_consultation_for_encounter
 from consultations_core.services.encounter_service import EncounterService
 from consultations_core.services.encounter_state_machine import EncounterStateMachine
 from consultations_core.services.end_consultation_service import persist_consultation_end_state
+from consultations_core.domain.encounter_status import encounter_status_for_api
 from patient_account.models import PatientProfile
 from clinic.models import Clinic
 
@@ -53,6 +52,59 @@ from collections import OrderedDict
 
 
 logger = logging.getLogger(__name__)
+
+
+def _vitals_data_for_api(raw_data):
+    """Normalize legacy/flat vitals JSON into doctor-form compatible nested shape."""
+    if not isinstance(raw_data, dict):
+        return raw_data
+
+    data = dict(raw_data)
+
+    bp = data.get("bp")
+    blood_pressure = data.get("blood_pressure")
+    if not isinstance(blood_pressure, dict):
+        if isinstance(bp, dict):
+            blood_pressure = {
+                "systolic": bp.get("systolic"),
+                "diastolic": bp.get("diastolic"),
+            }
+        else:
+            blood_pressure = {}
+    if blood_pressure:
+        data["blood_pressure"] = blood_pressure
+
+    height_weight = dict(data.get("height_weight") or {})
+    weight_kg = data.get("weight_kg")
+    if weight_kg is None:
+        weight_kg = data.get("weight")
+    if weight_kg is not None and "weight_kg" not in height_weight:
+        height_weight["weight_kg"] = weight_kg
+
+    height_cm = data.get("height_cm")
+    if height_cm is None:
+        height_cm = data.get("height")
+    if height_cm is None:
+        height_ft = data.get("height_ft")
+        try:
+            height_cm = round(float(height_ft) * 30.48, 2) if height_ft is not None else None
+        except (TypeError, ValueError):
+            height_cm = None
+    if height_cm is not None and "height_cm" not in height_weight:
+        height_weight["height_cm"] = height_cm
+    if height_weight:
+        data["height_weight"] = height_weight
+
+    temperature = data.get("temperature")
+    if isinstance(temperature, (int, float, str)):
+        data["temperature"] = {"value": temperature, "unit": "c"}
+    elif isinstance(temperature, dict) and "value" in temperature:
+        data["temperature"] = {
+            "value": temperature.get("value"),
+            "unit": (temperature.get("unit") or "c"),
+        }
+
+    return data
 
 # Phase-1: single message for all "cancelled encounter" guards
 MSG_VISIT_CANCELLED = "This visit has been cancelled. Please start a new one."
@@ -233,6 +285,17 @@ class CreateEncounterAPIView(APIView):
         """
         Create a new encounter for the selected patient
         """
+        return Response(
+            {
+                "status": False,
+                "message": "Doctor encounter creation is disabled. Please create/reuse encounter from helpdesk check-in.",
+                "code": "ENCOUNTER_CREATION_HELPDESK_ONLY",
+            },
+            status=status.HTTP_403_FORBIDDEN,
+            content_type="application/json",
+        )
+
+        # Legacy implementation retained below for rollback reference.
         try:
             user = request.user
             doctor_profile = getattr(user, "doctor", None)
@@ -677,10 +740,13 @@ class PreConsultationSectionAPIView(APIView):
         
         try:
             section_obj = section_model.objects.get(pre_consultation=preconsultation)
+            payload = section_obj.data
+            if section_code == "vitals":
+                payload = _vitals_data_for_api(payload)
             return Response({
                 "status": True,
                 "message": f"{section_code} retrieved successfully.",
-                "data": section_obj.data
+                "data": payload
             }, status=status.HTTP_200_OK)
         except section_model.DoesNotExist:
             return Response({
@@ -954,7 +1020,7 @@ class PreConsultationPreviousRecordsAPIView(APIView):
 
 def _status_for_api(encounter_status: str) -> str:
     """Return API-facing status (UPPERCASE with underscores)."""
-    return (encounter_status or "").upper()
+    return encounter_status_for_api(encounter_status)
 
 
 class StartPreConsultationAPIView(APIView):
@@ -1123,7 +1189,6 @@ class StartConsultationAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated, IsDoctor]
 
-    @transaction.atomic
     def post(self, request, encounter_id):
         def bad_request(detail, message=None):
             return Response(
@@ -1132,87 +1197,31 @@ class StartConsultationAPIView(APIView):
                 content_type="application/json",
             )
         try:
-            encounter = get_object_or_404(ClinicalEncounter, id=encounter_id)
-        except Exception as e:
-            logger.exception("StartConsultation get_object_or_404: %s", e)
+            result = start_consultation_for_encounter(
+                encounter_id=encounter_id,
+                user=request.user,
+                source="doctor",
+            )
+        except ClinicalEncounter.DoesNotExist:
             return bad_request("Encounter not found or invalid.", "Cannot start consultation.")
-        if encounter.status in ("cancelled", "no_show"):
-            return bad_request(MSG_VISIT_CANCELLED)
-        # 1) Reject if already completed
-        if encounter.status == "consultation_completed":
-            return bad_request("Consultation already completed.", "Cannot start consultation. Encounter is already completed.")
-
-        # 2) Idempotent: already in consultation → return success
-        has_consultation = Consultation.objects.filter(encounter=encounter).exists()
-        if encounter.status == "consultation_in_progress" and has_consultation:
+        except DjangoValidationError as e:
+            return bad_request(str(e) or "Invalid state for consultation.")
+        except Exception as e:
+            logger.exception("StartConsultation start service failed: %s", e)
             return Response(
-                {
-                    "encounter_id": str(encounter.id),
-                    "status": _status_for_api(encounter.status),
-                    "next_step": "CONSULTATION",
-                    "redirect_url": f"/consultations/start-consultation?encounter_id={encounter.id}",
-                },
-                status=status.HTTP_200_OK,
-            )
-
-        # 2b) consultation_in_progress but no consultation record, or user navigated away without cancelling
-        # → Require cancel first so encounter moves to CANCELLED; then user can start a new visit.
-        if encounter.status == "consultation_in_progress":
-            return bad_request(
-                "Consultation already in progress. Cancel the current visit from the consultation screen (Cancel button or Back), then start a new visit.",
-                "Consultation already in progress. Cancel the current visit first.",
-            )
-
-        # 3) Allowed start states
-        allowed = ("pre_consultation_completed", "created", "pre_consultation_in_progress")
-        if encounter.status not in allowed:
-            return bad_request(
-                f"Encounter must be PRE_CONSULTATION_COMPLETED, CREATED, or PRE_CONSULTATION_IN_PROGRESS. Current: {encounter.status}.",
-                f"Cannot start consultation. Encounter status: {encounter.status}.",
-            )
-
-        # 4) Ensure PreConsultation exists; if not completed, mark skipped (direct start = skip pre)
-        try:
-            pre = _get_or_create_preconsultation_for_start(encounter, created_by=request.user)
-        except PreConsultationAlreadyExistsError:
-            return Response(
-                {
-                    "detail": "Pre-consultation record already exists for this encounter. Please retry.",
-                    "message": "Pre-consultation record already exists for this encounter. Please retry.",
-                },
-                status=status.HTTP_409_CONFLICT,
+                {"detail": str(e) or "Failed to start consultation.", "message": str(e) or "Failed to start consultation."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 content_type="application/json",
             )
-        except ValueError as e:
-            return bad_request(str(e) or "Invalid pre-consultation state.")
-        if not pre.is_completed:
-            pre.is_skipped = True
-            pre.save(update_fields=["is_skipped"])
 
-        # 5) Create Consultation if not exists (Consultation.save calls _on_consultation_started → transition)
-        if has_consultation:
-            if encounter.status != "consultation_in_progress":
-                try:
-                    EncounterStateMachine.start_consultation(encounter, user=request.user)
-                except DjangoValidationError as e:
-                    return bad_request(str(e) or "Invalid transition.")
-        else:
-            try:
-                Consultation.objects.create(encounter=encounter)
-            except DjangoValidationError as e:
-                return bad_request(str(e) or "Invalid state for consultation.")
-            except Exception as e:
-                logger.exception("StartConsultation create failed: %s", e)
-                return Response(
-                    {"detail": str(e) or "Failed to start consultation.", "message": str(e) or "Failed to start consultation."},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    content_type="application/json",
-                )
-        encounter.refresh_from_db()
+        encounter = result.encounter
         return Response(
             {
                 "encounter_id": str(encounter.id),
+                "consultation_id": str(result.consultation.id),
                 "status": _status_for_api(encounter.status),
+                "already_started": result.already_started,
+                "source": "doctor",
                 "next_step": "CONSULTATION",
                 "redirect_url": f"/consultations/start-consultation?encounter_id={encounter.id}",
             },

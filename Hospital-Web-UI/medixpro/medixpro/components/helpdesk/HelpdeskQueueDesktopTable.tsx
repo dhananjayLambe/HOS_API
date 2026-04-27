@@ -19,7 +19,7 @@ import {
 import type { QueueEntry, QueueStatus } from "@/lib/helpdeskQueueStore";
 import { maskMobile, vitalsPreviewLine } from "@/lib/helpdeskQueueStore";
 import { cn } from "@/lib/utils";
-import { ArrowUp, MoreVertical, Play, Stethoscope } from "lucide-react";
+import { ArrowUp, MoreVertical, Stethoscope } from "lucide-react";
 
 function statusBadge(status: QueueStatus): { label: string; className: string } {
   switch (status) {
@@ -31,7 +31,7 @@ function statusBadge(status: QueueStatus): { label: string; className: string } 
       };
     case "vitals_done":
       return {
-        label: "Vitals done",
+        label: "Pre-consult in progress",
         className:
           "border-amber-300/80 bg-amber-50 text-amber-950 dark:border-amber-700/60 dark:bg-amber-950/40 dark:text-amber-50",
       };
@@ -62,7 +62,6 @@ interface HelpdeskQueueDesktopTableProps {
   highlightedId: string | null;
   onSelectRow: (id: string) => void;
   onVitals: (id: string) => void;
-  onStart: (id: string) => void | Promise<void>;
   onUrgent: (id: string) => void | Promise<void>;
   onRemove: (id: string) => void | Promise<void>;
 }
@@ -73,7 +72,6 @@ export function HelpdeskQueueDesktopTable({
   highlightedId,
   onSelectRow,
   onVitals,
-  onStart,
   onUrgent,
   onRemove,
 }: HelpdeskQueueDesktopTableProps) {
@@ -131,15 +129,6 @@ export function HelpdeskQueueDesktopTable({
                         >
                           <Stethoscope className="h-3.5 w-3.5" />
                           Vitals
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          className="h-8 gap-1 rounded-lg px-2"
-                          onClick={() => onStart(entry.id)}
-                        >
-                          <Play className="h-3.5 w-3.5" />
-                          Start
                         </Button>
                       </>
                     ) : null}

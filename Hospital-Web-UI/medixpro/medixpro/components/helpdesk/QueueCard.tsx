@@ -11,7 +11,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { QueueEntry, QueueStatus } from "@/lib/helpdeskQueueStore";
 import { maskMobile, vitalsPreviewLine } from "@/lib/helpdeskQueueStore";
-import { ArrowUp, MoreVertical, Play, Stethoscope } from "lucide-react";
+import { ArrowUp, MoreVertical, Stethoscope } from "lucide-react";
 
 function initialsFromName(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -37,7 +37,7 @@ function statusBadge(status: QueueStatus): { label: string; className: string } 
       };
     case "vitals_done":
       return {
-        label: "Vitals done",
+        label: "Pre-consult in progress",
         className:
           "border-amber-300/80 bg-amber-50 text-amber-950 dark:border-amber-700/60 dark:bg-amber-950/40 dark:text-amber-50",
       };
@@ -66,7 +66,6 @@ interface QueueCardProps {
   entry: QueueEntry;
   position: number;
   onVitals: () => void;
-  onStart: () => void;
   onUrgent: () => void;
   onRemove: () => void;
   onOpen: () => void;
@@ -77,7 +76,6 @@ export function QueueCard({
   entry,
   position,
   onVitals,
-  onStart,
   onUrgent,
   onRemove,
   onOpen,
@@ -135,18 +133,6 @@ export function QueueCard({
                     }}
                   >
                     <Stethoscope className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    type="button"
-                    size="icon"
-                    className="h-9 w-9 shrink-0 rounded-lg"
-                    title="Start consultation"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onStart();
-                    }}
-                  >
-                    <Play className="h-4 w-4" />
                   </Button>
                 </>
               ) : null}

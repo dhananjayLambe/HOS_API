@@ -43,7 +43,8 @@ class Queue(models.Model):
         indexes = [
             models.Index(fields=["clinic", "doctor", "status"]),
             models.Index(fields=["appointment"]),
-            models.Index(fields=["clinic", "position_in_queue"])
+            models.Index(fields=["clinic", "position_in_queue"]),
+            models.Index(fields=["encounter", "created_at"]),
         ]
     def __str__(self):
         return f"{self.patient.first_name} - {self.status}"

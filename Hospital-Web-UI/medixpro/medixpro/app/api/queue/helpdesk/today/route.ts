@@ -2,10 +2,15 @@ import { type NextRequest, NextResponse } from "next/server";
 
 const DJANGO_API_URL = process.env.DJANGO_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/";
 
+function djangoQueueUrl() {
+  const base = DJANGO_API_URL.replace(/\/+$/, "");
+  return `${base}/queue/helpdesk/today/`;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const authHeader = request.headers.get("authorization") || request.headers.get("Authorization");
-    const url = `${DJANGO_API_URL}queue/helpdesk/today/`;
+    const url = djangoQueueUrl();
 
     const response = await fetch(url, {
       method: "GET",

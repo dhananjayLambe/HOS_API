@@ -1,4 +1,5 @@
 import redis
+import logging
 from django.conf import settings
 from django.utils.timezone import now, localdate
 from django.db.models import F
@@ -22,8 +23,21 @@ from queue_management.api.serializers import (
     QueuePatientSerializer,
     QueueReorderSerializer,
 )
-from account.permissions import IsDoctorOrHelpdesk,IsHelpdesk
-from django.db import transaction
+from account.permissions import IsDoctor, IsDoctorOrHelpdesk,IsHelpdesk
+from django.db import IntegrityError, transaction
+
+# Once encounter reaches these (raw DB values; includes legacy), hide row from helpdesk "today"
+# even if Queue.status is still waiting/vitals_done (stale op row).
+# Active helpdesk work stays on created / pre_consult* only.
+HELPDESK_TODAY_EXCLUDE_IF_ENCOUNTER_STATUS_IN = (
+    "consultation_in_progress",
+    "in_consultation",
+    "consultation_completed",
+    "closed",
+    "cancelled",
+    "no_show",
+    "completed",
+)
 
 # Initialize Redis connection
 redis_client = redis.StrictRedis(host=settings.REDIS_HOST, port=settings.REDIS_PORT, db=0, decode_responses=True)
@@ -69,17 +83,25 @@ class CheckInQueueAPIView(APIView):
             appointment = Appointment.objects.filter(id=appointment_id).first()
 
         with transaction.atomic():
-            encounter, _enc_created = EncounterService.get_or_create_encounter(
-                clinic=clinic,
-                patient_account=patient_account,
-                patient_profile=patient_profile,
-                doctor=doctor_obj,
-                appointment=appointment,
-                encounter_type="walk_in",
-                entry_mode="helpdesk",
-                created_by=request.user,
-                consultation_type="FULL",
-            )
+            try:
+                encounter, _enc_created = EncounterService.get_or_create_encounter(
+                    clinic=clinic,
+                    patient_account=patient_account,
+                    patient_profile=patient_profile,
+                    doctor=doctor_obj,
+                    appointment=appointment,
+                    encounter_type="walk_in",
+                    entry_mode="helpdesk",
+                    created_by=request.user,
+                    consultation_type="FULL",
+                )
+            except IntegrityError:
+                encounter = EncounterService.get_active_encounter(patient_account, clinic)
+                if encounter is None:
+                    return Response(
+                        {"error": "Could not resolve active encounter. Please retry check-in."},
+                        status=status.HTTP_409_CONFLICT,
+                    )
             update_fields = []
             if encounter.doctor_id != doctor_obj.id:
                 encounter.doctor = doctor_obj
@@ -101,6 +123,15 @@ class CheckInQueueAPIView(APIView):
                 encounter=encounter,
                 position_in_queue=new_position,
                 status="waiting",
+            )
+            logging.getLogger(__name__).info(
+                "encounter.lifecycle.queue.checkin queue_id=%s encounter_id=%s visit_pnr=%s clinic_id=%s doctor_id=%s patient_profile_id=%s",
+                queue_entry.id,
+                getattr(encounter, "id", None),
+                getattr(encounter, "visit_pnr", None),
+                clinic_id,
+                doctor_id,
+                patient_profile_id,
             )
 
         queue_entry = Queue.objects.select_related("patient", "appointment", "encounter").get(pk=queue_entry.pk)
@@ -151,16 +182,54 @@ class HelpdeskClinicQueueAPIView(APIView):
                 clinic_id=clinic.id,
                 doctor_id__in=doctor_ids,
                 created_at__date=today,
+                status__in=("waiting", "vitals_done"),
             )
+            .exclude(encounter__status__in=HELPDESK_TODAY_EXCLUDE_IF_ENCOUNTER_STATUS_IN)
             .select_related("patient", "appointment", "encounter", "patient_account__user")
             .order_by("doctor_id", "position_in_queue")
         )
         return Response(HelpdeskQueueRowSerializer(queue, many=True).data)
 
 
+class HelpdeskQueueContextAPIView(APIView):
+    """
+    GET /queue/helpdesk/context/ — clinic + default doctor context for check-in calls.
+    """
+
+    permission_classes = [IsAuthenticated, IsHelpdesk]
+    authentication_classes = [JWTAuthentication]
+
+    def get(self, request):
+        hp = getattr(request.user, "helpdesk_profile", None)
+        if hp is None:
+            return Response(
+                {"detail": "No helpdesk clinic assignment for this user."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        clinic = hp.clinic
+        doctor_ids = list(
+            DoctorModel.objects.filter(clinics__id=clinic.id, is_approved=True)
+            .values_list("id", flat=True)
+            .distinct()
+        )
+        if not doctor_ids:
+            return Response(
+                {"detail": "No approved doctor is currently assigned to this clinic."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(
+            {
+                "clinic_id": str(clinic.id),
+                "doctor_id": str(doctor_ids[0]),
+                "doctor_ids": [str(did) for did in doctor_ids],
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
 # 3. PATCH /queue/start/ – Mark a patient as In Consultation
 class StartConsultationAPIView(APIView):
-    permission_classes = [IsAuthenticated, IsDoctorOrHelpdesk]
+    permission_classes = [IsAuthenticated, IsDoctor]
     authentication_classes = [JWTAuthentication]
 
     def patch(self, request):
@@ -173,7 +242,8 @@ class StartConsultationAPIView(APIView):
         today = localdate()
         try:
             with transaction.atomic():
-                queue_entry = Queue.objects.select_related("encounter").select_for_update().get(
+                # Avoid FOR UPDATE on nullable outer-join side (encounter is nullable FK).
+                queue_entry = Queue.objects.select_for_update().get(
                     id=queue_id,
                     clinic_id=clinic_id,
                     created_at__date=today,
@@ -182,10 +252,17 @@ class StartConsultationAPIView(APIView):
                 queue_entry.status = "in_consultation"
                 queue_entry.save()
                 start_consultation_from_queue_entry(queue_entry, request.user)
+                logging.getLogger(__name__).info(
+                    "encounter.lifecycle.queue.start queue_id=%s encounter_id=%s clinic_id=%s user_id=%s",
+                    queue_entry.id,
+                    getattr(queue_entry, "encounter_id", None),
+                    clinic_id,
+                    getattr(request.user, "id", None),
+                )
             return Response({"message": "Patient is now in consultation."}, status=status.HTTP_200_OK)
         except Queue.DoesNotExist:
             return Response(
-                {"error": "Patient not found or not in waiting / vitals-done status."},
+                {"error": "Patient not found or not in waiting/vitals-done state."},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
@@ -217,11 +294,20 @@ class SkipPatientAPIView(APIView):
 
     def patch(self, request):
         queue_id = request.data.get("queue_id")
+        clinic_id = request.data.get("clinic_id")
         if not queue_id:
             return Response({"error": "Queue ID is required."}, status=status.HTTP_400_BAD_REQUEST)
 
+        today = localdate()
         try:
-            queue_entry = Queue.objects.get(id=queue_id, status__in=("waiting", "vitals_done"))
+            query = Queue.objects.filter(
+                id=queue_id,
+                created_at__date=today,
+                status__in=("waiting", "vitals_done", "in_consultation"),
+            )
+            if clinic_id:
+                query = query.filter(clinic_id=clinic_id)
+            queue_entry = query.get()
             queue_entry.status = "skipped"
             queue_entry.save()
             return Response({"message": "Patient skipped."}, status=status.HTTP_200_OK)

@@ -1,5 +1,9 @@
+import logging
+
 from consultations_core.models.encounter import ClinicalEncounter
 from consultations_core.services.encounter_state_machine import EncounterStateMachine
+
+logger = logging.getLogger(__name__)
 
 
 class EncounterService:
@@ -42,6 +46,14 @@ class EncounterService:
             raise ValueError("clinic is required to create an encounter.")
         existing = EncounterService.get_active_encounter(patient_account, clinic)
         if existing:
+            logger.info(
+                "encounter.lifecycle.reuse_active encounter_id=%s visit_pnr=%s patient_account_id=%s clinic_id=%s status=%s",
+                existing.id,
+                existing.visit_pnr,
+                getattr(patient_account, "id", None),
+                getattr(clinic, "id", None),
+                existing.status,
+            )
             return existing, False
         encounter = EncounterService.create_encounter(
             clinic=clinic,
@@ -53,6 +65,15 @@ class EncounterService:
             entry_mode=entry_mode,
             created_by=created_by,
             consultation_type=consultation_type,
+        )
+        logger.info(
+            "encounter.lifecycle.created encounter_id=%s visit_pnr=%s patient_account_id=%s clinic_id=%s encounter_type=%s entry_mode=%s",
+            encounter.id,
+            encounter.visit_pnr,
+            getattr(patient_account, "id", None),
+            getattr(clinic, "id", None),
+            encounter_type,
+            entry_mode,
         )
         return encounter, True
 

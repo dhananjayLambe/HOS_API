@@ -14,6 +14,7 @@ export interface HelpdeskSearchPatient {
   first_name?: string;
   last_name?: string;
   mobile?: string;
+  patient_account_id?: string;
 }
 
 interface HelpdeskPatientSearchProps {
@@ -33,6 +34,7 @@ function toHelpdeskPatient(p: PatientSearchRow): HelpdeskSearchPatient {
     first_name: p.first_name,
     last_name: p.last_name,
     mobile: p.mobile,
+    patient_account_id: p.patient_account_id,
   };
 }
 

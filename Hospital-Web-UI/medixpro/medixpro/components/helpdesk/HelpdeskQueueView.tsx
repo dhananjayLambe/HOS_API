@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -14,6 +15,7 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/componen
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import {
   isHelpdeskQueueCalendarDayStale,
+  mapVisitVitalsApiResponse,
   maskMobile,
   useFilteredQueueEntries,
   useHelpdeskQueueStore,
@@ -24,14 +26,15 @@ import {
 } from "@/lib/helpdeskQueueStore";
 import { useIsMobile } from "@/components/ui/use-mobile";
 import axiosClient from "@/lib/axiosClient";
+import { isAxiosError } from "axios";
 import { toast } from "sonner";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/authContext";
-import { Play, Stethoscope } from "lucide-react";
+import { Stethoscope } from "lucide-react";
 
 const statusLabel: Record<QueueStatus, string> = {
   waiting: "Waiting",
-  vitals_done: "Vitals done",
+  vitals_done: "Pre-consultation in progress",
   in_consultation: "In consultation",
   completed: "Completed",
 };
@@ -47,16 +50,14 @@ function ageGenderLine(entry: QueueEntry): string | undefined {
 function QueuePatientPanel({
   entry,
   onOpenVitals,
-  onStart,
   onUrgent,
 }: {
   entry: QueueEntry;
   onOpenVitals: () => void;
-  onStart: () => void;
   onUrgent: () => void;
 }) {
   const preview = vitalsPreviewLine(entry.vitals);
-  const canFlow = entry.status === "waiting" || entry.status === "vitals_done";
+  const canOpenVitals = entry.status === "waiting" || entry.status === "vitals_done";
 
   return (
     <div className="space-y-4">
@@ -69,21 +70,17 @@ function QueuePatientPanel({
           <p className="text-sm text-muted-foreground">{ageGenderLine(entry)}</p>
         ) : null}
         <p className="text-sm text-muted-foreground tabular-nums">{maskMobile(entry.mobile)}</p>
-        {entry.visitId ? (
-          <p className="mt-1 font-mono text-xs text-muted-foreground">Visit {entry.visitId}</p>
+        {entry.visitPnr || entry.visitId ? (
+          <p className="mt-1 font-mono text-xs text-muted-foreground">Visit {entry.visitPnr ?? entry.visitId}</p>
         ) : null}
         {preview ? <p className="mt-2 text-sm text-muted-foreground">{preview}</p> : null}
       </div>
 
-      {canFlow ? (
+      {canOpenVitals ? (
         <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="secondary" className="gap-2" onClick={onOpenVitals}>
+          <Button type="button" variant="secondary" className="gap-2" onClick={onOpenVitals} disabled={!canOpenVitals}>
             <Stethoscope className="h-4 w-4" />
             Vitals
-          </Button>
-          <Button type="button" className="gap-2" onClick={onStart}>
-            <Play className="h-4 w-4" />
-            Start consultation
           </Button>
           <Button type="button" variant="outline" onClick={onUrgent}>
             Urgent
@@ -91,6 +88,9 @@ function QueuePatientPanel({
         </div>
       ) : null}
 
+      {entry.status === "vitals_done" && (
+        <p className="text-sm text-muted-foreground">Ready for doctor pre-consult review.</p>
+      )}
       {entry.status === "in_consultation" && (
         <p className="text-sm text-muted-foreground">Patient is in consultation.</p>
       )}
@@ -107,7 +107,6 @@ export function HelpdeskQueueView() {
   const list = useFilteredQueueEntries();
   const entries = useHelpdeskQueueStore((s) => s.entries);
   const saveVitals = useHelpdeskQueueStore((s) => s.saveVitals);
-  const startConsultation = useHelpdeskQueueStore((s) => s.startConsultation);
   const moveToTop = useHelpdeskQueueStore((s) => s.moveToTop);
   const removeFromQueue = useHelpdeskQueueStore((s) => s.removeFromQueue);
   const fetchTodayQueue = useHelpdeskQueueStore((s) => s.fetchTodayQueue);
@@ -120,11 +119,47 @@ export function HelpdeskQueueView() {
   const [mobileSheetMode, setMobileSheetMode] = useState<"patient" | "vitals">("patient");
   const [vitalsDialogOpen, setVitalsDialogOpen] = useState(false);
   const [vitalsEntryId, setVitalsEntryId] = useState<string | null>(null);
+  const [vitalsFormInitial, setVitalsFormInitial] = useState<HelpdeskVitalsPayload | null>(null);
+  const [vitalsFormLoading, setVitalsFormLoading] = useState(false);
   const [vitalsSubmitting, setVitalsSubmitting] = useState(false);
   const [queueLoading, setQueueLoading] = useState(true);
 
   const selected = useMemo(() => entries.find((e) => e.id === selectedId) ?? null, [entries, selectedId]);
   const vitalsEntry = useMemo(() => entries.find((e) => e.id === vitalsEntryId) ?? null, [entries, vitalsEntryId]);
+
+  useEffect(() => {
+    if (!vitalsEntryId) {
+      setVitalsFormInitial(null);
+      setVitalsFormLoading(false);
+      return;
+    }
+    const entry = useHelpdeskQueueStore.getState().entries.find((e) => e.id === vitalsEntryId);
+    if (!entry?.visitId) {
+      setVitalsFormInitial(null);
+      setVitalsFormLoading(false);
+      return;
+    }
+    setVitalsFormLoading(true);
+    setVitalsFormInitial(null);
+    const visitId = entry.visitId;
+    const fallback = entry.vitals;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await axiosClient.get<Record<string, unknown>>(`/visits/${visitId}/vitals/`);
+        if (cancelled) return;
+        setVitalsFormInitial(mapVisitVitalsApiResponse(data) ?? fallback ?? null);
+      } catch {
+        if (cancelled) return;
+        setVitalsFormInitial(fallback ?? null);
+      } finally {
+        if (!cancelled) setVitalsFormLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [vitalsEntryId]);
 
   useEffect(() => {
     if (selectedId && !entries.some((e) => e.id === selectedId)) {
@@ -220,20 +255,6 @@ export function HelpdeskQueueView() {
     [isMobile]
   );
 
-  const handleStart = useCallback(
-    async (id: string) => {
-      try {
-        await startConsultation(id);
-        toast.success("Consultation started");
-        setMobileSheetOpen(false);
-        setVitalsDialogOpen(false);
-      } catch {
-        toast.error("Could not start consultation");
-      }
-    },
-    [startConsultation]
-  );
-
   const handleUrgent = useCallback(
     async (id: string) => {
       try {
@@ -265,30 +286,38 @@ export function HelpdeskQueueView() {
   );
 
   const persistVitals = useCallback(
-    async (entry: QueueEntry, payload: HelpdeskVitalsPayload) => {
+    async (entry: QueueEntry, payload: HelpdeskVitalsPayload): Promise<boolean> => {
       if (!entry.visitId) {
-        saveVitals(entry.id, payload);
-        return;
+        toast.error("Visit ID is missing. Please refresh queue and retry.");
+        return false;
       }
       try {
-        const { data } = await axiosClient.post(`/visits/${entry.visitId}/vitals/`, {
+        const { data } = await axiosClient.post<Record<string, unknown>>(`/visits/${entry.visitId}/vitals/`, {
           bp_systolic: payload.bp_systolic,
           bp_diastolic: payload.bp_diastolic,
           weight: payload.weight,
           height: payload.height,
           temperature: payload.temperature,
+          temperature_unit: payload.temperature != null ? "f" : undefined,
         });
         saveVitals(entry.id, {
-          bp_systolic: data.bp_systolic ?? payload.bp_systolic,
-          bp_diastolic: data.bp_diastolic ?? payload.bp_diastolic,
-          weight: data.weight ?? payload.weight,
-          height: data.height ?? payload.height,
-          temperature: data.temperature ?? payload.temperature,
+          bp_systolic: (data.bp_systolic as number | undefined) ?? payload.bp_systolic,
+          bp_diastolic: (data.bp_diastolic as number | undefined) ?? payload.bp_diastolic,
+          weight: (data.weight as number | undefined) ?? payload.weight,
+          height: (data.height as number | undefined) ?? payload.height,
+          temperature: (data.temperature as number | undefined) ?? payload.temperature,
         });
-        if (entry.clinicId) void fetchTodayQueue().catch(() => undefined);
-      } catch {
-        saveVitals(entry.id, payload);
-        toast.message("Saved locally; server sync failed — retry when online");
+        void fetchTodayQueue().catch(() => undefined);
+        return true;
+      } catch (err) {
+        let message = "Vitals were not saved to server. Please retry.";
+        if (isAxiosError(err) && err.response?.data) {
+          const d = err.response.data as { detail?: unknown; message?: string };
+          if (typeof d.detail === "string") message = d.detail;
+          else if (typeof d.message === "string") message = d.message;
+        }
+        toast.error(message);
+        return false;
       }
     },
     [saveVitals, fetchTodayQueue]
@@ -299,8 +328,9 @@ export function HelpdeskQueueView() {
       if (!vitalsEntry) return;
       setVitalsSubmitting(true);
       try {
-        await persistVitals(vitalsEntry, payload);
-        toast.success("Vitals saved");
+        const saved = await persistVitals(vitalsEntry, payload);
+        if (!saved) return;
+        toast.success("Vitals saved to server");
         if (isMobile) {
           setMobileSheetOpen(false);
         } else {
@@ -344,7 +374,6 @@ export function HelpdeskQueueView() {
         highlightedId={highlightedId}
         onSelectRow={handleSelectRow}
         onVitals={openVitalsFor}
-        onStart={handleStart}
         onUrgent={handleUrgent}
         onRemove={handleRemove}
         isLoading={queueLoading}
@@ -358,20 +387,19 @@ export function HelpdeskQueueView() {
         <QueuePatientPanel
           entry={selected}
           onOpenVitals={() => openVitalsFor(selected.id)}
-          onStart={() => handleStart(selected.id)}
           onUrgent={() => handleUrgent(selected.id)}
         />
       </div>
     );
 
   const vitalsFormNode =
-    vitalsEntry && (
+    vitalsEntry && !vitalsFormLoading ? (
       <HelpdeskQueueVitalsForm
         key={vitalsEntry.id}
         patientName={vitalsEntry.name}
         ageGenderLine={ageGenderLine(vitalsEntry)}
-        visitId={vitalsEntry.visitId}
-        initial={vitalsEntry.vitals}
+        visitLabel={vitalsEntry.visitPnr ?? vitalsEntry.visitId}
+        initial={vitalsFormInitial}
         isSubmitting={vitalsSubmitting}
         onCancel={() => {
           setVitalsDialogOpen(false);
@@ -380,7 +408,11 @@ export function HelpdeskQueueView() {
         }}
         onSave={handleVitalsSave}
       />
-    );
+    ) : vitalsEntry && vitalsFormLoading ? (
+      <p className="text-sm text-muted-foreground" aria-live="polite">
+        Loading current vitals…
+      </p>
+    ) : null;
 
   return (
     <>
@@ -432,7 +464,6 @@ export function HelpdeskQueueView() {
                   setVitalsEntryId(selected.id);
                   setMobileSheetMode("vitals");
                 }}
-                onStart={() => handleStart(selected.id)}
                 onUrgent={() => handleUrgent(selected.id)}
               />
             ) : null}
@@ -451,6 +482,9 @@ export function HelpdeskQueueView() {
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Vitals</DialogTitle>
+            <DialogDescription>
+              Review and update patient vitals before starting consultation.
+            </DialogDescription>
           </DialogHeader>
           {vitalsFormNode}
         </DialogContent>

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useHelpdeskQueueStore } from "@/lib/helpdeskQueueStore";
 import type { Patient } from "@/lib/patientContext";
 import axiosClient from "@/lib/axiosClient";
+import { helpdeskCheckInOnServer, HELPDESK_DUPLICATE_NO_SYNCED_ROW } from "@/lib/helpdeskCheckIn";
 import { useIsMobile } from "@/components/ui/use-mobile";
 import { UserPlus } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -22,6 +23,7 @@ export default function HelpdeskPatientsPage() {
   const addPatientFromSearch = useHelpdeskQueueStore((s) => s.addPatientFromSearch);
   const findEntryByPatient = useHelpdeskQueueStore((s) => s.findEntryByPatient);
   const setHighlightQueueEntryId = useHelpdeskQueueStore((s) => s.setHighlightQueueEntryId);
+  const fetchTodayQueue = useHelpdeskQueueStore((s) => s.fetchTodayQueue);
 
   const [addOpen, setAddOpen] = useState(false);
   const [addDialogContext, setAddDialogContext] = useState<{
@@ -46,10 +48,54 @@ export default function HelpdeskPatientsPage() {
     [router, setHighlightQueueEntryId]
   );
 
-  const handleSelectFromSearch = (patient: HelpdeskSearchPatient) => {
+  const handleSelectFromSearch = async (patient: HelpdeskSearchPatient) => {
     const existing = findEntryByPatient({ id: patient.id, mobile: patient.mobile });
-    const queueEntryId = existing ? existing.id : addPatientFromSearch(patient);
-    goQueueWithHighlight(queueEntryId, existing ? "existing" : "new");
+    const hasSyncedEncounter = Boolean(existing?.visitId && existing?.clinicId);
+    if (existing && hasSyncedEncounter) {
+      goQueueWithHighlight(existing.id, "existing");
+      return;
+    }
+    if (!patient.patient_account_id) {
+      notify.error("Patient account is missing. Please re-search and try again.");
+      return;
+    }
+    const checkIn = await helpdeskCheckInOnServer(axiosClient, {
+      patient_account_id: patient.patient_account_id,
+      patient_profile_id: patient.id,
+    });
+    if (!checkIn.ok) {
+      if (checkIn.kind === "duplicate_queue") {
+        await fetchTodayQueue().catch(() => undefined);
+        const afterSync = useHelpdeskQueueStore
+          .getState()
+          .findEntryByPatient({ id: patient.id, mobile: patient.mobile });
+        if (afterSync?.visitId && afterSync.clinicId) {
+          goQueueWithHighlight(afterSync.id, "existing");
+          return;
+        }
+        notify.info(`${checkIn.error}${HELPDESK_DUPLICATE_NO_SYNCED_ROW}`);
+        router.push("/helpdesk/queue");
+        return;
+      }
+      const localId = addPatientFromSearch(patient);
+      setHighlightQueueEntryId(localId);
+      notify.error(
+        checkIn.kind === "other"
+          ? `${checkIn.error} (Added locally; you can retry after fixing the issue.)`
+          : "Could not sync queue. Added locally; retry check-in."
+      );
+      router.push("/helpdesk/queue");
+      return;
+    }
+    try {
+      await fetchTodayQueue();
+    } catch {
+      notify.info("Check-in saved. Refresh the queue if the list looks out of date.");
+    }
+    const synced = useHelpdeskQueueStore
+      .getState()
+      .findEntryByPatient({ id: patient.id, mobile: patient.mobile });
+    goQueueWithHighlight(synced ? synced.id : addPatientFromSearch(patient), "new");
   };
 
   const handleAddProfile = async (patient: HelpdeskSearchPatient) => {
@@ -94,10 +140,65 @@ export default function HelpdeskPatientsPage() {
     setAddOpen(true);
   };
 
-  const handlePatientAddedFromDialog = (patient: Patient) => {
+  const handlePatientAddedFromDialog = async (patient: Patient) => {
     const existing = findEntryByPatient({ id: patient.id, mobile: patient.mobile });
-    const queueEntryId = existing ? existing.id : addPatientFromSearch(patient);
-    goQueueWithHighlight(queueEntryId, existing ? "existing" : "new");
+    const hasSyncedEncounter = Boolean(existing?.visitId && existing?.clinicId);
+    if (existing && hasSyncedEncounter) {
+      goQueueWithHighlight(existing.id, "existing");
+      return;
+    }
+    try {
+      const { data: checkResponse } = await axiosClient.post("/patients/check-mobile/", {
+        mobile: (patient.mobile || "").replace(/\D/g, "").slice(-10),
+      });
+      const patientAccountId = checkResponse?.patient_account_id;
+      if (!patientAccountId) {
+        notify.error("Missing patient account. Please try again.");
+        return;
+      }
+      const checkIn = await helpdeskCheckInOnServer(axiosClient, {
+        patient_account_id: patientAccountId,
+        patient_profile_id: patient.id,
+      });
+      if (!checkIn.ok) {
+        if (checkIn.kind === "duplicate_queue") {
+          await fetchTodayQueue().catch(() => undefined);
+          const afterSync = useHelpdeskQueueStore
+            .getState()
+            .findEntryByPatient({ id: patient.id, mobile: patient.mobile });
+          if (afterSync?.visitId && afterSync.clinicId) {
+            goQueueWithHighlight(afterSync.id, "existing");
+            return;
+          }
+          notify.info(`${checkIn.error}${HELPDESK_DUPLICATE_NO_SYNCED_ROW}`);
+          router.push("/helpdesk/queue");
+          return;
+        }
+        const localId = addPatientFromSearch(patient);
+        setHighlightQueueEntryId(localId);
+        notify.error(
+          checkIn.kind === "other"
+            ? `${checkIn.error} (Added locally; you can retry after fixing the issue.)`
+            : "Could not sync queue. Added locally; retry check-in."
+        );
+        router.push("/helpdesk/queue");
+        return;
+      }
+      try {
+        await fetchTodayQueue();
+      } catch {
+        notify.info("Check-in saved. Refresh the queue if the list looks out of date.");
+      }
+      const synced = useHelpdeskQueueStore
+        .getState()
+        .findEntryByPatient({ id: patient.id, mobile: patient.mobile });
+      goQueueWithHighlight(synced ? synced.id : addPatientFromSearch(patient), "new");
+    } catch {
+      const localId = addPatientFromSearch(patient);
+      setHighlightQueueEntryId(localId);
+      notify.error("Could not complete check-in. Added locally; retry check-in.");
+      router.push("/helpdesk/queue");
+    }
   };
 
   const openNewPatientDialog = () => {

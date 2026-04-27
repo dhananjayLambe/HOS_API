@@ -127,7 +127,57 @@ export function DynamicSectionForm({
           }
         });
       });
-      
+
+      // Vitals: backend / helpdesk JSON uses height_cm, weight_kg, temperature.value — template fields are height, weight, temperature.
+      // Also fixes strategy 2 assigning the whole temperature object to normalized.temperature.temperature.
+      if (sectionCode === "vitals") {
+        const hw = initialData?.height_weight as Record<string, unknown> | undefined;
+        const hwNorm = normalized.height_weight;
+        if (hw && typeof hw === "object" && hwNorm) {
+          if (hwNorm.height == null || hwNorm.height === "") {
+            const raw = hw.height_cm ?? hw.height;
+            if (raw != null && raw !== "") {
+              const n = Number(raw);
+              if (!Number.isNaN(n)) hwNorm.height = n;
+            } else if (hw.height_ft != null && hw.height_ft !== "") {
+              const ft = Number(hw.height_ft);
+              if (!Number.isNaN(ft)) hwNorm.height = Math.round(ft * 30.48 * 100) / 100;
+            }
+          }
+          if (hwNorm.weight == null || hwNorm.weight === "") {
+            const raw = hw.weight_kg ?? hw.weight;
+            if (raw != null && raw !== "") {
+              const n = Number(raw);
+              if (!Number.isNaN(n)) hwNorm.weight = n;
+            }
+          }
+        }
+        const tBlock = initialData?.temperature;
+        const tNorm = normalized.temperature;
+        if (tNorm) {
+          const cur = tNorm.temperature;
+          const needScalar =
+            cur == null ||
+            cur === "" ||
+            (typeof cur === "object" &&
+              cur !== null &&
+              ("value" in (cur as object) || "temperature" in (cur as object)));
+          if (needScalar) {
+            if (tBlock != null && typeof tBlock === "object") {
+              const tb = tBlock as Record<string, unknown>;
+              const inner = tb.value ?? tb.temperature;
+              if (inner != null && inner !== "") {
+                const n = Number(inner as string | number);
+                if (!Number.isNaN(n)) tNorm.temperature = n;
+              }
+            } else if (typeof tBlock === "number" || typeof tBlock === "string") {
+              const n = Number(tBlock);
+              if (!Number.isNaN(n)) tNorm.temperature = n;
+            }
+          }
+        }
+      }
+
       setSectionData(normalized);
     } catch (error) {
       console.error(`Error normalizing section data for ${sectionCode}:`, error);

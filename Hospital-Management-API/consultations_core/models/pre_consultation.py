@@ -133,8 +133,8 @@ class PreConsultation(models.Model):
                     "A pre-consultation already exists for this encounter."
                 )
 
-        # 🔒 Prevent modification if already locked in DB
-        if not is_new and self.is_locked:
+        # 🔒 Prevent modification if already locked in DB (protects stale instances too)
+        if not is_new:
             from django.core.exceptions import ValidationError
             if type(self).objects.filter(pk=self.pk, is_locked=True).exists():
                 raise ValidationError(

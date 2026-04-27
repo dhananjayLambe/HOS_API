@@ -16,10 +16,16 @@ export interface HelpdeskVitalsPayload {
   temperature?: number;
 }
 
+function cToF(c: number): number {
+  return (c * 9) / 5 + 32;
+}
+
 export interface QueueEntry {
   id: string;
   /** ClinicalEncounter UUID when linked from server check-in */
   visitId: string | null;
+  /** Human-readable visit identifier shown to users */
+  visitPnr?: string | null;
   patientProfileId?: string;
   name: string;
   mobile: string;
@@ -43,7 +49,7 @@ export function vitalsPreviewLine(vitals: HelpdeskVitalsPayload | null | undefin
   if (sys != null && dia != null) parts.push(`BP: ${sys}/${dia}`);
   if (vitals.weight != null) parts.push(`W: ${vitals.weight}kg`);
   if (vitals.height != null) parts.push(`H: ${vitals.height}ft`);
-  if (vitals.temperature != null) parts.push(`T: ${vitals.temperature}`);
+  if (vitals.temperature != null) parts.push(`T: ${vitals.temperature}°F`);
   return parts.length ? parts.join(" | ") : null;
 }
 
@@ -64,6 +70,21 @@ function maskMobile(m: string): string {
 
 function normalizeMobile(value?: string | null): string {
   return (value ?? "").replace(/\D/g, "");
+}
+
+function isSamePatientEntry(
+  left: { patientProfileId?: string; mobile?: string | null },
+  right: { patientProfileId?: string; mobile?: string | null }
+): boolean {
+  if (left.patientProfileId && right.patientProfileId) {
+    return left.patientProfileId === right.patientProfileId;
+  }
+  const lm = normalizeMobile(left.mobile);
+  const rm = normalizeMobile(right.mobile);
+  if (!left.patientProfileId && !right.patientProfileId && lm.length >= 10 && rm.length >= 10) {
+    return lm === rm;
+  }
+  return false;
 }
 
 /** sessionStorage key — tracks which calendar day the helpdesk queue UI was last aligned to (local timezone). */
@@ -90,6 +111,7 @@ export function isHelpdeskQueueCalendarDayStale(): boolean {
 interface HelpdeskQueueRowApi {
   id: string;
   visit_id: string | null;
+  visit_pnr?: string | null;
   patient?: string | null;
   patient_name?: string | null;
   patient_mobile?: string | null;
@@ -142,12 +164,43 @@ function vitalsFromPreview(vitals: Record<string, unknown> | null | undefined): 
   return Object.keys(out).length ? out : null;
 }
 
+/**
+ * Map GET /api/visits/{visit_id}/vitals/ body to the same shape used for POST.
+ * Use when opening the vitals dialog so fields match server state (not just queue preview).
+ */
+export function mapVisitVitalsApiResponse(data: unknown): HelpdeskVitalsPayload | null {
+  if (!data || typeof data !== "object") return null;
+  const d = data as Record<string, unknown>;
+  const out: HelpdeskVitalsPayload = {};
+  if (typeof d.bp_systolic === "number") out.bp_systolic = d.bp_systolic;
+  if (typeof d.bp_diastolic === "number") out.bp_diastolic = d.bp_diastolic;
+  if (typeof d.weight === "number") out.weight = d.weight;
+  else if (typeof d.weight === "string" && d.weight.trim() !== "") {
+    const n = Number(d.weight);
+    if (!Number.isNaN(n)) out.weight = n;
+  }
+  if (typeof d.height === "number") out.height = d.height;
+  else if (typeof d.height === "string" && d.height.trim() !== "") {
+    const n = Number(d.height);
+    if (!Number.isNaN(n)) out.height = n;
+  }
+  const tempUnit = typeof d.temperature_unit === "string" ? d.temperature_unit.toLowerCase() : "c";
+  if (typeof d.temperature === "number") {
+    out.temperature = tempUnit === "f" ? d.temperature : Number(cToF(d.temperature).toFixed(2));
+  } else if (typeof d.temperature === "string" && d.temperature.trim() !== "") {
+    const n = Number(d.temperature);
+    if (!Number.isNaN(n)) out.temperature = tempUnit === "f" ? n : Number(cToF(n).toFixed(2));
+  }
+  return Object.keys(out).length ? out : null;
+}
+
 function mapHelpdeskQueueRowToEntry(row: HelpdeskQueueRowApi): QueueEntry {
   const pos = row.position_in_queue ?? 0;
   const status = mapApiStatus(row.status);
   return {
     id: row.id,
     visitId: row.visit_id,
+    visitPnr: row.visit_pnr ?? null,
     patientProfileId: row.patient ?? undefined,
     name: (row.patient_name || "").trim() || "Patient",
     mobile: (row.patient_mobile || "").trim(),
@@ -190,11 +243,6 @@ let idCounter = 100;
 /** Coalesce overlapping refreshes (poll + day watch + visibility). */
 let fetchTodayQueueInFlight: Promise<{ rolledOver: boolean }> | null = null;
 
-function mockVisitIdForNewEntry(): string {
-  const hex = `${++idCounter}`.padStart(12, "0");
-  return `b0000000-0000-4000-8000-${hex.slice(0, 12)}`;
-}
-
 export const useHelpdeskQueueStore = create<HelpdeskQueueState>((set, get) => ({
   entries: [],
   headerSearch: "",
@@ -209,12 +257,7 @@ export const useHelpdeskQueueStore = create<HelpdeskQueueState>((set, get) => ({
       const mergedLocals = locals.filter(
         (loc) =>
           !serverEntries.some(
-            (se) =>
-              (loc.patientProfileId &&
-                se.patientProfileId &&
-                loc.patientProfileId === se.patientProfileId) ||
-              (normalizeMobile(loc.mobile).length >= 10 &&
-                normalizeMobile(loc.mobile) === normalizeMobile(se.mobile))
+            (se) => isSamePatientEntry(loc, se)
           )
       );
       return { entries: [...serverEntries, ...mergedLocals] };
@@ -240,7 +283,7 @@ export const useHelpdeskQueueStore = create<HelpdeskQueueState>((set, get) => ({
         sessionStorage.setItem(HELPDESK_QUEUE_DAY_KEY, today);
       }
 
-      const { data } = await axiosClient.get<unknown>("/api/queue/helpdesk/today/");
+      const { data } = await axiosClient.get<unknown>("/queue/helpdesk/today/");
       const mapped = mapHelpdeskQueueApiResponse(data);
       get().hydrateFromServer(mapped);
       if (rolledOver && typeof window !== "undefined") {
@@ -262,7 +305,7 @@ export const useHelpdeskQueueStore = create<HelpdeskQueueState>((set, get) => ({
           ...s.entries,
           {
             id,
-            visitId: mockVisitIdForNewEntry(),
+            visitId: null,
             patientProfileId: undefined,
             name: name.trim(),
             mobile: mobile.trim(),
@@ -293,7 +336,7 @@ export const useHelpdeskQueueStore = create<HelpdeskQueueState>((set, get) => ({
           ...s.entries,
           {
             id,
-            visitId: mockVisitIdForNewEntry(),
+            visitId: null,
             patientProfileId: patient.id,
             name: (patient.full_name || "").trim() || "Unnamed Patient",
             mobile: (patient.mobile || "").trim(),
@@ -317,7 +360,7 @@ export const useHelpdeskQueueStore = create<HelpdeskQueueState>((set, get) => ({
     const entries = get().entries;
     return (
       entries.find((entry) => entry.patientProfileId && entry.patientProfileId === patient.id) ??
-      (targetMobile
+      (!patient.id
         ? entries.find((entry) => normalizeMobile(entry.mobile) === targetMobile)
         : null) ??
       null
@@ -355,23 +398,15 @@ export const useHelpdeskQueueStore = create<HelpdeskQueueState>((set, get) => ({
     })),
 
   startConsultation: async (id) => {
-    const e = get().entries.find((x) => x.id === id);
-    if (e?.clinicId) {
-      await backendAxiosClient.patch("queue/start/", { queue_id: id, clinic_id: e.clinicId });
-    }
-    set((s) => ({
-      entries: s.entries.map((row) => {
-        if (row.id !== id) return row;
-        if (row.status !== "waiting" && row.status !== "vitals_done") return row;
-        return { ...row, status: "in_consultation" as const };
-      }),
-    }));
+    throw new Error("Only doctor can start consultation.");
   },
 
   removeFromQueue: async (id) => {
     const e = get().entries.find((x) => x.id === id);
     if (e && !e.id.startsWith("hq-")) {
-      await backendAxiosClient.patch("queue/skip/", { queue_id: id });
+      await backendAxiosClient.patch("queue/skip/", { queue_id: id, clinic_id: e.clinicId });
+      await get().fetchTodayQueue();
+      return;
     }
     set((s) => ({
       entries: s.entries.filter((row) => row.id !== id),

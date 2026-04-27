@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState, Suspense } from "react";
+import { useCallback, useEffect, useRef, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { usePatient } from "@/lib/patientContext";
 import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, AlertCircle, Search, Save, X, Loader2, Zap } from "lucide-react";
+import { ArrowLeft, AlertCircle, Search, Save, X, Loader2, Zap, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { VitalsSection } from "@/components/consultations/vitals-section";
 import { HistorySection } from "@/components/consultations/history-section";
@@ -44,6 +44,7 @@ function PreConsultationPageContent() {
   const [isResolvingEntry, setIsResolvingEntry] = useState(false);
   const [encounterStatus, setEncounterStatus] = useState<string | null>(null);
   const [isStartingNewVisit, setIsStartingNewVisit] = useState(false);
+  const [isRefreshingSections, setIsRefreshingSections] = useState(false);
   const [showStartNewVisitConfirm, setShowStartNewVisitConfirm] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   // Cancel Visit (commented out for later use)
@@ -346,8 +347,7 @@ function PreConsultationPageContent() {
     startPreConsultation();
   }, [encounterId, encounterStatus, preConsultationStarted]);
 
-  // Load existing section data if encounter_id is available (parallel requests). Skip if cancelled.
-  useEffect(() => {
+  const reloadPreConsultationSections = useCallback(async () => {
     if (!encounterId || redirectingDueToCancelledRef.current || encounterStatus === "CANCELLED") return;
 
     const sectionCodes = ["vitals", "chief_complaint", "allergies", "medical_history"] as const;
@@ -358,37 +358,64 @@ function PreConsultationPageContent() {
       medical_history: "history",
     };
 
-    let cancelled = false;
-    const loadExistingData = async () => {
-      const results = await Promise.allSettled(
-        sectionCodes.map((sectionCode) =>
-          backendAxiosClient.get(
-            `/consultations/pre-consult/encounter/${encounterId}/section/${sectionCode}/`
-          )
-        )
-      );
-      if (cancelled) return;
-      const updates: Partial<typeof preConsultationData> = {};
-      results.forEach((result, i) => {
-        if (result.status !== "fulfilled" || result.value?.data?.data == null) {
-          if (result.status === "rejected" && result.reason?.response?.status !== 404) {
-            console.error(`Error loading ${sectionCodes[i]}:`, result.reason);
-          }
-          return;
+    const results = await Promise.allSettled(
+      sectionCodes.map((sectionCode) =>
+        backendAxiosClient.get(`/consultations/pre-consult/encounter/${encounterId}/section/${sectionCode}/`)
+      )
+    );
+    const updates: Partial<typeof preConsultationData> = {};
+    results.forEach((result, i) => {
+      if (result.status !== "fulfilled" || result.value?.data?.data == null) {
+        if (result.status === "rejected" && result.reason?.response?.status !== 404) {
+          console.error(`Error loading ${sectionCodes[i]}:`, result.reason);
         }
-        const sectionKey = sectionMap[sectionCodes[i]];
-        if (sectionKey) updates[sectionKey] = result.value.data.data;
-      });
-      if (Object.keys(updates).length > 0) {
-        setPreConsultationData((prev) => ({ ...prev, ...updates }));
+        return;
       }
-    };
-
-    loadExistingData();
-    return () => {
-      cancelled = true;
-    };
+      const sectionKey = sectionMap[sectionCodes[i]];
+      if (sectionKey) updates[sectionKey] = result.value.data.data;
+    });
+    if (Object.keys(updates).length > 0) {
+      setPreConsultationData((prev) => ({ ...prev, ...updates }));
+    }
   }, [encounterId, encounterStatus]);
+
+  // Initial load when encounter or status changes.
+  useEffect(() => {
+    void reloadPreConsultationSections();
+  }, [reloadPreConsultationSections]);
+
+  // Helpdesk may save vitals after the doctor opened this page — refetch when tab becomes visible or window gains focus.
+  useEffect(() => {
+    if (!encounterId || encounterStatus === "CANCELLED" || redirectingDueToCancelledRef.current) return;
+    const DEBOUNCE_MS = 400;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const schedule = () => {
+      if (document.visibilityState !== "visible") return;
+      if (timeoutId) clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        timeoutId = null;
+        void reloadPreConsultationSections();
+      }, DEBOUNCE_MS);
+    };
+    document.addEventListener("visibilitychange", schedule);
+    window.addEventListener("focus", schedule);
+    return () => {
+      document.removeEventListener("visibilitychange", schedule);
+      window.removeEventListener("focus", schedule);
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [encounterId, encounterStatus, reloadPreConsultationSections]);
+
+  const handleRefreshSectionsFromServer = async () => {
+    if (!encounterId) return;
+    setIsRefreshingSections(true);
+    try {
+      await reloadPreConsultationSections();
+      toast.info("Sections updated from server.");
+    } finally {
+      setIsRefreshingSections(false);
+    }
+  };
 
   useEffect(() => {
     if (!selectedPatient) {
@@ -943,6 +970,20 @@ function PreConsultationPageContent() {
           </div>
         </div>
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
+          {encounterId && (
+            <Button
+              type="button"
+              variant="outline"
+              className="gap-2 shrink-0"
+              disabled={isRefreshingSections}
+              onClick={() => void handleRefreshSectionsFromServer()}
+              aria-label="Refresh pre-consultation sections from server"
+            >
+              <RefreshCw className={`h-4 w-4 shrink-0 ${isRefreshingSections ? "animate-spin" : ""}`} />
+              <span className="hidden sm:inline">Refresh from server</span>
+              <span className="sm:hidden">Refresh</span>
+            </Button>
+          )}
           {!preLocked && (
             <>
               <div className="flex items-center gap-2 px-3 py-2 rounded-lg border bg-muted/50">
