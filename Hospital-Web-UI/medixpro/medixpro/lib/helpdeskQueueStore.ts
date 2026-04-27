@@ -435,3 +435,16 @@ export function useFilteredQueueEntries(): QueueEntry[] {
     );
   }, [entries, headerSearch]);
 }
+
+export function resetHelpdeskQueueStoreState(): void {
+  idCounter = 100;
+  fetchTodayQueueInFlight = null;
+  useHelpdeskQueueStore.setState({
+    entries: [],
+    headerSearch: "",
+    highlightQueueEntryId: null,
+  });
+  if (typeof sessionStorage !== "undefined") {
+    sessionStorage.removeItem(HELPDESK_QUEUE_DAY_KEY);
+  }
+}

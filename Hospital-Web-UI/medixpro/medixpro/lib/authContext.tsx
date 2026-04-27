@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import axiosClient, { ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY, ROLE_KEY } from "./axiosClient";
 import { isTokenValid, getRoleRedirectPath } from "./jwtUtils";
 import { extractAuthTokens } from "./auth-token-utils";
+import { resetHelpdeskQueueStoreState } from "./helpdeskQueueStore";
 
 interface UserInfo {
   user_id: string | null;
@@ -185,6 +186,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       setUser(null);
       setRole(null);
+      resetHelpdeskQueueStoreState();
       // Clear tokens
       localStorage.removeItem(ACCESS_TOKEN_KEY);
       localStorage.removeItem(REFRESH_TOKEN_KEY);

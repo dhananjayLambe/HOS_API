@@ -82,7 +82,11 @@ export function HelpdeskLayout({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!sessionChecked) return;
-    if (role?.toLowerCase() !== "helpdesk") {
+    if (!role) {
+      router.replace("/auth/login");
+      return;
+    }
+    if (role.toLowerCase() !== "helpdesk") {
       router.replace(getRoleRedirectPath(role));
     }
   }, [role, sessionChecked, router]);
