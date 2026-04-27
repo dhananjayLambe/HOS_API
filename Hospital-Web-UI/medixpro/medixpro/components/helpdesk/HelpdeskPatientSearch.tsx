@@ -5,8 +5,11 @@ import { Input } from "@/components/ui/input";
 import { usePatientSearchQuery } from "@/hooks/use-patient-search-query";
 import { PatientSearchResultList } from "@/components/patient/patient-search-result-list";
 import type { PatientSearchRow } from "@/lib/patientSearchDisplay";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
+
+const RECENT_SEARCH_KEY = "helpdesk_recent_patient_searches";
+const RECENT_LIMIT = 8;
 
 export interface HelpdeskSearchPatient {
   id: string;
@@ -47,7 +50,19 @@ export function HelpdeskPatientSearch({
   className,
 }: HelpdeskPatientSearchProps) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const { query, setQuery, results, isLoading, error, reset } = usePatientSearchQuery(true);
+  const { query, setQuery, results, isLoading, error, reset } = usePatientSearchQuery(true, 10);
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const [recentResults, setRecentResults] = useState<PatientSearchRow[]>([]);
+
+  const persistRecent = (patient: PatientSearchRow) => {
+    const next = [patient, ...recentResults.filter((row) => row.id !== patient.id)].slice(0, RECENT_LIMIT);
+    setRecentResults(next);
+    try {
+      localStorage.setItem(RECENT_SEARCH_KEY, JSON.stringify(next));
+    } catch {
+      // ignore local storage failures
+    }
+  };
 
   useEffect(() => {
     setQuery(initialQuery);
@@ -59,6 +74,22 @@ export function HelpdeskPatientSearch({
       return () => window.clearTimeout(t);
     }
   }, [autoFocus]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(RECENT_SEARCH_KEY);
+      const parsed = raw ? (JSON.parse(raw) as PatientSearchRow[]) : [];
+      setRecentResults(Array.isArray(parsed) ? parsed.slice(0, RECENT_LIMIT) : []);
+    } catch {
+      setRecentResults([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    setActiveIndex(results.length > 0 ? 0 : -1);
+  }, [results]);
+
+  const visibleResults = query.trim().length >= 2 ? results : recentResults;
 
   return (
     <div className={cn("space-y-4", className)}>
@@ -73,7 +104,24 @@ export function HelpdeskPatientSearch({
             ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search by name / mobile"
+            onKeyDown={(e) => {
+              if (!visibleResults.length) return;
+              if (e.key === "ArrowDown") {
+                e.preventDefault();
+                setActiveIndex((prev) => (prev + 1) % visibleResults.length);
+              } else if (e.key === "ArrowUp") {
+                e.preventDefault();
+                setActiveIndex((prev) => (prev <= 0 ? visibleResults.length - 1 : prev - 1));
+              } else if (e.key === "Enter") {
+                e.preventDefault();
+                const selected = visibleResults[activeIndex] || visibleResults[0];
+                if (selected) {
+                  persistRecent(selected);
+                  onSelectPatient?.(toHelpdeskPatient(selected));
+                }
+              }
+            }}
+            placeholder="Search by name / mobile / username"
             className="h-11 pl-9"
             inputMode="search"
             autoComplete="off"
@@ -86,10 +134,13 @@ export function HelpdeskPatientSearch({
       <PatientSearchResultList
         variant="inline"
         query={query}
-        results={results}
+        results={visibleResults}
         isLoading={isLoading}
         error={error}
-        onSelect={(p) => onSelectPatient?.(toHelpdeskPatient(p))}
+        onSelect={(p) => {
+          persistRecent(p);
+          onSelectPatient?.(toHelpdeskPatient(p));
+        }}
         onAddNew={onAddNew}
         onAddProfile={(p) => {
           if (onAddProfile) onAddProfile(toHelpdeskPatient(p));
@@ -98,6 +149,8 @@ export function HelpdeskPatientSearch({
         addProfileDisabled={false}
         addNewDisabled={false}
         showAddProfile={Boolean(onAddProfile)}
+        activeIndex={activeIndex}
+        onHoverIndex={setActiveIndex}
       />
     </div>
   );

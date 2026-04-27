@@ -8,7 +8,7 @@ import type { PatientSearchRow } from "@/lib/patientSearchDisplay";
 const DEBOUNCE_MS = 300;
 const MIN_CHARS = 2;
 
-export function usePatientSearchQuery(enabled = true) {
+export function usePatientSearchQuery(enabled = true, limit = 10) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<PatientSearchRow[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -27,7 +27,7 @@ export function usePatientSearchQuery(enabled = true) {
     setError(null);
     try {
       const response = await axiosClient.get("/patients/search/", {
-        params: { query: trimmed },
+        params: { query: trimmed, limit },
       });
       setResults(Array.isArray(response.data) ? response.data : []);
     } catch (err: unknown) {
@@ -56,7 +56,7 @@ export function usePatientSearchQuery(enabled = true) {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [limit]);
 
   useEffect(() => {
     if (!enabled) {

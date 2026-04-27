@@ -26,6 +26,8 @@ export interface PatientSearchResultListProps {
   addNewDisabled?: boolean;
   /** When false, hide per-row "+ Add Profile" (e.g. locked doctor). */
   showAddProfile?: boolean;
+  activeIndex?: number;
+  onHoverIndex?: (index: number) => void;
 }
 
 const scrollAreaClass = cn(
@@ -48,6 +50,8 @@ export function PatientSearchResultList({
   addProfileDisabled = false,
   addNewDisabled = false,
   showAddProfile = true,
+  activeIndex = -1,
+  onHoverIndex,
 }: PatientSearchResultListProps) {
   const minChars = 2;
   const showEmpty = query.trim().length >= minChars && !isLoading && results.length === 0 && !error;
@@ -63,6 +67,22 @@ export function PatientSearchResultList({
       : "border-t border-purple-200 dark:border-purple-800 bg-purple-50/50 dark:bg-purple-900/10";
 
   const rowBorder = variant === "inline" ? "border-border/70" : "border-purple-100 dark:border-purple-900/60";
+
+  const highlightText = (text: string) => {
+    const q = query.trim();
+    if (!q || q.length < 2) return text;
+    const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const parts = text.split(new RegExp(`(${escaped})`, "ig"));
+    return parts.map((part, i) =>
+      part.toLowerCase() === q.toLowerCase() ? (
+        <mark key={`${part}-${i}`} className="rounded bg-amber-200/70 px-0.5 text-foreground dark:bg-amber-700/40">
+          {part}
+        </mark>
+      ) : (
+        <span key={`${part}-${i}`}>{part}</span>
+      )
+    );
+  };
 
   return (
     <div className="flex flex-col">
@@ -93,20 +113,26 @@ export function PatientSearchResultList({
         </div>
       ) : results.length > 0 ? (
         <div className={scrollAreaClass}>
-          {results.map((patient) => {
+          {results.map((patient, index) => {
             const subtitle = formatAgeGenderLine(patient);
             const mobileLine = patient.mobile ? maskMobileForSearch(patient.mobile) : "";
+            const detailLine = [subtitle, mobileLine].filter(Boolean).join(" | ");
+            const isActive = activeIndex === index;
             return (
               <div key={patient.id} className={cn("mb-2 last:mb-0 rounded-lg border", rowBorder)}>
                 <button
                   type="button"
                   onClick={() => onSelect(patient)}
-                  className="w-full rounded-t-lg px-4 py-3 text-left transition-all duration-200 hover:bg-accent/50 group"
+                  onMouseEnter={() => onHoverIndex?.(index)}
+                  className={cn(
+                    "w-full rounded-t-lg px-4 py-3 text-left transition-all duration-200 hover:bg-accent/50 group",
+                    isActive && "bg-accent/60"
+                  )}
                 >
                   <div className="flex flex-col gap-1.5">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="font-semibold text-sm text-foreground group-hover:text-purple-700 dark:group-hover:text-purple-400">
-                        {displayPatientName(patient)}
+                        {highlightText(displayPatientName(patient))}
                       </p>
                       {patient.relation && (
                         <span className="rounded bg-purple-100 px-2 py-0.5 text-xs capitalize text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">
@@ -114,8 +140,9 @@ export function PatientSearchResultList({
                         </span>
                       )}
                     </div>
-                    {subtitle ? <p className="text-xs text-muted-foreground">{subtitle}</p> : null}
-                    {mobileLine ? <p className="text-xs tabular-nums text-muted-foreground">{mobileLine}</p> : null}
+                    {detailLine ? (
+                      <p className="text-xs tabular-nums text-muted-foreground">{highlightText(detailLine)}</p>
+                    ) : null}
                   </div>
                 </button>
                 {showAddProfile && patient.mobile && (

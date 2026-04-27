@@ -7,6 +7,9 @@ import { PatientSearchResultList } from "@/components/patient/patient-search-res
 import type { PatientSearchRow } from "@/lib/patientSearchDisplay";
 import { useEffect, useRef, useState } from "react";
 
+const RECENT_SEARCH_KEY = "helpdesk_recent_patient_searches";
+const RECENT_LIMIT = 8;
+
 interface HelpdeskHeaderLiveSearchProps {
   onSelectPatient: (patient: PatientSearchRow) => void;
   onAddNew: () => void;
@@ -18,9 +21,21 @@ export function HelpdeskHeaderLiveSearch({
   onAddNew,
   onAddProfile,
 }: HelpdeskHeaderLiveSearchProps) {
-  const { query, setQuery, results, isLoading, error, reset } = usePatientSearchQuery(true);
+  const { query, setQuery, results, isLoading, error, reset } = usePatientSearchQuery(true, 10);
   const [isOpen, setIsOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const [recentResults, setRecentResults] = useState<PatientSearchRow[]>([]);
   const rootRef = useRef<HTMLDivElement>(null);
+
+  const persistRecent = (patient: PatientSearchRow) => {
+    const next = [patient, ...recentResults.filter((row) => row.id !== patient.id)].slice(0, RECENT_LIMIT);
+    setRecentResults(next);
+    try {
+      localStorage.setItem(RECENT_SEARCH_KEY, JSON.stringify(next));
+    } catch {
+      // ignore local storage failures
+    }
+  };
 
   const handleClose = () => {
     setIsOpen(false);
@@ -38,17 +53,53 @@ export function HelpdeskHeaderLiveSearch({
     return () => document.removeEventListener("mousedown", handleOutside);
   }, []);
 
-  const showPanel = isOpen && (query.trim().length > 0 || isLoading || Boolean(error));
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(RECENT_SEARCH_KEY);
+      const parsed = raw ? (JSON.parse(raw) as PatientSearchRow[]) : [];
+      setRecentResults(Array.isArray(parsed) ? parsed.slice(0, RECENT_LIMIT) : []);
+    } catch {
+      setRecentResults([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    setActiveIndex(results.length > 0 ? 0 : -1);
+  }, [results]);
+
+  const visibleResults = query.trim().length >= 2 ? results : recentResults;
+  const showPanel = isOpen && (query.trim().length > 0 || isLoading || Boolean(error) || recentResults.length > 0);
 
   return (
     <div ref={rootRef} className="relative min-w-0 flex-1">
       <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
       <Input
-        placeholder="Search patients by name or mobile"
+        placeholder="Search by name / mobile / username"
         value={query}
         onChange={(e) => {
           setQuery(e.target.value);
           if (!isOpen) setIsOpen(true);
+        }}
+        onKeyDown={(e) => {
+          if (!visibleResults.length) return;
+          if (e.key === "ArrowDown") {
+            e.preventDefault();
+            setActiveIndex((prev) => (prev + 1) % visibleResults.length);
+          } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            setActiveIndex((prev) => (prev <= 0 ? visibleResults.length - 1 : prev - 1));
+          } else if (e.key === "Enter") {
+            e.preventDefault();
+            const selected = visibleResults[activeIndex] || visibleResults[0];
+            if (selected) {
+              persistRecent(selected);
+              onSelectPatient(selected);
+              handleClose();
+            }
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            handleClose();
+          }
         }}
         onFocus={() => setIsOpen(true)}
         className="h-11 flex-1 rounded-full border-border bg-background pl-9 pr-11 shadow-sm"
@@ -67,10 +118,11 @@ export function HelpdeskHeaderLiveSearch({
         <PatientSearchResultList
           variant="popover"
           query={query}
-          results={results}
+          results={visibleResults}
           isLoading={isLoading}
           error={error}
           onSelect={(patient) => {
+            persistRecent(patient);
             onSelectPatient(patient);
             handleClose();
           }}
@@ -84,6 +136,8 @@ export function HelpdeskHeaderLiveSearch({
           }}
           onClose={handleClose}
           showAddProfile
+          activeIndex={activeIndex}
+          onHoverIndex={setActiveIndex}
         />
         </div>
       )}

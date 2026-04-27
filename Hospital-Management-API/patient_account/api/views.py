@@ -21,7 +21,6 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import generics, permissions
-from django.contrib.postgres.search import TrigramSimilarity
 from patient_account.api.serializers import(
 PatientProfileSerializer, PatientProfileUpdateSerializer, PatientProfileDetailsSerializer,
 PatientAccountSerializer,
@@ -35,10 +34,10 @@ from django.core.cache import cache
 from django.db.models import Q
 from rest_framework.generics import ListAPIView
 from django.db import transaction
-from django.db.models import F, Value, CharField
-from django.db.models.functions import Concat, Replace
+from rest_framework.throttling import UserRateThrottle
 from django.utils import timezone
 import traceback
+from patient_account.services.patient_search_service import search_patients_for_suggestions
 
 # Set up logger
 logger = logging.getLogger(__name__)
@@ -330,116 +329,18 @@ class PatientProfileSearchView(ListAPIView):
     Uses case-insensitive containment to avoid database-specific trigram requirements.
     """
     serializer_class = PatientProfileSearchSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsDoctorOrHelpdesk]
     authentication_classes = [JWTAuthentication]
 
-    def _get_user_clinic_ids(self, user):
-        """Return clinic ids for doctor/helpdesk users to keep results clinic-scoped."""
-        print("PatientProfileSearchView: Getting user clinic ids")
-        clinic_ids = set()
-        if hasattr(user, "doctor"):
-            clinic_ids.update(user.doctor.clinics.values_list("id", flat=True))
-        if hasattr(user, "helpdesk_profile") and user.helpdesk_profile.clinic_id:
-            clinic_ids.add(user.helpdesk_profile.clinic_id)
-        return list(clinic_ids)
+    class PatientSearchThrottle(UserRateThrottle):
+        rate = "90/min"
+
+    throttle_classes = [PatientSearchThrottle]
 
     def get(self, request, *args, **kwargs):
-        query = request.query_params.get('query', '').strip()
-
-        # Basic validation: require at least 2 characters to search
-        if not query or len(query) < 2:
-            return Response([], status=status.HTTP_200_OK)
-
-        # Prevent excessively long queries from being used
-        if len(query) > 50:
-            query = query[:50]
-
-        normalized_query = " ".join(query.split())
-        query_tokens = [token for token in normalized_query.split(" ") if token]
-        digit_query = "".join(ch for ch in normalized_query if ch.isdigit())
-
-        # Patient search is global for doctor/helpdesk and should not depend on clinic.
-        cache_key = f"patient_search_v4_all_{normalized_query.lower()}"
-        cached_data = None
-
-        # Safely try cache get – if Redis is down, log and ignore errors
-        try:
-            cached_data = cache.get(cache_key)
-        except Exception:
-            logger.exception("PatientProfileSearchView: Redis cache GET failed", exc_info=True)
-            cached_data = None
-
-        if cached_data:
-            return Response(cached_data)
-
-        # Fuzzy-friendly search:
-        # - tokenized name matching ("rah sh" should match Rahul Sharma)
-        # - digit-normalized mobile matching (+91/space/hyphen differences)
-        queryset = PatientProfile.objects.select_related('account__user').annotate(
-            full_name_search=Concat(
-                F('first_name'),
-                Value(' '),
-                F('last_name'),
-                output_field=CharField(),
-            ),
-            user_full_name_search=Concat(
-                F('account__user__first_name'),
-                Value(' '),
-                F('account__user__last_name'),
-                output_field=CharField(),
-            ),
-            mobile_digits=Replace(
-                Replace(
-                    Replace(
-                        Replace(F('account__user__username'), Value('+'), Value('')),
-                        Value('-'),
-                        Value(''),
-                    ),
-                    Value(' '),
-                    Value(''),
-                ),
-                Value('('),
-                Value(''),
-            ),
-        )
-
-        token_filter = Q()
-        for token in query_tokens:
-            token_filter &= (
-                Q(first_name__icontains=token) |
-                Q(last_name__icontains=token) |
-                Q(full_name_search__icontains=token) |
-                Q(account__user__first_name__icontains=token) |
-                Q(account__user__last_name__icontains=token) |
-                Q(user_full_name_search__icontains=token) |
-                Q(account__user__username__icontains=token)
-            )
-
-        if digit_query:
-            token_filter |= (
-                Q(account__user__username__icontains=digit_query) |
-                Q(mobile_digits__icontains=digit_query)
-            )
-
-            # Last 4-6 digits should also work fast for helpdesk lookup.
-            if len(digit_query) <= 6:
-                token_filter |= Q(mobile_digits__endswith=digit_query)
-
-        queryset = queryset.filter(token_filter)
-
-        queryset = queryset.distinct().order_by('first_name', 'last_name')[:50]
-
-        serializer = self.get_serializer(queryset, many=True)
-        data = serializer.data
-
-        # Safely try cache set – if Redis is down, log and ignore errors
-        try:
-            if data:
-                cache.set(cache_key, data, timeout=300)  # cache for 5 minutes
-        except Exception:
-            logger.exception("PatientProfileSearchView: Redis cache SET failed", exc_info=True)
-            pass
-
+        query = request.query_params.get("query", "")
+        limit = request.query_params.get("limit", 10)
+        data = search_patients_for_suggestions(query=query, limit=limit)
         return Response(data, status=status.HTTP_200_OK)
 
 

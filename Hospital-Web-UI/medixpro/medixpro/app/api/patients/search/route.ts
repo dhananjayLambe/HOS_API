@@ -7,13 +7,14 @@ export async function GET(request: NextRequest) {
     const authHeader = request.headers.get("authorization") || request.headers.get("Authorization");
     const { searchParams } = new URL(request.url);
     const query = searchParams.get("query") || "";
+    const limit = searchParams.get("limit") || "10";
 
     if (!query.trim()) {
       return NextResponse.json([], { status: 200 });
     }
 
     const djangoBase = getDjangoApiBase();
-    const url = `${djangoBase}patients/search/?query=${encodeURIComponent(query.trim())}`;
+    const url = `${djangoBase}patients/search/?query=${encodeURIComponent(query.trim())}&limit=${encodeURIComponent(limit)}`;
 
     const response = await fetch(url, {
       method: "GET",

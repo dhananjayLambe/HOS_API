@@ -74,11 +74,27 @@ class PatientProfileDetailsSerializer(serializers.ModelSerializer):
 class PatientProfileSearchSerializer(serializers.ModelSerializer):
     mobile = serializers.SerializerMethodField()
     full_name = serializers.SerializerMethodField()
+    name = serializers.SerializerMethodField()
+    age = serializers.SerializerMethodField()
+    username = serializers.SerializerMethodField()
     patient_account_id = serializers.UUIDField(source="account_id", read_only=True)
 
     class Meta:
         model = PatientProfile
-        fields = ['id', 'first_name', 'last_name', 'full_name', 'relation', 'gender', 'date_of_birth', 'mobile', 'patient_account_id']
+        fields = [
+            'id',
+            'first_name',
+            'last_name',
+            'full_name',
+            'name',
+            'relation',
+            'gender',
+            'date_of_birth',
+            'age',
+            'mobile',
+            'username',
+            'patient_account_id',
+        ]
 
     def get_mobile(self, obj):
         try:
@@ -88,6 +104,24 @@ class PatientProfileSearchSerializer(serializers.ModelSerializer):
 
     def get_full_name(self, obj):
         return f"{obj.first_name} {obj.last_name}".strip()
+
+    def get_name(self, obj):
+        return self.get_full_name(obj)
+
+    def get_age(self, obj):
+        if not obj.date_of_birth:
+            return None
+        today = datetime.today().date()
+        years = today.year - obj.date_of_birth.year
+        if (today.month, today.day) < (obj.date_of_birth.month, obj.date_of_birth.day):
+            years -= 1
+        return years
+
+    def get_username(self, obj):
+        try:
+            return obj.account.user.username
+        except AttributeError:
+            return None
 
 
 class PatientInfoSerializer(serializers.ModelSerializer):

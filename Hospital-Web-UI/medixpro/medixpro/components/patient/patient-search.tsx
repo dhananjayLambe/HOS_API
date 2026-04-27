@@ -16,6 +16,9 @@ import { usePatientSearchQuery } from "@/hooks/use-patient-search-query";
 import { PatientSearchResultList } from "./patient-search-result-list";
 import type { PatientSearchRow } from "@/lib/patientSearchDisplay";
 
+const RECENT_SEARCH_KEY = "doctor_recent_patient_searches";
+const RECENT_LIMIT = 8;
+
 interface AddDialogContext {
   prefillMobile?: string;
   isExistingAccount?: boolean;
@@ -29,13 +32,17 @@ export function PatientSearch() {
   const isMobile = useMobile();
   const isSearchDisabled = !!selectedPatient;
 
-  const { query, setQuery, results, isLoading, error, reset } = usePatientSearchQuery(!isSearchDisabled);
+  const { query, setQuery, results, isLoading, error, reset } = usePatientSearchQuery(!isSearchDisabled, 10);
 
   const [isOpen, setIsOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const [recentResults, setRecentResults] = useState<PatientSearchRow[]>([]);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showMobileModal, setShowMobileModal] = useState(false);
   const [addDialogContext, setAddDialogContext] = useState<AddDialogContext>({});
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const visibleResults = query.trim().length >= 2 ? results : recentResults;
 
   useEffect(() => {
     if (highlightSearch && inputRef.current && !isSearchDisabled) {
@@ -45,7 +52,32 @@ export function PatientSearch() {
     }
   }, [highlightSearch, isSearchDisabled]);
 
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(RECENT_SEARCH_KEY);
+      const parsed = raw ? (JSON.parse(raw) as PatientSearchRow[]) : [];
+      setRecentResults(Array.isArray(parsed) ? parsed.slice(0, RECENT_LIMIT) : []);
+    } catch {
+      setRecentResults([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    setActiveIndex(visibleResults.length > 0 ? 0 : -1);
+  }, [query, results, recentResults, visibleResults.length]);
+
+  const persistRecent = (patient: PatientSearchRow) => {
+    const next = [patient, ...recentResults.filter((row) => row.id !== patient.id)].slice(0, RECENT_LIMIT);
+    setRecentResults(next);
+    try {
+      localStorage.setItem(RECENT_SEARCH_KEY, JSON.stringify(next));
+    } catch {
+      // ignore local storage failures
+    }
+  };
+
   const handleSelectPatient = (patient: PatientSearchRow) => {
+    persistRecent(patient);
     setSelectedPatient(patient as Patient);
     setIsOpen(false);
     setShowMobileModal(false);
@@ -114,7 +146,7 @@ export function PatientSearch() {
 
   const listProps = {
     query,
-    results,
+    results: visibleResults,
     isLoading,
     error,
     onSelect: handleSelectPatient,
@@ -123,6 +155,8 @@ export function PatientSearch() {
     addProfileDisabled: isLocked,
     addNewDisabled: isLocked,
     showAddProfile: true,
+    activeIndex,
+    onHoverIndex: setActiveIndex,
   } as const;
 
   if (selectedPatient) {
@@ -186,6 +220,24 @@ export function PatientSearch() {
                   placeholder="Search by name / mobile"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (!visibleResults.length) return;
+                    if (e.key === "ArrowDown") {
+                      e.preventDefault();
+                      setActiveIndex((prev) => (prev + 1) % visibleResults.length);
+                    } else if (e.key === "ArrowUp") {
+                      e.preventDefault();
+                      setActiveIndex((prev) => (prev <= 0 ? visibleResults.length - 1 : prev - 1));
+                    } else if (e.key === "Enter") {
+                      e.preventDefault();
+                      const selected = visibleResults[activeIndex] || visibleResults[0];
+                      if (selected) handleSelectPatient(selected);
+                    } else if (e.key === "Escape") {
+                      e.preventDefault();
+                      setShowMobileModal(false);
+                      reset();
+                    }
+                  }}
                   disabled={isLocked}
                   className="h-11 w-full rounded-lg border-2 border-purple-300 pl-12 pr-4 text-base shadow-sm focus:border-purple-600 focus:ring-2 focus:ring-purple-500/20 dark:border-purple-700 dark:focus:border-purple-500 dark:focus:ring-purple-400/20"
                   autoFocus
@@ -259,7 +311,21 @@ export function PatientSearch() {
               }}
               onClick={(e) => e.stopPropagation()}
               onKeyDown={(e) => {
-                if (e.key === "Escape") {
+                if (!visibleResults.length && e.key !== "Escape") {
+                  e.stopPropagation();
+                  return;
+                }
+                if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  setActiveIndex((prev) => (prev + 1) % visibleResults.length);
+                } else if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  setActiveIndex((prev) => (prev <= 0 ? visibleResults.length - 1 : prev - 1));
+                } else if (e.key === "Enter") {
+                  e.preventDefault();
+                  const selected = visibleResults[activeIndex] || visibleResults[0];
+                  if (selected) handleSelectPatient(selected);
+                } else if (e.key === "Escape") {
                   setIsOpen(false);
                   reset();
                 }
