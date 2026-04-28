@@ -1,5 +1,7 @@
 import uuid
 from django.db import models
+from django.db.models import Q
+from django.db.models.functions import TruncDate
 from datetime import timedelta
 from doctor.models import doctor
 from clinic.models import Clinic
@@ -45,6 +47,17 @@ class Queue(models.Model):
             models.Index(fields=["appointment"]),
             models.Index(fields=["clinic", "position_in_queue"]),
             models.Index(fields=["encounter", "created_at"]),
+            models.Index(fields=["doctor", "created_at", "position_in_queue"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                models.F("doctor"),
+                models.F("clinic"),
+                TruncDate("created_at"),
+                models.F("position_in_queue"),
+                condition=Q(status__in=["waiting", "vitals_done"]),
+                name="uniq_active_queue_position_per_doctor_clinic_day",
+            )
         ]
     def __str__(self):
         return f"{self.patient.first_name} - {self.status}"

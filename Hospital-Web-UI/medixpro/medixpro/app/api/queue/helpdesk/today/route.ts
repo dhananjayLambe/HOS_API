@@ -1,9 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server";
-
-const DJANGO_API_URL = process.env.DJANGO_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/";
+import { getDjangoApiBase } from "@/lib/get-django-api-base";
 
 function djangoQueueUrl() {
-  const base = DJANGO_API_URL.replace(/\/+$/, "");
+  const base = getDjangoApiBase().replace(/\/+$/, "");
   return `${base}/queue/helpdesk/today/`;
 }
 

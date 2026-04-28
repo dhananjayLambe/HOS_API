@@ -18,11 +18,13 @@ class QueueUpdateSerializer(serializers.ModelSerializer):
         fields = ['status', 'position_in_queue']
 
 
+class QueueReorderItemSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    position = serializers.IntegerField(min_value=1)
+
+
 class QueueReorderSerializer(serializers.Serializer):
-    queue_ids = serializers.ListField(
-        child=serializers.UUIDField(),
-        help_text="List of queue IDs in the desired order"
-    )
+    queue = QueueReorderItemSerializer(many=True)
 
 
 class QueuePatientSerializer(serializers.ModelSerializer):

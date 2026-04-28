@@ -11,20 +11,13 @@ import {
 import { cn } from "@/lib/utils";
 import type { QueueEntry, QueueStatus } from "@/lib/helpdeskQueueStore";
 import { maskMobile, vitalsPreviewLine } from "@/lib/helpdeskQueueStore";
-import { ArrowUp, MoreVertical, Stethoscope } from "lucide-react";
+import { ArrowBigDown, ArrowBigUp, ArrowDown, ArrowUp, MoreVertical, Stethoscope } from "lucide-react";
 
 function initialsFromName(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return "?";
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
-}
-
-function ordinalInQueue(n: number) {
-  const j = n % 10;
-  const k = n % 100;
-  const suf = j === 1 && k !== 11 ? "st" : j === 2 && k !== 12 ? "nd" : j === 3 && k !== 13 ? "rd" : "th";
-  return `${n}${suf} in queue`;
 }
 
 function statusBadge(status: QueueStatus): { label: string; className: string } {
@@ -65,9 +58,15 @@ function ageGenderLine(entry: QueueEntry): string {
 interface QueueCardProps {
   entry: QueueEntry;
   position: number;
+  compact?: boolean;
   onVitals: () => void;
   onUrgent: () => void;
   onRemove: () => void;
+  onMove: (direction: "top" | "up" | "down" | "bottom") => void;
+  canMove: boolean;
+  disableMove: boolean;
+  isFirst: boolean;
+  isLast: boolean;
   onOpen: () => void;
   className?: string;
 }
@@ -75,9 +74,15 @@ interface QueueCardProps {
 export function QueueCard({
   entry,
   position,
+  compact = false,
   onVitals,
   onUrgent,
   onRemove,
+  onMove,
+  canMove,
+  disableMove,
+  isFirst,
+  isLast,
   onOpen,
   className,
 }: QueueCardProps) {
@@ -98,34 +103,45 @@ export function QueueCard({
         }
       }}
       className={cn(
-        "w-full cursor-pointer rounded-2xl border border-border/80 bg-card p-4 text-left shadow-sm transition-colors hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "w-full cursor-pointer rounded-2xl border border-border/80 bg-card text-left shadow-sm transition-colors hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        compact ? "p-2.5" : "p-4",
         className
       )}
     >
-      <div className="flex gap-3">
+      <div className={cn("flex", compact ? "gap-2" : "gap-3")}>
         <div
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary"
+          className={cn(
+            "flex shrink-0 items-center justify-center rounded-full bg-primary/10 font-semibold text-primary",
+            compact ? "h-8 w-8 text-[11px]" : "h-11 w-11 text-sm"
+          )}
           aria-hidden
         >
           {initialsFromName(entry.name)}
         </div>
 
-        <div className="min-w-0 flex-1 space-y-2">
-          <div className="flex items-start justify-between gap-2">
+        <div className={cn("min-w-0 flex-1", compact ? "space-y-1" : "space-y-2")}>
+          <div className={cn("flex items-start justify-between", compact ? "gap-1.5" : "gap-2")}>
             <div className="min-w-0">
-              <p className="truncate text-base font-semibold leading-tight text-foreground">{entry.name}</p>
-              <p className="mt-0.5 text-sm text-muted-foreground">{ageGenderLine(entry)}</p>
-              <p className="text-xs text-muted-foreground tabular-nums">Token {token}</p>
+              <p className={cn("truncate font-semibold leading-tight text-foreground", compact ? "text-sm" : "text-base")}>
+                {entry.name}
+              </p>
+              <p className={cn("text-muted-foreground", compact ? "mt-0 text-xs" : "mt-0.5 text-sm")}>
+                {ageGenderLine(entry)}
+              </p>
+              <p className={cn("text-muted-foreground tabular-nums", compact ? "text-[11px]" : "text-xs")}>Token {token}</p>
+              {!compact ? (
+                <p className="text-xs font-medium text-muted-foreground tabular-nums">Queue #{position}</p>
+              ) : null}
             </div>
 
-            <div className="flex shrink-0 items-start gap-1">
+            <div className={cn("flex shrink-0 items-start", compact ? "gap-0.5" : "gap-1")}>
               {canFlow ? (
                 <>
                   <Button
                     type="button"
                     size="icon"
                     variant="secondary"
-                    className="h-9 w-9 shrink-0 rounded-lg"
+                    className={cn("shrink-0 rounded-lg", compact ? "h-8 w-8" : "h-9 w-9")}
                     title="Vitals"
                     onClick={(e) => {
                       e.stopPropagation();
@@ -142,7 +158,7 @@ export function QueueCard({
                     type="button"
                     size="icon"
                     variant="outline"
-                    className="h-9 w-9 shrink-0 rounded-lg"
+                    className={cn("shrink-0 rounded-lg", compact ? "h-8 w-8" : "h-9 w-9")}
                     title="More"
                     onClick={(e) => e.stopPropagation()}
                   >
@@ -150,6 +166,46 @@ export function QueueCard({
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onMove("top");
+                    }}
+                    disabled={!canMove || disableMove || isFirst}
+                  >
+                    <ArrowBigUp className="mr-2 h-4 w-4" />
+                    Move to top
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onMove("up");
+                    }}
+                    disabled={!canMove || disableMove || isFirst}
+                  >
+                    <ArrowUp className="mr-2 h-4 w-4" />
+                    Move up
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onMove("down");
+                    }}
+                    disabled={!canMove || disableMove || isLast}
+                  >
+                    <ArrowDown className="mr-2 h-4 w-4" />
+                    Move down
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onMove("bottom");
+                    }}
+                    disabled={!canMove || disableMove || isLast}
+                  >
+                    <ArrowBigDown className="mr-2 h-4 w-4" />
+                    Move to bottom
+                  </DropdownMenuItem>
                   {canFlow ? (
                     <DropdownMenuItem
                       onClick={(e) => {
@@ -178,21 +234,25 @@ export function QueueCard({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="outline" className="border font-medium tabular-nums">
-              {ordinalInQueue(position)}
-            </Badge>
             <Badge variant="outline" className={cn("border font-medium", badge.className)}>
               {badge.label}
             </Badge>
+            {compact ? (
+              <Badge variant="outline" className="border font-medium tabular-nums">
+                #{position}
+              </Badge>
+            ) : null}
           </div>
 
           {preview ? (
-            <p className="text-xs text-muted-foreground tabular-nums line-clamp-2">{preview}</p>
+            <p className={cn("text-muted-foreground tabular-nums", compact ? "text-[11px] line-clamp-1" : "text-xs line-clamp-2")}>
+              {preview}
+            </p>
           ) : (
-            <p className="text-xs text-muted-foreground">No vitals yet</p>
+            <p className={cn("text-muted-foreground", compact ? "text-[11px]" : "text-xs")}>No vitals yet</p>
           )}
 
-          <p className="text-xs text-muted-foreground tabular-nums">{maskMobile(entry.mobile)}</p>
+          {!compact ? <p className="text-xs text-muted-foreground tabular-nums">{maskMobile(entry.mobile)}</p> : null}
         </div>
       </div>
     </div>

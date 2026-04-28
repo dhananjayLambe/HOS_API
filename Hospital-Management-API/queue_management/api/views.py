@@ -1,7 +1,7 @@
 import redis
 import logging
 from django.conf import settings
-from django.utils.timezone import now, localdate
+from django.utils.timezone import localdate
 from django.db.models import F
 from rest_framework import generics, status
 from rest_framework.response import Response
@@ -25,6 +25,11 @@ from queue_management.api.serializers import (
 )
 from account.permissions import IsDoctor, IsDoctorOrHelpdesk,IsHelpdesk
 from django.db import IntegrityError, transaction
+from queue_management.services.queue_realtime import (
+    publish_queue_update,
+    queue_reorder_lock,
+    update_queue_sorted_set,
+)
 
 # Once encounter reaches these (raw DB values; includes legacy), hide row from helpdesk "today"
 # even if Queue.status is still waiting/vitals_done (stale op row).
@@ -329,20 +334,56 @@ class UrgentPatientAPIView(APIView):
             return Response({"error": "Queue ID is required."}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            queue_entry = Queue.objects.get(id=queue_id, status__in=("waiting", "vitals_done"))
-
-            # Shift existing patients down
-            Queue.objects.filter(
-                doctor_id=queue_entry.doctor_id,
+            today = localdate()
+            queue_entry = Queue.objects.get(
+                id=queue_id,
+                created_at__date=today,
                 status__in=("waiting", "vitals_done"),
-                position_in_queue__lt=queue_entry.position_in_queue,
-            ).update(position_in_queue=F("position_in_queue") + 1)
+            )
+            with transaction.atomic():
+                active_scope_rows = list(
+                    Queue.objects.select_for_update()
+                    .filter(
+                        doctor_id=queue_entry.doctor_id,
+                        clinic_id=queue_entry.clinic_id,
+                        created_at__date=today,
+                        status__in=("waiting", "vitals_done", "in_consultation"),
+                    )
+                    .order_by("position_in_queue", "created_at", "id")
+                )
+                if not active_scope_rows:
+                    return Response({"error": "No active queue rows found."}, status=status.HTTP_404_NOT_FOUND)
 
-            # Move urgent patient to the top
-            queue_entry.position_in_queue = 1
-            queue_entry.save()
+                movable_rows = [row for row in active_scope_rows if row.status in ("waiting", "vitals_done")]
+                if not movable_rows:
+                    return Response({"error": "No movable queue rows found."}, status=status.HTTP_404_NOT_FOUND)
+
+                scope_by_id = {str(row.id): row for row in movable_rows}
+                target = scope_by_id.get(str(queue_entry.id))
+                if target is None:
+                    return Response({"error": "Patient not found in active queue scope."}, status=status.HTTP_404_NOT_FOUND)
+
+                reordered = [target] + [row for row in movable_rows if str(row.id) != str(target.id)]
+                movable_slots = sorted(row.position_in_queue for row in movable_rows)
+                for index, row in enumerate(reordered):
+                    row.position_in_queue = movable_slots[index]
+
+                # Two-phase write avoids transient unique collisions on active-position constraints.
+                temp_offset = 10_000
+                for row in reordered:
+                    row.position_in_queue += temp_offset
+                Queue.objects.bulk_update(reordered, ["position_in_queue"])
+
+                for index, row in enumerate(reordered):
+                    row.position_in_queue = movable_slots[index]
+                Queue.objects.bulk_update(reordered, ["position_in_queue"])
 
             return Response({"message": "Patient moved to urgent priority."}, status=status.HTTP_200_OK)
+        except IntegrityError:
+            return Response(
+                {"error": "Queue changed during update. Please retry."},
+                status=status.HTTP_409_CONFLICT,
+            )
         except Queue.DoesNotExist:
             return Response(
                 {"error": "Patient not found or not in waiting / vitals-done status."},
@@ -381,15 +422,137 @@ class QueueReorderAPIView(APIView):
     """
     permission_classes = [IsAuthenticated, IsDoctorOrHelpdesk]
     authentication_classes = [JWTAuthentication]
+
+    def _error(self, code: str, message: str, http_status: int = status.HTTP_400_BAD_REQUEST):
+        return Response({"error_code": code, "message": message}, status=http_status)
+
     def patch(self, request, *args, **kwargs):
         serializer = QueueReorderSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        queue_items = serializer.validated_data["queue"]
+        if not queue_items:
+            return self._error("INVALID_PAYLOAD", "At least one queue item is required.")
 
-        queue_ids = serializer.validated_data["queue_ids"]
+        queue_ids = [str(item["id"]) for item in queue_items]
+        positions = [item["position"] for item in queue_items]
+        if len(set(queue_ids)) != len(queue_ids):
+            return self._error("INVALID_PAYLOAD", "Duplicate queue IDs are not allowed.")
+        if len(set(positions)) != len(positions):
+            return self._error("INVALID_POSITION_SEQUENCE", "Duplicate positions are not allowed.")
+        expected_positions = list(range(1, len(queue_items) + 1))
+        if sorted(positions) != expected_positions:
+            return self._error(
+                "INVALID_POSITION_SEQUENCE",
+                f"Positions must be contiguous from 1 to {len(queue_items)}.",
+            )
 
-        with transaction.atomic():
-            for position, queue_id in enumerate(queue_ids, start=1):
-                Queue.objects.filter(id=queue_id).update(position_in_queue=position)
+        today = localdate()
+        rows = list(Queue.objects.filter(id__in=queue_ids, created_at__date=today).select_related("doctor", "clinic"))
+        if len(rows) != len(queue_ids):
+            return self._error("NOT_FOUND", "One or more queue items are invalid.")
+        by_id = {str(row.id): row for row in rows}
+
+        first_row = rows[0]
+        scope_doctor_id = first_row.doctor_id
+        scope_clinic_id = first_row.clinic_id
+        if any(row.doctor_id != scope_doctor_id or row.clinic_id != scope_clinic_id for row in rows):
+            return self._error("INVALID_SCOPE", "Invalid queue scope: mixed doctor/clinic entries are not allowed.")
+
+        is_helpdesk = request.user.groups.filter(name="helpdesk").exists()
+        is_doctor = request.user.groups.filter(name="doctor").exists()
+        if is_helpdesk:
+            hp = getattr(request.user, "helpdesk_profile", None)
+            if not hp or not hp.clinic_id:
+                return self._error("INVALID_SCOPE", "No helpdesk clinic assignment for this user.", status.HTTP_403_FORBIDDEN)
+            if scope_clinic_id != hp.clinic_id:
+                return self._error("INVALID_SCOPE", "Invalid queue scope", status.HTTP_403_FORBIDDEN)
+            allowed_doctor_ids = set(
+                DoctorModel.objects.filter(clinics__id=hp.clinic_id, is_approved=True).values_list("id", flat=True)
+            )
+            if scope_doctor_id not in allowed_doctor_ids:
+                return self._error("INVALID_SCOPE", "Invalid queue scope", status.HTTP_403_FORBIDDEN)
+        elif is_doctor:
+            doctor_profile = getattr(request.user, "doctor", None)
+            if doctor_profile is None or str(doctor_profile.id) != str(scope_doctor_id):
+                return self._error("INVALID_SCOPE", "Invalid queue scope", status.HTTP_403_FORBIDDEN)
+        else:
+            return self._error("INVALID_SCOPE", "Invalid queue scope", status.HTTP_403_FORBIDDEN)
+
+        try:
+            with queue_reorder_lock(str(scope_doctor_id), timeout_seconds=5):
+                with transaction.atomic():
+                    locked_scope_qs = Queue.objects.select_for_update().filter(
+                        doctor_id=scope_doctor_id,
+                        clinic_id=scope_clinic_id,
+                        created_at__date=today,
+                        status__in=("waiting", "vitals_done"),
+                    )
+                    locked_scope_rows = list(locked_scope_qs)
+                    if len(locked_scope_rows) != len(queue_items):
+                        return self._error("PARTIAL_QUEUE_UPDATE", "Full queue reorder required")
+                    scope_ids = {str(row.id) for row in locked_scope_rows}
+                    if scope_ids != set(queue_ids):
+                        return self._error("PARTIAL_QUEUE_UPDATE", "Full queue reorder required")
+
+                    allowed_statuses = {"waiting", "vitals_done"}
+                    for item in queue_items:
+                        row = by_id[str(item["id"])]
+                        if row.status not in allowed_statuses:
+                            return self._error(
+                                "CONSULTATION_STARTED",
+                                f"Cannot move patient {row.id} — consultation already started",
+                            )
+
+                    locked_by_id = {str(row.id): row for row in locked_scope_rows}
+                    updates = []
+                    for item in queue_items:
+                        row = locked_by_id[str(item["id"])]
+                        row.position_in_queue = item["position"]
+                        updates.append(row)
+                    # Two-phase write avoids transient duplicate key collisions on
+                    # unique (doctor_id, clinic_id, position_in_queue) constraints.
+                    temp_offset = 10_000
+                    temp_updates = []
+                    for row in updates:
+                        row.position_in_queue = row.position_in_queue + temp_offset
+                        temp_updates.append(row)
+                    Queue.objects.bulk_update(temp_updates, ["position_in_queue"])
+
+                    final_updates = []
+                    for item in queue_items:
+                        row = locked_by_id[str(item["id"])]
+                        row.position_in_queue = item["position"]
+                        final_updates.append(row)
+                    Queue.objects.bulk_update(final_updates, ["position_in_queue"])
+                    updates = final_updates
+
+                    ordered_rows = sorted(
+                        updates,
+                        key=lambda x: x.position_in_queue,
+                    )
+                    redis_payload = [
+                        {
+                            "id": str(row.id),
+                            "encounter_id": str(row.encounter_id) if row.encounter_id else None,
+                            "position": row.position_in_queue,
+                        }
+                        for row in ordered_rows
+                    ]
+        except TimeoutError:
+            return self._error("QUEUE_LOCK_TIMEOUT", "Queue is being updated. Please retry shortly.", status.HTTP_409_CONFLICT)
+
+        update_queue_sorted_set(
+            clinic_id=str(scope_clinic_id),
+            doctor_id=str(scope_doctor_id),
+            queue_date=today,
+            queue_rows=redis_payload,
+        )
+        publish_queue_update(
+            clinic_id=str(scope_clinic_id),
+            doctor_id=str(scope_doctor_id),
+            queue_date=today,
+            queue_rows=redis_payload,
+        )
 
         return Response({"message": "Queue reordered successfully"}, status=status.HTTP_200_OK)
 

@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import axiosClient, { backendAxiosClient } from "@/lib/axiosClient";
 
 export type QueueStatus = "waiting" | "vitals_done" | "in_consultation" | "completed";
+export const DRAGGABLE_STATUSES: ReadonlyArray<QueueStatus> = ["waiting", "vitals_done"];
 
 /** Persisted vitals shape (aligned with POST /api/visits/{visit_id}/vitals/) */
 export interface HelpdeskVitalsPayload {
@@ -39,6 +40,48 @@ export interface QueueEntry {
   /** Present for server-backed rows — used for queue mutations */
   clinicId?: string | null;
   doctorId?: string | null;
+}
+
+type MoveDirection = "top" | "up" | "down" | "bottom";
+
+type ReorderQueueItemPayload = {
+  id: string;
+  position: number;
+};
+
+function isServerBackedEntry(entry: QueueEntry): boolean {
+  return !entry.id.startsWith("hq-");
+}
+
+export function isQueueEntryDraggable(status: QueueStatus): boolean {
+  return DRAGGABLE_STATUSES.includes(status);
+}
+
+function byPriorityDesc(a: QueueEntry, b: QueueEntry): number {
+  return b.priority - a.priority;
+}
+
+function arrayMove<T>(items: T[], from: number, to: number): T[] {
+  const next = [...items];
+  const [removed] = next.splice(from, 1);
+  next.splice(to, 0, removed);
+  return next;
+}
+
+function applySortedPriority(entries: QueueEntry[], sorted: QueueEntry[]): QueueEntry[] {
+  const max = sorted.length;
+  const byId = new Map<string, number>();
+  sorted.forEach((entry, idx) => {
+    byId.set(entry.id, max - idx);
+  });
+  return entries.map((entry) => {
+    const p = byId.get(entry.id);
+    return p == null ? entry : { ...entry, priority: p };
+  });
+}
+
+function sameQueueScope(a: QueueEntry, b: QueueEntry): boolean {
+  return a.doctorId === b.doctorId && a.clinicId === b.clinicId;
 }
 
 export function vitalsPreviewLine(vitals: HelpdeskVitalsPayload | null | undefined): string | null {
@@ -225,8 +268,14 @@ interface HelpdeskQueueState {
   headerSearch: string;
   /** Scroll/highlight a row after add-to-queue */
   highlightQueueEntryId: string | null;
+  isReorderUpdating: boolean;
+  isReordering: boolean;
   setHeaderSearch: (q: string) => void;
   setHighlightQueueEntryId: (id: string | null) => void;
+  startRealtimeSync: () => void;
+  stopRealtimeSync: () => void;
+  reorderEntries: (activeId: string, overId: string) => Promise<boolean>;
+  moveEntry: (id: string, direction: MoveDirection) => Promise<boolean>;
   hydrateFromServer: (serverEntries: QueueEntry[]) => void;
   fetchTodayQueue: () => Promise<{ rolledOver: boolean }>;
   addPatient: (name: string, mobile: string) => string;
@@ -239,6 +288,7 @@ interface HelpdeskQueueState {
 }
 
 let idCounter = 100;
+let queueUpdatesWs: WebSocket | null = null;
 
 /** Coalesce overlapping refreshes (poll + day watch + visibility). */
 let fetchTodayQueueInFlight: Promise<{ rolledOver: boolean }> | null = null;
@@ -247,9 +297,115 @@ export const useHelpdeskQueueStore = create<HelpdeskQueueState>((set, get) => ({
   entries: [],
   headerSearch: "",
   highlightQueueEntryId: null,
+  isReorderUpdating: false,
+  isReordering: false,
 
   setHeaderSearch: (q) => set({ headerSearch: q }),
   setHighlightQueueEntryId: (id) => set({ highlightQueueEntryId: id }),
+
+  startRealtimeSync: () => {
+    if (typeof window === "undefined" || queueUpdatesWs) return;
+    const explicit = process.env.NEXT_PUBLIC_WS_URL?.trim();
+    if (!explicit) return;
+    const first = get().entries.find((entry) => !!entry.clinicId && !!entry.doctorId);
+    if (!first?.clinicId || !first?.doctorId) return;
+    const date = helpdeskQueueCalendarDayLocal();
+    const wsBase = explicit.replace(/\/+$/, "");
+    const wsUrl = `${wsBase}/ws/queue-updates/${first.clinicId}/${first.doctorId}/${date}/`;
+    try {
+      queueUpdatesWs = new WebSocket(wsUrl);
+    } catch {
+      queueUpdatesWs = null;
+      return;
+    }
+    queueUpdatesWs.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data) as { clinic_id?: string; doctor_id?: string };
+        if (!payload.clinic_id || !payload.doctor_id) return;
+        const hasScope = get().entries.some(
+          (entry) => entry.clinicId === payload.clinic_id && entry.doctorId === payload.doctor_id
+        );
+        if (!hasScope || get().isReordering) return;
+        void get().fetchTodayQueue().catch(() => undefined);
+      } catch {
+        // Ignore malformed websocket message payloads.
+      }
+    };
+    queueUpdatesWs.onclose = () => {
+      queueUpdatesWs = null;
+    };
+    queueUpdatesWs.onerror = () => {
+      queueUpdatesWs?.close();
+      queueUpdatesWs = null;
+    };
+  },
+
+  stopRealtimeSync: () => {
+    if (queueUpdatesWs) {
+      queueUpdatesWs.close();
+      queueUpdatesWs = null;
+    }
+  },
+
+  reorderEntries: async (activeId, overId) => {
+    if (activeId === overId) return false;
+    if (get().isReorderUpdating) return false;
+
+    const previousEntries = get().entries;
+    const sorted = [...previousEntries].sort(byPriorityDesc);
+    const fromIndex = sorted.findIndex((entry) => entry.id === activeId);
+    const toIndex = sorted.findIndex((entry) => entry.id === overId);
+    if (fromIndex < 0 || toIndex < 0) return false;
+
+    const active = sorted[fromIndex];
+    const over = sorted[toIndex];
+    if (!isQueueEntryDraggable(active.status) || !isQueueEntryDraggable(over.status)) return false;
+    if (!sameQueueScope(active, over)) return false;
+
+    const nextSorted = applySortedPriority(previousEntries, arrayMove(sorted, fromIndex, toIndex)).sort(byPriorityDesc);
+    set({ entries: nextSorted, isReorderUpdating: true, isReordering: true });
+
+    try {
+      const scoped = nextSorted.filter(
+        (entry) => isServerBackedEntry(entry) && sameQueueScope(entry, active) && isQueueEntryDraggable(entry.status)
+      );
+      if (scoped.length > 0) {
+        const queue: ReorderQueueItemPayload[] = scoped.map((entry, index) => ({
+          id: entry.id,
+          position: index + 1,
+        }));
+        await axiosClient.patch("/queue/helpdesk/reorder/", { queue });
+      }
+      return true;
+    } catch (error) {
+      set({ entries: previousEntries });
+      throw error;
+    } finally {
+      set({ isReorderUpdating: false, isReordering: false });
+    }
+  },
+
+  moveEntry: async (id, direction) => {
+    if (get().isReorderUpdating) return false;
+    const sorted = [...get().entries].sort(byPriorityDesc);
+    const active = sorted.find((entry) => entry.id === id);
+    if (!active || !isQueueEntryDraggable(active.status)) return false;
+
+    const scopeEntries = sorted.filter((entry) => sameQueueScope(entry, active) && isQueueEntryDraggable(entry.status));
+    const currentScopeIndex = scopeEntries.findIndex((entry) => entry.id === id);
+    if (currentScopeIndex < 0) return false;
+
+    let targetScopeIndex = currentScopeIndex;
+    if (direction === "top") targetScopeIndex = 0;
+    if (direction === "up") targetScopeIndex = Math.max(0, currentScopeIndex - 1);
+    if (direction === "down") targetScopeIndex = Math.min(scopeEntries.length - 1, currentScopeIndex + 1);
+    if (direction === "bottom") targetScopeIndex = scopeEntries.length - 1;
+    if (targetScopeIndex === currentScopeIndex) return false;
+
+    const overId = scopeEntries[targetScopeIndex]?.id;
+    if (!overId) return false;
+    return get().reorderEntries(id, overId);
+  },
 
   hydrateFromServer: (serverEntries) => {
     set((s) => {
@@ -443,6 +599,8 @@ export function resetHelpdeskQueueStoreState(): void {
     entries: [],
     headerSearch: "",
     highlightQueueEntryId: null,
+    isReorderUpdating: false,
+    isReordering: false,
   });
   if (typeof sessionStorage !== "undefined") {
     sessionStorage.removeItem(HELPDESK_QUEUE_DAY_KEY);

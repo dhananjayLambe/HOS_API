@@ -108,6 +108,12 @@ export function HelpdeskQueueView() {
   const entries = useHelpdeskQueueStore((s) => s.entries);
   const saveVitals = useHelpdeskQueueStore((s) => s.saveVitals);
   const moveToTop = useHelpdeskQueueStore((s) => s.moveToTop);
+  const moveEntry = useHelpdeskQueueStore((s) => s.moveEntry);
+  const reorderEntries = useHelpdeskQueueStore((s) => s.reorderEntries);
+  const isReorderUpdating = useHelpdeskQueueStore((s) => s.isReorderUpdating);
+  const isReordering = useHelpdeskQueueStore((s) => s.isReordering);
+  const startRealtimeSync = useHelpdeskQueueStore((s) => s.startRealtimeSync);
+  const stopRealtimeSync = useHelpdeskQueueStore((s) => s.stopRealtimeSync);
   const removeFromQueue = useHelpdeskQueueStore((s) => s.removeFromQueue);
   const fetchTodayQueue = useHelpdeskQueueStore((s) => s.fetchTodayQueue);
   const highlightQueueEntryId = useHelpdeskQueueStore((s) => s.highlightQueueEntryId);
@@ -123,6 +129,8 @@ export function HelpdeskQueueView() {
   const [vitalsFormLoading, setVitalsFormLoading] = useState(false);
   const [vitalsSubmitting, setVitalsSubmitting] = useState(false);
   const [queueLoading, setQueueLoading] = useState(true);
+  const [queueDragging, setQueueDragging] = useState(false);
+  const [changedRowIds, setChangedRowIds] = useState<Set<string>>(new Set());
 
   const selected = useMemo(() => entries.find((e) => e.id === selectedId) ?? null, [entries, selectedId]);
   const vitalsEntry = useMemo(() => entries.find((e) => e.id === vitalsEntryId) ?? null, [entries, vitalsEntryId]);
@@ -196,6 +204,18 @@ export function HelpdeskQueueView() {
   }, [highlightedId]);
 
   useEffect(() => {
+    if (changedRowIds.size === 0) return;
+    const timer = window.setTimeout(() => setChangedRowIds(new Set()), 1_000);
+    return () => window.clearTimeout(timer);
+  }, [changedRowIds]);
+
+  useEffect(() => {
+    if (entries.length === 0) return;
+    startRealtimeSync();
+    return () => stopRealtimeSync();
+  }, [entries.length, startRealtimeSync, stopRealtimeSync]);
+
+  useEffect(() => {
     let cancelled = false;
     const runFetch = async () => {
       try {
@@ -208,16 +228,19 @@ export function HelpdeskQueueView() {
     };
     void runFetch();
     const poll = window.setInterval(() => {
+      if (queueDragging || isReordering || isReorderUpdating) return;
       void fetchTodayQueue().catch(() => undefined);
-    }, 45_000);
+    }, 90_000);
     /** Catch midnight while the tab stays open without waiting for the next poll. */
     const dayWatch = window.setInterval(() => {
       if (document.visibilityState !== "visible") return;
+      if (queueDragging || isReordering || isReorderUpdating) return;
       if (!isHelpdeskQueueCalendarDayStale()) return;
       void fetchTodayQueue().catch(() => undefined);
     }, 30_000);
     const onVisible = () => {
       if (document.visibilityState !== "visible") return;
+      if (queueDragging || isReordering || isReorderUpdating) return;
       if (!isHelpdeskQueueCalendarDayStale()) return;
       void fetchTodayQueue().catch(() => undefined);
     };
@@ -228,7 +251,7 @@ export function HelpdeskQueueView() {
       window.clearInterval(dayWatch);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [fetchTodayQueue]);
+  }, [fetchTodayQueue, isReorderUpdating, isReordering, queueDragging]);
 
   const openVitalsFor = useCallback(
     (id: string) => {
@@ -283,6 +306,77 @@ export function HelpdeskQueueView() {
       }
     },
     [removeFromQueue, selectedId, vitalsEntryId]
+  );
+
+  const computeChangedRows = useCallback((beforeIds: string[], afterIds: string[]) => {
+    const changed = new Set<string>();
+    beforeIds.forEach((id, idx) => {
+      if (afterIds[idx] !== id) changed.add(id);
+    });
+    afterIds.forEach((id, idx) => {
+      if (beforeIds[idx] !== id) changed.add(id);
+    });
+    setChangedRowIds(changed);
+  }, []);
+
+  const handleReorder = useCallback(
+    async (activeId: string, overId: string) => {
+      const before = [...useHelpdeskQueueStore.getState().entries]
+        .sort((a, b) => b.priority - a.priority)
+        .map((entry) => entry.id);
+      try {
+        const changed = await reorderEntries(activeId, overId);
+        if (!changed) return;
+        const after = [...useHelpdeskQueueStore.getState().entries]
+          .sort((a, b) => b.priority - a.priority)
+          .map((entry) => entry.id);
+        computeChangedRows(before, after);
+        toast.success("Queue updated");
+      } catch (err) {
+        if (isAxiosError(err) && err.response?.data) {
+          const d = err.response.data as { detail?: unknown; message?: string; error_code?: string };
+          if (d.error_code === "CONSULTATION_STARTED") {
+            toast.error("Cannot move patient — consultation already started");
+            toast.message("Queue updated by another user. Refreshing...");
+            await fetchTodayQueue().catch(() => undefined);
+            return;
+          }
+        }
+        toast.message("Queue updated by another user. Refreshing...");
+        await fetchTodayQueue().catch(() => undefined);
+      }
+    },
+    [computeChangedRows, fetchTodayQueue, reorderEntries]
+  );
+
+  const handleMove = useCallback(
+    async (id: string, direction: "top" | "up" | "down" | "bottom") => {
+      const before = [...useHelpdeskQueueStore.getState().entries]
+        .sort((a, b) => b.priority - a.priority)
+        .map((entry) => entry.id);
+      try {
+        const changed = await moveEntry(id, direction);
+        if (!changed) return;
+        const after = [...useHelpdeskQueueStore.getState().entries]
+          .sort((a, b) => b.priority - a.priority)
+          .map((entry) => entry.id);
+        computeChangedRows(before, after);
+        toast.success("Queue updated");
+      } catch (err) {
+        if (isAxiosError(err) && err.response?.data) {
+          const d = err.response.data as { detail?: unknown; message?: string; error_code?: string };
+          if (d.error_code === "CONSULTATION_STARTED") {
+            toast.error("Cannot move patient — consultation already started");
+            toast.message("Queue updated by another user. Refreshing...");
+            await fetchTodayQueue().catch(() => undefined);
+            return;
+          }
+        }
+        toast.message("Queue updated by another user. Refreshing...");
+        await fetchTodayQueue().catch(() => undefined);
+      }
+    },
+    [computeChangedRows, fetchTodayQueue, moveEntry]
   );
 
   const persistVitals = useCallback(
@@ -376,6 +470,11 @@ export function HelpdeskQueueView() {
         onVitals={openVitalsFor}
         onUrgent={handleUrgent}
         onRemove={handleRemove}
+        onReorder={handleReorder}
+        onMove={handleMove}
+        reorderDisabled={queueLoading || isReorderUpdating}
+        changedIds={changedRowIds}
+        onDragStateChange={setQueueDragging}
         isLoading={queueLoading}
       />
     </div>
