@@ -1,4 +1,5 @@
 import logging
+from django.core.exceptions import ObjectDoesNotExist
 
 from rest_framework import serializers
 from queue_management.models import Queue
@@ -41,18 +42,18 @@ class QueuePatientSerializer(serializers.ModelSerializer):
 def _vitals_preview_from_encounter(encounter):
     if not encounter:
         return None
-    from consultations_core.models.pre_consultation import PreConsultation, PreConsultationVitals
+    from consultations_core.models.pre_consultation import PreConsultation
 
     try:
         pre = encounter.pre_consultation
     except PreConsultation.DoesNotExist:
-        pre = PreConsultation.objects.filter(encounter=encounter).first()
+        return None
     if not pre:
         return None
     try:
-        row = PreConsultationVitals.objects.get(pre_consultation=pre)
+        row = pre.preconsultationvitals
         data = row.data or {}
-    except PreConsultationVitals.DoesNotExist:
+    except ObjectDoesNotExist:
         return None
     bp = data.get("bp") or data.get("blood_pressure") or {}
     if isinstance(bp, dict):

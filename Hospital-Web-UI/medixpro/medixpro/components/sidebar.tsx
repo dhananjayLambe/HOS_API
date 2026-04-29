@@ -40,6 +40,7 @@ export function Sidebar({ isOpen, setIsOpen, alignBelowHeader }: SidebarProps) {
   const router = useRouter();
   const [showPatientAlert, setShowPatientAlert] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
+  const hideSmartQueue = pathname.startsWith("/consultations/");
 
   // Helper function to get user's full name
   const getUserFullName = () => {
@@ -437,12 +438,16 @@ export function Sidebar({ isOpen, setIsOpen, alignBelowHeader }: SidebarProps) {
       <div className="border-b border-border/50 mx-4"></div>
 
       {/* Smart Queue Section */}
-      <div className="pt-2">
-        <SmartQueue />
-      </div>
+      {!hideSmartQueue && (
+        <>
+          <div className="pt-2">
+            <SmartQueue />
+          </div>
 
-      {/* Divider Line */}
-      <div className="border-b border-border/50 mx-4 shrink-0"></div>
+          {/* Divider Line */}
+          <div className="border-b border-border/50 mx-4 shrink-0"></div>
+        </>
+      )}
 
       <div className="flex-1 min-h-0 overflow-y-auto pt-1 pb-2">
         <nav className="space-y-1 px-2 ">

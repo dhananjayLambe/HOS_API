@@ -23,6 +23,7 @@ import { useConsultationStore } from "@/store/consultationStore";
 import { usePatient } from "@/lib/patientContext";
 import { backendAxiosClient } from "@/lib/axiosClient";
 import { useToastNotification } from "@/hooks/use-toast-notification";
+import { useEncounter } from "@/lib/encounterContext";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -254,6 +255,7 @@ export function ConsultationActionBar() {
   const toastErrorRef = useRef(toast.error);
   toastErrorRef.current = toast.error;
   const { selectedPatient } = usePatient();
+  const { fetchEncounterById } = useEncounter();
   const { activateSection, scrollSectionIntoView, expandSectionCard } =
     useConsultationSectionScroll();
   const {
@@ -301,12 +303,11 @@ export function ConsultationActionBar() {
       return;
     }
     let cancelled = false;
-    backendAxiosClient
-      .get<{ visit_pnr?: string; consultation_id?: string | null }>(`/consultations/encounter/${encounterId}/`)
-      .then((res) => {
-        if (cancelled) return;
-        setVisitPnr(res.data?.visit_pnr ?? null);
-        setConsultationId(res.data?.consultation_id ?? null);
+    fetchEncounterById(encounterId)
+      .then((encounter) => {
+        if (cancelled || !encounter) return;
+        setVisitPnr(encounter.visit_pnr ?? null);
+        setConsultationId(encounter.consultation_id ?? null);
       })
       .catch(() => {
         setVisitPnr(null);
@@ -315,7 +316,7 @@ export function ConsultationActionBar() {
     return () => {
       cancelled = true;
     };
-  }, [encounterId]);
+  }, [encounterId, fetchEncounterById]);
 
   const copyPnrToClipboard = () => {
     if (!visitPnr) return;

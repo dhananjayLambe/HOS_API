@@ -120,7 +120,9 @@ export function SmartQueue() {
           setClinicId(String(resolvedClinic));
         }
       } catch (e) {
-        console.error("SmartQueue: failed to resolve doctor/clinic context:", e);
+        if (process.env.NODE_ENV !== "production") {
+          console.warn("SmartQueue: failed to resolve doctor/clinic context");
+        }
       }
     };
     void resolve();
@@ -144,7 +146,9 @@ export function SmartQueue() {
         }))
       );
     } catch (error) {
-      console.error("Failed to fetch queue:", error);
+      if (process.env.NODE_ENV !== "production") {
+        console.warn("SmartQueue fetch failed; rendering fallback state.");
+      }
       setQueue([]);
     } finally {
       setIsLoading(false);

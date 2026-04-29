@@ -1,5 +1,6 @@
 import redis
 import logging
+import threading
 from django.conf import settings
 from django.utils.timezone import localdate
 from django.db.models import F, Max, Q
@@ -31,6 +32,7 @@ from queue_management.services.queue_realtime import (
     queue_reorder_lock,
     update_queue_sorted_set,
 )
+from queue_management.tasks import sync_queue_realtime_task
 
 # Once encounter reaches these (raw DB values; includes legacy), hide row from helpdesk "today"
 # even if Queue.status is still waiting/vitals_done (stale op row).
@@ -57,7 +59,31 @@ def _build_active_queue_payload(*, doctor_id, clinic_id, queue_date):
             created_at__date=queue_date,
             status__in=("waiting", "vitals_done"),
         )
-        .select_related("patient", "appointment", "encounter")
+        .select_related(
+            "patient",
+            "appointment",
+            "encounter",
+            "encounter__pre_consultation",
+            "encounter__pre_consultation__preconsultationvitals",
+        )
+        .only(
+            "id",
+            "encounter_id",
+            "patient_id",
+            "appointment_id",
+            "status",
+            "position_in_queue",
+            "created_at",
+            "patient__first_name",
+            "patient__last_name",
+            "patient__public_id",
+            "patient__gender",
+            "patient__date_of_birth",
+            "patient__age_years",
+            "encounter__visit_pnr",
+            "encounter__pre_consultation__id",
+            "encounter__pre_consultation__preconsultationvitals__data",
+        )
         .order_by("position_in_queue", "created_at", "id")
     )
     payload = []
@@ -269,7 +295,31 @@ class DoctorQueueAPIView(APIView):
                 created_at__date=today,
                 status__in=("waiting", "vitals_done"),
             )
-            .select_related("patient", "appointment", "encounter")
+            .select_related(
+                "patient",
+                "appointment",
+                "encounter",
+                "encounter__pre_consultation",
+                "encounter__pre_consultation__preconsultationvitals",
+            )
+            .only(
+                "id",
+                "encounter_id",
+                "patient_id",
+                "appointment_id",
+                "status",
+                "position_in_queue",
+                "created_at",
+                "patient__first_name",
+                "patient__last_name",
+                "patient__public_id",
+                "patient__gender",
+                "patient__date_of_birth",
+                "patient__age_years",
+                "encounter__visit_pnr",
+                "encounter__pre_consultation__id",
+                "encounter__pre_consultation__preconsultationvitals__data",
+            )
             .order_by("position_in_queue")
         )
         return Response(DoctorActiveQueueSerializer(queue, many=True).data)
@@ -313,7 +363,14 @@ class HelpdeskClinicQueueAPIView(APIView):
                 Q(encounter__isnull=True)
                 | ~Q(encounter__status__in=HELPDESK_TODAY_EXCLUDE_IF_ENCOUNTER_STATUS_IN)
             )
-            .select_related("patient", "appointment", "encounter", "patient_account__user")
+            .select_related(
+                "patient",
+                "appointment",
+                "encounter",
+                "encounter__pre_consultation",
+                "encounter__pre_consultation__preconsultationvitals",
+                "patient_account__user",
+            )
             .order_by("doctor_id", "position_in_queue")
         )
         body = HelpdeskQueueRowSerializer(queue, many=True).data
@@ -394,6 +451,9 @@ class StartConsultationAPIView(APIView):
                 queue_entry.status = "in_consultation"
                 queue_entry.save()
                 start_consultation_from_queue_entry(queue_entry, request.user)
+                sync_doctor_id = str(queue_entry.doctor_id)
+                sync_clinic_id = str(queue_entry.clinic_id)
+                sync_queue_date = today
                 logging.getLogger(__name__).info(
                     "encounter.lifecycle.queue.start queue_id=%s encounter_id=%s clinic_id=%s user_id=%s",
                     queue_entry.id,
@@ -401,11 +461,29 @@ class StartConsultationAPIView(APIView):
                     clinic_id,
                     getattr(request.user, "id", None),
                 )
-            _sync_queue_realtime(
-                doctor_id=queue_entry.doctor_id,
-                clinic_id=queue_entry.clinic_id,
-                queue_date=today,
-            )
+
+            def _dispatch_realtime_sync():
+                try:
+                    sync_queue_realtime_task.delay(
+                        doctor_id=sync_doctor_id,
+                        clinic_id=sync_clinic_id,
+                        queue_date_iso=sync_queue_date.isoformat(),
+                    )
+                except Exception:
+                    logging.getLogger(__name__).exception(
+                        "queue start: celery dispatch failed, falling back to thread"
+                    )
+                    threading.Thread(
+                        target=_sync_queue_realtime,
+                        kwargs={
+                            "doctor_id": sync_doctor_id,
+                            "clinic_id": sync_clinic_id,
+                            "queue_date": sync_queue_date,
+                        },
+                        daemon=True,
+                    ).start()
+
+            transaction.on_commit(_dispatch_realtime_sync)
             return Response({"message": "Patient is now in consultation."}, status=status.HTTP_200_OK)
         except Queue.DoesNotExist:
             return Response(

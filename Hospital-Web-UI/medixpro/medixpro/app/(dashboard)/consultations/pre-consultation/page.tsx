@@ -16,9 +16,11 @@ import { useToastNotification } from "@/hooks/use-toast-notification";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { usePreConsultationTemplateStore } from "@/store/preConsultationTemplateStore";
+import { useEncounter } from "@/lib/encounterContext";
 
 function PreConsultationPageContent() {
   const { selectedPatient, triggerSearchHighlight } = usePatient();
+  const { fetchEncounterById, getEncounterById } = useEncounter();
   const router = useRouter();
   const searchParams = useSearchParams();
   const toast = useToastNotification();
@@ -279,16 +281,15 @@ function PreConsultationPageContent() {
     if (!encounterId) return;
     if (redirectingDueToCancelledRef.current && redirectedForEncounterIdRef.current === encounterId) return;
     let cancelled = false;
-    backendAxiosClient
-      .get<{ status: string; cancelled?: boolean; visit_pnr?: string }>(`/consultations/encounter/${encounterId}/`)
-      .then((res) => {
-        if (cancelled) return;
-        const st = (res.data?.status || "").toUpperCase().replace(/\s/g, "_");
+    fetchEncounterById(encounterId)
+      .then((encounter) => {
+        if (cancelled || !encounter) return;
+        const st = (encounter.status || "").toUpperCase().replace(/\s/g, "_");
         setEncounterStatus(st);
-        if (res.data?.visit_pnr) {
-          setVisitPnr(res.data.visit_pnr);
+        if (encounter.visit_pnr) {
+          setVisitPnr(encounter.visit_pnr);
         }
-        if (st === "CANCELLED" || res.data?.cancelled) {
+        if (st === "CANCELLED" || encounter.cancelled) {
           redirectingDueToCancelledRef.current = true;
           redirectedForEncounterIdRef.current = encounterId;
           toast.error("Visit already cancelled.");
@@ -306,29 +307,16 @@ function PreConsultationPageContent() {
       cancelled = true;
     };
     // Intentionally omit toast from deps to avoid effect re-running and causing redirect loop
-  }, [encounterId, router]);
+  }, [encounterId, fetchEncounterById, router]);
 
-  // Dedicated fetch for visit_pnr so header PNR always shows (status effect may redirect before setting it)
   useEffect(() => {
     if (!encounterId) {
       setVisitPnr(null);
       return;
     }
-    let cancelled = false;
-    backendAxiosClient
-      .get<{ visit_pnr?: string }>(`/consultations/encounter/${encounterId}/`)
-      .then((res) => {
-        if (!cancelled && res.data?.visit_pnr) {
-          setVisitPnr(res.data.visit_pnr);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setVisitPnr(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [encounterId]);
+    const encounter = getEncounterById(encounterId);
+    setVisitPnr(encounter?.visit_pnr ?? null);
+  }, [encounterId, getEncounterById]);
 
   // Start pre-consultation when we have an encounter (status CREATED → PRE_CONSULTATION_IN_PROGRESS). Skip if cancelled.
   useEffect(() => {
