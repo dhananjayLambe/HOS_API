@@ -6,8 +6,7 @@ class QueueUpdatesConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         self.clinic_id = self.scope["url_route"]["kwargs"]["clinic_id"]
         self.doctor_id = self.scope["url_route"]["kwargs"]["doctor_id"]
-        self.queue_date = self.scope["url_route"]["kwargs"]["queue_date"]
-        self.group_name = f"queue_updates_{self.clinic_id}_{self.doctor_id}_{self.queue_date}"
+        self.group_name = f"queue_updates_{self.clinic_id}_{self.doctor_id}"
         await self.channel_layer.group_add(self.group_name, self.channel_name)
         await self.accept()
 

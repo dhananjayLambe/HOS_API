@@ -35,6 +35,12 @@ const nextConfig = {
   async rewrites() {
     return {
       beforeFiles: [
+        // WebSocket + Channels routes live on Django (ASGI), not the Next dev server.
+        // Without this, `new WebSocket(`${location.host}/ws/...`)` targets :3000 and will never see queue events.
+        {
+          source: "/ws/:path*",
+          destination: `${backendProxyTarget}/ws/:path*/`,
+        },
         {
           source: "/api/consultations/:path*",
           destination: `${backendProxyTarget}/api/consultations/:path*/`,

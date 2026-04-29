@@ -11,6 +11,7 @@ import { useAuth } from "@/lib/authContext";
 import axiosClient from "@/lib/axiosClient";
 import { helpdeskCheckInOnServer, HELPDESK_DUPLICATE_NO_SYNCED_ROW } from "@/lib/helpdeskCheckIn";
 import { getRoleRedirectPath } from "@/lib/jwtUtils";
+import { debugSessionLog } from "@/lib/debugSessionLog";
 import { useHelpdeskQueueStore } from "@/lib/helpdeskQueueStore";
 import { cn } from "@/lib/utils";
 import type { PatientSearchRow } from "@/lib/patientSearchDisplay";
@@ -97,11 +98,31 @@ export function HelpdeskLayout({ children }: { children: React.ReactNode }) {
   };
 
   const handleLiveSelect = async (patient: PatientSearchRow) => {
+    try {
+      await fetchTodayQueue();
+    } catch {
+      // Best-effort; duplicate check still uses current store
+    }
     const existing = findEntryByPatient({ id: patient.id, mobile: patient.mobile });
     const hasSyncedEncounter = Boolean(existing?.visitId && existing?.clinicId);
+    // #region agent log
+    debugSessionLog({
+      runId: "post-fix-verify",
+      hypothesisId: "H3",
+      location: "HelpdeskLayout.tsx:handleLiveSelect",
+      message: "add-from-search after fetchTodayQueue",
+      data: {
+        hasExisting: Boolean(existing),
+        hasSyncedEncounter,
+        willShortCircuitAlready: Boolean(existing && hasSyncedEncounter),
+      },
+    });
+    // #endregion
     if (existing && hasSyncedEncounter) {
       setHighlightQueueEntryId(existing.id);
-      toast.message("Already in queue");
+      toast.message(
+        `Already in queue${existing.name ? ` (${existing.name})` : ""} — see highlighted row.`
+      );
       router.push("/helpdesk/queue");
       return;
     }
@@ -297,11 +318,18 @@ export function HelpdeskLayout({ children }: { children: React.ReactNode }) {
           if (!open) setAddDialogContext({});
         }}
         onPatientAdded={async (patient: Patient) => {
+          try {
+            await fetchTodayQueue();
+          } catch {
+            // best-effort
+          }
           const existing = findEntryByPatient({ id: patient.id, mobile: patient.mobile });
           const hasSyncedEncounter = Boolean(existing?.visitId && existing?.clinicId);
           if (existing && hasSyncedEncounter) {
             setHighlightQueueEntryId(existing.id);
-            toast.message("Already in queue");
+            toast.message(
+              `Already in queue${existing.name ? ` (${existing.name})` : ""} — see highlighted row.`
+            );
             router.push("/helpdesk/queue");
             return;
           }

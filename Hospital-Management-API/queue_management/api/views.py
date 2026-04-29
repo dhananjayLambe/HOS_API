@@ -2,7 +2,7 @@ import redis
 import logging
 from django.conf import settings
 from django.utils.timezone import localdate
-from django.db.models import F
+from django.db.models import F, Max
 from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -17,6 +17,7 @@ from patient_account.models import PatientAccount, PatientProfile
 from rest_framework.generics import get_object_or_404,RetrieveAPIView
 from clinic.models import Clinic
 from queue_management.api.serializers import (
+    DoctorActiveQueueSerializer,
     HelpdeskQueueRowSerializer,
     QueueSerializer,
     QueueUpdateSerializer,
@@ -46,6 +47,94 @@ HELPDESK_TODAY_EXCLUDE_IF_ENCOUNTER_STATUS_IN = (
 
 # Initialize Redis connection
 redis_client = redis.StrictRedis(host=settings.REDIS_HOST, port=settings.REDIS_PORT, db=0, decode_responses=True)
+
+
+def _build_active_queue_payload(*, doctor_id, clinic_id, queue_date):
+    rows = (
+        Queue.objects.filter(
+            doctor_id=doctor_id,
+            clinic_id=clinic_id,
+            created_at__date=queue_date,
+            status__in=("waiting", "vitals_done"),
+        )
+        .select_related("patient", "appointment", "encounter")
+        .order_by("position_in_queue", "created_at", "id")
+    )
+    payload = []
+    for row in rows:
+        patient = row.patient
+        enc = getattr(row, "encounter", None)
+        visit_pnr = None
+        if enc is not None:
+            pnr = getattr(enc, "visit_pnr", None)
+            visit_pnr = str(pnr) if pnr else None
+        gender = (patient.gender or "").lower()
+        if gender == "male":
+            gender = "M"
+        elif gender == "female":
+            gender = "F"
+        elif gender == "other":
+            gender = "O"
+        else:
+            gender = patient.gender or None
+
+        token = None
+        appointment = getattr(row, "appointment", None)
+        if appointment:
+            for key in ("token_number", "token", "queue_number"):
+                value = getattr(appointment, key, None)
+                if value:
+                    token = str(value)
+                    break
+
+        payload.append(
+            {
+                "id": str(row.id),
+                "encounter_id": str(row.encounter_id) if row.encounter_id else None,
+                "visit_pnr": visit_pnr,
+                "patient_public_id": str(patient.public_id) if getattr(patient, "public_id", None) else None,
+                "patient_name": " ".join(x for x in [patient.first_name or "", patient.last_name or ""] if x).strip() or "Patient",
+                "age": patient.age if patient.date_of_birth else patient.age_years,
+                "gender": gender,
+                "status": row.status,
+                "token": token,
+                "position": int(row.position_in_queue),
+            }
+        )
+    return payload
+
+
+def get_top_queue(doctor_id, clinic_id):
+    today = localdate()
+    active_queue = _build_active_queue_payload(
+        doctor_id=doctor_id,
+        clinic_id=clinic_id,
+        queue_date=today,
+    )
+    return {
+        "top_queue": active_queue[:3],
+        "total_active": len(active_queue),
+    }
+
+
+def _sync_queue_realtime(*, doctor_id, clinic_id, queue_date):
+    queue_payload = _build_active_queue_payload(
+        doctor_id=doctor_id,
+        clinic_id=clinic_id,
+        queue_date=queue_date,
+    )
+    update_queue_sorted_set(
+        clinic_id=str(clinic_id),
+        doctor_id=str(doctor_id),
+        queue_date=queue_date,
+        queue_rows=queue_payload,
+    )
+    publish_queue_update(
+        clinic_id=str(clinic_id),
+        doctor_id=str(doctor_id),
+        queue_date=queue_date,
+        queue_rows=queue_payload,
+    )
 
 # 1. POST /queue/check-in/ – Add a patient to the queue
 class CheckInQueueAPIView(APIView):
@@ -79,8 +168,19 @@ class CheckInQueueAPIView(APIView):
         if existing_entry:
             return Response({"error": "Patient is already checked in for today's queue at this clinic."}, status=status.HTTP_400_BAD_REQUEST)
 
-        last_position = Queue.objects.filter(doctor_id=doctor_id, clinic_id=clinic_id, status='waiting', created_at__date=today).count()
-        new_position = last_position + 1
+        # Next position must account for ALL active queue rows (waiting + vitals_done);
+        # counting only `waiting` can collide with existing vitals_done positions and
+        # violate uniq_active_queue_position_per_doctor_clinic_day.
+        max_pos = (
+            Queue.objects.filter(
+                doctor_id=doctor_id,
+                clinic_id=clinic_id,
+                created_at__date=today,
+                status__in=("waiting", "vitals_done"),
+            ).aggregate(m=Max("position_in_queue"))
+            .get("m")
+        )
+        new_position = (max_pos or 0) + 1
 
         doctor_obj = get_object_or_404(DoctorModel, id=doctor_id)
         appointment = None
@@ -140,6 +240,14 @@ class CheckInQueueAPIView(APIView):
             )
 
         queue_entry = Queue.objects.select_related("patient", "appointment", "encounter").get(pk=queue_entry.pk)
+        try:
+            _sync_queue_realtime(
+                doctor_id=queue_entry.doctor_id,
+                clinic_id=queue_entry.clinic_id,
+                queue_date=today,
+            )
+        except Exception:
+            logging.getLogger(__name__).exception("queue check-in: realtime sync failed after create")
         return Response(HelpdeskQueueRowSerializer(queue_entry).data, status=status.HTTP_201_CREATED)
 
 # 2. GET /queue/doctor/{id}/ – Get today’s live queue for a doctor at a clinic
@@ -148,13 +256,22 @@ class DoctorQueueAPIView(APIView):
     authentication_classes = [JWTAuthentication]
 
     def get(self, request, doctor_id, clinic_id):
+        if request.user.groups.filter(name="doctor").exists():
+            doctor_profile = getattr(request.user, "doctor", None)
+            if doctor_profile is None or str(doctor_profile.id) != str(doctor_id):
+                return Response({"detail": "Invalid queue scope."}, status=status.HTTP_403_FORBIDDEN)
         today = localdate()
         queue = (
-            Queue.objects.filter(doctor_id=doctor_id, clinic_id=clinic_id, created_at__date=today)
+            Queue.objects.filter(
+                doctor_id=doctor_id,
+                clinic_id=clinic_id,
+                created_at__date=today,
+                status__in=("waiting", "vitals_done"),
+            )
             .select_related("patient", "appointment", "encounter")
             .order_by("position_in_queue")
         )
-        return Response(HelpdeskQueueRowSerializer(queue, many=True).data)
+        return Response(DoctorActiveQueueSerializer(queue, many=True).data)
 
 
 class HelpdeskClinicQueueAPIView(APIView):
@@ -239,21 +356,32 @@ class StartConsultationAPIView(APIView):
 
     def patch(self, request):
         queue_id = request.data.get("queue_id")
+        encounter_id = request.data.get("encounter_id")
         clinic_id = request.data.get("clinic_id")
 
-        if not queue_id or not clinic_id:
-            return Response({"error": "Queue ID and Clinic ID are required."}, status=status.HTTP_400_BAD_REQUEST)
+        if not clinic_id:
+            return Response({"error": "Clinic ID is required."}, status=status.HTTP_400_BAD_REQUEST)
+        if not queue_id and not encounter_id:
+            return Response(
+                {"error": "Either queue_id or encounter_id is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         today = localdate()
         try:
             with transaction.atomic():
                 # Avoid FOR UPDATE on nullable outer-join side (encounter is nullable FK).
-                queue_entry = Queue.objects.select_for_update().get(
-                    id=queue_id,
-                    clinic_id=clinic_id,
-                    created_at__date=today,
-                    status__in=("waiting", "vitals_done"),
-                )
+                lookup_filters = {
+                    "clinic_id": clinic_id,
+                    "created_at__date": today,
+                    "status__in": ("waiting", "vitals_done"),
+                }
+                if queue_id:
+                    lookup_filters["id"] = queue_id
+                else:
+                    lookup_filters["encounter_id"] = encounter_id
+
+                queue_entry = Queue.objects.select_for_update().get(**lookup_filters)
                 queue_entry.status = "in_consultation"
                 queue_entry.save()
                 start_consultation_from_queue_entry(queue_entry, request.user)
@@ -264,11 +392,16 @@ class StartConsultationAPIView(APIView):
                     clinic_id,
                     getattr(request.user, "id", None),
                 )
+            _sync_queue_realtime(
+                doctor_id=queue_entry.doctor_id,
+                clinic_id=queue_entry.clinic_id,
+                queue_date=today,
+            )
             return Response({"message": "Patient is now in consultation."}, status=status.HTTP_200_OK)
         except Queue.DoesNotExist:
             return Response(
                 {"error": "Patient not found or not in waiting/vitals-done state."},
-                status=status.HTTP_404_NOT_FOUND,
+                status=status.HTTP_409_CONFLICT,
             )
 
 # 4. PATCH /queue/complete/ – Mark consultation as Completed
@@ -286,8 +419,15 @@ class CompleteConsultationAPIView(APIView):
         today = localdate()
         try:
             queue_entry = Queue.objects.get(id=queue_id, clinic_id=clinic_id,created_at__date=today, status="in_consultation")
+            queue_doctor_id = queue_entry.doctor_id
+            queue_clinic_id = queue_entry.clinic_id
             queue_entry.status = "completed"
             queue_entry.save()
+            _sync_queue_realtime(
+                doctor_id=queue_doctor_id,
+                clinic_id=queue_clinic_id,
+                queue_date=today,
+            )
             return Response({"message": "Consultation completed."}, status=status.HTTP_200_OK)
         except Queue.DoesNotExist:
             return Response({"error": "Patient not found or not in consultation."}, status=status.HTTP_404_NOT_FOUND)
@@ -313,8 +453,15 @@ class SkipPatientAPIView(APIView):
             if clinic_id:
                 query = query.filter(clinic_id=clinic_id)
             queue_entry = query.get()
+            queue_doctor_id = queue_entry.doctor_id
+            queue_clinic_id = queue_entry.clinic_id
             queue_entry.status = "skipped"
             queue_entry.save()
+            _sync_queue_realtime(
+                doctor_id=queue_doctor_id,
+                clinic_id=queue_clinic_id,
+                queue_date=today,
+            )
             return Response({"message": "Patient skipped."}, status=status.HTTP_200_OK)
         except Queue.DoesNotExist:
             return Response(
@@ -378,6 +525,11 @@ class UrgentPatientAPIView(APIView):
                     row.position_in_queue = movable_slots[index]
                 Queue.objects.bulk_update(reordered, ["position_in_queue"])
 
+            _sync_queue_realtime(
+                doctor_id=queue_entry.doctor_id,
+                clinic_id=queue_entry.clinic_id,
+                queue_date=today,
+            )
             return Response({"message": "Patient moved to urgent priority."}, status=status.HTTP_200_OK)
         except IntegrityError:
             return Response(

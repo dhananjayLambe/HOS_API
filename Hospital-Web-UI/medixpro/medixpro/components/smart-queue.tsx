@@ -1,95 +1,98 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { usePatient } from "@/lib/patientContext";
 import { Check, Users, Clock, AlertCircle } from "lucide-react";
 import axiosClient from "@/lib/axiosClient";
 import { useToastNotification } from "@/hooks/use-toast-notification";
+import { loadStaffClinicSelection } from "@/lib/doctorClinicsClient";
 
 interface QueuePatient {
   id: string;
-  patient: {
-    id: string;
-    first_name: string;
-    last_name?: string;
-    full_name?: string;
-    date_of_birth?: string;
-    gender?: string;
-  };
-  status: "waiting" | "in_consultation" | "completed" | "skipped" | "cancelled";
-  position_in_queue: number;
-  appointment_type?: "new" | "follow_up";
+  encounter_id: string | null;
+  /** Per-visit number — distinguishes same name different visits. */
+  visit_pnr: string | null;
+  /** Unique patient profile id in EMR (names can repeat). */
+  patient_public_id: string | null;
+  patient_name: string;
+  age: number | null;
+  gender: string | null;
+  status: "waiting" | "vitals_done";
+  token: string | null;
+  position: number;
 }
 
 interface QueueData {
   id: string;
-  patient: {
-    id: string;
-    first_name: string;
-    last_name?: string;
-    full_name?: string;
-    date_of_birth?: string;
-    gender?: string;
-    relation?: string;
+  encounter_id: string | null;
+  visit_pnr?: string | null;
+  patient_public_id?: string | null;
+  patient_name: string;
+  age: number | null;
+  gender: string | null;
+  status: "waiting" | "vitals_done";
+  token: string | null;
+  position: number;
+}
+
+interface SmartQueueUpdatePayload {
+  type?: string;
+  doctor_id?: string;
+  clinic_id?: string;
+  data?: {
+    top_queue?: QueuePatient[];
+    total_active?: number;
   };
-  status: string;
-  position_in_queue: number;
-  appointment_type?: string;
+}
+
+function resolveWebsocketBaseUrl(): string | null {
+  const explicit = process.env.NEXT_PUBLIC_WS_URL?.trim();
+  if (explicit) {
+    return explicit.replace(/\/+$/, "");
+  }
+  if (typeof window === "undefined") {
+    return null;
+  }
+  // Same-origin (typical: Next + reverse proxy routes /ws/ to Daphne/ASGI on same host).
+  const { protocol, host } = window.location;
+  const wsProto = protocol === "https:" ? "wss:" : "ws:";
+  return `${wsProto}//${host}`;
 }
 
 export function SmartQueue() {
-  const { selectedPatient, setSelectedPatient, isLocked } = usePatient();
+  const { selectedPatient, isLocked } = usePatient();
   const toast = useToastNotification();
   const [queue, setQueue] = useState<QueuePatient[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [doctorId, setDoctorId] = useState<string | null>(null);
   const [clinicId, setClinicId] = useState<string | null>(null);
+  const [wsLive, setWsLive] = useState<"off" | "connecting" | "open" | "closed">("off");
+  const socketRef = useRef<WebSocket | null>(null);
+  const closedCleanRef = useRef(false);
 
-  // Fetch doctor ID and clinic ID
+  // Resolve doctor + clinic scope the same way other doctor flows do (avoids wrong clinic from older localStorage).
   useEffect(() => {
-    const fetchIds = async () => {
-      // Try localStorage first
-      let docId = localStorage.getItem("doctor_id");
-      let clinId = localStorage.getItem("clinic_id");
-
-      // If not in localStorage, fetch from API
-      if (!docId || !clinId) {
-        try {
-          // Fetch doctor profile to get doctor ID
-          if (!docId) {
-            const profileResponse = await axiosClient.get("/doctor/profile/");
-            const profile = profileResponse.data?.doctor_profile || profileResponse.data;
-            docId = profile?.personal_info?.id || profile?.id || profile?.doctor_id;
-            if (docId) {
-              localStorage.setItem("doctor_id", docId);
-              setDoctorId(docId);
-            }
-          }
-
-          // Fetch clinics to get clinic ID
-          if (!clinId) {
-            const clinicsResponse = await axiosClient.get("/doctor/profile/clinics");
-            const clinics = clinicsResponse.data?.data || clinicsResponse.data?.clinics || [];
-            if (Array.isArray(clinics) && clinics.length > 0) {
-              const firstClinic = clinics[0];
-              clinId = firstClinic?.id || firstClinic?.clinic_id || firstClinic?.clinic?.id;
-              if (clinId) {
-                localStorage.setItem("clinic_id", clinId);
-                setClinicId(clinicId);
-              }
-            }
-          }
-        } catch (error) {
-          console.error("Failed to fetch doctor/clinic IDs:", error);
+    const resolve = async () => {
+      try {
+        const profileResponse = await axiosClient.get("/doctor/profile/");
+        const profile = profileResponse.data?.doctor_profile || profileResponse.data;
+        const fromProfile = profile?.personal_info?.id || profile?.id || profile?.doctor_id;
+        if (fromProfile) {
+          const s = String(fromProfile);
+          localStorage.setItem("doctor_id", s);
+          setDoctorId(s);
         }
+
+        const { clinicId: resolvedClinic } = await loadStaffClinicSelection();
+        if (resolvedClinic) {
+          setClinicId(String(resolvedClinic));
+        }
+      } catch (e) {
+        console.error("SmartQueue: failed to resolve doctor/clinic context:", e);
       }
-
-      if (docId) setDoctorId(docId);
-      if (clinId) setClinicId(clinicId);
     };
-
-    fetchIds();
+    void resolve();
   }, []);
 
   // Fetch queue data
@@ -98,38 +101,16 @@ export function SmartQueue() {
 
     setIsLoading(true);
     try {
-      const response = await axiosClient.get(`/api/queue/doctor/${doctorId}/${clinicId}/`);
+      const response = await axiosClient.get(`/queue/doctor/${doctorId}/${clinicId}/`);
       const queueData: QueueData[] = response.data || [];
-      
-      // Filter and transform queue data
-      const filteredQueue = queueData
-        .filter((item) => 
-          item.status === "waiting" || 
-          item.status === "in_consultation"
-        )
-        .sort((a, b) => a.position_in_queue - b.position_in_queue) // Sort by position
-        .slice(0, 3) // Show max 3 patients
-        .map((item) => {
-          // Patient data should now be an object with details from the updated serializer
-          const patientData = item.patient;
-
-          return {
-            id: item.id,
-            patient: {
-              id: patientData.id,
-              first_name: patientData.first_name || "Unknown",
-              last_name: patientData.last_name,
-              full_name: patientData.full_name || `${patientData.first_name} ${patientData.last_name || ""}`.trim(),
-              date_of_birth: patientData.date_of_birth,
-              gender: patientData.gender,
-            },
-            status: item.status as QueuePatient["status"],
-            position_in_queue: item.position_in_queue,
-            appointment_type: item.appointment_type as "new" | "follow_up" | undefined,
-          };
-        });
-
-      setQueue(filteredQueue);
+      // Backend is source of truth: response is already ordered; only cap UI to top 3.
+      setQueue(
+        queueData.slice(0, 3).map((row) => ({
+          ...row,
+          visit_pnr: row.visit_pnr ?? null,
+          patient_public_id: row.patient_public_id ?? null,
+        }))
+      );
     } catch (error) {
       console.error("Failed to fetch queue:", error);
       setQueue([]);
@@ -138,95 +119,131 @@ export function SmartQueue() {
     }
   }, [doctorId, clinicId]);
 
-  // Fetch queue on mount and when IDs are available
+  // Initial queue bootstrap after IDs are available.
   useEffect(() => {
     if (doctorId && clinicId) {
-      fetchQueue();
-      // Refresh queue every 30 seconds
-      const interval = setInterval(fetchQueue, 30000);
-      return () => clearInterval(interval);
+      void fetchQueue();
     }
   }, [doctorId, clinicId, fetchQueue]);
+
+  useEffect(() => {
+    if (!doctorId || !clinicId || typeof window === "undefined") return;
+
+    const wsBase = resolveWebsocketBaseUrl();
+    if (!wsBase) {
+      setWsLive("off");
+      return;
+    }
+
+    const wsUrl = `${wsBase}/ws/queue-updates/${clinicId}/${doctorId}/`;
+    closedCleanRef.current = false;
+    setWsLive("connecting");
+    let socket: WebSocket | null = null;
+    try {
+      socket = new WebSocket(wsUrl);
+    } catch {
+      setWsLive("closed");
+      return;
+    }
+    socketRef.current = socket;
+
+    socket.onopen = () => setWsLive("open");
+    socket.onclose = () => {
+      socketRef.current = null;
+      if (!closedCleanRef.current) {
+        setWsLive("closed");
+      }
+    };
+    socket.onerror = () => {
+      // If handshake fails, onclose may not always follow consistently across browsers.
+      if (socket.readyState === WebSocket.CONNECTING) {
+        setWsLive("closed");
+      }
+    };
+    socket.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data) as SmartQueueUpdatePayload;
+        if (payload.type !== "SMART_QUEUE_UPDATE") return;
+        if (payload.clinic_id && String(payload.clinic_id) !== String(clinicId)) return;
+        if (payload.doctor_id && String(payload.doctor_id) !== String(doctorId)) return;
+
+        const topQueue = payload.data?.top_queue;
+        if (Array.isArray(topQueue)) {
+          setQueue(
+            topQueue.map((row) => ({
+              ...row,
+              visit_pnr: row.visit_pnr ?? null,
+              patient_public_id: row.patient_public_id ?? null,
+            }))
+          );
+          return;
+        }
+      } catch {
+        if (process.env.NODE_ENV !== "production") {
+          console.warn("SmartQueue: non-JSON websocket frame ignored");
+        }
+      }
+    };
+
+    return () => {
+      closedCleanRef.current = true;
+      setWsLive("off");
+      socket?.close();
+      if (socketRef.current === socket) {
+        socketRef.current = null;
+      }
+    };
+  }, [clinicId, doctorId, fetchQueue]);
+
+  // Fallback polling is active only while websocket is disconnected.
+  useEffect(() => {
+    if (!doctorId || !clinicId) return;
+    if (wsLive === "open" || wsLive === "connecting" || wsLive === "off") return;
+    const interval = setInterval(() => {
+      void fetchQueue();
+    }, 60000);
+    return () => clearInterval(interval);
+  }, [clinicId, doctorId, wsLive, fetchQueue]);
 
   // Get status color (pastel colors)
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "in_consultation":
-        return "bg-green-400"; // Pastel green
       case "waiting":
         return "bg-yellow-400"; // Pastel yellow
+      case "vitals_done":
+        return "bg-blue-400";
       default:
         return "bg-gray-300"; // Pastel gray
     }
   };
 
-  // Handle patient selection
-  const handleSelectPatient = (patient: QueuePatient) => {
+  const handleStartConsultation = async (patient: QueuePatient) => {
     if (isLocked) {
       toast.info("Please end or pause the current consultation to switch patients");
       return;
     }
+    if (!clinicId || !patient.encounter_id) {
+      toast.error("Unable to start consultation for this patient.");
+      return;
+    }
 
-    const fullName = patient.patient.full_name || 
-      `${patient.patient.first_name || ""} ${patient.patient.last_name || ""}`.trim() || 
-      "Unknown";
-
-    const patientData = {
-      id: patient.patient.id,
-      first_name: patient.patient.first_name,
-      last_name: patient.patient.last_name || "",
-      full_name: fullName,
-      gender: patient.patient.gender,
-      date_of_birth: patient.patient.date_of_birth,
-    };
-
-    setSelectedPatient(patientData);
-    
-    // Show success notification
-    toast.success(`${fullName} selected. Patient is now active in the search bar.`, { duration: 2000 });
+    try {
+      await axiosClient.patch("/queue/start/", {
+        clinic_id: clinicId,
+        encounter_id: patient.encounter_id,
+      });
+      toast.success(`Consultation started for ${patient.patient_name}.`);
+    } catch (error: any) {
+      const statusCode = error?.response?.status;
+      if (statusCode === 409) {
+        toast.error("Consultation already started or patient is no longer active in queue.");
+      } else {
+        toast.error("Failed to start consultation. Please try again.");
+      }
+    }
   };
 
-  // Dummy data for display
-  const dummyPatients: QueuePatient[] = [
-    {
-      id: "dummy-1",
-      patient: {
-        id: "dummy-patient-1",
-        first_name: "Rahul",
-        last_name: "Sharma",
-        full_name: "Rahul Sharma",
-      },
-      status: "waiting",
-      position_in_queue: 1,
-    },
-    {
-      id: "dummy-2",
-      patient: {
-        id: "dummy-patient-2",
-        first_name: "Priya",
-        last_name: "Patel",
-        full_name: "Priya Patel",
-      },
-      status: "waiting",
-      position_in_queue: 2,
-    },
-    {
-      id: "dummy-3",
-      patient: {
-        id: "dummy-patient-3",
-        first_name: "Amit",
-        last_name: "Kumar",
-        full_name: "Amit Kumar",
-      },
-      status: "waiting",
-      position_in_queue: 3,
-    },
-  ];
-
-  const queueCount = queue.length;
-  const displayQueue = queue.length > 0 ? queue.slice(0, 3) : dummyPatients;
-  const waitingCount = displayQueue.filter(p => p.status === "waiting").length;
-  const activeCount = displayQueue.filter(p => p.status === "in_consultation").length;
+  const displayQueue = queue.slice(0, 3);
 
   return (
     <div className={cn(
@@ -256,40 +273,35 @@ export function SmartQueue() {
           </div>
         ) : (
           <div className="space-y-1.5">
-            {displayQueue.map((patient, index) => {
-              const isSelected = selectedPatient?.id === patient.patient.id;
-              // Get full name (first name + last name)
-              const fullName = patient.patient.full_name || 
-                `${patient.patient.first_name || ""} ${patient.patient.last_name || ""}`.trim() || 
-                "Unknown";
+            {displayQueue.length === 0 ? (
+              <div className="py-2 text-center text-[10px] text-muted-foreground">
+                No patients in queue
+              </div>
+            ) : (
+              displayQueue.map((patient, index) => {
+              const isSelected = selectedPatient?.id === patient.id;
               const statusColor = getStatusColor(patient.status);
-              const isActive = patient.status === "in_consultation";
               const isWaiting = patient.status === "waiting";
-              const isDummy = patient.id.startsWith("dummy-");
 
               return (
                 <button
                   key={patient.id}
-                  onClick={() => !isDummy && handleSelectPatient(patient)}
-                  disabled={isLocked || isDummy}
+                  onClick={() => handleStartConsultation(patient)}
+                  disabled={isLocked}
                   className={cn(
                     "group relative w-full text-left px-2 py-1.5 rounded-md",
                     "border transition-all duration-300 ease-in-out",
                     "flex items-center gap-2",
                     "transform hover:scale-[1.01] active:scale-[0.99]",
-                    isDummy
-                      ? "bg-purple-50/30 dark:bg-purple-950/10 border-purple-200/30 dark:border-purple-800/20 cursor-default"
-                      : isSelected
+                    isSelected
                       ? "bg-gradient-to-r from-purple-100 to-purple-50 dark:from-purple-950/50 dark:to-purple-900/30 border-purple-500 dark:border-purple-600 shadow-md shadow-purple-200/50 dark:shadow-purple-900/30 ring-2 ring-purple-300/50 dark:ring-purple-700/50"
                       : "bg-white dark:bg-background border-purple-200/60 dark:border-purple-800/40 hover:border-purple-400 dark:hover:border-purple-600 hover:bg-gradient-to-r hover:from-purple-50 hover:to-white dark:hover:from-purple-950/30 dark:hover:to-background hover:shadow-md hover:shadow-purple-100/50 dark:hover:shadow-purple-900/20",
-                    isLocked && !isDummy && "cursor-not-allowed opacity-60 hover:scale-100 hover:bg-white dark:hover:bg-background hover:border-purple-200/60 dark:hover:border-purple-800/40 hover:shadow-none"
+                    isLocked && "cursor-not-allowed opacity-60 hover:scale-100 hover:bg-white dark:hover:bg-background hover:border-purple-200/60 dark:hover:border-purple-800/40 hover:shadow-none"
                   )}
                   title={
-                    isDummy
-                      ? "Sample patient (dummy data)"
-                      : isLocked 
+                    isLocked 
                       ? "End or pause consultation to switch patient" 
-                      : `Click to select ${fullName}${isActive ? " (Currently in consultation)" : ""}`
+                      : `Start consultation for ${patient.patient_name}`
                   }
                 >
                   {/* Status Indicator */}
@@ -301,32 +313,38 @@ export function SmartQueue() {
                         isSelected && "ring-1 ring-white dark:ring-purple-900"
                       )}
                     />
-                    {isWaiting && index === 0 && !isDummy && (
+                    {isWaiting && index === 0 && (
                       <span className="absolute -top-0.5 -right-0.5 h-1 w-1 bg-purple-600 dark:bg-purple-400 rounded-full animate-pulse" />
                     )}
                   </div>
 
-                  {/* Patient Full Name */}
+                  {/* Patient Name + Metadata */}
                   <div className="flex-1 min-w-0">
                     <p className={cn(
                       "text-xs font-medium truncate transition-colors duration-200",
                       isSelected 
                         ? "text-black dark:text-white" 
-                        : isDummy
-                        ? "text-gray-500 dark:text-gray-400"
                         : "text-black dark:text-white group-hover:text-black dark:group-hover:text-white"
                     )}>
-                      {fullName}
+                      {patient.patient_name}
                     </p>
-                    {isActive && !isDummy && (
+                    <p className="text-[10px] text-purple-600/70 dark:text-purple-400/70 mt-0.5">
+                      #{patient.position}
+                      {patient.visit_pnr ? `  Visit ${patient.visit_pnr}` : ""}
+                      {patient.patient_public_id ? `  Pat ${patient.patient_public_id}` : ""}
+                      {patient.token ? `  Token ${patient.token}` : ""}
+                      {patient.age ? `  ${patient.age}y` : ""}
+                      {patient.gender ? `  ${patient.gender}` : ""}
+                    </p>
+                    {index === 0 && (
                       <p className="text-[10px] text-purple-600/70 dark:text-purple-400/70 mt-0.5">
-                        In consultation
+                        Next
                       </p>
                     )}
                   </div>
 
                   {/* Selection Indicator */}
-                  {isSelected && !isDummy && (
+                  {isSelected && (
                     <div className="flex-shrink-0">
                       <div className="p-0.5 rounded-full bg-purple-600 dark:bg-purple-500 shadow-sm">
                         <Check className="h-2.5 w-2.5 text-white" />
@@ -335,7 +353,7 @@ export function SmartQueue() {
                   )}
 
                   {/* Hover Arrow Indicator */}
-                  {!isSelected && !isDummy && !isLocked && (
+                  {!isSelected && !isLocked && (
                     <div className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                       <div className="h-4 w-4 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
                         <svg 
@@ -351,7 +369,7 @@ export function SmartQueue() {
                   )}
                 </button>
               );
-            })}
+            }))}
           </div>
         )}
 

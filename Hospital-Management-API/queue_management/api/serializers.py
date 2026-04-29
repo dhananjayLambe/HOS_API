@@ -181,3 +181,75 @@ class HelpdeskQueueRowSerializer(serializers.ModelSerializer):
 
     def get_vitals(self, obj):
         return _vitals_preview_from_encounter(obj.encounter)
+
+
+class DoctorActiveQueueSerializer(serializers.ModelSerializer):
+    encounter_id = serializers.SerializerMethodField()
+    visit_pnr = serializers.SerializerMethodField()
+    patient_public_id = serializers.SerializerMethodField()
+    patient_name = serializers.SerializerMethodField()
+    age = serializers.SerializerMethodField()
+    gender = serializers.SerializerMethodField()
+    token = serializers.SerializerMethodField()
+    position = serializers.IntegerField(source="position_in_queue")
+
+    class Meta:
+        model = Queue
+        fields = (
+            "id",
+            "encounter_id",
+            "visit_pnr",
+            "patient_public_id",
+            "patient_name",
+            "age",
+            "gender",
+            "status",
+            "token",
+            "position",
+        )
+
+    def get_encounter_id(self, obj):
+        return obj.encounter_id
+
+    def get_visit_pnr(self, obj):
+        enc = getattr(obj, "encounter", None)
+        if enc is None:
+            return None
+        pnr = getattr(enc, "visit_pnr", None)
+        return str(pnr) if pnr else None
+
+    def get_patient_public_id(self, obj):
+        p = obj.patient
+        pid = getattr(p, "public_id", None)
+        return str(pid) if pid else None
+
+    def get_patient_name(self, obj):
+        p = obj.patient
+        parts = [p.first_name or "", p.last_name or ""]
+        return " ".join(x for x in parts if x).strip() or "Patient"
+
+    def get_age(self, obj):
+        p = obj.patient
+        if p.date_of_birth:
+            return p.age
+        return p.age_years
+
+    def get_gender(self, obj):
+        g = (obj.patient.gender or "").lower()
+        if g == "male":
+            return "M"
+        if g == "female":
+            return "F"
+        if g == "other":
+            return "O"
+        return obj.patient.gender or None
+
+    def get_token(self, obj):
+        appt = obj.appointment
+        if not appt:
+            return None
+        for key in ("token_number", "token", "queue_number"):
+            v = getattr(appt, key, None)
+            if v:
+                return str(v)
+        return None

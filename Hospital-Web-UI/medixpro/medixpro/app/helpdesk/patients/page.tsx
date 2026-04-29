@@ -36,9 +36,13 @@ export default function HelpdeskPatientsPage() {
   const initialQuery = searchParams.get("q") ?? "";
 
   const goQueueWithHighlight = useCallback(
-    (queueEntryId: string, message: "new" | "existing") => {
+    (queueEntryId: string, message: "new" | "existing", listName?: string) => {
       if (message === "existing") {
-        toast.message("Already in queue");
+        toast.message(
+          listName
+            ? `Already in queue (${listName}) — see highlighted row.`
+            : "Already in queue — see highlighted row."
+        );
       } else {
         toast.success("Added to queue");
       }
@@ -49,10 +53,15 @@ export default function HelpdeskPatientsPage() {
   );
 
   const handleSelectFromSearch = async (patient: HelpdeskSearchPatient) => {
+    try {
+      await fetchTodayQueue();
+    } catch {
+      // best-effort
+    }
     const existing = findEntryByPatient({ id: patient.id, mobile: patient.mobile });
     const hasSyncedEncounter = Boolean(existing?.visitId && existing?.clinicId);
     if (existing && hasSyncedEncounter) {
-      goQueueWithHighlight(existing.id, "existing");
+      goQueueWithHighlight(existing.id, "existing", existing.name);
       return;
     }
     if (!patient.patient_account_id) {
@@ -70,7 +79,7 @@ export default function HelpdeskPatientsPage() {
           .getState()
           .findEntryByPatient({ id: patient.id, mobile: patient.mobile });
         if (afterSync?.visitId && afterSync.clinicId) {
-          goQueueWithHighlight(afterSync.id, "existing");
+          goQueueWithHighlight(afterSync.id, "existing", afterSync.name);
           return;
         }
         notify.info(`${checkIn.error}${HELPDESK_DUPLICATE_NO_SYNCED_ROW}`);
@@ -141,10 +150,15 @@ export default function HelpdeskPatientsPage() {
   };
 
   const handlePatientAddedFromDialog = async (patient: Patient) => {
+    try {
+      await fetchTodayQueue();
+    } catch {
+      // best-effort
+    }
     const existing = findEntryByPatient({ id: patient.id, mobile: patient.mobile });
     const hasSyncedEncounter = Boolean(existing?.visitId && existing?.clinicId);
     if (existing && hasSyncedEncounter) {
-      goQueueWithHighlight(existing.id, "existing");
+      goQueueWithHighlight(existing.id, "existing", existing.name);
       return;
     }
     try {
@@ -167,7 +181,7 @@ export default function HelpdeskPatientsPage() {
             .getState()
             .findEntryByPatient({ id: patient.id, mobile: patient.mobile });
           if (afterSync?.visitId && afterSync.clinicId) {
-            goQueueWithHighlight(afterSync.id, "existing");
+            goQueueWithHighlight(afterSync.id, "existing", afterSync.name);
             return;
           }
           notify.info(`${checkIn.error}${HELPDESK_DUPLICATE_NO_SYNCED_ROW}`);

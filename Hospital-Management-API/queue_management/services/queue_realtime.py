@@ -31,6 +31,14 @@ def queue_group_name(clinic_id: str, doctor_id: str, queue_date: date) -> str:
     return f"queue_updates_{clinic_id}_{doctor_id}_{queue_date.isoformat()}"
 
 
+def queue_updates_channel_name(clinic_id: str, doctor_id: str) -> str:
+    return f"queue_updates:{clinic_id}:{doctor_id}"
+
+
+def queue_group_name_scoped(clinic_id: str, doctor_id: str) -> str:
+    return f"queue_updates_{clinic_id}_{doctor_id}"
+
+
 def update_queue_sorted_set(clinic_id: str, doctor_id: str, queue_date: date, queue_rows: Iterable[dict]) -> str:
     key = queue_cache_key(clinic_id=clinic_id, doctor_id=doctor_id, queue_date=queue_date)
     redis_client = get_redis_client()
@@ -46,15 +54,20 @@ def update_queue_sorted_set(clinic_id: str, doctor_id: str, queue_date: date, qu
 
 
 def publish_queue_update(clinic_id: str, doctor_id: str, queue_date: date, queue_rows: list[dict]) -> None:
+    top_queue = list(queue_rows[:3])
     payload = {
+        "type": "SMART_QUEUE_UPDATE",
         "doctor_id": str(doctor_id),
         "clinic_id": str(clinic_id),
-        "date": queue_date.isoformat(),
-        "queue": queue_rows,
+        "data": {
+            "top_queue": top_queue,
+            "total_active": len(queue_rows),
+        },
     }
     body = json.dumps(payload)
     try:
         redis_client = get_redis_client()
+        redis_client.publish(queue_updates_channel_name(clinic_id=str(clinic_id), doctor_id=str(doctor_id)), body)
         redis_client.publish(QUEUE_UPDATES_CHANNEL, body)
     except Exception:
         logger.exception("Failed publishing queue update on Redis channel")
@@ -64,7 +77,7 @@ def publish_queue_update(clinic_id: str, doctor_id: str, queue_date: date, queue
         return
     try:
         async_to_sync(channel_layer.group_send)(
-            queue_group_name(clinic_id=clinic_id, doctor_id=doctor_id, queue_date=queue_date),
+            queue_group_name_scoped(clinic_id=str(clinic_id), doctor_id=str(doctor_id)),
             {
                 "type": "queue.update",
                 "payload": payload,
