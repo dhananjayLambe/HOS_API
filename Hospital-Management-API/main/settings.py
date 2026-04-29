@@ -232,16 +232,14 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-#TIME_ZONE = 'UTC'
-
 USE_I18N = True
 
 USE_L10N = True
 
+# Datetimes are stored UTC in the DB (USE_TZ); localdate(), template dates, and queue
+# "today" filters use TIME_ZONE. Default IST for India; override e.g. DJANGO_TIME_ZONE=UTC for CI.
 USE_TZ = True
-
-TIME_ZONE = "Asia/Kolkata"
-USE_TZ = True  # required for datetime-aware operations
+TIME_ZONE = os.environ.get("DJANGO_TIME_ZONE", "Asia/Kolkata")
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/3.0/howto/static-files/

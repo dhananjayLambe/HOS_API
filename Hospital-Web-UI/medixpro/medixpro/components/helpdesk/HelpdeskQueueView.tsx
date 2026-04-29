@@ -14,7 +14,6 @@ import {
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import {
-  isHelpdeskQueueCalendarDayStale,
   mapVisitVitalsApiResponse,
   maskMobile,
   useFilteredQueueEntries,
@@ -231,17 +230,15 @@ export function HelpdeskQueueView() {
       if (queueDragging || isReordering || isReorderUpdating) return;
       void fetchTodayQueue().catch(() => undefined);
     }, 90_000);
-    /** Catch midnight while the tab stays open without waiting for the next poll. */
+    /** Shorter refresh while the tab is visible so server “queue day” changes are picked up without relying on browser-local midnight. */
     const dayWatch = window.setInterval(() => {
       if (document.visibilityState !== "visible") return;
       if (queueDragging || isReordering || isReorderUpdating) return;
-      if (!isHelpdeskQueueCalendarDayStale()) return;
       void fetchTodayQueue().catch(() => undefined);
-    }, 30_000);
+    }, 60_000);
     const onVisible = () => {
       if (document.visibilityState !== "visible") return;
       if (queueDragging || isReordering || isReorderUpdating) return;
-      if (!isHelpdeskQueueCalendarDayStale()) return;
       void fetchTodayQueue().catch(() => undefined);
     };
     document.addEventListener("visibilitychange", onVisible);

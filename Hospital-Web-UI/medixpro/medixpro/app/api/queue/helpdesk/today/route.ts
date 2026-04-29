@@ -42,7 +42,12 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    return NextResponse.json(data, { status: response.status });
+    const next = NextResponse.json(data, { status: response.status });
+    const queueDay = response.headers.get("x-queue-calendar-date");
+    if (queueDay) {
+      next.headers.set("X-Queue-Calendar-Date", queueDay);
+    }
+    return next;
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Internal server error";
     console.error("[API] Helpdesk queue fetch error:", error);

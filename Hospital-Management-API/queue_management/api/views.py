@@ -2,7 +2,7 @@ import redis
 import logging
 from django.conf import settings
 from django.utils.timezone import localdate
-from django.db.models import F, Max
+from django.db.models import F, Max, Q
 from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -91,6 +91,7 @@ def _build_active_queue_payload(*, doctor_id, clinic_id, queue_date):
             {
                 "id": str(row.id),
                 "encounter_id": str(row.encounter_id) if row.encounter_id else None,
+                "patient_profile_id": str(row.patient_id) if row.patient_id else None,
                 "visit_pnr": visit_pnr,
                 "patient_public_id": str(patient.public_id) if getattr(patient, "public_id", None) else None,
                 "patient_name": " ".join(x for x in [patient.first_name or "", patient.last_name or ""] if x).strip() or "Patient",
@@ -298,7 +299,9 @@ class HelpdeskClinicQueueAPIView(APIView):
         )
         today = localdate()
         if not doctor_ids:
-            return Response([], status=status.HTTP_200_OK)
+            resp = Response([], status=status.HTTP_200_OK)
+            resp["X-Queue-Calendar-Date"] = today.isoformat()
+            return resp
         queue = (
             Queue.objects.filter(
                 clinic_id=clinic.id,
@@ -306,11 +309,17 @@ class HelpdeskClinicQueueAPIView(APIView):
                 created_at__date=today,
                 status__in=("waiting", "vitals_done"),
             )
-            .exclude(encounter__status__in=HELPDESK_TODAY_EXCLUDE_IF_ENCOUNTER_STATUS_IN)
+            .filter(
+                Q(encounter__isnull=True)
+                | ~Q(encounter__status__in=HELPDESK_TODAY_EXCLUDE_IF_ENCOUNTER_STATUS_IN)
+            )
             .select_related("patient", "appointment", "encounter", "patient_account__user")
             .order_by("doctor_id", "position_in_queue")
         )
-        return Response(HelpdeskQueueRowSerializer(queue, many=True).data)
+        body = HelpdeskQueueRowSerializer(queue, many=True).data
+        resp = Response(body, status=status.HTTP_200_OK)
+        resp["X-Queue-Calendar-Date"] = today.isoformat()
+        return resp
 
 
 class HelpdeskQueueContextAPIView(APIView):

@@ -42,18 +42,18 @@ export function PatientContextChip() {
     }
   };
 
-  const maskMobile = (mobile?: string) => {
-    if (!mobile) return "N/A";
+  const maskMobile = (mobile: string) => {
     if (mobile.length <= 4) return mobile;
     const last4 = mobile.slice(-4);
     return `+91-XXXX${last4}`;
   };
 
-  const age = calculateAge(selectedPatient.date_of_birth);
-  const ageGender = age
-    ? `${age}${selectedPatient.gender?.[0]?.toUpperCase() || ""}`
-    : selectedPatient.gender?.[0]?.toUpperCase() || "";
-  const mobile = maskMobile(selectedPatient.mobile);
+  const ageFromDob = calculateAge(selectedPatient.date_of_birth);
+  const displayAge = ageFromDob ?? selectedPatient.age_years ?? null;
+  const genderInitial = (selectedPatient.gender?.trim()?.[0] || "").toUpperCase();
+  const ageGender =
+    displayAge != null ? `${displayAge}${genderInitial}` : genderInitial;
+  const mobileMasked = selectedPatient.mobile?.trim() ? maskMobile(selectedPatient.mobile.trim()) : null;
   const patientName = selectedPatient.full_name || `${selectedPatient.first_name} ${selectedPatient.last_name}`.trim();
 
   const handleClearPatient = () => {
@@ -89,7 +89,7 @@ export function PatientContextChip() {
                 <div className="flex items-center gap-2 flex-1 min-w-0">
                   <span className="text-sm font-semibold text-foreground truncate">{patientName}</span>
                   {ageGender && <span className="text-xs text-muted-foreground shrink-0">• {ageGender}</span>}
-                  {mobile && <span className="text-xs text-muted-foreground shrink-0">• {mobile}</span>}
+                  {mobileMasked && <span className="text-xs text-muted-foreground shrink-0">• {mobileMasked}</span>}
                 </div>
                 {isLocked && <Lock className="h-4 w-4 text-purple-600 dark:text-purple-400 shrink-0" />}
               </Button>
@@ -142,11 +142,13 @@ export function PatientContextChip() {
             <div className="grid grid-cols-2 gap-4 pt-4 border-t">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Age & Gender</p>
-                <p className="text-sm">{ageGender || "N/A"}</p>
+                <p className="text-sm">{ageGender || "—"}</p>
               </div>
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Mobile</p>
-                <p className="text-sm">{mobile}</p>
+                <p className="text-sm">
+                  {selectedPatient.mobile?.trim() ? maskMobile(selectedPatient.mobile.trim()) : "—"}
+                </p>
               </div>
               {selectedPatient.date_of_birth && (
                 <div>

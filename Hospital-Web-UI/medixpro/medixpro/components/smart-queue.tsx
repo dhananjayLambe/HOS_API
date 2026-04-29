@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { cn } from "@/lib/utils";
-import { usePatient } from "@/lib/patientContext";
+import { usePatient, type Patient } from "@/lib/patientContext";
 import { Check, Users, Clock, AlertCircle } from "lucide-react";
 import axiosClient from "@/lib/axiosClient";
 import { useToastNotification } from "@/hooks/use-toast-notification";
@@ -11,6 +11,8 @@ import { loadStaffClinicSelection } from "@/lib/doctorClinicsClient";
 interface QueuePatient {
   id: string;
   encounter_id: string | null;
+  /** PatientProfile PK — use for search selection (not queue row `id`). */
+  patient_profile_id: string | null;
   /** Per-visit number — distinguishes same name different visits. */
   visit_pnr: string | null;
   /** Unique patient profile id in EMR (names can repeat). */
@@ -26,6 +28,7 @@ interface QueuePatient {
 interface QueueData {
   id: string;
   encounter_id: string | null;
+  patient_profile_id?: string | null;
   visit_pnr?: string | null;
   patient_public_id?: string | null;
   patient_name: string;
@@ -60,8 +63,36 @@ function resolveWebsocketBaseUrl(): string | null {
   return `${wsProto}//${host}`;
 }
 
+function mapQueueGenderToPatient(g: string | null | undefined): string | undefined {
+  if (!g) return undefined;
+  const u = g.toUpperCase();
+  if (u === "M") return "Male";
+  if (u === "F") return "Female";
+  if (u === "O") return "Other";
+  return g;
+}
+
+function patientNameToFirstLast(full: string): { first_name: string; last_name: string } {
+  const t = (full || "").trim() || "Patient";
+  const i = t.indexOf(" ");
+  if (i === -1) return { first_name: t, last_name: "" };
+  return { first_name: t.slice(0, i), last_name: t.slice(i + 1).trim() };
+}
+
+function queueRowToSelectedPatient(patient: QueuePatient): Patient {
+  const { first_name, last_name } = patientNameToFirstLast(patient.patient_name);
+  return {
+    id: patient.patient_profile_id!,
+    first_name,
+    last_name,
+    full_name: patient.patient_name.trim() || "Patient",
+    gender: mapQueueGenderToPatient(patient.gender),
+    age_years: patient.age ?? null,
+  };
+}
+
 export function SmartQueue() {
-  const { selectedPatient, isLocked } = usePatient();
+  const { selectedPatient, isLocked, setSelectedPatient, triggerSearchHighlight } = usePatient();
   const toast = useToastNotification();
   const [queue, setQueue] = useState<QueuePatient[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -107,6 +138,7 @@ export function SmartQueue() {
       setQueue(
         queueData.slice(0, 3).map((row) => ({
           ...row,
+          patient_profile_id: row.patient_profile_id ?? null,
           visit_pnr: row.visit_pnr ?? null,
           patient_public_id: row.patient_public_id ?? null,
         }))
@@ -172,6 +204,7 @@ export function SmartQueue() {
           setQueue(
             topQueue.map((row) => ({
               ...row,
+              patient_profile_id: row.patient_profile_id ?? null,
               visit_pnr: row.visit_pnr ?? null,
               patient_public_id: row.patient_public_id ?? null,
             }))
@@ -205,18 +238,6 @@ export function SmartQueue() {
     return () => clearInterval(interval);
   }, [clinicId, doctorId, wsLive, fetchQueue]);
 
-  // Get status color (pastel colors)
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "waiting":
-        return "bg-yellow-400"; // Pastel yellow
-      case "vitals_done":
-        return "bg-blue-400";
-      default:
-        return "bg-gray-300"; // Pastel gray
-    }
-  };
-
   const handleStartConsultation = async (patient: QueuePatient) => {
     if (isLocked) {
       toast.info("Please end or pause the current consultation to switch patients");
@@ -227,9 +248,15 @@ export function SmartQueue() {
       return;
     }
 
+    if (patient.patient_profile_id) {
+      setSelectedPatient(queueRowToSelectedPatient(patient));
+      triggerSearchHighlight();
+    }
+
     try {
       await axiosClient.patch("/queue/start/", {
         clinic_id: clinicId,
+        queue_id: patient.id,
         encounter_id: patient.encounter_id,
       });
       toast.success(`Consultation started for ${patient.patient_name}.`);
@@ -278,10 +305,8 @@ export function SmartQueue() {
                 No patients in queue
               </div>
             ) : (
-              displayQueue.map((patient, index) => {
-              const isSelected = selectedPatient?.id === patient.id;
-              const statusColor = getStatusColor(patient.status);
-              const isWaiting = patient.status === "waiting";
+              displayQueue.map((patient) => {
+              const isSelected = selectedPatient?.id === patient.patient_profile_id;
 
               return (
                 <button
@@ -299,71 +324,31 @@ export function SmartQueue() {
                     isLocked && "cursor-not-allowed opacity-60 hover:scale-100 hover:bg-white dark:hover:bg-background hover:border-purple-200/60 dark:hover:border-purple-800/40 hover:shadow-none"
                   )}
                   title={
-                    isLocked 
-                      ? "End or pause consultation to switch patient" 
+                    isLocked
+                      ? "End or pause consultation to switch patient"
                       : `Start consultation for ${patient.patient_name}`
                   }
                 >
-                  {/* Status Indicator */}
-                  <div className="relative flex-shrink-0">
-                    <span
-                      className={cn(
-                        "inline-block h-2 w-2 rounded-full",
-                        statusColor,
-                        isSelected && "ring-1 ring-white dark:ring-purple-900"
-                      )}
-                    />
-                    {isWaiting && index === 0 && (
-                      <span className="absolute -top-0.5 -right-0.5 h-1 w-1 bg-purple-600 dark:bg-purple-400 rounded-full animate-pulse" />
-                    )}
-                  </div>
-
-                  {/* Patient Name + Metadata */}
                   <div className="flex-1 min-w-0">
-                    <p className={cn(
-                      "text-xs font-medium truncate transition-colors duration-200",
-                      isSelected 
-                        ? "text-black dark:text-white" 
-                        : "text-black dark:text-white group-hover:text-black dark:group-hover:text-white"
-                    )}>
+                    <p
+                      className={cn(
+                        "text-xs font-medium truncate transition-colors duration-200",
+                        isSelected
+                          ? "text-black dark:text-white"
+                          : "text-black dark:text-white group-hover:text-black dark:group-hover:text-white"
+                      )}
+                    >
                       {patient.patient_name}
                     </p>
-                    <p className="text-[10px] text-purple-600/70 dark:text-purple-400/70 mt-0.5">
-                      #{patient.position}
-                      {patient.visit_pnr ? `  Visit ${patient.visit_pnr}` : ""}
-                      {patient.patient_public_id ? `  Pat ${patient.patient_public_id}` : ""}
-                      {patient.token ? `  Token ${patient.token}` : ""}
-                      {patient.age ? `  ${patient.age}y` : ""}
-                      {patient.gender ? `  ${patient.gender}` : ""}
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      {patient.age != null ? `${patient.age} yrs` : "—"}
                     </p>
-                    {index === 0 && (
-                      <p className="text-[10px] text-purple-600/70 dark:text-purple-400/70 mt-0.5">
-                        Next
-                      </p>
-                    )}
                   </div>
 
-                  {/* Selection Indicator */}
                   {isSelected && (
                     <div className="flex-shrink-0">
                       <div className="p-0.5 rounded-full bg-purple-600 dark:bg-purple-500 shadow-sm">
                         <Check className="h-2.5 w-2.5 text-white" />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Hover Arrow Indicator */}
-                  {!isSelected && !isLocked && (
-                    <div className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                      <div className="h-4 w-4 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
-                        <svg 
-                          className="h-2 w-2 text-purple-600 dark:text-purple-400" 
-                          fill="none" 
-                          viewBox="0 0 24 24" 
-                          stroke="currentColor"
-                        >
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                        </svg>
                       </div>
                     </div>
                   )}

@@ -9,6 +9,8 @@ export interface Patient {
   full_name: string;
   gender?: string;
   date_of_birth?: string;
+  /** When DOB is unknown, optional age from list views (e.g. Smart Queue). */
+  age_years?: number | null;
   mobile?: string;
   relation?: string;
 }

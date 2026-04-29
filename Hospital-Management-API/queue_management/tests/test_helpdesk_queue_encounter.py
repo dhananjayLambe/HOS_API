@@ -199,6 +199,32 @@ class HelpdeskQueueEncounterTests(TestCase):
         )
         self.assertEqual(r2.status_code, status.HTTP_200_OK, r2.data)
 
+    def test_doctor_queue_get_includes_patient_profile_id_and_encounter_id(self):
+        """GET /queue/doctor/.../ must expose profile id (for search sync) and encounter (for start)."""
+        self.client.post(
+            reverse("queue-check-in"),
+            {
+                "clinic_id": str(self.clinic.id),
+                "patient_account_id": str(self.patient_account.id),
+                "patient_profile_id": str(self.profile.id),
+                "doctor_id": str(self.doctor.id),
+            },
+            format="json",
+        )
+        q = Queue.objects.latest("created_at")
+        self.assertIsNotNone(q.encounter_id)
+        dq_url = reverse(
+            "doctor-queue",
+            kwargs={"doctor_id": str(self.doctor.id), "clinic_id": str(self.clinic.id)},
+        )
+        doc_client = _doctor_client(self.doctor.user)
+        r = doc_client.get(dq_url)
+        self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
+        self.assertEqual(len(r.data), 1)
+        row = r.data[0]
+        self.assertEqual(row.get("patient_profile_id"), str(self.profile.id))
+        self.assertEqual(str(row.get("encounter_id")), str(q.encounter_id))
+
     def test_doctor_section_vitals_get_after_helpdesk_post(self):
         """Regression: helpdesk POST visit vitals must be readable on doctor GET pre-consult section."""
         self.client.post(
@@ -364,6 +390,7 @@ class HelpdeskQueueEncounterTests(TestCase):
         url = reverse("helpdesk-clinic-queue-today")
         r = self.client.get(url)
         self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
+        self.assertIn("X-Queue-Calendar-Date", r.headers)
         self.assertEqual(len(r.data), 1)
         self.assertEqual(r.data[0]["patient_name"], "Pat Test")
         self.assertEqual(r.data[0]["patient_mobile"], self.patient_account.user.username)

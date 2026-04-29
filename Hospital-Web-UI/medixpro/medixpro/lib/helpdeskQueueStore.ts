@@ -137,24 +137,20 @@ function isSamePatientEntry(
   return false;
 }
 
-/** sessionStorage key — tracks which calendar day the helpdesk queue UI was last aligned to (local timezone). */
-const HELPDESK_QUEUE_DAY_KEY = "medixpro_helpdesk_queue_calendar_day";
+/**
+ * sessionStorage key — Django `localdate()` used for `created_at__date` on GET helpdesk/today/
+ * (see response header `X-Queue-Calendar-Date`). Rollover must use this, not the browser-only
+ * calendar day, or tabs near midnight can clear/refetch against the wrong server "today".
+ */
+const HELPDESK_QUEUE_SERVER_DAY_KEY = "medixpro_helpdesk_server_queue_date";
 
-/** Local calendar date `YYYY-MM-DD` for “today’s queue” boundaries. */
+/** Local calendar date `YYYY-MM-DD` (browser) — used for WebSocket path segments only. */
 export function helpdeskQueueCalendarDayLocal(): string {
   const d = new Date();
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
-}
-
-/** True when the browser tab has a stored day that is not today (e.g. tab left open past midnight). */
-export function isHelpdeskQueueCalendarDayStale(): boolean {
-  if (typeof sessionStorage === "undefined") return false;
-  const stored = sessionStorage.getItem(HELPDESK_QUEUE_DAY_KEY);
-  if (stored === null) return false;
-  return stored !== helpdeskQueueCalendarDayLocal();
 }
 
 /** Raw row from `HelpdeskQueueRowSerializer` (GET queue/helpdesk/today/). */
@@ -431,10 +427,15 @@ export const useHelpdeskQueueStore = create<HelpdeskQueueState>((set, get) => ({
     if (fetchTodayQueueInFlight) return fetchTodayQueueInFlight;
     fetchTodayQueueInFlight = (async () => {
       let rolledOver = false;
+      const resp = await axiosClient.get<unknown>("/queue/helpdesk/today/");
+      const data = resp.data;
+      const headerDay = resp.headers["x-queue-calendar-date"];
+      const serverDay =
+        typeof headerDay === "string" && headerDay.trim() !== "" ? headerDay.trim() : helpdeskQueueCalendarDayLocal();
+
       if (typeof sessionStorage !== "undefined") {
-        const today = helpdeskQueueCalendarDayLocal();
-        const prev = sessionStorage.getItem(HELPDESK_QUEUE_DAY_KEY);
-        if (prev !== null && prev !== today) {
+        const prevServer = sessionStorage.getItem(HELPDESK_QUEUE_SERVER_DAY_KEY);
+        if (prevServer !== null && prevServer !== serverDay) {
           rolledOver = true;
           idCounter = 100;
           set({
@@ -443,10 +444,9 @@ export const useHelpdeskQueueStore = create<HelpdeskQueueState>((set, get) => ({
             headerSearch: "",
           });
         }
-        sessionStorage.setItem(HELPDESK_QUEUE_DAY_KEY, today);
+        sessionStorage.setItem(HELPDESK_QUEUE_SERVER_DAY_KEY, serverDay);
       }
 
-      const { data } = await axiosClient.get<unknown>("/queue/helpdesk/today/");
       const mapped = mapHelpdeskQueueApiResponse(data);
       get().hydrateFromServer(mapped);
       // #region agent log
@@ -643,6 +643,6 @@ export function resetHelpdeskQueueStoreState(): void {
     isReordering: false,
   });
   if (typeof sessionStorage !== "undefined") {
-    sessionStorage.removeItem(HELPDESK_QUEUE_DAY_KEY);
+    sessionStorage.removeItem(HELPDESK_QUEUE_SERVER_DAY_KEY);
   }
 }

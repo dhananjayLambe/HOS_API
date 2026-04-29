@@ -185,12 +185,15 @@ class HelpdeskQueueRowSerializer(serializers.ModelSerializer):
 
 class DoctorActiveQueueSerializer(serializers.ModelSerializer):
     encounter_id = serializers.SerializerMethodField()
+    visit_id = serializers.SerializerMethodField()
+    patient_profile_id = serializers.SerializerMethodField()
     visit_pnr = serializers.SerializerMethodField()
     patient_public_id = serializers.SerializerMethodField()
     patient_name = serializers.SerializerMethodField()
     age = serializers.SerializerMethodField()
     gender = serializers.SerializerMethodField()
     token = serializers.SerializerMethodField()
+    vitals = serializers.SerializerMethodField()
     position = serializers.IntegerField(source="position_in_queue")
 
     class Meta:
@@ -198,6 +201,8 @@ class DoctorActiveQueueSerializer(serializers.ModelSerializer):
         fields = (
             "id",
             "encounter_id",
+            "visit_id",
+            "patient_profile_id",
             "visit_pnr",
             "patient_public_id",
             "patient_name",
@@ -205,11 +210,24 @@ class DoctorActiveQueueSerializer(serializers.ModelSerializer):
             "gender",
             "status",
             "token",
+            "vitals",
             "position",
         )
 
     def get_encounter_id(self, obj):
-        return obj.encounter_id
+        eid = getattr(obj, "encounter_id", None)
+        return str(eid) if eid else None
+
+    def get_visit_id(self, obj):
+        eid = getattr(obj, "encounter_id", None)
+        return str(eid) if eid else None
+
+    def get_vitals(self, obj):
+        return _vitals_preview_from_encounter(getattr(obj, "encounter", None))
+
+    def get_patient_profile_id(self, obj):
+        pid = getattr(obj, "patient_id", None)
+        return str(pid) if pid else None
 
     def get_visit_pnr(self, obj):
         enc = getattr(obj, "encounter", None)
