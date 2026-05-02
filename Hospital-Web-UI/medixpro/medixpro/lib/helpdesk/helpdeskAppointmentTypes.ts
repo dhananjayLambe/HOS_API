@@ -7,7 +7,13 @@ export type ConsultationMode = "clinic" | "video";
 
 export type AppointmentKind = "new" | "follow_up";
 
-export type AppointmentStatus = "scheduled" | "completed" | "cancelled" | "checked_in";
+export type AppointmentStatus =
+  | "scheduled"
+  | "completed"
+  | "cancelled"
+  | "checked_in"
+  | "no_show"
+  | "in_consultation";
 
 export type AppointmentListTab = "today" | "upcoming" | "completed" | "cancelled";
 
@@ -17,6 +23,10 @@ export type SlotState = "available" | "booked" | "blocked";
 export interface Appointment {
   id: string;
   patientProfileId: string;
+  /** Set when row comes from GET /api/appointments/ (queue check-in). */
+  patientAccountId?: string;
+  /** Appointment clinic (list/detail API). */
+  clinicId?: string;
   patientName: string;
   doctorId: string;
   doctorName: string;

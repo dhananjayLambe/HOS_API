@@ -27,6 +27,20 @@ def err_future_limit_exceeded(max_days: int) -> dict:
     )
 
 
+def err_future_limit_reschedule() -> dict:
+    return booking_error(
+        "FUTURE_LIMIT_EXCEEDED",
+        "Appointments can only be rescheduled within allowed range",
+    )
+
+
+def err_invalid_status() -> dict:
+    return booking_error(
+        "INVALID_STATUS",
+        "Only scheduled appointments can be rescheduled",
+    )
+
+
 def err_invalid_profile() -> dict:
     return booking_error("INVALID_PROFILE", "Patient profile does not belong to account")
 

@@ -1,6 +1,7 @@
 from .appointment import (
     AppointmentCancelView,
     AppointmentCreateView,
+    AppointmentListView,
     AppointmentDetailView,
     AppointmentHistoryView,
     AppointmentRescheduleView,
@@ -14,6 +15,7 @@ from .appointment import (
 )
 
 __all__ = [
+    "AppointmentListView",
     "AppointmentCreateView",
     "AppointmentDetailView",
     "AppointmentCancelView",

@@ -32,7 +32,7 @@ function syntheticPatientFromAppointment(a: Appointment): HelpdeskSearchPatient 
   return {
     id: a.patientProfileId,
     full_name: a.patientName,
-    patient_account_id: undefined,
+    patient_account_id: a.patientAccountId,
   };
 }
 
@@ -47,6 +47,7 @@ function BookAppointmentContent() {
     createAppointment,
     updateAppointment,
     allAppointments,
+    resolveAppointmentForEdit,
     todayIso,
   } = useHelpdeskAppointmentsMock();
 
@@ -103,30 +104,39 @@ function BookAppointmentContent() {
     }
     if (rescheduleAppliedFor.current === rescheduleId) return;
 
-    const a = allAppointments.find((x) => x.id === rescheduleId);
-    if (!a) {
-      toast.error("Could not load that appointment.");
-      router.replace("/helpdesk/appointments/book");
-      return;
-    }
-    if (a.status !== "scheduled") {
-      toast.message("Only scheduled appointments can be rescheduled.");
-      router.replace("/helpdesk/appointments/book");
-      return;
-    }
+    let cancelled = false;
+    (async () => {
+      const local = allAppointments.find((x) => x.id === rescheduleId);
+      const a = local ?? (await resolveAppointmentForEdit(rescheduleId));
+      if (cancelled) return;
+      if (!a) {
+        toast.error("Could not load that appointment.");
+        router.replace("/helpdesk/appointments/book");
+        return;
+      }
+      if (a.status !== "scheduled") {
+        toast.message("Only scheduled appointments can be rescheduled.");
+        router.replace("/helpdesk/appointments/book");
+        return;
+      }
 
-    rescheduleAppliedFor.current = rescheduleId;
-    setEditingAppointment(a);
-    setSelectedPatient(syntheticPatientFromAppointment(a));
-    setDoctorId(a.doctorId);
-    setSelectedDate(a.appointmentDate);
-    setConsultationMode(a.consultationMode);
-    setAppointmentType(a.appointmentType);
-    setConsultationFee(String(a.consultationFee));
-    setNotes(a.notes);
-    setSelectedSlotId(null);
-    setShowPostSubmitActions(false);
-  }, [rescheduleId, allAppointments, router]);
+      rescheduleAppliedFor.current = rescheduleId;
+      setEditingAppointment(a);
+      setSelectedPatient(syntheticPatientFromAppointment(a));
+      setDoctorId(a.doctorId);
+      setSelectedDate(a.appointmentDate);
+      setConsultationMode(a.consultationMode);
+      setAppointmentType(a.appointmentType);
+      setConsultationFee(String(a.consultationFee));
+      setNotes(a.notes);
+      setSelectedSlotId(null);
+      setShowPostSubmitActions(false);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [rescheduleId, allAppointments, resolveAppointmentForEdit, router]);
 
   useEffect(() => {
     if (!doctorId && defaultDoctorId) {
@@ -252,12 +262,21 @@ function BookAppointmentContent() {
       appointmentType,
       consultationFee: feeNum,
       notes,
+      /** Required for POST create and PATCH reschedule so Django receives slot times. */
+      slotStartTime: toHhMmSs(selectedSlot.startTime),
+      slotEndTime: toHhMmSs(selectedSlot.endTime),
     };
     if (!editingAppointment) {
       base.patientAccountId = selectedPatient.patient_account_id!.trim();
       base.clinicId = clinicId!.trim();
-      base.slotStartTime = toHhMmSs(selectedSlot.startTime);
-      base.slotEndTime = toHhMmSs(selectedSlot.endTime);
+    } else {
+      const rescheduleClinic =
+        editingAppointment.clinicId?.trim() || clinicId?.trim() || "";
+      if (!rescheduleClinic) {
+        toast.error("Clinic context unavailable. Refresh the page or open the appointment from the list.");
+        return;
+      }
+      base.clinicId = rescheduleClinic;
     }
 
     try {

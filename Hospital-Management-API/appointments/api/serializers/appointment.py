@@ -3,7 +3,6 @@ from datetime import datetime, timedelta
 from django.conf import settings
 from django.db import IntegrityError
 from django.utils import timezone
-from django.utils.timezone import localdate, localtime
 from rest_framework import serializers
 
 from appointments.models import Appointment, AppointmentHistory
@@ -11,9 +10,11 @@ from appointments.utils.booking_validation import (
     MAX_BOOKING_DAYS,
     err_doctor_on_leave,
     err_future_limit_exceeded,
+    err_future_limit_reschedule,
     err_invalid_doctor_clinic,
     err_invalid_profile,
     err_invalid_slot_range,
+    err_invalid_status,
     err_past_time,
     err_slot_conflict,
     err_wrong_patient_account,
@@ -153,7 +154,7 @@ class AppointmentCreateSerializer(serializers.Serializer):
 
 
 class AppointmentCreatedResponseSerializer(serializers.Serializer):
-    """201 response body for appointment create."""
+    """201 create / 200 reschedule — same shape for list refresh."""
 
     def to_representation(self, instance):
         return {
@@ -163,7 +164,47 @@ class AppointmentCreatedResponseSerializer(serializers.Serializer):
             "appointment_date": instance.appointment_date.isoformat(),
             "slot_start_time": instance.slot_start_time.strftime("%H:%M:%S"),
             "status": instance.status,
+            "consultation_mode": instance.consultation_mode,
+            "appointment_type": instance.appointment_type,
+            "consultation_fee": format(instance.consultation_fee, ".2f"),
+            "notes": instance.notes or "",
         }
+
+
+class AppointmentListSerializer(serializers.ModelSerializer):
+    """GET /api/appointments/ — tabbed list rows for helpdesk / patient."""
+
+    patient_name = serializers.SerializerMethodField()
+    doctor_name = serializers.SerializerMethodField()
+    patient_id = serializers.UUIDField(source="patient_profile_id", read_only=True)
+
+    class Meta:
+        model = Appointment
+        fields = [
+            "id",
+            "patient_name",
+            "patient_id",
+            "patient_account_id",
+            "doctor_id",
+            "doctor_name",
+            "clinic_id",
+            "appointment_date",
+            "slot_start_time",
+            "slot_end_time",
+            "status",
+            "consultation_mode",
+            "appointment_type",
+            "consultation_fee",
+            "notes",
+            "check_in_time",
+        ]
+
+    def get_patient_name(self, obj):
+        return obj.patient_profile.get_full_name()
+
+    def get_doctor_name(self, obj):
+        name = getattr(obj.doctor, "get_name", None) or ""
+        return name.strip() if isinstance(name, str) else str(name).strip() or "Doctor"
 
 
 class AppointmentCancelSerializer(serializers.ModelSerializer):
@@ -177,33 +218,154 @@ class AppointmentCancelSerializer(serializers.ModelSerializer):
         return instance
 
 
-class AppointmentRescheduleSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Appointment
-        fields = ["appointment_date", "slot_start_time", "slot_end_time"]
+class AppointmentRescheduleSerializer(serializers.Serializer):
+    """PATCH /api/appointments/<id>/reschedule/ — slot + booking fields (aligned with create)."""
 
-    def validate(self, data):
-        appointment_date = data.get("appointment_date")
-        slot_start_time = data.get("slot_start_time")
-        slot_end_time = data.get("slot_end_time")
+    doctor_id = serializers.PrimaryKeyRelatedField(
+        queryset=doctor.objects.all(),
+        source="doctor",
+    )
+    clinic_id = serializers.PrimaryKeyRelatedField(
+        queryset=Clinic.objects.all(),
+        source="clinic",
+    )
+    appointment_date = serializers.DateField()
+    slot_start_time = serializers.TimeField()
+    slot_end_time = serializers.TimeField()
+    consultation_mode = serializers.ChoiceField(choices=["clinic", "video"], required=False)
+    appointment_type = serializers.ChoiceField(choices=["new", "follow_up"], required=False)
+    consultation_fee = serializers.DecimalField(max_digits=10, decimal_places=2, required=False)
+    notes = serializers.CharField(required=False, allow_blank=True, allow_null=True)
 
-        if not appointment_date or slot_start_time is None or slot_end_time is None:
-            raise serializers.ValidationError(
-                "appointment_date, slot_start_time, and slot_end_time are required."
-            )
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._reschedule_no_op = False
+
+    def validate(self, attrs):
+        self._reschedule_no_op = False
+        instance = self.instance
+        if instance is None:
+            raise serializers.ValidationError("Missing appointment instance.")
+
+        if instance.status != "scheduled":
+            raise serializers.ValidationError({"status": err_invalid_status()})
+
+        attrs.setdefault("consultation_mode", instance.consultation_mode)
+        attrs.setdefault("appointment_type", instance.appointment_type)
+        attrs.setdefault("consultation_fee", instance.consultation_fee)
+        if "notes" not in attrs:
+            attrs["notes"] = instance.notes or ""
+        elif attrs["notes"] is None:
+            attrs["notes"] = ""
+
+        doc = attrs["doctor"]
+        clinic = attrs["clinic"]
+        appointment_date = attrs["appointment_date"]
+        slot_start_time = attrs["slot_start_time"]
+        slot_end_time = attrs["slot_end_time"]
+        consultation_mode = attrs["consultation_mode"]
+        appointment_type = attrs["appointment_type"]
+        consultation_fee = attrs["consultation_fee"]
+        notes = attrs["notes"] or ""
 
         if slot_start_time >= slot_end_time:
             raise serializers.ValidationError({"slot_start_time": err_invalid_slot_range()})
 
-        today = localdate()
-        now_time = localtime().time()
+        fee_unchanged = instance.consultation_fee == consultation_fee
+        notes_unchanged = (instance.notes or "").strip() == notes.strip()
+        if (
+            instance.doctor_id == doc.id
+            and instance.clinic_id == clinic.id
+            and instance.appointment_date == appointment_date
+            and instance.slot_start_time == slot_start_time
+            and instance.slot_end_time == slot_end_time
+            and instance.consultation_mode == consultation_mode
+            and instance.appointment_type == appointment_type
+            and fee_unchanged
+            and notes_unchanged
+        ):
+            self._reschedule_no_op = True
+            return attrs
 
-        if appointment_date < today:
-            raise serializers.ValidationError("Appointment date cannot be in the past.")
-        if appointment_date == today and slot_start_time < now_time:
-            raise serializers.ValidationError("Slot start time cannot be in the past.")
+        tz = timezone.get_current_timezone()
+        appointment_datetime = timezone.make_aware(
+            datetime.combine(appointment_date, slot_start_time),
+            tz,
+        )
+        if appointment_datetime < timezone.now():
+            raise serializers.ValidationError({"appointment_date": err_past_time()})
 
-        return data
+        max_days = int(getattr(settings, "MAX_BOOKING_DAYS", MAX_BOOKING_DAYS))
+        today = timezone.localdate()
+        max_date = today + timedelta(days=max_days)
+        if appointment_date > max_date:
+            raise serializers.ValidationError(
+                {"appointment_date": err_future_limit_reschedule()}
+            )
+
+        if clinic not in doc.clinics.all():
+            raise serializers.ValidationError({"clinic_id": err_invalid_doctor_clinic()})
+
+        request = self.context.get("request")
+        if request and request.user.is_authenticated:
+            hp = getattr(request.user, "helpdesk_profile", None)
+            if hp is not None and clinic.id != hp.clinic_id:
+                raise serializers.ValidationError({"clinic_id": err_invalid_doctor_clinic()})
+
+        active_statuses = ["scheduled", "checked_in", "in_consultation"]
+        if (
+            Appointment.objects.filter(
+                doctor=doc,
+                clinic=clinic,
+                appointment_date=appointment_date,
+                slot_start_time=slot_start_time,
+                status__in=active_statuses,
+            )
+            .exclude(id=instance.id)
+            .exists()
+        ):
+            raise serializers.ValidationError({"slot_start_time": err_slot_conflict()})
+
+        return attrs
+
+    def update(self, instance, validated_data):
+        if self._reschedule_no_op:
+            return instance
+
+        request = self.context["request"]
+        instance.doctor = validated_data["doctor"]
+        instance.clinic = validated_data["clinic"]
+        instance.appointment_date = validated_data["appointment_date"]
+        instance.slot_start_time = validated_data["slot_start_time"]
+        instance.slot_end_time = validated_data["slot_end_time"]
+        instance.consultation_mode = validated_data["consultation_mode"]
+        instance.appointment_type = validated_data["appointment_type"]
+        instance.consultation_fee = validated_data["consultation_fee"]
+        notes_val = validated_data.get("notes")
+        instance.notes = notes_val if notes_val else None
+        instance.updated_by = request.user
+        try:
+            instance.save(
+                update_fields=[
+                    "doctor",
+                    "clinic",
+                    "appointment_date",
+                    "slot_start_time",
+                    "slot_end_time",
+                    "consultation_mode",
+                    "appointment_type",
+                    "consultation_fee",
+                    "notes",
+                    "updated_by",
+                    "updated_at",
+                ]
+            )
+        except IntegrityError:
+            raise serializers.ValidationError({"slot_start_time": err_slot_conflict()})
+        return instance
+
+    def create(self, validated_data):
+        raise NotImplementedError("Reschedule serializer is update-only.")
 
 
 class DoctorAppointmentSerializer(serializers.ModelSerializer):

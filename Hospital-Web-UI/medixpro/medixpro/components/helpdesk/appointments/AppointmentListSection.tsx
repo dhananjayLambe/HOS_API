@@ -54,10 +54,17 @@ export function AppointmentListSection({
 
         <div className="mt-4">
           {isLoading ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p>
+            <div className="space-y-3 py-6" aria-busy>
+              {[0, 1, 2].map((i) => (
+                <div
+                  key={i}
+                  className="h-28 animate-pulse rounded-xl border border-border/60 bg-muted/40"
+                />
+              ))}
+            </div>
           ) : appointments.length === 0 ? (
             <p className="rounded-lg border border-dashed border-border py-10 text-center text-sm text-muted-foreground">
-              No appointments in this tab.
+              No appointments found
             </p>
           ) : (
             <ul className="space-y-3">

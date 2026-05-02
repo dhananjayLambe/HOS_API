@@ -1,15 +1,17 @@
 "use client";
 
-import { format, isAfter, isSameDay, parseISO, startOfDay } from "date-fns";
+import { format } from "date-fns";
 import {
   createContext,
   useCallback,
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
+import { toast } from "sonner";
 
 import type {
   Appointment,
@@ -19,51 +21,18 @@ import type {
   UpdateAppointmentInput,
 } from "@/lib/helpdesk/helpdeskAppointmentTypes";
 import {
-  buildSeedAppointments,
-  mockDelay,
-  MOCK_DOCTOR_UNAVAILABLE,
-  nextAppointmentId,
-} from "@/lib/helpdesk/helpdeskAppointmentMockStore";
-import { createAppointment as postAppointment } from "@/lib/api/appointments";
+  cancelAppointmentRequest,
+  createAppointment as postAppointment,
+  fetchAppointmentDetail,
+  getAppointments,
+  patchRescheduleAppointment,
+  type GetAppointmentsParams,
+} from "@/lib/api/appointments";
+import { mapAppointmentListApiRow } from "@/lib/helpdesk/mapAppointmentListRow";
 import axiosClient from "@/lib/axiosClient";
 
 function todayStr(): string {
   return format(new Date(), "yyyy-MM-dd");
-}
-
-function matchesTab(a: Appointment, tab: AppointmentListTab): boolean {
-  const today = startOfDay(new Date());
-  const d = startOfDay(parseISO(a.appointmentDate));
-
-  switch (tab) {
-    case "today":
-      return isSameDay(d, today) && (a.status === "scheduled" || a.status === "checked_in");
-    case "upcoming":
-      return isAfter(d, today) && a.status === "scheduled";
-    case "completed":
-      return a.status === "completed";
-    case "cancelled":
-      return a.status === "cancelled";
-    default:
-      return false;
-  }
-}
-
-function hasSlotConflict(
-  rows: Appointment[],
-  doctorId: string,
-  date: string,
-  time: string,
-  excludeId?: string
-): boolean {
-  return rows.some(
-    (x) =>
-      x.id !== excludeId &&
-      x.doctorId === doctorId &&
-      x.appointmentDate === date &&
-      x.appointmentTime === time &&
-      (x.status === "scheduled" || x.status === "checked_in")
-  );
 }
 
 export interface HelpdeskAppointmentMockContextValue {
@@ -76,9 +45,16 @@ export interface HelpdeskAppointmentMockContextValue {
   clinicId: string | null;
   listTab: AppointmentListTab;
   setListTab: (t: AppointmentListTab) => void;
+  /** Optional list filters (wired to API when set). */
+  listDoctorId: string;
+  setListDoctorId: (id: string) => void;
+  listDate: string;
+  setListDate: (d: string) => void;
   isLoading: boolean;
   mutationKey: string | null;
   fetchAppointments: () => Promise<void>;
+  /** Load one appointment for reschedule when it is not in the current list tab. */
+  resolveAppointmentForEdit: (id: string) => Promise<Appointment | null>;
   createAppointment: (input: CreateAppointmentInput) => Promise<Appointment>;
   updateAppointment: (input: UpdateAppointmentInput) => Promise<Appointment>;
   cancelAppointment: (id: string) => Promise<void>;
@@ -98,13 +74,16 @@ type HelpdeskContextApi = {
 };
 
 export function HelpdeskAppointmentMockProvider({ children }: { children: ReactNode }) {
-  const [store, setStore] = useState<Appointment[]>(() => buildSeedAppointments());
+  const [listRows, setListRows] = useState<Appointment[]>([]);
   const [listTab, setListTab] = useState<AppointmentListTab>("today");
+  const [listDoctorId, setListDoctorId] = useState("");
+  const [listDate, setListDate] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [mutationKey, setMutationKey] = useState<string | null>(null);
   const [doctors, setDoctors] = useState<MockDoctor[]>([]);
   const [doctorsLoading, setDoctorsLoading] = useState(true);
   const [clinicId, setClinicId] = useState<string | null>(null);
+  const listFetchAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -148,160 +127,245 @@ export function HelpdeskAppointmentMockProvider({ children }: { children: ReactN
     };
   }, []);
 
-  const appointments = useMemo(
-    () => store.filter((a) => matchesTab(a, listTab)),
-    [store, listTab]
-  );
-
   const fetchAppointments = useCallback(async () => {
+    if (doctorsLoading) return;
+
+    listFetchAbortRef.current?.abort();
+    const ac = new AbortController();
+    listFetchAbortRef.current = ac;
+
     setIsLoading(true);
     try {
-      await mockDelay(500, 900);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+      const params: GetAppointmentsParams = { tab: listTab };
+      if (clinicId?.trim()) params.clinic_id = clinicId.trim();
+      if (listDoctorId.trim()) params.doctor_id = listDoctorId.trim();
+      if (listDate.trim()) params.date = listDate.trim();
 
-  const createAppointment = useCallback(async (input: CreateAppointmentInput): Promise<Appointment> => {
-    const {
-      patientAccountId,
-      clinicId: inputClinicId,
-      slotStartTime,
-      slotEndTime,
-    } = input;
+      const res = await getAppointments(params, { signal: ac.signal });
+      if (ac.signal.aborted) return;
 
-    if (
-      !patientAccountId?.trim() ||
-      !inputClinicId?.trim() ||
-      !slotStartTime?.trim() ||
-      !slotEndTime?.trim()
-    ) {
-      throw new Error("MISSING_BOOKING_FIELDS");
-    }
-
-    setMutationKey("create");
-    try {
-      const { data } = await postAppointment({
-        patient_account_id: patientAccountId.trim(),
-        patient_profile_id: input.patientProfileId,
-        doctor_id: input.doctorId,
-        clinic_id: inputClinicId.trim(),
-        appointment_date: input.appointmentDate,
-        slot_start_time: slotStartTime.trim(),
-        slot_end_time: slotEndTime.trim(),
-        consultation_mode: input.consultationMode,
-        appointment_type: input.appointmentType,
-        consultation_fee: input.consultationFee,
-        notes: input.notes ?? "",
-      });
-
-      const startDisplay =
-        data.slot_start_time.length >= 5 ? data.slot_start_time.slice(0, 5) : data.slot_start_time;
-
-      const row: Appointment = {
-        id: String(data.id),
-        patientProfileId: input.patientProfileId,
-        patientName: data.patient_name,
-        doctorId: input.doctorId,
-        doctorName: data.doctor_name,
-        appointmentDate: data.appointment_date,
-        appointmentTime: startDisplay,
-        consultationMode: input.consultationMode,
-        appointmentType: input.appointmentType,
-        consultationFee: input.consultationFee,
-        notes: input.notes,
-        status: (data.status as Appointment["status"]) || "scheduled",
-      };
-
-      setStore((prev) => [...prev, row]);
-      return row;
-    } catch (e) {
-      throw e;
-    } finally {
-      setMutationKey(null);
-    }
-  }, []);
-
-  const updateAppointment = useCallback(async (input: UpdateAppointmentInput): Promise<Appointment> => {
-    setMutationKey("update");
-    await mockDelay(500, 1000);
-
-    let updated: Appointment | undefined;
-    let conflicted = false;
-    let missing = false;
-
-    setStore((prev) => {
-      const exists = prev.some((a) => a.id === input.id);
-      if (!exists) {
-        missing = true;
-        return prev;
+      if (res.status >= 200 && res.status < 300 && Array.isArray(res.data)) {
+        setListRows(res.data.map((row) => mapAppointmentListApiRow(row)));
+      } else {
+        toast.error("Failed to load appointments");
+        setListRows([]);
       }
+    } catch (e: unknown) {
+      const code = (e as { code?: string })?.code;
+      const name = (e as Error)?.name;
+      if (code === "ERR_CANCELED" || name === "CanceledError") return;
+      toast.error("Failed to load appointments");
+      setListRows([]);
+    } finally {
+      if (!ac.signal.aborted) {
+        setIsLoading(false);
+      }
+    }
+  }, [listTab, clinicId, listDoctorId, listDate, doctorsLoading]);
+
+  useEffect(() => {
+    void fetchAppointments();
+  }, [fetchAppointments]);
+
+  const resolveAppointmentForEdit = useCallback(
+    async (lookupId: string): Promise<Appointment | null> => {
+      const hit = listRows.find((x) => x.id === lookupId);
+      if (hit) return hit;
+      const res = await fetchAppointmentDetail(lookupId);
+      const body = res.data;
       if (
-        hasSlotConflict(prev, input.doctorId, input.appointmentDate, input.appointmentTime, input.id)
+        res.status === 200 &&
+        body &&
+        typeof body === "object" &&
+        body.status === "success" &&
+        body.data
       ) {
-        conflicted = true;
-        return prev;
+        return mapAppointmentListApiRow(body.data);
       }
-      return prev.map((a) => {
-        if (a.id !== input.id) return a;
-        updated = {
-          ...a,
+      return null;
+    },
+    [listRows]
+  );
+
+  const createAppointment = useCallback(
+    async (input: CreateAppointmentInput): Promise<Appointment> => {
+      const {
+        patientAccountId,
+        clinicId: inputClinicId,
+        slotStartTime,
+        slotEndTime,
+      } = input;
+
+      if (
+        !patientAccountId?.trim() ||
+        !inputClinicId?.trim() ||
+        !slotStartTime?.trim() ||
+        !slotEndTime?.trim()
+      ) {
+        throw new Error("MISSING_BOOKING_FIELDS");
+      }
+
+      setMutationKey("create");
+      try {
+        const { data } = await postAppointment({
+          patient_account_id: patientAccountId.trim(),
+          patient_profile_id: input.patientProfileId,
+          doctor_id: input.doctorId,
+          clinic_id: inputClinicId.trim(),
+          appointment_date: input.appointmentDate,
+          slot_start_time: slotStartTime.trim(),
+          slot_end_time: slotEndTime.trim(),
+          consultation_mode: input.consultationMode,
+          appointment_type: input.appointmentType,
+          consultation_fee: input.consultationFee,
+          notes: input.notes ?? "",
+        });
+
+        const startDisplay =
+          data.slot_start_time.length >= 5 ? data.slot_start_time.slice(0, 5) : data.slot_start_time;
+
+        const createFeeNum = Number.parseFloat(String(data.consultation_fee ?? input.consultationFee));
+        const row: Appointment = {
+          id: String(data.id),
           patientProfileId: input.patientProfileId,
-          patientName: input.patientName,
+          patientAccountId: patientAccountId.trim(),
+          clinicId: inputClinicId.trim(),
+          patientName: data.patient_name,
           doctorId: input.doctorId,
-          doctorName: input.doctorName,
-          appointmentDate: input.appointmentDate,
-          appointmentTime: input.appointmentTime,
-          consultationMode: input.consultationMode,
-          appointmentType: input.appointmentType,
-          consultationFee: input.consultationFee,
-          notes: input.notes,
+          doctorName: data.doctor_name,
+          appointmentDate: data.appointment_date,
+          appointmentTime: startDisplay,
+          consultationMode: (data.consultation_mode as Appointment["consultationMode"]) ?? input.consultationMode,
+          appointmentType: (data.appointment_type as Appointment["appointmentType"]) ?? input.appointmentType,
+          consultationFee: Number.isFinite(createFeeNum) ? createFeeNum : input.consultationFee,
+          notes: typeof data.notes === "string" ? data.notes : input.notes,
+          status: (data.status as Appointment["status"]) || "scheduled",
         };
-        return updated;
-      });
-    });
 
-    setMutationKey(null);
-    if (missing) throw new Error("NOT_FOUND");
-    if (conflicted) throw new Error("SLOT_CONFLICT");
-    if (!updated) throw new Error("NOT_FOUND");
-    return updated;
-  }, []);
+        await fetchAppointments();
+        return row;
+      } finally {
+        setMutationKey(null);
+      }
+    },
+    [fetchAppointments]
+  );
 
-  const cancelAppointment = useCallback(async (id: string) => {
-    setMutationKey("cancel");
-    await mockDelay(500, 800);
-    setStore((prev) =>
-      prev.map((a) => (a.id === id ? { ...a, status: "cancelled" as const } : a))
-    );
-    setMutationKey(null);
-  }, []);
+  const updateAppointment = useCallback(
+    async (input: UpdateAppointmentInput): Promise<Appointment> => {
+      const clinicId = input.clinicId?.trim();
+      const slotStartTime = input.slotStartTime?.trim();
+      const slotEndTime = input.slotEndTime?.trim();
+      if (!clinicId || !slotStartTime || !slotEndTime) {
+        throw new Error("MISSING_BOOKING_FIELDS");
+      }
 
-  const checkInAppointment = useCallback(async (id: string) => {
-    setMutationKey("checkin");
-    await mockDelay(500, 800);
-    setStore((prev) =>
-      prev.map((a) =>
-        a.id === id && a.status === "scheduled" ? { ...a, status: "checked_in" as const } : a
-      )
-    );
-    setMutationKey(null);
-  }, []);
+      setMutationKey("update");
+      try {
+        const { data } = await patchRescheduleAppointment(input.id, {
+          doctor_id: input.doctorId,
+          clinic_id: clinicId,
+          appointment_date: input.appointmentDate,
+          slot_start_time: slotStartTime,
+          slot_end_time: slotEndTime,
+          consultation_mode: input.consultationMode,
+          appointment_type: input.appointmentType,
+          consultation_fee: input.consultationFee,
+          notes: input.notes ?? "",
+        });
+        const startDisplay =
+          data.slot_start_time.length >= 5 ? data.slot_start_time.slice(0, 5) : data.slot_start_time;
+        const feeNum = Number.parseFloat(String(data.consultation_fee ?? input.consultationFee));
+        const row: Appointment = {
+          id: String(data.id),
+          patientProfileId: input.patientProfileId,
+          patientAccountId: input.patientAccountId?.trim(),
+          clinicId,
+          patientName: data.patient_name,
+          doctorId: input.doctorId,
+          doctorName: data.doctor_name,
+          appointmentDate: data.appointment_date,
+          appointmentTime: startDisplay,
+          consultationMode: (data.consultation_mode as Appointment["consultationMode"]) ?? input.consultationMode,
+          appointmentType: (data.appointment_type as Appointment["appointmentType"]) ?? input.appointmentType,
+          consultationFee: Number.isFinite(feeNum) ? feeNum : input.consultationFee,
+          notes: typeof data.notes === "string" ? data.notes : input.notes,
+          status: (data.status as Appointment["status"]) || "scheduled",
+        };
+        await fetchAppointments();
+        return row;
+      } finally {
+        setMutationKey(null);
+      }
+    },
+    [fetchAppointments]
+  );
+
+  const cancelAppointment = useCallback(
+    async (id: string) => {
+      setMutationKey("cancel");
+      try {
+        const res = await cancelAppointmentRequest(id);
+        if (res.status < 200 || res.status >= 300) {
+          throw new Error("CANCEL_FAILED");
+        }
+        await fetchAppointments();
+      } finally {
+        setMutationKey(null);
+      }
+    },
+    [fetchAppointments]
+  );
+
+  const checkInAppointment = useCallback(
+    async (id: string) => {
+      setMutationKey("checkin");
+      try {
+        const row = listRows.find((a) => a.id === id);
+        if (!row) throw new Error("NOT_FOUND");
+        const clinic = row.clinicId ?? clinicId ?? "";
+        const patientAccountId = row.patientAccountId?.trim();
+        const patientProfileId = row.patientProfileId?.trim();
+        if (!clinic || !patientAccountId || !patientProfileId) {
+          throw new Error("MISSING_CHECKIN_FIELDS");
+        }
+        const { status } = await axiosClient.post("/queue/check-in/", {
+          clinic_id: clinic,
+          doctor_id: row.doctorId,
+          patient_account_id: patientAccountId,
+          patient_profile_id: patientProfileId,
+          appointment_id: id,
+        });
+        if (status < 200 || status >= 300) {
+          throw new Error("CHECKIN_FAILED");
+        }
+        await fetchAppointments();
+      } finally {
+        setMutationKey(null);
+      }
+    },
+    [listRows, clinicId, fetchAppointments]
+  );
 
   const todayIso = useMemo(() => todayStr(), []);
 
   const value = useMemo<HelpdeskAppointmentMockContextValue>(
     () => ({
-      appointments,
-      allAppointments: store,
+      appointments: listRows,
+      allAppointments: listRows,
       doctors,
       doctorsLoading,
       clinicId,
       listTab,
       setListTab,
+      listDoctorId,
+      setListDoctorId,
+      listDate,
+      setListDate,
       isLoading,
       mutationKey,
       fetchAppointments,
+      resolveAppointmentForEdit,
       createAppointment,
       updateAppointment,
       cancelAppointment,
@@ -309,15 +373,17 @@ export function HelpdeskAppointmentMockProvider({ children }: { children: ReactN
       todayIso,
     }),
     [
-      appointments,
-      store,
+      listRows,
       doctors,
       doctorsLoading,
       clinicId,
       listTab,
+      listDoctorId,
+      listDate,
       isLoading,
       mutationKey,
       fetchAppointments,
+      resolveAppointmentForEdit,
       createAppointment,
       updateAppointment,
       cancelAppointment,

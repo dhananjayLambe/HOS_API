@@ -12,6 +12,9 @@ function isCodedFieldError(v: unknown): v is CodedFieldError {
 function messageForCode(code: string, fallbackMessage?: string): string {
   if (code === "SLOT_CONFLICT") return "Slot already booked";
   if (code === "PAST_TIME") return "Cannot book past appointment";
+  if (code === "INVALID_STATUS") {
+    return fallbackMessage ?? "Only scheduled appointments can be rescheduled";
+  }
   if (code === "FUTURE_LIMIT_EXCEEDED") {
     return fallbackMessage ?? "You can only book appointments within 30 days";
   }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -20,7 +20,6 @@ export default function HelpdeskAppointmentsListPage() {
     setListTab,
     isLoading,
     mutationKey,
-    fetchAppointments,
     cancelAppointment,
     checkInAppointment,
   } = useHelpdeskAppointmentsMock();
@@ -29,10 +28,6 @@ export default function HelpdeskAppointmentsListPage() {
   const [cancelOpen, setCancelOpen] = useState(false);
 
   const busy = Boolean(mutationKey);
-
-  useEffect(() => {
-    void fetchAppointments();
-  }, [fetchAppointments]);
 
   const openCancelDialog = useCallback((a: Appointment) => {
     setCancelTarget(a);
@@ -47,7 +42,7 @@ export default function HelpdeskAppointmentsListPage() {
       setCancelOpen(false);
       setCancelTarget(null);
     } catch {
-      toast.error("Could not cancel (mock).");
+      toast.error("Could not cancel appointment.");
     }
   }, [cancelTarget, cancelAppointment]);
 
@@ -57,7 +52,7 @@ export default function HelpdeskAppointmentsListPage() {
         await checkInAppointment(a.id);
         toast.success("Patient checked in");
       } catch {
-        toast.error("Check-in failed (mock).");
+        toast.error("Check-in failed.");
       }
     },
     [checkInAppointment]
@@ -77,7 +72,7 @@ export default function HelpdeskAppointmentsListPage() {
           <div className="space-y-0.5">
             <h1 className="text-xl font-semibold tracking-tight">Appointments</h1>
             <p className="text-sm text-muted-foreground">
-              View and manage bookings. Mock data — Phase A.
+              View and manage bookings for your clinic.
             </p>
           </div>
           <Button asChild className="h-11 w-full shrink-0 sm:w-auto sm:self-center">

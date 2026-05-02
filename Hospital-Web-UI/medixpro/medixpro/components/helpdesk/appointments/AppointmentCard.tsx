@@ -11,6 +11,8 @@ const statusLabel: Record<AppointmentStatus, string> = {
   completed: "Completed",
   cancelled: "Cancelled",
   checked_in: "Checked in",
+  no_show: "No show",
+  in_consultation: "In consultation",
 };
 
 const statusClass: Record<AppointmentStatus, string> = {
@@ -18,6 +20,8 @@ const statusClass: Record<AppointmentStatus, string> = {
   completed: "bg-emerald-500/15 text-emerald-900 dark:text-emerald-100",
   cancelled: "bg-muted text-muted-foreground",
   checked_in: "bg-sky-500/15 text-sky-900 dark:text-sky-100",
+  no_show: "bg-muted text-muted-foreground",
+  in_consultation: "bg-violet-500/15 text-violet-900 dark:text-violet-100",
 };
 
 export interface AppointmentCardProps {

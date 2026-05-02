@@ -6,9 +6,11 @@ from django.conf import settings
 from django.core.cache import cache
 from django.core.paginator import Paginator
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 from django.utils.timezone import localdate, localtime, now, timedelta
 from rest_framework import generics, status
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import UserRateThrottle
@@ -20,6 +22,7 @@ from appointments.api.serializers import (
     AppointmentCreatedResponseSerializer,
     AppointmentCreateSerializer,
     AppointmentHistorySerializer,
+    AppointmentListSerializer,
     AppointmentRescheduleSerializer,
     AppointmentSerializer,
     AppointmentStatusUpdateSerializer,
@@ -47,12 +50,108 @@ logger = logging.getLogger(__name__)
 IST = ZoneInfo("Asia/Kolkata")
 CACHE_TIMEOUT = 300
 
+APPOINTMENT_LIST_TABS = frozenset({"today", "upcoming", "completed", "cancelled"})
+CANCELLED_LIKE_STATUSES = ("cancelled", "no_show")
 
-class AppointmentCreateView(generics.CreateAPIView):
+
+class AppointmentListView(generics.ListCreateAPIView):
+    """
+    GET /api/appointments/ — tabbed, filterable list for helpdesk UI.
+    POST /api/appointments/ — create appointment (unchanged contract).
+    """
+
     permission_classes = [IsAuthenticated, IsHelpdeskOrPatient]
     authentication_classes = [JWTAuthentication]
-    queryset = Appointment.objects.all()
-    serializer_class = AppointmentCreateSerializer
+    queryset = Appointment.objects.none()
+    pagination_class = None
+
+    def get_serializer_class(self):
+        if self.request.method == "POST":
+            return AppointmentCreateSerializer
+        return AppointmentListSerializer
+
+    def get_queryset(self):
+        request = self.request
+        user = request.user
+        qs = Appointment.objects.select_related(
+            "patient_profile",
+            "doctor__user",
+            "clinic",
+            "patient_account__user",
+        )
+
+        if user.is_superuser:
+            pass
+        elif user.groups.filter(name="patient").exists():
+            qs = qs.filter(patient_account__user=user)
+        elif user.groups.filter(name__in=["helpdesk", "helpdesk_admin"]).exists():
+            hp = getattr(user, "helpdesk_profile", None)
+            if hp is None:
+                raise PermissionDenied("No helpdesk clinic assignment for this user.")
+            qs = qs.filter(clinic_id=hp.clinic_id)
+            clinic_param = request.query_params.get("clinic_id")
+            if clinic_param and str(hp.clinic_id) != str(clinic_param):
+                raise ValidationError(
+                    {"clinic_id": "Does not match your assigned clinic."},
+                )
+        else:
+            return Appointment.objects.none()
+
+        tab = request.query_params.get("tab") or "today"
+        if tab not in APPOINTMENT_LIST_TABS:
+            raise ValidationError(
+                {"tab": f"Invalid tab. Allowed: {', '.join(sorted(APPOINTMENT_LIST_TABS))}."},
+            )
+
+        today = localdate()
+        non_cancelled = ~Q(status__in=CANCELLED_LIKE_STATUSES)
+
+        if tab == "today":
+            qs = qs.filter(appointment_date=today).filter(non_cancelled)
+        elif tab == "upcoming":
+            qs = qs.filter(appointment_date__gt=today).filter(non_cancelled)
+        elif tab == "completed":
+            qs = qs.filter(status="completed")
+        elif tab == "cancelled":
+            qs = qs.filter(status__in=CANCELLED_LIKE_STATUSES)
+
+        doctor_id = request.query_params.get("doctor_id")
+        if doctor_id:
+            qs = qs.filter(doctor_id=doctor_id)
+
+        clinic_id = request.query_params.get("clinic_id")
+        if clinic_id:
+            qs = qs.filter(clinic_id=clinic_id)
+
+        date_str = request.query_params.get("date")
+        if date_str:
+            try:
+                exact_date = timezone.datetime.strptime(date_str, "%Y-%m-%d").date()
+            except ValueError:
+                raise ValidationError({"date": "Invalid date. Use YYYY-MM-DD."})
+            qs = qs.filter(appointment_date=exact_date)
+
+        status_override = request.query_params.get("status")
+        if status_override:
+            qs = qs.filter(status=status_override)
+
+        if tab in ("completed", "cancelled"):
+            qs = qs.order_by("-appointment_date", "-slot_start_time")
+        else:
+            qs = qs.order_by("appointment_date", "slot_start_time")
+
+        return qs
+
+    def list(self, request, *args, **kwargs):
+        tab = request.query_params.get("tab") or "today"
+        logger.info(
+            "appointment_list tab=%s doctor_id=%s clinic_id=%s user_id=%s",
+            tab,
+            request.query_params.get("doctor_id"),
+            request.query_params.get("clinic_id"),
+            getattr(request.user, "id", None),
+        )
+        return super().list(request, *args, **kwargs)
 
     @transaction.atomic
     def create(self, request, *args, **kwargs):
@@ -71,6 +170,10 @@ class AppointmentCreateView(generics.CreateAPIView):
         )
         body = AppointmentCreatedResponseSerializer().to_representation(appointment)
         return Response(body, status=status.HTTP_201_CREATED)
+
+
+# Backward compatibility for imports and URL name.
+AppointmentCreateView = AppointmentListView
 
 
 class AppointmentDetailView(generics.GenericAPIView):
@@ -96,9 +199,9 @@ class AppointmentDetailView(generics.GenericAPIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        serializer = self.get_serializer(appointment)
+        body = AppointmentListSerializer(appointment).data
         return Response(
-            {"status": "success", "message": "Appointment fetched successfully", "data": serializer.data},
+            {"status": "success", "message": "Appointment fetched successfully", "data": body},
             status=status.HTTP_200_OK,
         )
 
@@ -156,58 +259,59 @@ class AppointmentCancelView(APIView):
 
 
 class AppointmentRescheduleView(APIView):
-    permission_classes = [IsAuthenticated, IsDoctorOrHelpdeskOrPatient]
+    """PATCH /api/appointments/<id>/reschedule/ — slot-based reschedule (helpdesk / patient)."""
+
+    permission_classes = [IsAuthenticated, IsHelpdeskOrPatient]
     authentication_classes = [JWTAuthentication]
 
-    @transaction.atomic
-    def patch(self, request):
-        appointment_id = request.data.get("id")
-        if not appointment_id:
-            return Response(
-                {"status": "error", "message": "Appointment ID is required.", "data": None},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+    def _get_reschedule_appointment(self, request, pk):
+        user = request.user
+        qs = Appointment.objects.select_related(
+            "doctor",
+            "clinic",
+            "patient_profile",
+            "patient_account",
+        )
+        if user.is_superuser:
+            return qs.get(id=pk)
+        if user.groups.filter(name="patient").exists():
+            return qs.get(id=pk, patient_account__user=user)
+        if user.groups.filter(name__in=["helpdesk", "helpdesk_admin"]).exists():
+            hp = getattr(user, "helpdesk_profile", None)
+            if hp is None:
+                raise PermissionDenied("No helpdesk clinic assignment for this user.")
+            return qs.get(id=pk, clinic_id=hp.clinic_id)
+        raise PermissionDenied("You do not have permission to reschedule this appointment.")
 
+    @transaction.atomic
+    def patch(self, request, pk):
         try:
-            appointment = Appointment.objects.select_related("doctor", "clinic", "patient_profile", "patient_account").get(
-                id=appointment_id, status="scheduled"
-            )
+            appointment = self._get_reschedule_appointment(request, pk)
         except Appointment.DoesNotExist:
-            logger.warning("Attempt to reschedule non-existing or modified appointment: %s", appointment_id)
+            logger.warning("Reschedule: appointment not found or out of scope pk=%s", pk)
             return Response(
-                {"status": "error", "message": "Appointment not found or already modified.", "data": None},
+                {"detail": "Not found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
+        except PermissionDenied as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_403_FORBIDDEN)
 
-        serializer = AppointmentRescheduleSerializer(appointment, data=request.data, partial=True)
-        if not serializer.is_valid():
-            logger.warning("Reschedule validation failed for appointment %s: %s", appointment_id, serializer.errors)
-            return Response(
-                {"status": "error", "message": "Validation failed.", "data": serializer.errors},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        try:
-            serializer.save(updated_at=now())
+        serializer = AppointmentRescheduleSerializer(
+            appointment,
+            data=request.data,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+        instance = serializer.save()
+        if not serializer._reschedule_no_op:
             log_appointment_history(
-                appointment=appointment,
-                status="rescheduled",
+                appointment=instance,
+                status="scheduled",
                 changed_by=request.user,
-                comment=(
-                    f"Rescheduled to {serializer.validated_data.get('appointment_date')} "
-                    f"{serializer.validated_data.get('slot_start_time')}"
-                ),
+                comment="Rescheduled",
             )
-            return Response(
-                {"status": "success", "message": "Appointment rescheduled successfully.", "data": serializer.data},
-                status=status.HTTP_200_OK,
-            )
-        except Exception as exc:
-            logger.error("Failed to reschedule appointment %s: %s", appointment_id, str(exc))
-            return Response(
-                {"status": "error", "message": "Something went wrong during rescheduling.", "data": str(exc)},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
+        body = AppointmentCreatedResponseSerializer().to_representation(instance)
+        return Response(body, status=status.HTTP_200_OK)
 
 
 class DoctorAppointmentsView(generics.GenericAPIView):
