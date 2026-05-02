@@ -72,6 +72,7 @@ export type UpdateAppointmentInput = CreateAppointmentInput & { id: string };
 
 export interface FetchSlotsParams {
   doctorId: string;
+  clinicId: string;
   /** yyyy-MM-dd */
   date: string;
 }

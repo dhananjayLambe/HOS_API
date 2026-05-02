@@ -30,6 +30,8 @@ export interface AppointmentSlotGridProps {
   onSelectionInvalidInBucket?: () => void;
   isLoading?: boolean;
   errorMessage?: string | null;
+  /** Shown when `slots.length === 0` (e.g. backend message for closed day / no schedule). */
+  emptySlotsDescription?: string | null;
   disabled?: boolean;
   className?: string;
 }
@@ -58,6 +60,7 @@ export function AppointmentSlotGrid({
   onSelectionInvalidInBucket,
   isLoading,
   errorMessage,
+  emptySlotsDescription,
   disabled,
   className,
 }: AppointmentSlotGridProps) {
@@ -113,10 +116,11 @@ export function AppointmentSlotGrid({
   }
 
   if (slots.length === 0) {
+    const emptyCopy =
+      emptySlotsDescription?.trim() ||
+      "No slots for this selection. Pick another doctor or date.";
     return (
-      <p className={cn("py-6 text-center text-sm text-muted-foreground", className)}>
-        No slots for this selection. Pick another doctor or date.
-      </p>
+      <p className={cn("py-6 text-center text-sm text-muted-foreground", className)}>{emptyCopy}</p>
     );
   }
 

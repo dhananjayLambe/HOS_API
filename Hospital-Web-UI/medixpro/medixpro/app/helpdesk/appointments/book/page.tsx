@@ -41,6 +41,7 @@ function BookAppointmentContent() {
   const searchParams = useSearchParams();
   const {
     doctors,
+    doctorsLoading,
     clinicId,
     mutationKey,
     createAppointment,
@@ -49,8 +50,6 @@ function BookAppointmentContent() {
     todayIso,
   } = useHelpdeskAppointmentsMock();
 
-  const { slots, fetchSlots, isLoadingSlots, slotsError } = useHelpdeskAppointmentSlots();
-
   const [selectedPatient, setSelectedPatient] = useState<HelpdeskSearchPatient | null>(null);
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
   const [showPostSubmitActions, setShowPostSubmitActions] = useState(false);
@@ -58,6 +57,18 @@ function BookAppointmentContent() {
   const [doctorId, setDoctorId] = useState("");
   const [selectedDate, setSelectedDate] = useState(todayIso);
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
+
+  const { slots, isLoadingSlots, slotsError, slotsEmptyHint, refetch: refetchSlots } =
+    useHelpdeskAppointmentSlots({
+      doctorId,
+      clinicId: clinicId ?? "",
+      date: selectedDate,
+    });
+
+  const slotGridEmptyHint =
+    !doctorsLoading && doctorId && !clinicId?.trim()
+      ? "Clinic context is missing, so slots cannot load. Refresh the page or verify your helpdesk clinic assignment."
+      : slotsEmptyHint;
 
   const [consultationMode, setConsultationMode] = useState<ConsultationMode>("clinic");
   const [appointmentType, setAppointmentType] = useState<AppointmentKind>("new");
@@ -122,13 +133,6 @@ function BookAppointmentContent() {
       setDoctorId(defaultDoctorId);
     }
   }, [defaultDoctorId, doctorId]);
-
-  useEffect(() => {
-    if (!doctorId || doctorId === MOCK_DOCTOR_UNAVAILABLE_ID) {
-      return;
-    }
-    void fetchSlots({ doctorId, date: selectedDate });
-  }, [doctorId, selectedDate, fetchSlots]);
 
   useEffect(() => {
     if (!selectedPatient) return;
@@ -260,6 +264,7 @@ function BookAppointmentContent() {
       if (editingAppointment) {
         await updateAppointment({ ...base, id: editingAppointment.id });
         toast.success("Appointment updated");
+        await refetchSlots();
         persistLastDoctor(doctorId);
         setEditingAppointment(null);
         resetFormForCreate();
@@ -268,6 +273,7 @@ function BookAppointmentContent() {
       } else {
         await createAppointment(base);
         toast.success("Appointment booked successfully");
+        await refetchSlots();
         persistLastDoctor(doctorId);
         resetFormForCreate();
         setShowPostSubmitActions(true);
@@ -301,6 +307,7 @@ function BookAppointmentContent() {
     persistLastDoctor,
     resetFormForCreate,
     router,
+    refetchSlots,
   ]);
 
   return (
@@ -333,6 +340,7 @@ function BookAppointmentContent() {
           <AppointmentBookingPanel
             mode={editingAppointment ? "edit" : "create"}
             doctors={doctors}
+            doctorsLoading={doctorsLoading}
             doctorId={doctorId}
             onDoctorIdChange={(id) => {
               setDoctorId(id);
@@ -346,6 +354,7 @@ function BookAppointmentContent() {
             slots={slots}
             isLoadingSlots={isLoadingSlots}
             slotsError={slotsError}
+            slotsEmptyHint={slotGridEmptyHint}
             selectedSlotId={selectedSlotId}
             onSelectSlot={(slot: Slot) => {
               if (slot.state !== "available") return;

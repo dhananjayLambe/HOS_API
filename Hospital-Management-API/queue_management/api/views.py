@@ -395,21 +395,32 @@ class HelpdeskQueueContextAPIView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
         clinic = hp.clinic
-        doctor_ids = list(
+        doctors_qs = (
             DoctorModel.objects.filter(clinics__id=clinic.id, is_approved=True)
-            .values_list("id", flat=True)
+            .select_related("user")
             .distinct()
+            .order_by("user__first_name", "user__last_name")
         )
+        doctor_ids = list(doctors_qs.values_list("id", flat=True))
         if not doctor_ids:
             return Response(
                 {"detail": "No approved doctor is currently assigned to this clinic."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        doctors_payload = [
+            {
+                "id": str(d.id),
+                "name": (d.get_name or "").strip() or "Doctor",
+                "specialization": (d.primary_specialization or "").strip(),
+            }
+            for d in doctors_qs
+        ]
         return Response(
             {
                 "clinic_id": str(clinic.id),
                 "doctor_id": str(doctor_ids[0]),
                 "doctor_ids": [str(did) for did in doctor_ids],
+                "doctors": doctors_payload,
             },
             status=status.HTTP_200_OK,
         )

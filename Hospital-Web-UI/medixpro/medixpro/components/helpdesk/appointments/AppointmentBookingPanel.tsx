@@ -1,5 +1,7 @@
 "use client";
 
+import { Loader2 } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import { AppointmentDateStrip } from "@/components/helpdesk/appointments/AppointmentDateStrip";
 import { AppointmentDetailsForm } from "@/components/helpdesk/appointments/AppointmentDetailsForm";
@@ -16,6 +18,8 @@ import { cn } from "@/lib/utils";
 export interface AppointmentBookingPanelProps {
   mode: "create" | "edit";
   doctors: MockDoctor[];
+  /** GET /queue/helpdesk/context/ still loading. */
+  doctorsLoading?: boolean;
   doctorId: string;
   onDoctorIdChange: (id: string) => void;
   selectedDate: string;
@@ -23,6 +27,8 @@ export interface AppointmentBookingPanelProps {
   slots: Slot[];
   isLoadingSlots: boolean;
   slotsError: string | null;
+  /** Explains zero slots after a successful API response (e.g. closed weekday). */
+  slotsEmptyHint?: string | null;
   selectedSlotId: string | null;
   onSelectSlot: (slot: Slot) => void;
   onClearSlotSelection?: () => void;
@@ -43,6 +49,7 @@ export interface AppointmentBookingPanelProps {
 export function AppointmentBookingPanel({
   mode,
   doctors,
+  doctorsLoading = false,
   doctorId,
   onDoctorIdChange,
   selectedDate,
@@ -50,6 +57,7 @@ export function AppointmentBookingPanel({
   slots,
   isLoadingSlots,
   slotsError,
+  slotsEmptyHint = null,
   selectedSlotId,
   onSelectSlot,
   onClearSlotSelection,
@@ -68,6 +76,10 @@ export function AppointmentBookingPanel({
 }: AppointmentBookingPanelProps) {
   const busy = isSubmitting || actionBlocked;
   const noAvailableSlots = slots.length > 0 && !slots.some((s) => s.state === "available");
+  const hasDoctor = Boolean(doctorId?.trim());
+  const showSlotGrid = !doctorsLoading && doctors.length > 0 && hasDoctor;
+  const showSelectDoctorHint = !doctorsLoading && doctors.length > 0 && !hasDoctor;
+  const showNoDoctors = !doctorsLoading && doctors.length === 0;
 
   return (
     <section className="space-y-4">
@@ -85,9 +97,10 @@ export function AppointmentBookingPanel({
       <div className="rounded-xl border border-border/80 bg-card p-4 shadow-sm space-y-4">
         <HelpdeskDoctorSelect
           doctors={doctors}
-          value={doctorId}
+          value={doctorId || undefined}
           onValueChange={onDoctorIdChange}
           disabled={busy}
+          loading={doctorsLoading}
         />
 
         <AppointmentDateStrip
@@ -96,17 +109,33 @@ export function AppointmentBookingPanel({
           disabled={busy}
         />
 
-        <AppointmentSlotGrid
-          key={`${doctorId}-${selectedDate}`}
-          slots={slots}
-          selectedDateIso={selectedDate}
-          selectedSlotId={selectedSlotId}
-          onSelectSlot={onSelectSlot}
-          onSelectionInvalidInBucket={onClearSlotSelection}
-          isLoading={isLoadingSlots}
-          errorMessage={slotsError}
-          disabled={busy}
-        />
+        {doctorsLoading ? (
+          <div className="flex min-h-[120px] items-center justify-center gap-2 py-8">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            <span className="text-sm text-muted-foreground">Loading clinic doctors…</span>
+          </div>
+        ) : showNoDoctors ? (
+          <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-4 text-sm text-amber-900 dark:text-amber-100">
+            No approved doctors are assigned to your clinic. You cannot book until a doctor is linked.
+          </p>
+        ) : showSelectDoctorHint ? (
+          <p className="rounded-lg border border-dashed border-border bg-muted/20 px-3 py-6 text-center text-sm text-muted-foreground">
+            Select a doctor first — then available time slots will load for the chosen date.
+          </p>
+        ) : (
+          <AppointmentSlotGrid
+            key={`${doctorId}-${selectedDate}`}
+            slots={slots}
+            selectedDateIso={selectedDate}
+            selectedSlotId={selectedSlotId}
+            onSelectSlot={onSelectSlot}
+            onSelectionInvalidInBucket={onClearSlotSelection}
+            isLoading={isLoadingSlots}
+            errorMessage={slotsError}
+            emptySlotsDescription={slotsEmptyHint}
+            disabled={busy}
+          />
+        )}
 
         <AppointmentDetailsForm
           consultationMode={consultationMode}
@@ -132,8 +161,16 @@ export function AppointmentBookingPanel({
             type="button"
             className="h-12 w-full text-base font-semibold"
             onClick={onSubmit}
-            disabled={busy || noAvailableSlots}
-            title={noAvailableSlots ? "No open slots for this doctor and date" : undefined}
+            disabled={busy || noAvailableSlots || !showSlotGrid}
+            title={
+              !showSlotGrid
+                ? doctors.length === 0
+                  ? "No doctors available for this clinic"
+                  : "Select a doctor and time slot"
+                : noAvailableSlots
+                  ? "No open slots for this doctor and date"
+                  : undefined
+            }
           >
             {isSubmitting
               ? "Please wait…"

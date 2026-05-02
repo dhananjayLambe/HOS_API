@@ -1184,6 +1184,7 @@ class WorkingHoursDaySerializer(serializers.Serializer):
     day = serializers.CharField(required=True)
     is_working = serializers.BooleanField(default=True)
     morning = serializers.DictField(required=False, allow_null=True)
+    afternoon = serializers.DictField(required=False, allow_null=True)
     evening = serializers.DictField(required=False, allow_null=True)
     night = serializers.DictField(required=False, allow_null=True)
     breaks = serializers.ListField(
@@ -1209,6 +1210,17 @@ class WorkingHoursDaySerializer(serializers.Serializer):
                         'morning': 'Start time must be before end time'
                     })
         
+        # Validate afternoon slot
+        afternoon = data.get('afternoon')
+        if afternoon:
+            start = afternoon.get('start')
+            end = afternoon.get('end')
+            if start and end:
+                if start >= end:
+                    raise serializers.ValidationError({
+                        'afternoon': 'Start time must be before end time'
+                    })
+
         # Validate evening slot
         evening = data.get('evening')
         if evening:

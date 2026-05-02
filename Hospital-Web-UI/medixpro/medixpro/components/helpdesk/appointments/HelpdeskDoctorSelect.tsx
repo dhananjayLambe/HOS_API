@@ -13,9 +13,12 @@ import { cn } from "@/lib/utils";
 
 interface HelpdeskDoctorSelectProps {
   doctors: MockDoctor[];
-  value: string;
+  /** Use undefined when none selected so the placeholder shows (Radix Select). */
+  value: string | undefined;
   onValueChange: (doctorId: string) => void;
   disabled?: boolean;
+  /** Helpdesk clinic doctors are loading from context API. */
+  loading?: boolean;
   className?: string;
 }
 
@@ -24,14 +27,16 @@ export function HelpdeskDoctorSelect({
   value,
   onValueChange,
   disabled,
+  loading,
   className,
 }: HelpdeskDoctorSelectProps) {
+  const busy = Boolean(disabled || loading);
   return (
     <div className={cn("space-y-2", className)}>
       <Label htmlFor="helpdesk-doctor">Doctor</Label>
-      <Select value={value} onValueChange={onValueChange} disabled={disabled}>
+      <Select value={value} onValueChange={onValueChange} disabled={busy}>
         <SelectTrigger id="helpdesk-doctor" className="h-11 w-full">
-          <SelectValue placeholder="Select doctor" />
+          <SelectValue placeholder={loading ? "Loading doctors…" : "Select doctor"} />
         </SelectTrigger>
         <SelectContent>
           {doctors.map((d) => (

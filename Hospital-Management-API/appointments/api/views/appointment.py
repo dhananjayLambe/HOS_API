@@ -1,10 +1,11 @@
+import calendar
 import logging
 from zoneinfo import ZoneInfo
 
+from django.conf import settings
 from django.core.cache import cache
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.timezone import localdate, localtime, now, timedelta
 from rest_framework import generics, status
@@ -30,8 +31,17 @@ from appointments.api.serializers import (
 )
 from appointments.models import Appointment, AppointmentHistory
 from appointments.utils.history import log_appointment_history
+from appointments.utils.booking_validation import MAX_BOOKING_DAYS as DEFAULT_MAX_BOOKING_DAYS
+from appointments.utils.default_doctor_availability import ensure_doctor_availability
+from appointments.utils.slot_generation import (
+    format_slot_time,
+    generate_slots,
+    ordered_day_windows,
+    parse_time_string,
+    slot_bucket_counts,
+)
 from clinic.models import Clinic
-from doctor.models import DoctorAvailability, DoctorLeave, doctor
+from doctor.models import DoctorLeave, doctor
 
 logger = logging.getLogger(__name__)
 IST = ZoneInfo("Asia/Kolkata")
@@ -185,7 +195,7 @@ class AppointmentRescheduleView(APIView):
                 changed_by=request.user,
                 comment=(
                     f"Rescheduled to {serializer.validated_data.get('appointment_date')} "
-                    f"{serializer.validated_data.get('appointment_time')}"
+                    f"{serializer.validated_data.get('slot_start_time')}"
                 ),
             )
             return Response(
@@ -247,7 +257,7 @@ class DoctorAppointmentsView(generics.GenericAPIView):
         if payment_status is not None:
             queryset = queryset.filter(payment_status=payment_status)
 
-        if sort_by in ["appointment_date", "appointment_time", "clinic_name"]:
+        if sort_by in ["appointment_date", "slot_start_time", "clinic_name"]:
             queryset = queryset.order_by(sort_by)
 
         paginator = Paginator(queryset, page_size)
@@ -332,7 +342,36 @@ class PatientAppointmentsView(generics.GenericAPIView):
 
 
 class DoctorSlotThrottle(UserRateThrottle):
-    rate = "10/min"
+    scope = "appointment_slots"
+
+
+def _availability_entry_day_raw(entry: dict) -> str:
+    raw = entry.get("day")
+    if raw is None:
+        return ""
+    return str(raw).strip().lower()
+
+
+# Map short / alternate labels to calendar.day_name values (all lowercase).
+_DAY_ABBREV_TO_FULL = {
+    "sun": "sunday",
+    "mon": "monday",
+    "tue": "tuesday",
+    "tues": "tuesday",
+    "wed": "wednesday",
+    "thu": "thursday",
+    "thur": "thursday",
+    "thurs": "thursday",
+    "fri": "friday",
+    "sat": "saturday",
+}
+
+
+def _normalize_weekday_name(token: str) -> str:
+    t = (token or "").strip().lower()
+    if not t:
+        return ""
+    return _DAY_ABBREV_TO_FULL.get(t, t)
 
 
 class AppointmentSlotView(APIView):
@@ -353,112 +392,195 @@ class AppointmentSlotView(APIView):
                 )
 
             try:
-                date = timezone.datetime.strptime(date_str, "%Y-%m-%d").date()
+                target_date = timezone.datetime.strptime(date_str, "%Y-%m-%d").date()
             except ValueError:
                 return Response(
                     {"status": "error", "message": "Invalid date format. Use YYYY-MM-DD.", "data": None},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            cache_key = f"slots_{doctor_id}_{clinic_id}_{date_str}"
-            cached_data = cache.get(cache_key)
-            if cached_data:
+            today = timezone.localdate()
+            if target_date < today:
                 return Response(
-                    {"status": "success", "message": "Slots fetched from cache.", "data": cached_data},
-                    status=status.HTTP_200_OK,
+                    {"status": "error", "message": "Date cannot be in the past.", "data": None},
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            doctor_obj = get_object_or_404(doctor, id=doctor_id)
-            clinic = get_object_or_404(Clinic, id=clinic_id)
+            max_days = int(getattr(settings, "MAX_BOOKING_DAYS", DEFAULT_MAX_BOOKING_DAYS))
+            if target_date > today + timedelta(days=max_days):
+                return Response(
+                    {
+                        "status": "error",
+                        "message": f"Date must be within {max_days} days from today.",
+                        "data": None,
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            try:
+                doctor_obj = doctor.objects.get(id=doctor_id)
+            except doctor.DoesNotExist:
+                return Response(
+                    {"status": "error", "message": "Doctor not found.", "data": None},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            try:
+                clinic = Clinic.objects.get(id=clinic_id)
+            except Clinic.DoesNotExist:
+                return Response(
+                    {"status": "error", "message": "Clinic not found.", "data": None},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            if not doctor_obj.clinics.filter(id=clinic.id).exists():
+                return Response(
+                    {"status": "error", "message": "Doctor is not associated with this clinic.", "data": None},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
             is_on_leave = DoctorLeave.objects.filter(
                 doctor=doctor_obj,
                 clinic=clinic,
-                start_date__lte=date,
-                end_date__gte=date,
+                start_date__lte=target_date,
+                end_date__gte=target_date,
             ).exists()
 
-            availability = DoctorAvailability.objects.filter(doctor=doctor_obj, clinic=clinic).first()
+            availability, availability_bootstrapped = ensure_doctor_availability(doctor_obj, clinic)
 
-            if not availability:
+            # English weekday name only — strftime("%A") follows server locale and may not match JSON "monday".
+            weekday = calendar.day_name[target_date.weekday()].lower()
+
+            availability_days = availability.availability
+            if not isinstance(availability_days, list) or len(availability_days) == 0:
                 return Response(
-                    {"status": "error", "message": "Doctor availability not configured for this clinic.", "data": None},
-                    status=status.HTTP_404_NOT_FOUND,
+                    {
+                        "status": "success",
+                        "message": "Doctor availability data is invalid. Contact support.",
+                        "data": {
+                            "date": date_str,
+                            "doctor_id": str(doctor_id),
+                            "clinic_id": str(clinic_id),
+                            "slots": [],
+                            "summary": {"morning": 0, "afternoon": 0, "evening": 0},
+                            "meta": {
+                                "day_name": weekday.capitalize(),
+                                "is_on_leave": is_on_leave,
+                                "reason": "availability_invalid",
+                            },
+                        },
+                    },
+                    status=status.HTTP_200_OK,
                 )
 
-            weekday = date.strftime("%A").lower()
             day_availability = next(
-                (entry for entry in availability.availability if entry.get("day", "").lower() == weekday),
+                (
+                    entry
+                    for entry in availability_days
+                    if isinstance(entry, dict)
+                    and _normalize_weekday_name(_availability_entry_day_raw(entry)) == weekday
+                ),
                 None,
             )
 
             if not day_availability:
                 return Response(
-                    {"status": "error", "message": f"Doctor is not available on {weekday}.", "data": None},
-                    status=status.HTTP_404_NOT_FOUND,
+                    {
+                        "status": "success",
+                        "message": f"Doctor is not available on {weekday}.",
+                        "data": {
+                            "date": date_str,
+                            "doctor_id": str(doctor_id),
+                            "clinic_id": str(clinic_id),
+                            "slots": [],
+                            "summary": {"morning": 0, "afternoon": 0, "evening": 0},
+                            "meta": {
+                                "day_name": weekday.capitalize(),
+                                "is_on_leave": is_on_leave,
+                                "reason": "closed_weekday",
+                            },
+                        },
+                    },
+                    status=status.HTTP_200_OK,
                 )
 
-            def generate_slots(start_time_str, end_time_str):
-                slots = []
-                if not start_time_str or not end_time_str:
-                    return slots
+            if isinstance(day_availability, dict) and day_availability.get("is_working") is False:
+                return Response(
+                    {
+                        "status": "success",
+                        "message": "Doctor is not scheduled to work on this day.",
+                        "data": {
+                            "date": date_str,
+                            "doctor_id": str(doctor_id),
+                            "clinic_id": str(clinic_id),
+                            "slots": [],
+                            "summary": {"morning": 0, "afternoon": 0, "evening": 0},
+                            "meta": {
+                                "day_name": weekday.capitalize(),
+                                "is_on_leave": is_on_leave,
+                                "reason": "not_working_day",
+                            },
+                        },
+                    },
+                    status=status.HTTP_200_OK,
+                )
 
-                try:
-                    start_time = timezone.datetime.strptime(start_time_str, "%H:%M:%S").time()
-                    end_time = timezone.datetime.strptime(end_time_str, "%H:%M:%S").time()
-                except ValueError:
-                    return slots
+            duration = max(1, int(availability.slot_duration or 0))
+            buffer_min = max(0, int(availability.buffer_time or 0))
 
-                start = timezone.make_aware(timezone.datetime.combine(date, start_time))
-                end = timezone.make_aware(timezone.datetime.combine(date, end_time))
-                current = start
-                duration = availability.slot_duration
-                buffer = availability.buffer_time
+            flat_slots = []
+            for start_str, end_str in ordered_day_windows(day_availability):
+                ws = parse_time_string(start_str)
+                we = parse_time_string(end_str)
+                if not ws or not we:
+                    continue
+                for slot in generate_slots(target_date, ws, we, duration, buffer_min):
+                    flat_slots.append(slot)
 
-                while current + timedelta(minutes=duration) <= end:
-                    slot_end = current + timedelta(minutes=duration)
-                    is_booked = Appointment.objects.filter(
-                        doctor=doctor_obj,
-                        clinic=clinic,
-                        appointment_date=date,
-                        appointment_time=current.time(),
-                        status="scheduled",
-                    ).exists()
+            booked_times = set(
+                Appointment.objects.filter(
+                    doctor_id=doctor_id,
+                    clinic_id=clinic_id,
+                    appointment_date=target_date,
+                    status__in=["scheduled", "checked_in", "in_consultation"],
+                ).values_list("slot_start_time", flat=True)
+            )
 
-                    slots.append(
-                        {
-                            "start_time": current.strftime("%H:%M:%S"),
-                            "end_time": slot_end.strftime("%H:%M:%S"),
-                            "available": not is_booked and not is_on_leave,
-                        }
-                    )
-                    current = slot_end + timedelta(minutes=buffer)
-                return slots
+            out_slots = []
+            for slot in flat_slots:
+                st = slot["start_time"]
+                et = slot["end_time"]
+                if is_on_leave:
+                    slot_status = "blocked"
+                elif st in booked_times:
+                    slot_status = "booked"
+                else:
+                    slot_status = "available"
+                out_slots.append(
+                    {
+                        "start_time": format_slot_time(st),
+                        "end_time": format_slot_time(et),
+                        "status": slot_status,
+                    }
+                )
 
-            slots = {
-                "morning": generate_slots(day_availability.get("morning_start"), day_availability.get("morning_end")),
-                "afternoon": generate_slots(
-                    day_availability.get("afternoon_start"),
-                    day_availability.get("afternoon_end"),
-                ),
-                "evening": generate_slots(day_availability.get("evening_start"), day_availability.get("evening_end")),
-                "night": generate_slots(day_availability.get("night_start"), day_availability.get("night_end")),
-            }
+            summary = slot_bucket_counts([s["start_time"] for s in flat_slots])
 
             response_data = {
+                "date": date_str,
                 "doctor_id": str(doctor_id),
                 "clinic_id": str(clinic_id),
-                "date": date_str,
-                "slots": slots,
+                "slots": out_slots,
+                "summary": summary,
                 "meta": {
                     "day_name": weekday.capitalize(),
                     "is_on_leave": is_on_leave,
                     "slot_duration": availability.slot_duration,
                     "buffer_time": availability.buffer_time,
+                    "availability_bootstrapped": availability_bootstrapped,
                 },
             }
 
-            cache.set(cache_key, response_data, timeout=30)
             logger.info("Slot availability fetched for doctor %s at clinic %s on %s", doctor_id, clinic_id, date_str)
             return Response(
                 {"status": "success", "message": "Slot availability retrieved successfully.", "data": response_data},
@@ -592,7 +714,8 @@ class WalkInAppointmentCreateView(APIView):
                         "doctor": appointment.doctor.get_name,
                         "clinic": appointment.clinic.name,
                         "appointment_date": appointment.appointment_date,
-                        "appointment_time": str(appointment.appointment_time),
+                        "slot_start_time": str(appointment.slot_start_time),
+                        "slot_end_time": str(appointment.slot_end_time),
                         "status": appointment.status,
                     },
                 },
@@ -716,7 +839,7 @@ class DoctorCalendarView(APIView):
             doctor_id=doctor_id,
             clinic_id=clinic_id,
             appointment_date__range=(start_date, end_date),
-        ).order_by("appointment_date", "appointment_time")
+        ).order_by("appointment_date", "slot_start_time")
 
         calendar_data = {}
         for appt in appointments:
@@ -724,7 +847,7 @@ class DoctorCalendarView(APIView):
             calendar_data.setdefault(date_str, []).append(
                 {
                     "id": str(appt.id),
-                    "time": appt.appointment_time.strftime("%H:%M"),
+                    "time": appt.slot_start_time.strftime("%H:%M"),
                     "patient": appt.patient_profile.get_full_name(),
                     "status": appt.status,
                     "consultation_mode": appt.consultation_mode,

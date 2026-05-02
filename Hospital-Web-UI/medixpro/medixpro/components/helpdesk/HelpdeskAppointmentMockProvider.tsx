@@ -70,6 +70,8 @@ export interface HelpdeskAppointmentMockContextValue {
   appointments: Appointment[];
   allAppointments: Appointment[];
   doctors: MockDoctor[];
+  /** True until GET /api/queue/helpdesk/context/ finishes (success or error). */
+  doctorsLoading: boolean;
   /** Helpdesk clinic from GET /api/queue/helpdesk/context/ (for booking payload). */
   clinicId: string | null;
   listTab: AppointmentListTab;
@@ -88,7 +90,12 @@ const HelpdeskAppointmentMockContext = createContext<HelpdeskAppointmentMockCont
   null
 );
 
-type HelpdeskContextApi = { clinic_id: string; doctor_id: string; doctor_ids: string[] };
+type HelpdeskContextApi = {
+  clinic_id: string;
+  doctor_id: string;
+  doctor_ids: string[];
+  doctors?: Array<{ id: string; name: string; specialization?: string }>;
+};
 
 export function HelpdeskAppointmentMockProvider({ children }: { children: ReactNode }) {
   const [store, setStore] = useState<Appointment[]>(() => buildSeedAppointments());
@@ -96,27 +103,43 @@ export function HelpdeskAppointmentMockProvider({ children }: { children: ReactN
   const [isLoading, setIsLoading] = useState(false);
   const [mutationKey, setMutationKey] = useState<string | null>(null);
   const [doctors, setDoctors] = useState<MockDoctor[]>([]);
+  const [doctorsLoading, setDoctorsLoading] = useState(true);
   const [clinicId, setClinicId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      setDoctorsLoading(true);
       try {
         const { data } = await axiosClient.get<HelpdeskContextApi>("/queue/helpdesk/context/");
         if (cancelled) return;
         setClinicId(data.clinic_id);
-        const ids = data.doctor_ids?.length ? data.doctor_ids : data.doctor_id ? [data.doctor_id] : [];
-        setDoctors(
-          ids.map((id) => ({
-            id,
-            name: "Doctor",
-            specialization: "",
-          }))
-        );
+        if (data.doctors?.length) {
+          setDoctors(
+            data.doctors.map((d) => ({
+              id: d.id,
+              name: (d.name && d.name.trim()) || "Doctor",
+              specialization: (d.specialization ?? "").trim(),
+            }))
+          );
+        } else {
+          const ids = data.doctor_ids?.length ? data.doctor_ids : data.doctor_id ? [data.doctor_id] : [];
+          setDoctors(
+            ids.map((id) => ({
+              id,
+              name: "Doctor",
+              specialization: "",
+            }))
+          );
+        }
       } catch {
         if (!cancelled) {
           setClinicId(null);
           setDoctors([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setDoctorsLoading(false);
         }
       }
     })();
@@ -272,6 +295,7 @@ export function HelpdeskAppointmentMockProvider({ children }: { children: ReactN
       appointments,
       allAppointments: store,
       doctors,
+      doctorsLoading,
       clinicId,
       listTab,
       setListTab,
@@ -288,6 +312,7 @@ export function HelpdeskAppointmentMockProvider({ children }: { children: ReactN
       appointments,
       store,
       doctors,
+      doctorsLoading,
       clinicId,
       listTab,
       isLoading,

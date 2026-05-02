@@ -60,6 +60,8 @@ PRESCRIPTION_TIMING_SLOT_MAX = int(os.getenv("PRESCRIPTION_TIMING_SLOT_MAX", "2"
 # Appointment booking: max days from today that a slot can be booked (create API).
 MAX_BOOKING_DAYS = int(os.getenv("MAX_BOOKING_DAYS", "30"))
 
+APPOINTMENT_SLOTS_THROTTLE = os.getenv("APPOINTMENT_SLOTS_THROTTLE", "120/min")
+
 
 # Application definition
 
@@ -130,6 +132,7 @@ REST_FRAMEWORK={
         'registration': '10/min',
         'user': '10000/day',   # Increased limit for development
         'anon': '1000/day',
+        'appointment_slots': APPOINTMENT_SLOTS_THROTTLE,
     },
      "DATETIME_FORMAT": "%Y-%m-%d %H:%M:%S",
 }

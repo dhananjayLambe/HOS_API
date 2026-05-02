@@ -180,22 +180,28 @@ class AppointmentCancelSerializer(serializers.ModelSerializer):
 class AppointmentRescheduleSerializer(serializers.ModelSerializer):
     class Meta:
         model = Appointment
-        fields = ["appointment_date", "appointment_time"]
+        fields = ["appointment_date", "slot_start_time", "slot_end_time"]
 
     def validate(self, data):
         appointment_date = data.get("appointment_date")
-        appointment_time = data.get("appointment_time")
+        slot_start_time = data.get("slot_start_time")
+        slot_end_time = data.get("slot_end_time")
 
-        if not appointment_date or not appointment_time:
-            raise serializers.ValidationError("Both appointment_date and appointment_time are required.")
+        if not appointment_date or slot_start_time is None or slot_end_time is None:
+            raise serializers.ValidationError(
+                "appointment_date, slot_start_time, and slot_end_time are required."
+            )
+
+        if slot_start_time >= slot_end_time:
+            raise serializers.ValidationError({"slot_start_time": err_invalid_slot_range()})
 
         today = localdate()
         now_time = localtime().time()
 
         if appointment_date < today:
             raise serializers.ValidationError("Appointment date cannot be in the past.")
-        if appointment_date == today and appointment_time < now_time:
-            raise serializers.ValidationError("Appointment time cannot be in the past.")
+        if appointment_date == today and slot_start_time < now_time:
+            raise serializers.ValidationError("Slot start time cannot be in the past.")
 
         return data
 
@@ -213,7 +219,8 @@ class DoctorAppointmentSerializer(serializers.ModelSerializer):
             "patient_profile_id",
             "clinic_name",
             "appointment_date",
-            "appointment_time",
+            "slot_start_time",
+            "slot_end_time",
             "consultation_mode",
             "booking_source",
             "status",
@@ -230,7 +237,7 @@ class DoctorAppointmentFilterSerializer(serializers.Serializer):
     appointment_status = serializers.ChoiceField(choices=["scheduled", "completed", "canceled"], required=False)
     payment_status = serializers.BooleanField(required=False)
     sort_by = serializers.ChoiceField(
-        choices=["appointment_date", "appointment_time", "clinic_name"],
+        choices=["appointment_date", "slot_start_time", "clinic_name"],
         required=False,
         default="appointment_date",
     )
@@ -258,7 +265,7 @@ class PatientAppointmentFilterSerializer(serializers.Serializer):
     )
     payment_status = serializers.BooleanField(required=False)
     sort_by = serializers.ChoiceField(
-        choices=["appointment_date", "appointment_time", "status", "clinic_name"],
+        choices=["appointment_date", "slot_start_time", "status", "clinic_name"],
         required=False,
         default="appointment_date",
     )
@@ -288,22 +295,36 @@ class AppointmentStatusUpdateSerializer(serializers.Serializer):
 class WalkInAppointmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Appointment
-        fields = ["patient_account", "patient_profile", "doctor", "clinic", "appointment_time", "appointment_date"]
+        fields = [
+            "patient_account",
+            "patient_profile",
+            "doctor",
+            "clinic",
+            "slot_start_time",
+            "slot_end_time",
+            "appointment_date",
+        ]
 
     def validate(self, data):
         doctor = data["doctor"]
         clinic = data["clinic"]
         appointment_date = data.get("appointment_date", timezone.localdate())
-        appointment_time = data.get("appointment_time")
+        slot_start_time = data.get("slot_start_time")
+        slot_end_time = data.get("slot_end_time")
         patient_profile = data["patient_profile"]
+
+        if slot_start_time is None or slot_end_time is None:
+            raise serializers.ValidationError("slot_start_time and slot_end_time are required.")
+        if slot_start_time >= slot_end_time:
+            raise serializers.ValidationError({"slot_start_time": err_invalid_slot_range()})
 
         today = timezone.localdate()
         now_time = timezone.localtime().time()
 
         if appointment_date < today:
             raise serializers.ValidationError("Appointment date cannot be in the past.")
-        if appointment_date == today and appointment_time and appointment_time < now_time:
-            raise serializers.ValidationError("Appointment time cannot be in the past.")
+        if appointment_date == today and slot_start_time < now_time:
+            raise serializers.ValidationError("Appointment slot cannot be in the past.")
 
         if clinic not in doctor.clinics.all():
             raise serializers.ValidationError("Doctor is not associated with the selected clinic.")
@@ -316,14 +337,18 @@ class WalkInAppointmentSerializer(serializers.ModelSerializer):
         ).exists():
             raise serializers.ValidationError("Doctor is on leave on selected date.")
 
-        if appointment_time and Appointment.objects.filter(
+        active_statuses = ["scheduled", "checked_in", "in_consultation"]
+        if Appointment.objects.filter(
             doctor=doctor,
             clinic=clinic,
             appointment_date=appointment_date,
-            appointment_time=appointment_time,
-            status="scheduled",
+            slot_start_time=slot_start_time,
+            status__in=active_statuses,
         ).exists():
             raise serializers.ValidationError("Selected time slot is already booked.")
+
+        if patient_profile.account_id != data["patient_account"].id:
+            raise serializers.ValidationError("Patient profile does not belong to the selected account.")
 
         return data
 
