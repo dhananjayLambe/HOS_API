@@ -18,6 +18,8 @@ export interface HelpdeskSearchPatient {
   last_name?: string;
   mobile?: string;
   patient_account_id?: string;
+  gender?: string;
+  date_of_birth?: string;
 }
 
 interface HelpdeskPatientSearchProps {
@@ -28,6 +30,8 @@ interface HelpdeskPatientSearchProps {
   /** Autofocus search on mount (e.g. patients page). */
   autoFocus?: boolean;
   className?: string;
+  /** Max height class for results list scroll area (default: 250px on helpdesk appointments). */
+  resultsScrollMaxHeightClassName?: string;
 }
 
 function toHelpdeskPatient(p: PatientSearchRow): HelpdeskSearchPatient {
@@ -38,6 +42,8 @@ function toHelpdeskPatient(p: PatientSearchRow): HelpdeskSearchPatient {
     last_name: p.last_name,
     mobile: p.mobile,
     patient_account_id: p.patient_account_id,
+    gender: p.gender,
+    date_of_birth: p.date_of_birth,
   };
 }
 
@@ -48,6 +54,7 @@ export function HelpdeskPatientSearch({
   initialQuery = "",
   autoFocus = false,
   className,
+  resultsScrollMaxHeightClassName = "max-h-[250px]",
 }: HelpdeskPatientSearchProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const { query, setQuery, results, isLoading, error, reset } = usePatientSearchQuery(true, 10);
@@ -151,6 +158,7 @@ export function HelpdeskPatientSearch({
         showAddProfile={Boolean(onAddProfile)}
         activeIndex={activeIndex}
         onHoverIndex={setActiveIndex}
+        scrollMaxHeightClassName={resultsScrollMaxHeightClassName}
       />
     </div>
   );

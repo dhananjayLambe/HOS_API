@@ -28,14 +28,19 @@ export interface PatientSearchResultListProps {
   showAddProfile?: boolean;
   activeIndex?: number;
   onHoverIndex?: (index: number) => void;
+  /** Override default max-height for the scrollable results (e.g. `max-h-[250px]` on helpdesk appointments). */
+  scrollMaxHeightClassName?: string;
 }
 
-const scrollAreaClass = cn(
-  "max-h-[min(50vh,360px)] min-h-0 overflow-y-auto overflow-x-hidden overscroll-y-contain p-2 pr-1.5",
-  "[scrollbar-gutter:stable] [scrollbar-width:thin]",
-  "[&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-purple-100/60 dark:[&::-webkit-scrollbar-track]:bg-purple-950/50",
-  "[&::-webkit-scrollbar-thumb]:min-h-[40px] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-purple-300 dark:[&::-webkit-scrollbar-thumb]:bg-purple-700"
-);
+function scrollAreaClassNames(scrollMaxHeightClassName?: string) {
+  return cn(
+    scrollMaxHeightClassName ?? "max-h-[min(50vh,360px)]",
+    "min-h-0 overflow-y-auto overflow-x-hidden overscroll-y-contain p-2 pr-1.5",
+    "[scrollbar-gutter:stable] [scrollbar-width:thin]",
+    "[&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-purple-100/60 dark:[&::-webkit-scrollbar-track]:bg-purple-950/50",
+    "[&::-webkit-scrollbar-thumb]:min-h-[40px] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-purple-300 dark:[&::-webkit-scrollbar-thumb]:bg-purple-700"
+  );
+}
 
 export function PatientSearchResultList({
   variant,
@@ -52,6 +57,7 @@ export function PatientSearchResultList({
   showAddProfile = true,
   activeIndex = -1,
   onHoverIndex,
+  scrollMaxHeightClassName,
 }: PatientSearchResultListProps) {
   const minChars = 2;
   const showEmpty = query.trim().length >= minChars && !isLoading && results.length === 0 && !error;
@@ -112,7 +118,7 @@ export function PatientSearchResultList({
           <span>Searching…</span>
         </div>
       ) : results.length > 0 ? (
-        <div className={scrollAreaClass}>
+        <div className={scrollAreaClassNames(scrollMaxHeightClassName)}>
           {results.map((patient, index) => {
             const subtitle = formatAgeGenderLine(patient);
             const mobileLine = patient.mobile ? maskMobileForSearch(patient.mobile) : "";

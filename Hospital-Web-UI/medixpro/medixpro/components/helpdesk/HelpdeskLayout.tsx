@@ -97,6 +97,10 @@ export function HelpdeskLayout({ children }: { children: React.ReactNode }) {
     return pathname === item.href || pathname.startsWith(item.href + "/");
   };
 
+  /** Appointments page has its own patient search; hide duplicate header search. */
+  const hideHeaderLiveSearch =
+    pathname === "/helpdesk/appointments" || pathname.startsWith("/helpdesk/appointments/");
+
   const handleLiveSelect = async (patient: PatientSearchRow) => {
     try {
       await fetchTodayQueue();
@@ -249,24 +253,37 @@ export function HelpdeskLayout({ children }: { children: React.ReactNode }) {
             <div className="flex shrink-0 items-center gap-1">
               <NotificationDropdown />
               <UserNav />
+              {hideHeaderLiveSearch && (
+                <Button
+                  type="button"
+                  size="icon"
+                  className="h-11 w-11 shrink-0 rounded-full"
+                  aria-label="Add patient"
+                  onClick={handleOpenAddNew}
+                >
+                  <Plus className="h-5 w-5" />
+                </Button>
+              )}
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <HelpdeskHeaderLiveSearch
-              onSelectPatient={handleLiveSelect}
-              onAddNew={handleOpenAddNew}
-              onAddProfile={handleAddProfileFromSearch}
-            />
-            <Button
-              type="button"
-              size="icon"
-              className="h-11 w-11 shrink-0 rounded-full"
-              aria-label="Add patient"
-              onClick={handleOpenAddNew}
-            >
-              <Plus className="h-5 w-5" />
-            </Button>
-          </div>
+          {!hideHeaderLiveSearch && (
+            <div className="flex items-center gap-2">
+              <HelpdeskHeaderLiveSearch
+                onSelectPatient={handleLiveSelect}
+                onAddNew={handleOpenAddNew}
+                onAddProfile={handleAddProfileFromSearch}
+              />
+              <Button
+                type="button"
+                size="icon"
+                className="h-11 w-11 shrink-0 rounded-full"
+                aria-label="Add patient"
+                onClick={handleOpenAddNew}
+              >
+                <Plus className="h-5 w-5" />
+              </Button>
+            </div>
+          )}
         </div>
       </header>
 
@@ -402,3 +419,5 @@ export function HelpdeskLayout({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
+
+export default HelpdeskLayout;

@@ -1,24 +1,23 @@
-import { type NextRequest, NextResponse } from "next/server";
-import { appendFileSync, mkdirSync } from "fs";
-import { dirname, join } from "path";
+import { appendFile, mkdir } from "fs/promises";
+import path from "path";
+import { NextRequest, NextResponse } from "next/server";
 
-/** Workspace: HOS_API — three levels up from Next app root (medixpro/medixpro). */
-function resolveLogFile(): string {
-  return join(process.cwd(), "..", "..", "..", ".cursor", "debug-bb2dcf.log");
-}
-
-export async function POST(request: NextRequest) {
-  if (process.env.NODE_ENV === "production") {
-    return NextResponse.json({ ok: false }, { status: 404 });
+/**
+ * Dev-only sink for `debugSessionLog()` (see lib/debugSessionLog.ts).
+ * Appends one NDJSON line per request under `.cursor/debug-bb2dcf.log`.
+ */
+export async function POST(req: NextRequest) {
+  if (process.env.NODE_ENV !== "development") {
+    return new NextResponse(null, { status: 204 });
   }
   try {
-    const text = (await request.text()).trim();
-    if (!text) return NextResponse.json({ ok: true });
-    const file = resolveLogFile();
-    mkdirSync(dirname(file), { recursive: true });
-    appendFileSync(file, `${text}\n`, "utf8");
-    return NextResponse.json({ ok: true });
+    const text = await req.text();
+    const logDir = path.join(process.cwd(), ".cursor");
+    await mkdir(logDir, { recursive: true });
+    const logFile = path.join(logDir, "debug-bb2dcf.log");
+    await appendFile(logFile, `${text}\n`, "utf8");
   } catch {
-    return NextResponse.json({ ok: false }, { status: 500 });
+    // best-effort
   }
+  return new NextResponse(null, { status: 204 });
 }

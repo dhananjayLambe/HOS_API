@@ -19,7 +19,6 @@ const nextConfig = {
   compress: true,
   poweredByHeader: false,
   reactStrictMode: true,
-  // Optimize bundle size
   experimental: {
     optimizePackageImports: [
       'lucide-react',
