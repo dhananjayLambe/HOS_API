@@ -207,15 +207,8 @@ class AppointmentListSerializer(serializers.ModelSerializer):
         return name.strip() if isinstance(name, str) else str(name).strip() or "Doctor"
 
 
-class AppointmentCancelSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Appointment
-        fields = ["status"]
-
-    def update(self, instance, validated_data):
-        instance.status = "cancelled"
-        instance.save()
-        return instance
+class AppointmentCancelRequestSerializer(serializers.Serializer):
+    cancel_reason = serializers.CharField(required=False, allow_blank=True, allow_null=True)
 
 
 class AppointmentRescheduleSerializer(serializers.Serializer):

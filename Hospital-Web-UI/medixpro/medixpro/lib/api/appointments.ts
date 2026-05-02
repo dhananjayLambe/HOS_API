@@ -76,15 +76,18 @@ export async function fetchAppointmentDetail(
   );
 }
 
+/** PATCH /api/appointments/<id>/cancel/ (Next BFF → Django). */
 export async function cancelAppointmentRequest(
   appointmentId: string,
-  options?: { signal?: AbortSignal }
+  options?: { signal?: AbortSignal; cancel_reason?: string }
 ) {
-  return axiosClient.patch<unknown>(
-    "/appointments/cancel/",
-    { id: appointmentId },
-    { validateStatus: () => true, ...options }
-  );
+  const { signal, cancel_reason, ...axiosRest } = options ?? {};
+  const body = cancel_reason != null && cancel_reason !== "" ? { cancel_reason } : {};
+  return axiosClient.patch<unknown>(`/appointments/${appointmentId}/cancel/`, body, {
+    validateStatus: () => true,
+    signal,
+    ...axiosRest,
+  });
 }
 
 /** PATCH /api/appointments/<id>/reschedule/ (Next BFF → Django). */

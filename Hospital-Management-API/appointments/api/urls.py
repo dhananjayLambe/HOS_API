@@ -13,9 +13,9 @@ app_name = 'appointments'
 
 urlpatterns = [
     path("<uuid:pk>/reschedule/", AppointmentRescheduleView.as_view(), name="appointment-reschedule"),
+    path("<uuid:pk>/cancel/", AppointmentCancelView.as_view(), name="appointment-cancel"),
     path("", AppointmentListView.as_view(), name="appointment-create"),
     path('detail/', AppointmentDetailView.as_view(), name='appointment-detail'),
-    path('cancel/', AppointmentCancelView.as_view(), name='appointment-cancel'),
     #Appointments View
     path('patient-appointments/', PatientAppointmentsView.as_view(), name='patient-appointments'),
     path("doctor-appointments/", DoctorAppointmentsView.as_view(), name="doctor-appointments"),

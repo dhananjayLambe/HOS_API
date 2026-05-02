@@ -1,5 +1,5 @@
 from .appointment import (
-    AppointmentCancelSerializer,
+    AppointmentCancelRequestSerializer,
     AppointmentCreatedResponseSerializer,
     AppointmentCreateSerializer,
     AppointmentHistorySerializer,
@@ -19,7 +19,7 @@ __all__ = [
     "AppointmentCreateSerializer",
     "AppointmentCreatedResponseSerializer",
     "AppointmentListSerializer",
-    "AppointmentCancelSerializer",
+    "AppointmentCancelRequestSerializer",
     "AppointmentRescheduleSerializer",
     "DoctorAppointmentSerializer",
     "DoctorAppointmentFilterSerializer",

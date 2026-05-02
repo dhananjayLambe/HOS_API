@@ -19,6 +19,7 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from account.permissions import IsDoctorOrHelpdesk, IsDoctorOrHelpdeskOrPatient, IsHelpdeskOrPatient
 from appointments.api.serializers import (
+    AppointmentCancelRequestSerializer,
     AppointmentCreatedResponseSerializer,
     AppointmentCreateSerializer,
     AppointmentHistorySerializer,
@@ -207,52 +208,97 @@ class AppointmentDetailView(generics.GenericAPIView):
 
 
 class AppointmentCancelView(APIView):
-    permission_classes = [IsAuthenticated, IsDoctorOrHelpdeskOrPatient]
+    """PATCH /api/appointments/<id>/cancel/ — cancel (helpdesk / patient / superuser)."""
+
+    permission_classes = [IsAuthenticated, IsHelpdeskOrPatient]
     authentication_classes = [JWTAuthentication]
 
-    def patch(self, request):
-        appointment_id = request.data.get("id")
-        if not appointment_id:
-            return Response(
-                {"status": "error", "message": "Appointment ID is required.", "data": None},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+    @staticmethod
+    def _error_all(code, message, http_status):
+        return Response({"all": {"code": code, "message": message}}, status=http_status)
+
+    def _get_scoped_appointment(self, request, pk):
+        user = request.user
+        qs = Appointment.objects.select_related(
+            "doctor",
+            "clinic",
+            "patient_profile",
+            "patient_account",
+        ).prefetch_related("encounters")
+        if user.is_superuser:
+            return qs.get(id=pk)
+        if user.groups.filter(name="patient").exists():
+            return qs.get(id=pk, patient_account__user=user)
+        if user.groups.filter(name__in=["helpdesk", "helpdesk_admin"]).exists():
+            hp = getattr(user, "helpdesk_profile", None)
+            if hp is None:
+                raise PermissionDenied("No helpdesk clinic assignment for this user.")
+            return qs.get(id=pk, clinic_id=hp.clinic_id)
+        raise PermissionDenied("You do not have permission to cancel this appointment.")
+
+    @transaction.atomic
+    def patch(self, request, pk):
+        serializer_in = AppointmentCancelRequestSerializer(data=request.data)
+        serializer_in.is_valid(raise_exception=True)
+        cancel_reason = serializer_in.validated_data.get("cancel_reason") or ""
+        cancel_reason = cancel_reason.strip() if isinstance(cancel_reason, str) else ""
 
         try:
-            appointment = Appointment.objects.select_related("doctor", "clinic", "patient_profile", "patient_account").get(
-                id=appointment_id, status="scheduled"
-            )
+            appointment = self._get_scoped_appointment(request, pk)
         except Appointment.DoesNotExist:
+            logger.warning("Cancel: appointment not found or out of scope pk=%s", pk)
+            return self._error_all(
+                "NOT_FOUND",
+                "Appointment not found.",
+                status.HTTP_404_NOT_FOUND,
+            )
+        except PermissionDenied as exc:
+            return self._error_all(
+                "PERMISSION_DENIED",
+                str(exc),
+                status.HTTP_403_FORBIDDEN,
+            )
+
+        if appointment.status == "cancelled":
             return Response(
-                {"status": "error", "message": "Appointment not found or is not in scheduled state.", "data": None},
-                status=status.HTTP_404_NOT_FOUND,
+                {
+                    "id": str(appointment.id),
+                    "status": "cancelled",
+                    "message": "Appointment already cancelled",
+                },
+                status=status.HTTP_200_OK,
             )
 
         if appointment.status != "scheduled":
-            return Response(
-                {
-                    "status": "error",
-                    "message": f"Cannot cancel appointment as it is already {appointment.status}.",
-                    "data": None,
-                },
-                status=status.HTTP_409_CONFLICT,
+            return self._error_all(
+                "INVALID_STATUS",
+                "Only scheduled appointments can be cancelled",
+                status.HTTP_400_BAD_REQUEST,
+            )
+
+        if appointment.encounter:
+            return self._error_all(
+                "INVALID_STATE",
+                "Cannot cancel appointment after check-in",
+                status.HTTP_400_BAD_REQUEST,
             )
 
         appointment.status = "cancelled"
-        appointment.updated_at = now()
-        appointment.save(update_fields=["status", "updated_at"])
+        appointment.updated_by = request.user
+        appointment.save()
         log_appointment_history(
             appointment=appointment,
             status="cancelled",
             changed_by=request.user,
-            comment="Appointment cancelled via API",
+            comment=cancel_reason or "Cancelled",
         )
+        logger.info("Appointment cancelled: id=%s, user=%s", appointment.id, request.user.id)
 
         return Response(
             {
-                "status": "success",
-                "message": "Appointment cancelled successfully.",
-                "data": {"appointment_id": str(appointment.id), "status": appointment.status},
+                "id": str(appointment.id),
+                "status": "cancelled",
+                "message": "Appointment cancelled successfully",
             },
             status=status.HTTP_200_OK,
         )
