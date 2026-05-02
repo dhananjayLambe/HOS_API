@@ -29,7 +29,20 @@ class IsDoctorOrHelpdeskOrPatient(BasePermission):
     """Custom permission to allow access to Doctors OR Helpdesk users."""
     def has_permission(self, request, view):
         return bool(request.user and request.user.groups.filter(name__in=['doctor', 'helpdesk', 'patient']).exists())
-    
+
+
+class IsHelpdeskOrPatient(BasePermission):
+    """Helpdesk, helpdesk_admin, or patient — for appointment booking APIs."""
+
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
+        if request.user.is_superuser:
+            return True
+        return bool(
+            request.user.groups.filter(name__in=["helpdesk", "helpdesk_admin", "patient"]).exists()
+        )
+
 
 class IsDoctorOrHelpdeskOrOwnerOrAdmin(BasePermission):
     def has_object_permission(self, request, view, obj):

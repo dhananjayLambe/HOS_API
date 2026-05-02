@@ -15,12 +15,16 @@ import { useHelpdeskAppointmentSlots } from "@/hooks/use-helpdesk-appointment-sl
 import { useHelpdeskAppointmentsMock } from "@/hooks/use-helpdesk-appointments";
 import type {
   Appointment,
-  ConsultationMode,
   AppointmentKind,
+  ConsultationMode,
+  CreateAppointmentInput,
   Slot,
 } from "@/lib/helpdesk/helpdeskAppointmentTypes";
 import { MOCK_DOCTOR_UNAVAILABLE_ID } from "@/lib/helpdesk/helpdeskAppointmentMockStore";
+import { toHhMmSs } from "@/lib/helpdesk/formatSlotTime";
+import { mapAppointmentBookingError } from "@/lib/helpdesk/mapAppointmentBookingError";
 import { Button } from "@/components/ui/button";
+import { isAxiosError } from "axios";
 
 const LAST_DOCTOR_KEY = "helpdesk:appointment:lastDoctorId";
 
@@ -37,6 +41,7 @@ function BookAppointmentContent() {
   const searchParams = useSearchParams();
   const {
     doctors,
+    clinicId,
     mutationKey,
     createAppointment,
     updateAppointment,
@@ -205,6 +210,10 @@ function BookAppointmentContent() {
       toast.error("Select a patient first.");
       return;
     }
+    if (!editingAppointment && !selectedPatient.patient_account_id?.trim()) {
+      toast.error("Patient account is missing. Search and select the patient again.");
+      return;
+    }
     if (!doctorId) {
       toast.error("Select a doctor.");
       return;
@@ -217,6 +226,10 @@ function BookAppointmentContent() {
       toast.error("Pick an available slot.");
       return;
     }
+    if (!editingAppointment && !clinicId?.trim()) {
+      toast.error("Clinic context unavailable. Refresh the page or verify helpdesk clinic assignment.");
+      return;
+    }
     const feeNum = Number.parseFloat(consultationFee.replace(/,/g, ""));
     if (Number.isNaN(feeNum) || feeNum < 0) {
       toast.error("Enter a valid fee.");
@@ -224,7 +237,7 @@ function BookAppointmentContent() {
     }
 
     const doctorName = doctors.find((d) => d.id === doctorId)?.name ?? "Doctor";
-    const base = {
+    const base: CreateAppointmentInput = {
       patientProfileId: selectedPatient.id,
       patientName: selectedPatient.full_name,
       doctorId,
@@ -236,6 +249,12 @@ function BookAppointmentContent() {
       consultationFee: feeNum,
       notes,
     };
+    if (!editingAppointment) {
+      base.patientAccountId = selectedPatient.patient_account_id!.trim();
+      base.clinicId = clinicId!.trim();
+      base.slotStartTime = toHhMmSs(selectedSlot.startTime);
+      base.slotEndTime = toHhMmSs(selectedSlot.endTime);
+    }
 
     try {
       if (editingAppointment) {
@@ -255,12 +274,15 @@ function BookAppointmentContent() {
         router.replace("/helpdesk/appointments/book");
       }
     } catch (e) {
-      const code = e instanceof Error ? e.message : "";
-      if (code === "SLOT_CONFLICT") {
-        toast.error("That slot is no longer available. Pick another time.");
-      } else {
-        toast.error("Something went wrong. Try again.");
+      if (e instanceof Error && e.message === "MISSING_BOOKING_FIELDS") {
+        toast.error("Missing booking details. Check patient account and clinic, then try again.");
+        return;
       }
+      if (isAxiosError(e)) {
+        toast.error(mapAppointmentBookingError(e));
+        return;
+      }
+      toast.error("Something went wrong. Try again.");
     }
   }, [
     selectedPatient,
@@ -273,6 +295,7 @@ function BookAppointmentContent() {
     appointmentType,
     notes,
     editingAppointment,
+    clinicId,
     createAppointment,
     updateAppointment,
     persistLastDoctor,
@@ -285,7 +308,9 @@ function BookAppointmentContent() {
       <header className="space-y-0.5">
         <h1 className="text-xl font-semibold tracking-tight">Book appointment</h1>
         <p className="text-sm text-muted-foreground">
-          Mock booking — fast path. No list on this screen.
+          {doctors.length === 0
+            ? "Loading doctors for your clinic… If this persists, check helpdesk assignment."
+            : "Choose patient, doctor, and slot. Booking uses the live API."}
         </p>
       </header>
 

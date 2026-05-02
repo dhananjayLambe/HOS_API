@@ -57,6 +57,8 @@ ENABLE_CONSULTATION_SUMMARY_CACHE = os.getenv("ENABLE_CONSULTATION_SUMMARY_CACHE
 CONSULTATION_SUMMARY_CACHE_TTL_SECONDS = int(os.getenv("CONSULTATION_SUMMARY_CACHE_TTL_SECONDS", "900"))
 PRESCRIPTION_TIMING_SLOT_MAX = int(os.getenv("PRESCRIPTION_TIMING_SLOT_MAX", "2"))
 
+# Appointment booking: max days from today that a slot can be booked (create API).
+MAX_BOOKING_DAYS = int(os.getenv("MAX_BOOKING_DAYS", "30"))
 
 
 # Application definition

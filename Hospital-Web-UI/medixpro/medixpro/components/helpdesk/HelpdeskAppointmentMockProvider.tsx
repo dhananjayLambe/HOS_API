@@ -5,6 +5,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -14,17 +15,17 @@ import type {
   Appointment,
   AppointmentListTab,
   CreateAppointmentInput,
+  MockDoctor,
   UpdateAppointmentInput,
 } from "@/lib/helpdesk/helpdeskAppointmentTypes";
 import {
   buildSeedAppointments,
   mockDelay,
-  MOCK_DOCTORS,
   MOCK_DOCTOR_UNAVAILABLE,
   nextAppointmentId,
 } from "@/lib/helpdesk/helpdeskAppointmentMockStore";
-
-const DOCTORS_FOR_UI = [...MOCK_DOCTORS, MOCK_DOCTOR_UNAVAILABLE];
+import { createAppointment as postAppointment } from "@/lib/api/appointments";
+import axiosClient from "@/lib/axiosClient";
 
 function todayStr(): string {
   return format(new Date(), "yyyy-MM-dd");
@@ -68,7 +69,9 @@ function hasSlotConflict(
 export interface HelpdeskAppointmentMockContextValue {
   appointments: Appointment[];
   allAppointments: Appointment[];
-  doctors: typeof DOCTORS_FOR_UI;
+  doctors: MockDoctor[];
+  /** Helpdesk clinic from GET /api/queue/helpdesk/context/ (for booking payload). */
+  clinicId: string | null;
   listTab: AppointmentListTab;
   setListTab: (t: AppointmentListTab) => void;
   isLoading: boolean;
@@ -85,11 +88,42 @@ const HelpdeskAppointmentMockContext = createContext<HelpdeskAppointmentMockCont
   null
 );
 
+type HelpdeskContextApi = { clinic_id: string; doctor_id: string; doctor_ids: string[] };
+
 export function HelpdeskAppointmentMockProvider({ children }: { children: ReactNode }) {
   const [store, setStore] = useState<Appointment[]>(() => buildSeedAppointments());
   const [listTab, setListTab] = useState<AppointmentListTab>("today");
   const [isLoading, setIsLoading] = useState(false);
   const [mutationKey, setMutationKey] = useState<string | null>(null);
+  const [doctors, setDoctors] = useState<MockDoctor[]>([]);
+  const [clinicId, setClinicId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await axiosClient.get<HelpdeskContextApi>("/queue/helpdesk/context/");
+        if (cancelled) return;
+        setClinicId(data.clinic_id);
+        const ids = data.doctor_ids?.length ? data.doctor_ids : data.doctor_id ? [data.doctor_id] : [];
+        setDoctors(
+          ids.map((id) => ({
+            id,
+            name: "Doctor",
+            specialization: "",
+          }))
+        );
+      } catch {
+        if (!cancelled) {
+          setClinicId(null);
+          setDoctors([]);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const appointments = useMemo(
     () => store.filter((a) => matchesTab(a, listTab)),
@@ -106,44 +140,63 @@ export function HelpdeskAppointmentMockProvider({ children }: { children: ReactN
   }, []);
 
   const createAppointment = useCallback(async (input: CreateAppointmentInput): Promise<Appointment> => {
-    setMutationKey("create");
-    await mockDelay(500, 1000);
+    const {
+      patientAccountId,
+      clinicId: inputClinicId,
+      slotStartTime,
+      slotEndTime,
+    } = input;
 
-    const row: Appointment = {
-      id: nextAppointmentId(),
-      patientProfileId: input.patientProfileId,
-      patientName: input.patientName,
-      doctorId: input.doctorId,
-      doctorName: input.doctorName,
-      appointmentDate: input.appointmentDate,
-      appointmentTime: input.appointmentTime,
-      consultationMode: input.consultationMode,
-      appointmentType: input.appointmentType,
-      consultationFee: input.consultationFee,
-      notes: input.notes,
-      status: "scheduled",
-    };
-
-    let created: Appointment | undefined;
-    let conflicted = false;
-    setStore((prev) => {
-      if (hasSlotConflict(prev, input.doctorId, input.appointmentDate, input.appointmentTime)) {
-        conflicted = true;
-        return prev;
-      }
-      if (Math.random() < 0.05) {
-        conflicted = true;
-        return prev;
-      }
-      created = row;
-      return [...prev, row];
-    });
-
-    setMutationKey(null);
-    if (conflicted || !created) {
-      throw new Error("SLOT_CONFLICT");
+    if (
+      !patientAccountId?.trim() ||
+      !inputClinicId?.trim() ||
+      !slotStartTime?.trim() ||
+      !slotEndTime?.trim()
+    ) {
+      throw new Error("MISSING_BOOKING_FIELDS");
     }
-    return created;
+
+    setMutationKey("create");
+    try {
+      const { data } = await postAppointment({
+        patient_account_id: patientAccountId.trim(),
+        patient_profile_id: input.patientProfileId,
+        doctor_id: input.doctorId,
+        clinic_id: inputClinicId.trim(),
+        appointment_date: input.appointmentDate,
+        slot_start_time: slotStartTime.trim(),
+        slot_end_time: slotEndTime.trim(),
+        consultation_mode: input.consultationMode,
+        appointment_type: input.appointmentType,
+        consultation_fee: input.consultationFee,
+        notes: input.notes ?? "",
+      });
+
+      const startDisplay =
+        data.slot_start_time.length >= 5 ? data.slot_start_time.slice(0, 5) : data.slot_start_time;
+
+      const row: Appointment = {
+        id: String(data.id),
+        patientProfileId: input.patientProfileId,
+        patientName: data.patient_name,
+        doctorId: input.doctorId,
+        doctorName: data.doctor_name,
+        appointmentDate: data.appointment_date,
+        appointmentTime: startDisplay,
+        consultationMode: input.consultationMode,
+        appointmentType: input.appointmentType,
+        consultationFee: input.consultationFee,
+        notes: input.notes,
+        status: (data.status as Appointment["status"]) || "scheduled",
+      };
+
+      setStore((prev) => [...prev, row]);
+      return row;
+    } catch (e) {
+      throw e;
+    } finally {
+      setMutationKey(null);
+    }
   }, []);
 
   const updateAppointment = useCallback(async (input: UpdateAppointmentInput): Promise<Appointment> => {
@@ -218,7 +271,8 @@ export function HelpdeskAppointmentMockProvider({ children }: { children: ReactN
     () => ({
       appointments,
       allAppointments: store,
-      doctors: DOCTORS_FOR_UI,
+      doctors,
+      clinicId,
       listTab,
       setListTab,
       isLoading,
@@ -233,6 +287,8 @@ export function HelpdeskAppointmentMockProvider({ children }: { children: ReactN
     [
       appointments,
       store,
+      doctors,
+      clinicId,
       listTab,
       isLoading,
       mutationKey,

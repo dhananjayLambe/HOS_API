@@ -14,8 +14,9 @@ from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
-from account.permissions import IsDoctorOrHelpdesk, IsDoctorOrHelpdeskOrPatient
+from account.permissions import IsDoctorOrHelpdesk, IsDoctorOrHelpdeskOrPatient, IsHelpdeskOrPatient
 from appointments.api.serializers import (
+    AppointmentCreatedResponseSerializer,
     AppointmentCreateSerializer,
     AppointmentHistorySerializer,
     AppointmentRescheduleSerializer,
@@ -38,10 +39,28 @@ CACHE_TIMEOUT = 300
 
 
 class AppointmentCreateView(generics.CreateAPIView):
-    permission_classes = [IsAuthenticated, IsDoctorOrHelpdeskOrPatient]
+    permission_classes = [IsAuthenticated, IsHelpdeskOrPatient]
     authentication_classes = [JWTAuthentication]
     queryset = Appointment.objects.all()
     serializer_class = AppointmentCreateSerializer
+
+    @transaction.atomic
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        appointment = serializer.save()
+        appointment = Appointment.objects.select_related(
+            "patient_profile", "doctor__user"
+        ).get(pk=appointment.pk)
+        logger.info(
+            "appointment_created appointment_id=%s doctor_id=%s clinic_id=%s patient_account_id=%s",
+            appointment.id,
+            appointment.doctor_id,
+            appointment.clinic_id,
+            appointment.patient_account_id,
+        )
+        body = AppointmentCreatedResponseSerializer().to_representation(appointment)
+        return Response(body, status=status.HTTP_201_CREATED)
 
 
 class AppointmentDetailView(generics.GenericAPIView):

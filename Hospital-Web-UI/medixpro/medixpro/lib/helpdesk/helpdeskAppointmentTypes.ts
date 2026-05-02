@@ -61,6 +61,11 @@ export interface CreateAppointmentInput {
   appointmentType: AppointmentKind;
   consultationFee: number;
   notes: string;
+  /** Required for POST /api/appointments/ (helpdesk create). */
+  patientAccountId?: string;
+  clinicId?: string;
+  slotStartTime?: string;
+  slotEndTime?: string;
 }
 
 export type UpdateAppointmentInput = CreateAppointmentInput & { id: string };

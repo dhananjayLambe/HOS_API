@@ -1,6 +1,7 @@
 #appointments/models/appointment.py
 import uuid
 from django.db import models
+from django.db.models import Q
 from django.utils import timezone
 from account.models import User
 
@@ -116,6 +117,8 @@ class Appointment(models.Model):
         related_name="follow_ups"
     )
 
+    notes = models.TextField(blank=True, null=True)
+
     # -------------------------
     # AUDIT (VERY IMPORTANT)
     # -------------------------
@@ -150,17 +153,26 @@ class Appointment(models.Model):
     # -------------------------
     class Meta:
         indexes = [
-            models.Index(fields=["doctor", "appointment_date"]),
-            models.Index(fields=["clinic", "appointment_date"]),
-            models.Index(fields=["status"]),
+            models.Index(
+                fields=["doctor", "appointment_date"],
+                name="appt_doctor_date_idx",
+            ),
+            models.Index(
+                fields=["clinic", "appointment_date"],
+                name="appt_clinic_date_idx",
+            ),
+            models.Index(fields=["status"], name="appt_status_idx"),
+            models.Index(fields=["patient_profile"], name="appt_patient_profile_idx"),
         ]
 
         constraints = [
-            # Prevent double booking
             models.UniqueConstraint(
                 fields=["doctor", "appointment_date", "slot_start_time"],
-                name="unique_doctor_slot"
-            )
+                name="unique_active_doctor_slot",
+                condition=Q(
+                    status__in=["scheduled", "checked_in", "in_consultation"]
+                ),
+            ),
         ]
 
     def __str__(self):

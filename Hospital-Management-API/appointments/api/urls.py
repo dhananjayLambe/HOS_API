@@ -12,8 +12,7 @@ from appointments.api.views import (
 app_name = 'appointments'
 
 urlpatterns = [
-    #path('', include(router.urls)),
-    path('create/', AppointmentCreateView.as_view(), name='appointment-create'),
+    path("", AppointmentCreateView.as_view(), name="appointment-create"),
     path('detail/', AppointmentDetailView.as_view(), name='appointment-detail'),
     path('cancel/', AppointmentCancelView.as_view(), name='appointment-cancel'),
     path('reschedule/', AppointmentRescheduleView.as_view(), name='appointment-reschedule'),
