@@ -38,6 +38,7 @@ export interface ConsultationVitals {
   weightKg?: string;
   heightCm?: string;
   bmi?: string;
+  /** Canonical Celsius string from pre-consult preview (name is legacy); UI shows °F. */
   temperatureF?: string;
 }
 

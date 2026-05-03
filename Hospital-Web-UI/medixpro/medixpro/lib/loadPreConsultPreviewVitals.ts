@@ -100,7 +100,7 @@ export async function loadPreConsultPreviewVitals(
     if (temperatureStr != null && temperatureStr !== "") {
       const n = Number(temperatureStr);
       if (!Number.isNaN(n) && tempUnit === "f") {
-        // Doctor-side UI is Celsius.
+        // Normalize to canonical Celsius for the consultation store; UI converts to °F for display.
         temperatureStr = (((n - 32) * 5) / 9).toFixed(2);
       }
     }

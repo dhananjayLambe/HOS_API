@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { backendAxiosClient } from "@/lib/axiosClient";
 import { Loader2 } from "lucide-react";
+import { formatCanonicalCelsiusAsFahrenheitString } from "@/lib/vitals-temperature-display";
 
 function isUuidLike(value: string) {
   // Accepts canonical UUID v1-v5 and generic UUID shape
@@ -236,9 +237,10 @@ export function ViewPreDrawer({ open, onOpenChange, encounterId }: ViewPreDrawer
     const temp = v.temperature?.temperature;
     if (temp !== null && temp !== undefined && temp !== "") {
       const num = Number(temp);
+      const fDisplay = formatCanonicalCelsiusAsFahrenheitString(temp);
       rows.push({
         label: "Temperature",
-        value: `${temp} °C`,
+        value: fDisplay !== "" ? `${fDisplay} °F` : `${temp} °F`,
         abnormal: !Number.isNaN(num) && num > 38.3,
       });
     }

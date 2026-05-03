@@ -10,6 +10,7 @@ import { useConsultationSectionScroll } from "@/components/consultations/consult
 import { useConsultationStore } from "@/store/consultationStore";
 import { cn } from "@/lib/utils";
 import { isUuidLike, loadPreConsultPreviewVitals } from "@/lib/loadPreConsultPreviewVitals";
+import { formatCanonicalCelsiusAsFahrenheitString } from "@/lib/vitals-temperature-display";
 import { useToastNotification } from "@/hooks/use-toast-notification";
 
 /**
@@ -64,15 +65,13 @@ export function ConsultationRightMenu() {
     return String(value);
   };
 
-  /** Temperature is stored/displayed here in Celsius for doctor-side UI. */
+  /** Store holds canonical °C from pre-consult preview; consultation UI shows °F. */
   const renderTemperature = (value: unknown) => {
     if (value === null || value === undefined || String(value).trim() === "") {
       return <span className="text-muted-foreground">-</span>;
     }
-    const numC = Number(value);
-    if (!Number.isNaN(numC)) {
-      return numC.toFixed(2);
-    }
+    const fStr = formatCanonicalCelsiusAsFahrenheitString(value);
+    if (fStr !== "") return fStr;
     return String(value);
   };
 
@@ -209,7 +208,7 @@ export function ConsultationRightMenu() {
               )}
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Temperature (°C)</Label>
+              <Label className="text-xs">Temperature (°F)</Label>
               <div className="rounded-md h-10 min-h-10 flex items-center px-3 bg-muted/50 border border-border/80 text-sm text-foreground cursor-default" aria-readonly="true">
                 {renderTemperature(vitals.temperatureF)}
               </div>

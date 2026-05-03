@@ -1,6 +1,7 @@
 "use client";
 
 import type { EndConsultationReviewData } from "./EndConsultationReviewModal";
+import { formatCanonicalCelsiusAsFahrenheitString } from "@/lib/vitals-temperature-display";
 
 interface ClinicalSummarySectionProps {
   data: EndConsultationReviewData;
@@ -16,7 +17,9 @@ function formatVitalsSummary(data: EndConsultationReviewData): string {
   const parts = [
     toDisplayValue(data.vitals.bp) ? `BP: ${toDisplayValue(data.vitals.bp)}` : "",
     toDisplayValue(data.vitals.pulse) ? `Pulse: ${toDisplayValue(data.vitals.pulse)}` : "",
-    toDisplayValue(data.vitals.temp) ? `Temp: ${toDisplayValue(data.vitals.temp, " C")}` : "",
+    toDisplayValue(data.vitals.temp)
+      ? `Temp: ${formatCanonicalCelsiusAsFahrenheitString(data.vitals.temp)}°F`
+      : "",
     toDisplayValue(data.vitals.weight) ? `Wt: ${toDisplayValue(data.vitals.weight, "kg")}` : "",
     toDisplayValue(data.vitals.height) ? `Ht: ${toDisplayValue(data.vitals.height, "cm")}` : "",
   ].filter(Boolean);

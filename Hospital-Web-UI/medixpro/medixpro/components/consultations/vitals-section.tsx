@@ -16,6 +16,7 @@ import { Activity, Plus, FileText, ChevronDown, ChevronUp, Clock, Trash2 } from 
 import { DynamicSectionForm } from "./dynamic-section-form";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useToastNotification } from "@/hooks/use-toast-notification";
+import { formatCanonicalCelsiusAsFahrenheitString } from "@/lib/vitals-temperature-display";
 
 interface VitalsSectionProps {
   data: any;
@@ -95,7 +96,10 @@ export function VitalsSection({ data, previousRecords = [], onUpdate, quickMode 
     }
     if (dataToUse.temperature) {
       const temp = dataToUse.temperature.temperature ?? dataToUse.temperature.value;
-      if (temp != null) parts.push(`Temp: ${temp}°C`);
+      if (temp != null) {
+        const f = formatCanonicalCelsiusAsFahrenheitString(temp);
+        parts.push(f !== "" ? `Temp: ${f}°F` : `Temp: ${temp}`);
+      }
     }
     if (dataToUse.height_weight) {
       const ht = dataToUse.height_weight.height ?? dataToUse.height_weight.height_cm;
