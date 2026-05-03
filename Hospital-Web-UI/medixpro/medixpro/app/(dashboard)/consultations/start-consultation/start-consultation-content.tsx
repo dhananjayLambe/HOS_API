@@ -44,6 +44,7 @@ import { isUuidLike, loadPreConsultPreviewVitals } from "@/lib/loadPreConsultPre
 import { syncQueueAfterConsultationStart } from "@/lib/syncQueueAfterConsultationStart";
 import { useEncounterMultiTabLeader } from "@/hooks/useEncounterMultiTabLeader";
 import { useEncounter } from "@/lib/encounterContext";
+import axios from "axios";
 
 export default function StartConsultationContent() {
   const { selectedPatient, triggerSearchHighlight } = usePatient();
@@ -60,7 +61,7 @@ export default function StartConsultationContent() {
     encounterIdFromUrl && isUuidLike(encounterIdFromUrl) ? encounterIdFromUrl : null;
   const { isSecondaryTab } = useEncounterMultiTabLeader(encounterIdForLock);
   const multiTabLocked = Boolean(encounterIdForLock && isSecondaryTab);
-  const { invalidateEncounterById } = useEncounter();
+  const { invalidateEncounterById, fetchEncounterById } = useEncounter();
 
   const {
     consultationType,
@@ -175,9 +176,60 @@ export default function StartConsultationContent() {
     };
   }, [encounterIdFromUrl, router, toast]);
 
-  // Direct Start Consultation: cancel any previous encounter, create new one, then start (skip pre-consultation).
+  // After pre-consultation complete we land here (not on /consultations/consultation/[id]). Ensure
+  // POST consultation/start runs so Consultation exists and encounter becomes IN_PROGRESS (idempotent).
   useEffect(() => {
-    if (encounterIdFromUrl || !selectedPatient?.id || entryFlowDoneRef.current || isResolvingOrCreating) return;
+    if (!encounterIdFromUrl || !isUuidLike(encounterIdFromUrl) || multiTabLocked) return;
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const summary = await fetchEncounterById(encounterIdFromUrl, { force: true });
+        if (cancelled || !summary) return;
+        const st = (summary.status || "").toUpperCase().replace(/\s/g, "_");
+        if (st === "CANCELLED" || summary.cancelled) return;
+        if (st === "CONSULTATION_IN_PROGRESS") return;
+        if (st !== "PRE_CONSULTATION_COMPLETED" && st !== "CREATED") return;
+        await backendAxiosClient.post(
+          `/consultations/encounter/${encounterIdFromUrl}/consultation/start/`
+        );
+        if (cancelled) return;
+        await syncQueueAfterConsultationStart(encounterIdFromUrl);
+        invalidateEncounterById(encounterIdFromUrl);
+      } catch (err: unknown) {
+        const ax = err as { response?: { status?: number; data?: { detail?: string } } };
+        const status = ax.response?.status;
+        const detail = String(ax.response?.data?.detail ?? "").toLowerCase();
+        if (
+          status === 409 ||
+          (status === 400 &&
+            (detail.includes("already") ||
+              detail.includes("in progress") ||
+              detail.includes("consultation already")))
+        ) {
+          invalidateEncounterById(encounterIdFromUrl);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    encounterIdFromUrl,
+    multiTabLocked,
+    fetchEncounterById,
+    invalidateEncounterById,
+  ]);
+
+  // Direct Start Consultation: cancel any previous encounter, create new one, then start (skip pre-consultation).
+  // AbortController prevents Strict Mode / remount double-runs from racing two start-new-visit calls (which caused
+  // a brief redirect to pre-consultation and duplicate PATCH /queue/start/ 409).
+  useEffect(() => {
+    if (encounterIdFromUrl || !selectedPatient?.id || entryFlowDoneRef.current) return;
+
+    const ac = new AbortController();
+    const { signal } = ac;
 
     const runEntryFlow = async () => {
       setIsResolvingOrCreating(true);
@@ -188,9 +240,16 @@ export default function StartConsultationContent() {
           visit_pnr?: string;
           status?: string;
           redirect_url?: string;
-        }>("/consultations/entry/start-new-visit/", {
-          patient_profile_id: selectedPatient.id,
-        });
+        }>(
+          "/consultations/entry/start-new-visit/",
+          {
+            patient_profile_id: selectedPatient.id,
+            intent: "direct_consultation",
+          },
+          { signal }
+        );
+        if (signal.aborted) return;
+
         const encounterId = startNewVisitRes.data?.encounter_id;
         if (!encounterId) {
           toast.error("Failed to create encounter. Invalid response.");
@@ -198,27 +257,20 @@ export default function StartConsultationContent() {
           return;
         }
 
-        // Existing encounter (200): follow API redirect (usually pre-consultation) so we do not open
-        // start-consultation without a Consultation row (Preview Rx would stay disabled).
-        const isExistingEncounter = startNewVisitRes.status === 200;
-        if (isExistingEncounter) {
-          setEncounterId(encounterId);
-          entryFlowDoneRef.current = true;
-          const redirect =
-            startNewVisitRes.data?.redirect_url?.trim() ||
-            `/consultations/pre-consultation?encounter_id=${encounterId}`;
-          router.replace(redirect, { scroll: false });
-          return;
-        }
-
+        // Both 201 (new) and 200 (IntegrityError race — existing active encounter): start consultation here
+        // so we never navigate to pre-consultation for this page (avoids route flash and duplicate queue sync).
         const startConsultation = async (attempt = 0): Promise<void> => {
           const maxAttempts = 3;
           try {
-            await backendAxiosClient.post(`/consultations/encounter/${encounterId}/consultation/start/`);
+            await backendAxiosClient.post(`/consultations/encounter/${encounterId}/consultation/start/`, undefined, {
+              signal,
+            });
           } catch (startErr: unknown) {
+            if (axios.isAxiosError(startErr) && startErr.code === "ERR_CANCELED") throw startErr;
             const ax = startErr as { response?: { data?: { detail?: string; message?: string }; status?: number } };
             if (ax.response?.status === 409 && attempt < maxAttempts - 1) {
               await new Promise((r) => setTimeout(r, 250));
+              if (signal.aborted) return;
               return startConsultation(attempt + 1);
             }
             const detail = (ax.response?.data?.detail ?? ax.response?.data?.message ?? "") as string;
@@ -248,13 +300,18 @@ export default function StartConsultationContent() {
           }
         };
         await startConsultation();
+        if (signal.aborted) return;
+
         await syncQueueAfterConsultationStart(encounterId);
+        if (signal.aborted) return;
+
         invalidateEncounterById(encounterId);
 
         setEncounterId(encounterId);
         entryFlowDoneRef.current = true;
         router.replace(`/consultations/start-consultation?encounter_id=${encounterId}`, { scroll: false });
       } catch (err: unknown) {
+        if (signal.aborted || (axios.isAxiosError(err) && err.code === "ERR_CANCELED")) return;
         const ax = err as {
           response?: { data?: { detail?: string; message?: string; error?: string }; status?: number };
           message?: string;
@@ -277,8 +334,14 @@ export default function StartConsultationContent() {
       }
     };
 
-    runEntryFlow();
-  }, [selectedPatient?.id, encounterIdFromUrl, isResolvingOrCreating, router, setEncounterId, toast]);
+    void runEntryFlow();
+    return () => {
+      ac.abort();
+    };
+    // useToastNotification() returns a new object every render; listing `toast` here caused an infinite
+    // loop (effect → setIsResolvingOrCreating → re-render → new toast ref → deps change → cleanup abort → effect).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPatient?.id, encounterIdFromUrl, router, setEncounterId, invalidateEncounterById]);
 
   const showLeftPanel = useMemo(
     () => isLeftPanelVisible(consultationType),

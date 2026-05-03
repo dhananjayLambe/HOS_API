@@ -567,8 +567,9 @@ class StartNewVisitAPIView(APIView):
     """
     POST /consultations/entry/start-new-visit/
     If an active encounter exists: transition it to consultation_completed or cancelled, then create new.
-    Returns new encounter_id and redirect_url to pre-consultation.
-    Body: { "patient_profile_id": "<uuid>", "clinic_id": "<uuid>" (optional) }
+    Returns new encounter_id and redirect_url to pre-consultation (or start-consultation when intent=direct_consultation).
+    Body: { "patient_profile_id": "<uuid>", "clinic_id": "<uuid>" (optional),
+            "intent": "direct_consultation" | "pre_consultation" (optional, default pre) }
     """
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated, IsDoctor]
@@ -576,6 +577,13 @@ class StartNewVisitAPIView(APIView):
     @transaction.atomic
     def post(self, request):
         print("Start new visit called at:", timezone.now())
+        intent = str(request.data.get("intent") or "").strip().lower()
+        direct_consultation = intent == "direct_consultation"
+        redirect_base = (
+            "/consultations/start-consultation"
+            if direct_consultation
+            else "/consultations/pre-consultation"
+        )
         patient_profile, patient_account, clinic, err_response = _resolve_patient_and_clinic_for_entry(request)
         if err_response is not None:
             return err_response
@@ -594,19 +602,11 @@ class StartNewVisitAPIView(APIView):
         ).select_for_update().first()
         if active:
             if active.status == "consultation_in_progress":
-                try:
-                    consultation = active.consultation
-                    if not consultation.is_finalized:
-                        if not consultation.ended_at:
-                            consultation.ended_at = timezone.now()
-                            consultation.save(update_fields=["ended_at"])
-                        EncounterStateMachine.complete_consultation(active, user=user)
-                        consultation.refresh_from_db()
-                        if not consultation.is_finalized:
-                            consultation.is_finalized = True
-                            consultation.save(update_fields=["is_finalized"])
-                except Consultation.DoesNotExist:
-                    EncounterStateMachine.complete_consultation(active, user=user)
+                # Discard in-progress visit: cancel first, then remove consultation row(s).
+                # (Deleting before cancel risks inconsistent state if cancel fails.)
+                EncounterStateMachine.cancel(active, user=user)
+                active.refresh_from_db()
+                Consultation.objects.filter(encounter_id=active.pk).delete()
             elif active.status in ("created", "pre_consultation_in_progress", "pre_consultation_completed"):
                 EncounterStateMachine.cancel(active, user=user)
             # Safeguard: ensure closed encounter is not still active (unique constraint)
@@ -643,7 +643,7 @@ class StartNewVisitAPIView(APIView):
                         "encounter_id": str(existing.id),
                         "visit_pnr": existing.visit_pnr or "",
                         "status": _status_for_api(existing.status),
-                        "redirect_url": f"/consultations/pre-consultation?encounter_id={existing.id}",
+                        "redirect_url": f"{redirect_base}?encounter_id={existing.id}",
                         "message": "Existing active encounter returned.",
                     },
                     status=status.HTTP_200_OK,
@@ -661,7 +661,7 @@ class StartNewVisitAPIView(APIView):
                 "encounter_id": str(new_encounter.id),
                 "visit_pnr": new_encounter.visit_pnr or "",
                 "status": _status_for_api(new_encounter.status),
-                "redirect_url": f"/consultations/pre-consultation?encounter_id={new_encounter.id}",
+                "redirect_url": f"{redirect_base}?encounter_id={new_encounter.id}",
             },
             status=status.HTTP_201_CREATED,
         )
@@ -1120,7 +1120,9 @@ class CompletePreConsultationAPIView(APIView):
                 {"detail": MSG_VISIT_CANCELLED},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        redirect_url = f"/consultations/consultation/{encounter.id}"
+        # Go straight to the consultation workspace; it will POST consultation/start when needed
+        # (avoids a visible hop through /consultations/consultation/[id]/).
+        redirect_url = f"/consultations/start-consultation?encounter_id={encounter.id}"
 
         # Idempotent: already completed, or created (doctor can go straight to consultation) → return 200 with redirect
         if encounter.status in (
@@ -1392,6 +1394,7 @@ class CancelEncounterAPIView(APIView):
                 {"detail": "Encounter already cancelled.", "status": "cancelled"},
                 status=status.HTTP_200_OK,
             )
+        prior_normalized = normalize_encounter_status(encounter.status)
         try:
             # Required for state integrity: transition to cancelled and set cancelled_at, cancelled_by
             # so the encounter leaves consultation_in_progress and user can start a new visit.
@@ -1416,6 +1419,29 @@ class CancelEncounterAPIView(APIView):
                 updated_at=timezone.now(),
             )
             encounter.refresh_from_db()
+        # Remove consultation rows for discarded in-progress visits (draft or partially saved).
+        # For other cancelled states, only remove non-finalized rows to avoid touching completed records.
+        try:
+            if prior_normalized == "consultation_in_progress":
+                deleted, _ = Consultation.objects.filter(encounter_id=encounter.pk).delete()
+            else:
+                deleted, _ = Consultation.objects.filter(
+                    encounter_id=encounter.pk, is_finalized=False
+                ).delete()
+            if deleted:
+                logger.info(
+                    "CancelEncounterAPIView: removed consultation row(s) count=%s encounter_id=%s prior=%s",
+                    deleted,
+                    encounter_id,
+                    prior_normalized,
+                )
+        except Exception as exc:
+            logger.warning(
+                "CancelEncounterAPIView: consultation cleanup failed encounter_id=%s err=%s",
+                encounter_id,
+                exc,
+                exc_info=True,
+            )
         return Response(
             {"detail": "Encounter cancelled.", "status": _status_for_api(encounter.status)},
             status=status.HTTP_200_OK,
