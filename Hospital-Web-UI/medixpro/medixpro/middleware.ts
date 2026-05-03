@@ -24,8 +24,11 @@ export function middleware(req: NextRequest) {
     "/api/lab-admin/onboarding/"
   ];
 
-  // All public paths are allowed
-  if (publicPaths.some((path) => pathname.startsWith(path))) {
+  // Exact "/" must not use startsWith — every pathname starts with "/".
+  if (pathname === "/") {
+    return NextResponse.next();
+  }
+  if (publicPaths.some((path) => path !== "/" && pathname.startsWith(path))) {
     return NextResponse.next();
   }
 

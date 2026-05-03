@@ -118,9 +118,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return false;
       }
 
-      const res = await axiosClient.post("/refresh-token", {
-        refresh_token: refreshToken,
-      });
+      const res = await axiosClient.post(
+        "/refresh-token",
+        { refresh_token: refreshToken },
+        { timeout: 20_000 },
+      );
 
       const data = res.data;
       
@@ -218,7 +220,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         // If no tokens, user is not logged in
         if (!storedAccessToken && !storedRefreshToken) {
-          setSessionChecked(true);
           return;
         }
 
@@ -230,7 +231,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (userInfo) {
             setUser({ ...userInfo, role: storedRole });
           }
-          setSessionChecked(true);
           return;
         }
 
@@ -256,12 +256,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } catch (error) {
         console.error("Auto-login error:", error);
         logout();
-      } finally {
-        setSessionChecked(true);
       }
     };
 
-    verifyAndAutoLogin();
+    let cancelled = false;
+    const deadline = window.setTimeout(() => {
+      if (!cancelled) {
+        console.warn(
+          "[Auth] Session verification is taking longer than 25s — releasing the UI gate. If refresh is still pending, pages may load with incomplete session state.",
+        );
+        setSessionChecked(true);
+      }
+    }, 25_000);
+
+    void verifyAndAutoLogin().finally(() => {
+      cancelled = true;
+      window.clearTimeout(deadline);
+      setSessionChecked(true);
+    });
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(deadline);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

@@ -223,6 +223,12 @@ backendAxiosClient.interceptors.response.use(
       const isTemplateEndpoint = fullUrl.includes("/pre-consult/template");
       const isPreviewEndpoint = fullUrl.includes("/pre-consultation/preview/");
       const isConsultationCompleteEndpoint = fullUrl.includes("/consultation/complete/");
+      const isInvestigationSuggestionsEndpoint = fullUrl.includes(
+        "/diagnostics/investigations/suggestions/",
+      );
+      /** Optional UI enrichment; investigations section uses static fallback — avoid red logs when Django/proxy is unreachable. */
+      const isSuppressedSuggestionsNetwork =
+        isInvestigationSuggestionsEndpoint && !error.response;
       const is404 = error.response?.status === 404;
       const isExpectedPreview400 = isPreviewEndpoint && error.response?.status === 400;
       const responseMessage = String((error.response?.data as any)?.message ?? "").toLowerCase();
@@ -248,7 +254,12 @@ backendAxiosClient.interceptors.response.use(
       // - skip expected 404s on section/template endpoints
       // - skip expected 400s on preview endpoint (e.g. cancelled/no-show encounters)
       // - skip expected already-completed 400 on consultation complete endpoint
-      if ((!is404 || (!isSectionEndpoint && !isTemplateEndpoint)) && !isExpectedPreview400 && !isAlreadyCompleted400) {
+      if (
+        (!is404 || (!isSectionEndpoint && !isTemplateEndpoint)) &&
+        !isExpectedPreview400 &&
+        !isAlreadyCompleted400 &&
+        !isSuppressedSuggestionsNetwork
+      ) {
         console.error(
           `[backendAxiosClient] Error ${error.response?.status || "Network"} on ${error.config.method?.toUpperCase()} ${fullUrl}`,
         );

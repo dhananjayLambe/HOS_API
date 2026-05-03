@@ -27,12 +27,14 @@ export type InvestigationSuggestionsResponse = {
 };
 
 export async function fetchInvestigationSuggestions(
-  encounterId: string
+  encounterId: string,
+  opts?: { signal?: AbortSignal }
 ): Promise<InvestigationSuggestionsResponse> {
   const response = await backendAxiosClient.get<InvestigationSuggestionsResponse>(
     "/diagnostics/investigations/suggestions/",
     {
       params: { encounter_id: encounterId },
+      signal: opts?.signal,
     }
   );
   return response.data;

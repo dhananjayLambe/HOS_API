@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AxiosError } from "axios";
 import { Check, FlaskConical, Plus, Search, X } from "lucide-react";
 import {
   ConsultationSectionCard,
@@ -359,11 +360,12 @@ export function InvestigationsSection() {
 
   useEffect(() => {
     if (!encounterId) return;
+    const ac = new AbortController();
     let cancelled = false;
     setIsSuggestionsLoading(!didLoadSuggestionsRef.current);
     setSuggestionsError(null);
 
-    fetchInvestigationSuggestions(encounterId)
+    fetchInvestigationSuggestions(encounterId, { signal: ac.signal })
       .then((payload) => {
         if (cancelled) return;
         setSuggestions(payload);
@@ -371,8 +373,9 @@ export function InvestigationsSection() {
         didLoadSuggestionsRef.current = true;
         didShowSuggestionsErrorRef.current = false;
       })
-      .catch(() => {
+      .catch((err) => {
         if (cancelled) return;
+        if (err?.code === AxiosError.ERR_CANCELED) return;
         setUseSuggestionsFallback(true);
         setSuggestionsError("Could not load live suggestions. Showing fallback recommendations.");
         if (!didShowSuggestionsErrorRef.current) {
@@ -388,6 +391,7 @@ export function InvestigationsSection() {
 
     return () => {
       cancelled = true;
+      ac.abort();
     };
   }, [encounterId, notify, suggestionsRefetchSignal, toast]);
 
