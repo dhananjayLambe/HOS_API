@@ -17,7 +17,6 @@ import { useHelpdeskQueueStore } from "@/lib/helpdeskQueueStore";
 import { cn } from "@/lib/utils";
 import type { PatientSearchRow } from "@/lib/patientSearchDisplay";
 import { Menu, Plus } from "lucide-react";
-import { NotificationDropdown } from "@/components/notification-dropdown";
 import { UserNav } from "@/components/user-nav";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -210,7 +209,6 @@ export function HelpdeskLayout({ children }: { children: React.ReactNode }) {
               MedixPro
             </Link>
             <div className="flex shrink-0 items-center gap-1">
-              <NotificationDropdown />
               <UserNav />
               {hideHeaderLiveSearch && (
                 <Button
