@@ -1031,7 +1031,10 @@ class StartPreConsultationAPIView(APIView):
     """
     POST /encounters/{id}/pre-consultation/start/
     Transitions CREATED -> PRE_CONSULTATION_IN_PROGRESS.
-    Idempotent: if already in/last pre-consultation (or legacy pre_consultation), returns 200.
+
+    Concurrency-safe: locks the encounter row (select_for_update) so concurrent POSTs
+    serialize; the second waiter observes an already-started status and returns 200
+    without running transition again (no duplicate EncounterStatusLog).
     """
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated, IsDoctor]
@@ -1048,8 +1051,16 @@ class StartPreConsultationAPIView(APIView):
         "completed",         # legacy
     })
 
+    @transaction.atomic
     def post(self, request, encounter_id):
-        encounter = get_object_or_404(ClinicalEncounter, id=encounter_id)
+        try:
+            encounter = ClinicalEncounter.objects.select_for_update().get(pk=encounter_id)
+        except ClinicalEncounter.DoesNotExist:
+            return Response(
+                {"detail": "Encounter not found or invalid."},
+                status=status.HTTP_404_NOT_FOUND,
+                content_type="application/json",
+            )
         if encounter.status in self._ALREADY_STARTED_OR_PAST:
             return Response(
                 {
@@ -1058,16 +1069,19 @@ class StartPreConsultationAPIView(APIView):
                     "message": "Pre-consultation already in progress or completed.",
                 },
                 status=status.HTTP_200_OK,
+                content_type="application/json",
             )
         if encounter.status in ("cancelled", "no_show"):
             return Response(
                 {"detail": MSG_VISIT_CANCELLED},
                 status=status.HTTP_400_BAD_REQUEST,
+                content_type="application/json",
             )
         if encounter.status != "created":
             return Response(
                 {"detail": f"Encounter must be in CREATED state. Current: {encounter.status}."},
                 status=status.HTTP_400_BAD_REQUEST,
+                content_type="application/json",
             )
         try:
             EncounterStateMachine.start_pre_consultation(encounter, user=request.user)
@@ -1075,7 +1089,9 @@ class StartPreConsultationAPIView(APIView):
             return Response(
                 {"detail": str(e) or "Invalid transition."},
                 status=status.HTTP_400_BAD_REQUEST,
+                content_type="application/json",
             )
+        encounter.refresh_from_db()
         return Response(
             {
                 "encounter_id": str(encounter.id),
@@ -1083,6 +1099,7 @@ class StartPreConsultationAPIView(APIView):
                 "message": "Pre-consultation started.",
             },
             status=status.HTTP_200_OK,
+            content_type="application/json",
         )
 
 

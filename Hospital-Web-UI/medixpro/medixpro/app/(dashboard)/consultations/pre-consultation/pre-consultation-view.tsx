@@ -17,6 +17,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { usePreConsultationTemplateStore } from "@/store/preConsultationTemplateStore";
 import { useEncounter } from "@/lib/encounterContext";
+import { useEncounterMultiTabLeader } from "@/hooks/useEncounterMultiTabLeader";
 
 export function PreConsultationView() {
   const { selectedPatient, triggerSearchHighlight } = usePatient();
@@ -39,6 +40,9 @@ export function PreConsultationView() {
   useEffect(() => {
     if (urlEncounterId) setEncounterId(urlEncounterId);
   }, [urlEncounterId]);
+
+  const { isSecondaryTab } = useEncounterMultiTabLeader(encounterId);
+
   const [isCompleting, setIsCompleting] = useState(false);
   const [preConsultationStarted, setPreConsultationStarted] = useState(false);
   // Entry flow: "active" | "completed" | "none" | null (null = not resolved or has encounter_id in URL)
@@ -323,6 +327,7 @@ export function PreConsultationView() {
   useEffect(() => {
     if (!encounterId || preConsultationStarted || redirectingDueToCancelledRef.current) return;
     if (encounterStatus === "CANCELLED") return;
+    if (isSecondaryTab) return;
     const startPreConsultation = async () => {
       try {
         await backendAxiosClient.post(
@@ -334,7 +339,7 @@ export function PreConsultationView() {
       }
     };
     startPreConsultation();
-  }, [encounterId, encounterStatus, preConsultationStarted]);
+  }, [encounterId, encounterStatus, preConsultationStarted, isSecondaryTab]);
 
   const reloadPreConsultationSections = useCallback(async () => {
     if (!encounterId || redirectingDueToCancelledRef.current || encounterStatus === "CANCELLED") return;
@@ -503,6 +508,11 @@ export function PreConsultationView() {
     // Check if patient is selected
     if (!selectedPatient?.id) {
       toast.error("Please select a patient first.");
+      return;
+    }
+
+    if (encounterId && isSecondaryTab) {
+      toast.error("This patient is open in another tab. Use that tab to continue.");
       return;
     }
 
@@ -706,6 +716,10 @@ export function PreConsultationView() {
       toast.error("Please select a patient first.");
       return;
     }
+    if (encounterId && isSecondaryTab) {
+      toast.error("This patient is open in another tab. Use that tab to continue.");
+      return;
+    }
     let currentEncounterId = encounterId;
     if (!currentEncounterId) {
       try {
@@ -777,6 +791,10 @@ export function PreConsultationView() {
       toast.error("Select a patient first.");
       return;
     }
+    if (encounterId && isSecondaryTab) {
+      toast.error("This patient is open in another tab. Use that tab to continue.");
+      return;
+    }
     let encId = encounterId;
     if (!encId) {
       try {
@@ -826,6 +844,9 @@ export function PreConsultationView() {
     encounterStatus === "CONSULTATION_COMPLETED" ||
     encounterStatus === "CLOSED" ||
     encounterStatus === "CANCELLED";
+
+  const multiTabLocked = Boolean(encounterId && isSecondaryTab);
+  const formLocked = preLocked || multiTabLocked;
 
   const handleCopyPnr = () => {
     if (!visitPnr) return;
@@ -914,6 +935,22 @@ export function PreConsultationView() {
 
   return (
     <div className="flex flex-col gap-6 pb-8">
+      {multiTabLocked && (
+        <div
+          role="status"
+          className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3"
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0" />
+            <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
+              This patient is open in another tab.
+            </p>
+          </div>
+          <Button variant="outline" size="sm" className="shrink-0 w-full sm:w-auto" asChild>
+            <Link href="/doctor-dashboard">Go to dashboard</Link>
+          </Button>
+        </div>
+      )}
       {/* Header with Action Buttons */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b pb-4 -mx-6 px-6">
         <div className="flex items-center gap-4">
@@ -985,7 +1022,13 @@ export function PreConsultationView() {
                     <span className="text-xs text-muted-foreground truncate">Showing: Vitals, Complaint, Allergies</span>
                   )}
                 </div>
-                <Switch id="quick-mode" checked={quickMode} onCheckedChange={setQuickMode} className="shrink-0" />
+                <Switch
+                  id="quick-mode"
+                  checked={quickMode}
+                  onCheckedChange={setQuickMode}
+                  className="shrink-0"
+                  disabled={multiTabLocked}
+                />
               </div>
               <div className="flex flex-wrap gap-2">
                 {/* Cancel Visit button (commented out for later use) */}
@@ -1001,7 +1044,7 @@ export function PreConsultationView() {
                 </Button> */}
                 <Button
                   onClick={handleCompleteAndRedirect}
-                  disabled={isCompleting}
+                  disabled={isCompleting || multiTabLocked}
                   className="gap-2 bg-purple-600 hover:bg-purple-700 flex-1 sm:flex-initial"
                 >
                   {isCompleting ? (
@@ -1113,7 +1156,7 @@ export function PreConsultationView() {
           <span className="ml-2 text-muted-foreground">Loading previous records...</span>
         </div>
       ) : (
-        <div className={preLocked ? "space-y-6 pointer-events-none opacity-75" : "space-y-6"}>
+        <div className={formLocked ? "space-y-6 pointer-events-none opacity-75" : "space-y-6"}>
           {/* First Row: Vitals and Chief Complaint (Most Important) */}
           <div className="grid gap-6 md:grid-cols-2">
             {/* Vitals Section - Always show (fallback if template not loaded) */}

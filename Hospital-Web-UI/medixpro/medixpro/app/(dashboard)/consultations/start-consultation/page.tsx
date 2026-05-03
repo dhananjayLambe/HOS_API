@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useState, useMemo, useRef, useCallback } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { usePatient } from "@/lib/patientContext";
 import { useAuth } from "@/lib/authContext";
@@ -16,6 +17,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { AlertCircle, Search, Thermometer, Stethoscope, ClipboardList, Pill, FileText, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { ConsultationActionBar } from "@/components/consultations/consultation-action-bar";
 import { ConsultationRightMenu } from "@/components/consultations/consultation-right-menu";
 import { ConsultationDynamicDetailPanel } from "@/components/consultations/consultation-dynamic-detail-panel";
@@ -40,6 +42,7 @@ import {
 } from "@/lib/consultation-workflow";
 import { isUuidLike, loadPreConsultPreviewVitals } from "@/lib/loadPreConsultPreviewVitals";
 import { syncQueueAfterConsultationStart } from "@/lib/syncQueueAfterConsultationStart";
+import { useEncounterMultiTabLeader } from "@/hooks/useEncounterMultiTabLeader";
 
 function StartConsultationLoading() {
   return (
@@ -61,6 +64,10 @@ function StartConsultationContent() {
   const { user } = useAuth();
   const doctorId = user?.user_id ?? null;
   const encounterIdFromUrl = searchParams.get("encounter_id");
+  const encounterIdForLock =
+    encounterIdFromUrl && isUuidLike(encounterIdFromUrl) ? encounterIdFromUrl : null;
+  const { isSecondaryTab } = useEncounterMultiTabLeader(encounterIdForLock);
+  const multiTabLocked = Boolean(encounterIdForLock && isSecondaryTab);
 
   const {
     consultationType,
@@ -365,7 +372,26 @@ function StartConsultationContent() {
   return (
     <ConsultationErrorBoundary>
       <ConsultationSectionScrollProvider>
-      <div className="flex min-h-0 flex-1 flex-col mt-0 pt-0 overflow-x-hidden min-w-0 w-full max-w-full">
+      <>
+        {multiTabLocked && (
+          <div
+            role="status"
+            className="shrink-0 border-b border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-3 sm:px-4 md:px-5 lg:px-6 py-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3"
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0" />
+              <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
+                This patient is open in another tab.
+              </p>
+            </div>
+            <Button variant="outline" size="sm" className="shrink-0 w-full sm:w-auto" asChild>
+              <Link href="/doctor-dashboard">Go to dashboard</Link>
+            </Button>
+          </div>
+        )}
+        <div
+          className={`flex min-h-0 flex-1 flex-col mt-0 pt-0 overflow-x-hidden min-w-0 w-full max-w-full ${multiTabLocked ? "pointer-events-none select-none opacity-60" : ""}`}
+        >
         <ConsultationActionBar />
         <div className="mx-auto w-full max-w-[1600px] min-w-0 flex-1 min-h-0 overflow-x-hidden px-3 sm:px-4 md:px-5 lg:px-6 pt-3 sm:pt-4 pb-6 pb-safe sm:pb-8 flex flex-col overflow-y-auto lg:overflow-y-hidden">
           <div
@@ -425,6 +451,7 @@ function StartConsultationContent() {
           </div>
         </div>
       </div>
+      </>
       </ConsultationSectionScrollProvider>
     </ConsultationErrorBoundary>
   );

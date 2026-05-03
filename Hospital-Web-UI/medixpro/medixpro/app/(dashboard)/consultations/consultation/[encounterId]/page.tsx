@@ -5,9 +5,10 @@ import { useRouter, useParams } from "next/navigation";
 import { backendAxiosClient } from "@/lib/axiosClient";
 import { syncQueueAfterConsultationStart } from "@/lib/syncQueueAfterConsultationStart";
 import { Button } from "@/components/ui/button";
-import { Loader2, Stethoscope, ArrowLeft } from "lucide-react";
+import { Loader2, Stethoscope, ArrowLeft, AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { useToastNotification } from "@/hooks/use-toast-notification";
+import { useEncounterMultiTabLeader } from "@/hooks/useEncounterMultiTabLeader";
 
 type EncounterStatus =
   | "CREATED"
@@ -40,6 +41,8 @@ export default function ConsultationByEncounterPage() {
   const [starting, setStarting] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const redirectedForCancelledRef = useRef(false);
+
+  const { isSecondaryTab } = useEncounterMultiTabLeader(encounterId);
 
   const fetchEncounter = async () => {
     if (!encounterId) return;
@@ -105,6 +108,7 @@ export default function ConsultationByEncounterPage() {
   // Auto-start consultation when pre-consultation is completed (no extra click). Run once per encounter.
   useEffect(() => {
     if (!encounterId || !encounter || !readyToAutoStart || autoStartDoneRef.current) return;
+    if (isSecondaryTab) return;
     autoStartDoneRef.current = true;
     setStarting(true);
     toast.success("Starting consultation...");
@@ -127,10 +131,14 @@ export default function ConsultationByEncounterPage() {
       });
     // Intentionally depend only on encounterId and readyToAutoStart so we run once when encounter is loaded
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [encounterId, encounter?.id, readyToAutoStart]);
+  }, [encounterId, encounter?.id, readyToAutoStart, isSecondaryTab]);
 
   const handleStartConsultation = async () => {
     if (!encounterId) return;
+    if (isSecondaryTab) {
+      toast.error("This patient is open in another tab. Use that tab to continue.");
+      return;
+    }
     setStarting(true);
     try {
       const response = await backendAxiosClient.post<{
@@ -184,6 +192,7 @@ export default function ConsultationByEncounterPage() {
   }
 
   const status = statusNormalized;
+  const multiTabLocked = Boolean(encounterId && isSecondaryTab);
   const showStartButton =
     (status === "PRE_CONSULTATION_COMPLETED" || status === "CREATED") && !starting;
 
@@ -201,6 +210,22 @@ export default function ConsultationByEncounterPage() {
 
   return (
     <div className="flex flex-col gap-6 pb-8 max-w-2xl mx-auto">
+      {multiTabLocked && (
+        <div
+          role="status"
+          className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3"
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0" />
+            <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
+              This patient is open in another tab.
+            </p>
+          </div>
+          <Button variant="outline" size="sm" className="shrink-0 w-full sm:w-auto" asChild>
+            <Link href="/doctor-dashboard">Go to dashboard</Link>
+          </Button>
+        </div>
+      )}
       <div className="flex items-center gap-4">
         <Link href="/doctor-dashboard">
           <Button variant="ghost" size="icon">
@@ -215,7 +240,9 @@ export default function ConsultationByEncounterPage() {
         </div>
       </div>
 
-      <div className="rounded-lg border bg-card p-6 space-y-4">
+      <div
+        className={`rounded-lg border bg-card p-6 space-y-4 ${multiTabLocked ? "pointer-events-none opacity-60" : ""}`}
+      >
         <p className="text-sm text-muted-foreground">
           Status: <span className="font-medium text-foreground">{status}</span>
         </p>
@@ -223,7 +250,7 @@ export default function ConsultationByEncounterPage() {
         {showStartButton && (
           <Button
             onClick={handleStartConsultation}
-            disabled={starting}
+            disabled={starting || multiTabLocked}
             className="w-full sm:w-auto gap-2 bg-purple-600 hover:bg-purple-700"
           >
             {starting ? (
