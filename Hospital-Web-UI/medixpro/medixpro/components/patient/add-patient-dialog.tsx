@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
-import { Loader2, CheckCircle2 } from "lucide-react";
+import { Loader2, CheckCircle2, UserPlus } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -24,6 +24,13 @@ import axiosClient from "@/lib/axiosClient";
 import { usePatient, type Patient } from "@/lib/patientContext";
 import { useToastNotification } from "@/hooks/use-toast-notification";
 import { cn } from "@/lib/utils";
+
+/** Ten-digit mobile for API: strip non-digits; if longer than 10, keep last 10 (e.g. country prefix). */
+function normalizeMobileForApi(raw: string): string {
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length <= 10) return digits;
+  return digits.slice(-10);
+}
 
 export type AddPatientDialogPresentation = "default" | "bottom-sheet";
 
@@ -62,7 +69,7 @@ interface PatientProfile {
   date_of_birth: string | null;
 }
 
-type DialogStep = "form" | "exists";
+type DialogStep = "form" | "exists" | "existingChoice";
 type AgeInputMode = "age" | "dob";
 
 export function AddPatientDialog({
@@ -92,6 +99,9 @@ export function AddPatientDialog({
   const [ageInputMode, setAgeInputMode] = useState<AgeInputMode>("age");
   const [showMinorWarning, setShowMinorWarning] = useState(false);
   const [pendingSubmitData, setPendingSubmitData] = useState<PatientFormData | null>(null);
+  /** When set (e.g. after 409 or “add family” on existing mobile), same as opening with isExistingAccount from parent. */
+  const [localExistingPatientAccountId, setLocalExistingPatientAccountId] = useState<string | null>(null);
+  const [localExistingRelations, setLocalExistingRelations] = useState<string[]>([]);
 
   const {
     register,
@@ -118,10 +128,12 @@ export function AddPatientDialog({
 
   const gender = watch("gender");
   const relation = watch("relation");
-  const normalizedExistingRelations = useMemo(
-    () => existingRelations.map((value) => value.toLowerCase()),
-    [existingRelations]
-  );
+  const normalizedExistingRelations = useMemo(() => {
+    const merged = [...existingRelations, ...localExistingRelations];
+    return Array.from(new Set(merged.map((value) => value.toLowerCase())));
+  }, [existingRelations, localExistingRelations]);
+  const isAddProfileMode = isExistingAccount || Boolean(localExistingPatientAccountId);
+  const resolvedPatientAccountId = existingPatientAccountId ?? localExistingPatientAccountId ?? null;
   const hasSelfProfile = normalizedExistingRelations.includes("self");
   const hasSpouseProfile = normalizedExistingRelations.includes("spouse");
   const hasFatherProfile = normalizedExistingRelations.includes("father");
@@ -136,9 +148,11 @@ export function AddPatientDialog({
       return;
     }
 
-    setValue("mobile", "", { shouldValidate: false });
-    setValue("relation", "self", { shouldValidate: false });
-  }, [open, isExistingAccount, prefillMobile, hasSelfProfile, setValue]);
+    if (!isExistingAccount && !localExistingPatientAccountId) {
+      setValue("mobile", "", { shouldValidate: false });
+      setValue("relation", "self", { shouldValidate: false });
+    }
+  }, [open, isExistingAccount, prefillMobile, hasSelfProfile, localExistingPatientAccountId, setValue]);
 
   // Extract error message following the priority-based algorithm from documentation
   const extractErrorMessage = (error: any): string => {
@@ -222,20 +236,25 @@ export function AddPatientDialog({
   const submitPatientFlow = async (data: PatientFormData, isMinorOverride = false) => {
     setIsSubmitting(true);
     try {
-      const normalizedMobile = data.mobile.replace(/\D/g, '');
-      
+      const normalizedMobile = normalizeMobileForApi(data.mobile);
+
       if (normalizedMobile.length !== 10) {
         toast.error("Mobile number must be exactly 10 digits");
         setIsSubmitting(false);
         return;
       }
 
-      if (isExistingAccount) {
-        if (!existingPatientAccountId) {
+      if (isAddProfileMode) {
+        if (!resolvedPatientAccountId) {
           toast.error("Could not resolve existing patient account");
           return;
         }
-        await handleAddProfileToExistingAccount(data, normalizedMobile, existingPatientAccountId, isMinorOverride);
+        await handleAddProfileToExistingAccount(
+          data,
+          normalizedMobile,
+          resolvedPatientAccountId,
+          isMinorOverride
+        );
         return;
       }
 
@@ -245,26 +264,21 @@ export function AddPatientDialog({
       });
 
       if (checkResponse.data.status === "success" && checkResponse.data.exists) {
-        // Patient exists - show profiles for selection
         setCheckedMobile(normalizedMobile);
-        setPatientAccountId(checkResponse.data.patient_account_id);
-        setProfiles(checkResponse.data.profiles || []);
-        
-        if (checkResponse.data.profiles && checkResponse.data.profiles.length > 0) {
-          // If only one profile, auto-select it
-          if (checkResponse.data.profiles.length === 1) {
-            await handleSelectProfile(checkResponse.data.profiles[0], normalizedMobile);
-          } else {
-            // Multiple profiles - show selection screen
-            setStep("exists");
-            toast.info("Patient already exists. Please select a profile.");
-          }
+        setPatientAccountId(checkResponse.data.patient_account_id ?? null);
+        const profileList: PatientProfile[] = checkResponse.data.profiles || [];
+        setProfiles(profileList);
+
+        if (profileList.length > 1) {
+          setStep("exists");
+          toast.info("Patient already exists. Please select a profile.");
+        } else if (profileList.length === 1) {
+          setStep("existingChoice");
+          toast.info("This mobile is already registered.");
         } else {
-          // No profiles found - create new profile
           await handleCreatePatient(data, normalizedMobile, isMinorOverride);
         }
       } else {
-        // Patient does not exist - create new patient
         await handleCreatePatient(data, normalizedMobile, isMinorOverride);
       }
     } catch (error: any) {
@@ -283,7 +297,7 @@ export function AddPatientDialog({
       return;
     }
 
-    if (isExistingAccount && !data.relation) {
+    if (isAddProfileMode && !data.relation) {
       setError("relation", { type: "manual", message: "Relation is required" });
       return;
     }
@@ -381,7 +395,47 @@ export function AddPatientDialog({
             }),
       };
 
-      const response = await axiosClient.post("/patients/create/", requestBody);
+      let response;
+      try {
+        response = await axiosClient.post("/patients/create/", requestBody);
+      } catch (err: unknown) {
+        const ax = err as { response?: { status?: number; data?: Record<string, unknown> } };
+        if (ax.response?.status === 409) {
+          const data = ax.response.data ?? {};
+          const top = typeof data.patient_account_id === "string" ? data.patient_account_id.trim() : "";
+          const dbg = data.debug as Record<string, unknown> | undefined;
+          const nested =
+            dbg && typeof dbg.patient_account_id === "string" ? dbg.patient_account_id.trim() : "";
+          const accountId = top || nested || null;
+          try {
+            const checkResponse = await axiosClient.post("/patients/check-mobile/", {
+              mobile: normalizedMobile,
+            });
+            const rels: string[] = Array.from(
+              new Set(
+                ((checkResponse.data?.profiles as { relation?: string }[]) || [])
+                  .map((p) => p?.relation?.toLowerCase())
+                  .filter((r): r is string => Boolean(r))
+              )
+            );
+            const resolvedId =
+              accountId ||
+              (typeof checkResponse.data?.patient_account_id === "string"
+                ? checkResponse.data.patient_account_id
+                : null);
+            if (resolvedId) {
+              setLocalExistingPatientAccountId(resolvedId);
+              setLocalExistingRelations(rels);
+              setValue("relation", rels.includes("self") ? "child" : "self", { shouldValidate: true });
+              toast.info("This number already has an account. Add a family profile below.");
+              return;
+            }
+          } catch {
+            // fall through to generic error
+          }
+        }
+        throw err;
+      }
 
       if (response.data.status === "success" && response.data.profile_id) {
         // Search for the created patient
@@ -534,8 +588,27 @@ export function AddPatientDialog({
       setPatientAccountId(null);
       setProfiles([]);
       setCheckedMobile("");
+      setLocalExistingPatientAccountId(null);
+      setLocalExistingRelations([]);
       onOpenChange(false);
     }
+  };
+
+  /** From “existing mobile” steps (one or many profiles): open the add-profile form on the same account. */
+  const enterAddProfileModeForCurrentAccount = () => {
+    if (!patientAccountId || profiles.length === 0 || !checkedMobile) return;
+    const relations = Array.from(
+      new Set(profiles.map((p) => (p.relation || "").toLowerCase()).filter(Boolean))
+    );
+    setLocalExistingPatientAccountId(patientAccountId);
+    setLocalExistingRelations(relations);
+    setValue("mobile", checkedMobile, { shouldValidate: true });
+    setValue("relation", relations.includes("self") ? "child" : "self", { shouldValidate: true });
+    setPatientAccountId(null);
+    setProfiles([]);
+    setCheckedMobile("");
+    setStep("form");
+    toast.info("Enter details for the new family member below.");
   };
 
   const handleBack = () => {
@@ -621,12 +694,52 @@ export function AddPatientDialog({
           <DialogTitle>
             {step === "form" && "Add Patient"}
             {step === "exists" && "Select Patient Profile"}
+            {step === "existingChoice" && "Mobile already registered"}
           </DialogTitle>
           <DialogDescription>
             {step === "form" && "Enter patient details. The system will check if the patient already exists."}
-            {step === "exists" && "Patient already exists. Please select a profile to continue."}
+            {step === "exists" &&
+              "Select an existing profile to continue, or add a new family member on this same mobile number."}
+            {step === "existingChoice" &&
+              "This number already has a patient account. Use the existing profile or add a family member on the same mobile."}
           </DialogDescription>
         </DialogHeader>
+
+        {step === "existingChoice" && profiles.length === 1 && (
+          <div className={cn("space-y-4 py-2", isBottomSheet ? "min-h-0 flex-1 overflow-y-auto px-4" : "")}>
+            <div className="rounded-lg border border-border/70 bg-muted/30 p-3 text-sm">
+              <p className="font-medium text-foreground">{profiles[0].full_name}</p>
+              <p className="mt-1 text-muted-foreground">
+                Mobile <span className="tabular-nums">{checkedMobile}</span>
+                {profiles[0].relation ? (
+                  <span className="capitalize"> · {getRelationLabel(profiles[0].relation)}</span>
+                ) : null}
+              </p>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+              <Button
+                type="button"
+                className="bg-purple-700 hover:bg-purple-800 dark:bg-purple-600 dark:hover:bg-purple-700"
+                disabled={isSubmitting}
+                onClick={() => handleSelectProfile(profiles[0], checkedMobile)}
+              >
+                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Use this patient
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isSubmitting}
+                onClick={enterAddProfileModeForCurrentAccount}
+              >
+                Add a family member
+              </Button>
+            </div>
+            <Button type="button" variant="ghost" size="sm" className="w-fit px-0" onClick={handleBack} disabled={isSubmitting}>
+              Back to form
+            </Button>
+          </div>
+        )}
 
         {/* Main Form */}
         {step === "form" && (
@@ -642,7 +755,8 @@ export function AddPatientDialog({
               <Input
                 id="mobile"
                 type="tel"
-                placeholder="9876543210"
+                placeholder="9876543210 or +91…"
+                inputMode="numeric"
                 {...register("mobile", {
                   required: "Mobile number is required",
                   pattern: {
@@ -650,20 +764,20 @@ export function AddPatientDialog({
                     message: "Mobile number must be exactly 10 digits",
                   },
                   onChange: (e) => {
-                    const value = e.target.value.replace(/\D/g, '').slice(0, 10);
-                    setValue("mobile", value, { shouldValidate: true });
+                    const digits = e.target.value.replace(/\D/g, "");
+                    const canonical = digits.length > 10 ? digits.slice(-10) : digits;
+                    setValue("mobile", canonical, { shouldValidate: true });
                   },
                 })}
-                disabled={isSubmitting || isExistingAccount}
-                maxLength={10}
+                disabled={isSubmitting || isAddProfileMode}
               />
               {errors.mobile && <p className="text-xs text-destructive">{errors.mobile.message}</p>}
-              {isExistingAccount && (
+              {isAddProfileMode && (
                 <p className="text-xs text-muted-foreground">Adding new profile for this number</p>
               )}
             </div>
 
-            {isExistingAccount && (
+            {isAddProfileMode && (
               <div className="space-y-1.5">
                 <Label htmlFor="relation">
                   Relation <span className="text-destructive">*</span>
@@ -867,50 +981,67 @@ export function AddPatientDialog({
             </div>
 
             {profiles.length > 0 ? (
-              <ScrollArea className="max-h-[300px]">
-                <div className="space-y-2">
-                  {profiles.map((profile) => (
-                    <button
-                      key={profile.profile_id}
-                      onClick={() => handleSelectProfile(profile, checkedMobile)}
-                      disabled={isSubmitting}
-                      className={cn(
-                        "w-full rounded-lg border-2 p-4 text-left transition-all",
-                        "hover:border-purple-300 dark:hover:border-purple-700",
-                        "hover:bg-purple-50 dark:hover:bg-purple-900/20",
-                        "border-purple-200 dark:border-purple-800",
-                        isSubmitting && "opacity-50 cursor-not-allowed"
-                      )}
-                    >
-                      <div className="flex items-center gap-3">
-                        <Avatar className="h-10 w-10">
-                          <AvatarFallback className="bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300">
-                            {getInitials(profile.full_name)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <p className="font-semibold">{profile.full_name}</p>
-                            <span className="text-xs px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300">
-                              {getRelationLabel(profile.relation)}
-                            </span>
+              <>
+                <ScrollArea className="max-h-[300px]">
+                  <div className="space-y-2">
+                    {profiles.map((profile) => (
+                      <button
+                        key={profile.profile_id}
+                        onClick={() => handleSelectProfile(profile, checkedMobile)}
+                        disabled={isSubmitting}
+                        className={cn(
+                          "w-full rounded-lg border-2 p-4 text-left transition-all",
+                          "hover:border-purple-300 dark:hover:border-purple-700",
+                          "hover:bg-purple-50 dark:hover:bg-purple-900/20",
+                          "border-purple-200 dark:border-purple-800",
+                          isSubmitting && "opacity-50 cursor-not-allowed"
+                        )}
+                      >
+                        <div className="flex items-center gap-3">
+                          <Avatar className="h-10 w-10">
+                            <AvatarFallback className="bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300">
+                              {getInitials(profile.full_name)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <p className="font-semibold">{profile.full_name}</p>
+                              <span className="text-xs px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300">
+                                {getRelationLabel(profile.relation)}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                              {profile.gender && <span>{profile.gender}</span>}
+                              {profile.date_of_birth && (
+                                <>
+                                  <span>•</span>
+                                  <span>{formatDate(profile.date_of_birth)}</span>
+                                </>
+                              )}
+                            </div>
                           </div>
-                          <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                            {profile.gender && <span>{profile.gender}</span>}
-                            {profile.date_of_birth && (
-                              <>
-                                <span>•</span>
-                                <span>{formatDate(profile.date_of_birth)}</span>
-                              </>
-                            )}
-                          </div>
+                          <CheckCircle2 className="h-5 w-5 text-purple-600 dark:text-purple-400" />
                         </div>
-                        <CheckCircle2 className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-                      </div>
-                    </button>
-                  ))}
+                      </button>
+                    ))}
+                  </div>
+                </ScrollArea>
+                <div className="space-y-2 border-t border-border/70 pt-3">
+                  <p className="text-xs text-muted-foreground">
+                    Need someone else on this number? Add a new profile to the same account.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full gap-2 border-purple-200 font-medium text-purple-800 hover:bg-purple-50 dark:border-purple-800 dark:text-purple-200 dark:hover:bg-purple-950/40"
+                    disabled={isSubmitting}
+                    onClick={enterAddProfileModeForCurrentAccount}
+                  >
+                    <UserPlus className="h-4 w-4 shrink-0" aria-hidden />
+                    Add another profile on this mobile
+                  </Button>
                 </div>
-              </ScrollArea>
+              </>
             ) : (
               <div className="py-8 text-center text-sm text-muted-foreground">
                 No profiles found for this patient

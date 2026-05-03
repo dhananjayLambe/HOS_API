@@ -31,7 +31,7 @@ function toPatientSearchRow(p: HelpdeskSearchPatient): PatientSearchRow {
 }
 
 export default function HelpdeskPatientsPage() {
-  const { openAddPatientDialog } = useHelpdeskAddPatientDialog();
+  const { openAddPatientDialog, openAddProfileForPatient } = useHelpdeskAddPatientDialog();
   const router = useRouter();
   const addPatientFromSearch = useHelpdeskQueueStore((s) => s.addPatientFromSearch);
   const findEntryByPatient = useHelpdeskQueueStore((s) => s.findEntryByPatient);
@@ -63,12 +63,14 @@ export default function HelpdeskPatientsPage() {
         <h1 className="text-xl font-semibold tracking-tight">Patients</h1>
         <p className="text-sm text-muted-foreground">
           Search to check in and add someone to today&apos;s queue. Use + in the header or + Add New Patient
-          in the results to register someone new.
+          in the results to register someone new. For a number that already has an account, use + Add Profile on
+          a search result to add a family member on the same mobile.
         </p>
       </header>
 
       <HelpdeskPatientSearch
         onAddNew={openAddPatientDialog}
+        onAddProfile={openAddProfileForPatient}
         onSelectPatient={handleSelectPatient}
         autoFocus
         resultsScrollMaxHeightClassName="max-h-[min(50vh,360px)]"

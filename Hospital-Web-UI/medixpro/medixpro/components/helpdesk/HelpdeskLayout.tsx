@@ -21,8 +21,10 @@ import { NotificationDropdown } from "@/components/notification-dropdown";
 import { UserNav } from "@/components/user-nav";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+
+import type { HelpdeskSearchPatient } from "@/components/helpdesk/HelpdeskPatientSearch";
 
 function NavLinkButton({ item, active }: { item: HelpdeskNavItem; active: boolean }) {
   return (
@@ -118,7 +120,7 @@ export function HelpdeskLayout({ children }: { children: React.ReactNode }) {
     setAddPatientOpen(true);
   };
 
-  const handleAddProfileFromSearch = async (patient: PatientSearchRow) => {
+  const handleAddProfileFromSearch = useCallback(async (patient: PatientSearchRow) => {
     if (!patient.mobile) return;
     const normalizedMobile = patient.mobile.replace(/\D/g, "").slice(-10);
     if (normalizedMobile.length !== 10) {
@@ -155,7 +157,29 @@ export function HelpdeskLayout({ children }: { children: React.ReactNode }) {
     } catch {
       toast.error("Failed to load profile details. Please try again.");
     }
-  };
+  }, []);
+
+  const openAddProfileForPatient = useCallback(
+    async (patient: HelpdeskSearchPatient) => {
+      const full =
+        patient.full_name?.trim() ||
+        `${patient.first_name ?? ""} ${patient.last_name ?? ""}`.trim() ||
+        "Unnamed";
+      const row: PatientSearchRow = {
+        id: patient.id,
+        first_name: patient.first_name ?? "",
+        last_name: patient.last_name ?? "",
+        full_name: full,
+        gender: patient.gender,
+        date_of_birth: patient.date_of_birth,
+        mobile: patient.mobile,
+        patient_account_id: patient.patient_account_id,
+        relation: undefined,
+      };
+      await handleAddProfileFromSearch(row);
+    },
+    [handleAddProfileFromSearch]
+  );
 
   if (!sessionChecked) {
     return (
@@ -250,7 +274,9 @@ export function HelpdeskLayout({ children }: { children: React.ReactNode }) {
         </Sheet>
 
         <main className="flex min-h-0 min-w-0 flex-1 flex-col p-3 pb-24 lg:pb-6 lg:pl-6">
-          <HelpdeskAddPatientContext.Provider value={{ openAddPatientDialog: handleOpenAddNew }}>
+          <HelpdeskAddPatientContext.Provider
+            value={{ openAddPatientDialog: handleOpenAddNew, openAddProfileForPatient }}
+          >
             {children}
           </HelpdeskAddPatientContext.Provider>
         </main>
