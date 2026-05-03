@@ -3,7 +3,7 @@
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { HelpCircle, LogOut, MessageCircle, Settings, User } from "lucide-react";
+import { HelpCircle, LogOut, Settings, User } from "lucide-react";
 import { NotificationDropdown } from "./notification-dropdown";
 import Link from "next/link";
 import { useAuth } from "@/lib/authContext" 
@@ -45,6 +45,7 @@ export function UserNav() {
   const displayName = getUserFullName();
   const displayEmail = getUserEmail();
   const initials = getUserInitials();
+  const isHelpdesk = role?.toLowerCase() === "helpdesk";
 
   return (
     <div className="flex items-center gap-2 sm:gap-3 flex-nowrap">
@@ -70,39 +71,31 @@ export function UserNav() {
             </div>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuGroup>
-            {/* Phase 1: hide Profile until feature is enabled
-            <DropdownMenuItem>
-              <Link href="/profile" className="flex items-center gap-2">
-                <User className="mr-2 h-4 w-4" />
-                <span>Profile</span>
-              </Link>
-            </DropdownMenuItem>
-            */}
-           {/* <DropdownMenuItem>
-              <Link href="/chat" className="flex items-center gap-2">
-                <MessageCircle className="mr-2 h-4 w-4" />
-                <span>Chat</span>
-              </Link> 
-            </DropdownMenuItem> */}
-            {/* Phase 1: hide Support until feature is enabled
-            <DropdownMenuItem>
-              <Link href="/support" className="flex items-center gap-2">
-                <HelpCircle className="mr-2 h-4 w-4" />
-                <span>Support</span>
-              </Link>
-            </DropdownMenuItem>
-            */}
-            {/* Phase 1: hide Settings until feature is enabled
-            <DropdownMenuItem>
-              <Link href="/settings" className="flex items-center gap-2">
-                <Settings className="mr-2 h-4 w-4" />
-                <span>Settings</span>
-              </Link>
-            </DropdownMenuItem>
-            */}
-          </DropdownMenuGroup>
-          <DropdownMenuSeparator />
+          {!isHelpdesk && (
+            <>
+              <DropdownMenuGroup>
+                <DropdownMenuItem asChild>
+                  <Link href="/profile" className="flex items-center gap-2 cursor-pointer">
+                    <User className="mr-2 h-4 w-4" />
+                    <span>Profile</span>
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/support" className="flex items-center gap-2 cursor-pointer">
+                    <HelpCircle className="mr-2 h-4 w-4" />
+                    <span>Support</span>
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/settings" className="flex items-center gap-2 cursor-pointer">
+                    <Settings className="mr-2 h-4 w-4" />
+                    <span>Settings</span>
+                  </Link>
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
+              <DropdownMenuSeparator />
+            </>
+          )}
           <DropdownMenuItem
             onClick={() => logout()}
             className="flex items-center gap-2 cursor-pointer"
