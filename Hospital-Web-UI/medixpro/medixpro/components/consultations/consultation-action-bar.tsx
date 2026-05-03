@@ -255,7 +255,7 @@ export function ConsultationActionBar() {
   const toastErrorRef = useRef(toast.error);
   toastErrorRef.current = toast.error;
   const { selectedPatient } = usePatient();
-  const { fetchEncounterById } = useEncounter();
+  const { fetchEncounterById, invalidateEncounterById } = useEncounter();
   const { activateSection, scrollSectionIntoView, expandSectionCard } =
     useConsultationSectionScroll();
   const {
@@ -305,16 +305,23 @@ export function ConsultationActionBar() {
     let cancelled = false;
     // Force refetch: encounter cache may still hold pre-consultation payload (consultation_id null)
     // after the doctor completes pre-consult and consultation/start runs.
-    fetchEncounterById(encounterId, { force: true })
-      .then((encounter) => {
+    void (async () => {
+      try {
+        let encounter = await fetchEncounterById(encounterId, { force: true });
+        if (cancelled) return;
+        if (!encounter) {
+          encounter = await fetchEncounterById(encounterId, { force: false });
+        }
         if (cancelled || !encounter) return;
         setVisitPnr(encounter.visit_pnr ?? null);
         setConsultationId(encounter.consultation_id ?? null);
-      })
-      .catch(() => {
-        setVisitPnr(null);
-        setConsultationId(null);
-      });
+      } catch {
+        if (!cancelled) {
+          setVisitPnr(null);
+          setConsultationId(null);
+        }
+      }
+    })();
     return () => {
       cancelled = true;
     };
@@ -1125,14 +1132,12 @@ export function ConsultationActionBar() {
                   setIsCancelling(false);
                   return;
                 }
+                invalidateEncounterById(id);
                 useConsultationStore.getState().reset();
                 setShowCancelConfirm(false);
                 setIsCancelling(false);
                 toast.success("Visit cancelled. You can start a new visit from the dashboard.");
-                // Defer navigation to next tick so React can commit state and avoid hook-order issues during transition
-                setTimeout(() => {
-                  router.replace("/doctor-dashboard");
-                }, 0);
+                router.replace("/doctor-dashboard");
               }}
             >
               {isCancelling ? <Loader2 className="h-4 w-4 animate-spin" /> : null}

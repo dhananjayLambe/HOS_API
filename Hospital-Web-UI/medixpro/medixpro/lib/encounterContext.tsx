@@ -45,6 +45,16 @@ export function EncounterProvider({ children }: { children: React.ReactNode }) {
       if (!encounterId) return null;
 
       if (opts?.force) {
+        // Serialize with any in-flight GET: a second force used to invalidate+bump version while the first
+        // GET was still pending, so the first response was discarded (null) and callers never got visit_pnr.
+        const pending = inFlightRef.current.get(encounterId);
+        if (pending) {
+          try {
+            await pending;
+          } catch {
+            // ignore — next invalidate+fetch refreshes
+          }
+        }
         invalidateEncounterById(encounterId);
       } else if (encounterCacheRef.current[encounterId]) {
         return encounterCacheRef.current[encounterId];
@@ -64,11 +74,14 @@ export function EncounterProvider({ children }: { children: React.ReactNode }) {
           if (versionAtFetchStart !== currentVersion) {
             return null;
           }
+          const rawPnr = (res.data as { visit_pnr?: string | null } | undefined)?.visit_pnr;
+          const visit_pnr =
+            rawPnr != null && String(rawPnr).trim() !== "" ? String(rawPnr).trim() : null;
           const payload: EncounterSummary = {
             id: encounterId,
             status: res.data?.status,
             cancelled: res.data?.cancelled,
-            visit_pnr: res.data?.visit_pnr ?? null,
+            visit_pnr,
             consultation_id: res.data?.consultation_id ?? null,
           };
           setEncounterCache((prev) => ({ ...prev, [encounterId]: payload }));
