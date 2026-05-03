@@ -205,6 +205,25 @@ export function DynamicSectionForm({
   const [fieldUnits, setFieldUnits] = useState<Record<string, string>>({}); // Track unit per field
   const firstFieldRef = useRef<HTMLInputElement | null>(null);
 
+  /** Default vitals temperature display to °F when template still says °C (e.g. cached template). */
+  const getEffectiveDisplayUnit = useCallback(
+    (itemCode: string, field: { type?: string; unit?: string; canonical_unit?: string; supported_units?: string[] }, fieldKeyFull: string) => {
+      const stored = fieldUnits[fieldKeyFull];
+      if (stored) return stored;
+      if (
+        sectionCode === "vitals" &&
+        itemCode === "temperature" &&
+        field?.type === "number" &&
+        Array.isArray(field?.supported_units) &&
+        field.supported_units.includes("f")
+      ) {
+        return "f";
+      }
+      return field.unit || field.canonical_unit || "";
+    },
+    [fieldUnits, sectionCode]
+  );
+
   // Persist last-used optional vitals when selection changes
   useEffect(() => {
     if (sectionCode !== "vitals") return;
@@ -513,7 +532,9 @@ export function DynamicSectionForm({
     (itemCode: string, field: any, value: any, currentUnitOverride?: string): string | undefined => {
       const fieldKeyFull = `${itemCode}.${field.key}`;
       const currentUnit =
-        currentUnitOverride ?? fieldUnits[fieldKeyFull] ?? field.unit ?? field.canonical_unit ?? "";
+        currentUnitOverride != null && currentUnitOverride !== ""
+          ? currentUnitOverride
+          : getEffectiveDisplayUnit(itemCode, field, fieldKeyFull);
 
       // Required validation
       if (field.required && (value === undefined || value === null || value === "")) {
@@ -591,7 +612,7 @@ export function DynamicSectionForm({
     }
 
     return undefined;
-  }, [fieldUnits, sectionData, specialtyRanges]);
+  }, [fieldUnits, sectionData, specialtyRanges, getEffectiveDisplayUnit]);
 
   const handleFieldChange = useCallback((itemCode: string, fieldKey: string, value: any) => {
     setSectionData((prev) => ({
@@ -674,7 +695,7 @@ export function DynamicSectionForm({
               return;
             }
             // Use unit-aware validateField for all fields (single source of truth)
-            const currentUnitForSubmit = fieldUnits[fieldKey];
+            const currentUnitForSubmit = getEffectiveDisplayUnit(itemCode, field, fieldKey);
             const validationError = validateField(itemCode, field, value, currentUnitForSubmit);
             if (validationError) {
               errors.push(validationError);
@@ -920,7 +941,7 @@ export function DynamicSectionForm({
     const hasError = validationErrors[fieldKey];
     const isTouched = touchedFields.has(fieldKey);
     const showError = hasError && isTouched;
-    const currentUnit = fieldUnits[fieldKey] || field.unit || "";
+    const currentUnit = getEffectiveDisplayUnit(itemCode, field, fieldKey);
     
     return (
       <div key={field.key} className={showError ? "space-y-1" : isCompact ? "flex-1" : ""}>
@@ -950,7 +971,7 @@ export function DynamicSectionForm({
         )}
       </div>
     );
-  }, [validationErrors, touchedFields, fieldUnits, sectionData, handleFieldChange, handleKeyDown, revalidateFieldWithUnit]);
+  }, [validationErrors, touchedFields, fieldUnits, sectionData, handleFieldChange, handleKeyDown, revalidateFieldWithUnit, getEffectiveDisplayUnit]);
 
   const renderItem = (item: any) => {
     const itemData = sectionData[item.code] || {};

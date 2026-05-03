@@ -106,7 +106,7 @@
         "key": "temperature",
         "type": "number",
         "label": "Temperature",
-        "unit": "c",
+        "unit": "f",
         "supported_units": ["c", "f"],
         "canonical_unit": "c",
         "step": 1,

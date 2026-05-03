@@ -265,7 +265,14 @@ export const DynamicFieldRenderer = memo<DynamicFieldRendererProps>(
         }, [value, canonicalUnit, activeUnit, hasUnitSwitcher, step]);
         // Sizing: small for BP, Pulse, SpO₂; medium for Height, Weight; larger for Temperature (°C/°F) for readability
         const rangeSpan = field.range?.[1] != null && field.range?.[0] != null ? field.range[1] - field.range[0] : null;
-        const isTempField = field.unit === "c" || field.unit === "f";
+        const isTempField =
+          activeUnit === "c" ||
+          activeUnit === "f" ||
+          field.unit === "c" ||
+          field.unit === "f" ||
+          canonicalUnit === "c" ||
+          canonicalUnit === "f" ||
+          (field.supported_units?.some((u) => u === "c" || u === "f") ?? false);
         const isSmallNumeric =
           !isTempField &&
           (field.unit === "mmHg" ||
