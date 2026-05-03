@@ -2,8 +2,8 @@
 
 /**
  * Helpdesk appointments: live list (GET /api/appointments/ via BFF), tab filters,
- * create, cancel, queue check-in. Components use useHelpdeskAppointmentsMock or
- * the useHelpdeskAppointments alias.
+ * create, cancel, check-in (POST /api/appointments/:id/check-in/ via BFF).
+ * Implementation lives in HelpdeskAppointmentMockProvider; this file re-exports the hook.
  */
 export {
   HelpdeskAppointmentMockProvider,

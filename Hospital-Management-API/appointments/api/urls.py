@@ -3,6 +3,7 @@ from appointments.api.views import (
     AppointmentListView,
     AppointmentDetailView,
     AppointmentCancelView,
+    AppointmentCheckInView,
     AppointmentRescheduleView,
     PatientAppointmentsView,
     DoctorAppointmentsView,
@@ -14,6 +15,7 @@ app_name = 'appointments'
 urlpatterns = [
     path("<uuid:pk>/reschedule/", AppointmentRescheduleView.as_view(), name="appointment-reschedule"),
     path("<uuid:pk>/cancel/", AppointmentCancelView.as_view(), name="appointment-cancel"),
+    path("<uuid:pk>/check-in/", AppointmentCheckInView.as_view(), name="appointment-check-in"),
     path("", AppointmentListView.as_view(), name="appointment-create"),
     path('detail/', AppointmentDetailView.as_view(), name='appointment-detail'),
     #Appointments View
@@ -27,3 +29,7 @@ urlpatterns = [
     path("calendar-view/", DoctorCalendarView.as_view(), name="calendar-view"),
 
 ]
+
+#Helpdesk UI → Check-in Button → BFF → Django → Encounter Created → UI Updated
+#Queue order → Doctor flow → Patient experience
+#Appointment → Check-in → Encounter → Queue → Pre-consult → Consultation → Completion

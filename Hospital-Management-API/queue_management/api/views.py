@@ -3,7 +3,7 @@ import logging
 import threading
 from django.conf import settings
 from django.utils.timezone import localdate
-from django.db.models import F, Max, Q
+from django.db.models import F, Q
 from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -32,6 +32,8 @@ from queue_management.services.queue_realtime import (
     queue_reorder_lock,
     update_queue_sorted_set,
 )
+from queue_management.services.queue_service import add_to_queue
+from queue_management.services.queue_sync import _sync_queue_realtime
 from queue_management.tasks import sync_queue_realtime_task
 
 # Once encounter reaches these (raw DB values; includes legacy), hide row from helpdesk "today"
@@ -49,119 +51,6 @@ HELPDESK_TODAY_EXCLUDE_IF_ENCOUNTER_STATUS_IN = (
 
 # Initialize Redis connection
 redis_client = redis.StrictRedis(host=settings.REDIS_HOST, port=settings.REDIS_PORT, db=0, decode_responses=True)
-
-
-def _build_active_queue_payload(*, doctor_id, clinic_id, queue_date):
-    rows = (
-        Queue.objects.filter(
-            doctor_id=doctor_id,
-            clinic_id=clinic_id,
-            created_at__date=queue_date,
-            status__in=("waiting", "vitals_done"),
-        )
-        .select_related(
-            "patient",
-            "appointment",
-            "encounter",
-            "encounter__pre_consultation",
-            "encounter__pre_consultation__preconsultationvitals",
-        )
-        .only(
-            "id",
-            "encounter_id",
-            "patient_id",
-            "appointment_id",
-            "status",
-            "position_in_queue",
-            "created_at",
-            "patient__first_name",
-            "patient__last_name",
-            "patient__public_id",
-            "patient__gender",
-            "patient__date_of_birth",
-            "patient__age_years",
-            "encounter__visit_pnr",
-            "encounter__pre_consultation__id",
-            "encounter__pre_consultation__preconsultationvitals__data",
-        )
-        .order_by("position_in_queue", "created_at", "id")
-    )
-    payload = []
-    for row in rows:
-        patient = row.patient
-        enc = getattr(row, "encounter", None)
-        visit_pnr = None
-        if enc is not None:
-            pnr = getattr(enc, "visit_pnr", None)
-            visit_pnr = str(pnr) if pnr else None
-        gender = (patient.gender or "").lower()
-        if gender == "male":
-            gender = "M"
-        elif gender == "female":
-            gender = "F"
-        elif gender == "other":
-            gender = "O"
-        else:
-            gender = patient.gender or None
-
-        token = None
-        appointment = getattr(row, "appointment", None)
-        if appointment:
-            for key in ("token_number", "token", "queue_number"):
-                value = getattr(appointment, key, None)
-                if value:
-                    token = str(value)
-                    break
-
-        payload.append(
-            {
-                "id": str(row.id),
-                "encounter_id": str(row.encounter_id) if row.encounter_id else None,
-                "patient_profile_id": str(row.patient_id) if row.patient_id else None,
-                "visit_pnr": visit_pnr,
-                "patient_public_id": str(patient.public_id) if getattr(patient, "public_id", None) else None,
-                "patient_name": " ".join(x for x in [patient.first_name or "", patient.last_name or ""] if x).strip() or "Patient",
-                "age": patient.age if patient.date_of_birth else patient.age_years,
-                "gender": gender,
-                "status": row.status,
-                "token": token,
-                "position": int(row.position_in_queue),
-            }
-        )
-    return payload
-
-
-def get_top_queue(doctor_id, clinic_id):
-    today = localdate()
-    active_queue = _build_active_queue_payload(
-        doctor_id=doctor_id,
-        clinic_id=clinic_id,
-        queue_date=today,
-    )
-    return {
-        "top_queue": active_queue[:3],
-        "total_active": len(active_queue),
-    }
-
-
-def _sync_queue_realtime(*, doctor_id, clinic_id, queue_date):
-    queue_payload = _build_active_queue_payload(
-        doctor_id=doctor_id,
-        clinic_id=clinic_id,
-        queue_date=queue_date,
-    )
-    update_queue_sorted_set(
-        clinic_id=str(clinic_id),
-        doctor_id=str(doctor_id),
-        queue_date=queue_date,
-        queue_rows=queue_payload,
-    )
-    publish_queue_update(
-        clinic_id=str(clinic_id),
-        doctor_id=str(doctor_id),
-        queue_date=queue_date,
-        queue_rows=queue_payload,
-    )
 
 # 1. POST /queue/check-in/ – Add a patient to the queue
 class CheckInQueueAPIView(APIView):
@@ -194,20 +83,6 @@ class CheckInQueueAPIView(APIView):
 
         if existing_entry:
             return Response({"error": "Patient is already checked in for today's queue at this clinic."}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Next position must account for ALL active queue rows (waiting + vitals_done);
-        # counting only `waiting` can collide with existing vitals_done positions and
-        # violate uniq_active_queue_position_per_doctor_clinic_day.
-        max_pos = (
-            Queue.objects.filter(
-                doctor_id=doctor_id,
-                clinic_id=clinic_id,
-                created_at__date=today,
-                status__in=("waiting", "vitals_done"),
-            ).aggregate(m=Max("position_in_queue"))
-            .get("m")
-        )
-        new_position = (max_pos or 0) + 1
 
         doctor_obj = get_object_or_404(DoctorModel, id=doctor_id)
         appointment = None
@@ -246,16 +121,7 @@ class CheckInQueueAPIView(APIView):
                 encounter.updated_by = request.user
                 encounter.save(update_fields=update_fields + ["updated_by"])
 
-            queue_entry = Queue.objects.create(
-                doctor_id=doctor_id,
-                clinic=clinic,
-                patient_account=patient_account,
-                patient=patient_profile,
-                appointment_id=appointment_id,
-                encounter=encounter,
-                position_in_queue=new_position,
-                status="waiting",
-            )
+            queue_entry = add_to_queue(encounter, request.user)
             logging.getLogger(__name__).info(
                 "encounter.lifecycle.queue.checkin queue_id=%s encounter_id=%s visit_pnr=%s clinic_id=%s doctor_id=%s patient_profile_id=%s",
                 queue_entry.id,
@@ -267,14 +133,6 @@ class CheckInQueueAPIView(APIView):
             )
 
         queue_entry = Queue.objects.select_related("patient", "appointment", "encounter").get(pk=queue_entry.pk)
-        try:
-            _sync_queue_realtime(
-                doctor_id=queue_entry.doctor_id,
-                clinic_id=queue_entry.clinic_id,
-                queue_date=today,
-            )
-        except Exception:
-            logging.getLogger(__name__).exception("queue check-in: realtime sync failed after create")
         return Response(HelpdeskQueueRowSerializer(queue_entry).data, status=status.HTTP_201_CREATED)
 
 # 2. GET /queue/doctor/{id}/ – Get today’s live queue for a doctor at a clinic

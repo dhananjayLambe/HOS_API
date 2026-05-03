@@ -49,10 +49,28 @@ export default function HelpdeskAppointmentsListPage() {
   const handleCheckIn = useCallback(
     async (a: Appointment) => {
       try {
-        await checkInAppointment(a.id);
-        toast.success("Patient checked in");
-      } catch {
-        toast.error("Check-in failed.");
+        const data = await checkInAppointment(a.id);
+        if (data.message?.toLowerCase().includes("already")) {
+          toast.info("Already checked in");
+        } else {
+          toast.success("Patient checked in");
+        }
+      } catch (err: unknown) {
+        const code = (err as { code?: string }).code;
+        const msg = err instanceof Error ? err.message : "";
+        if (code === "INVALID_STATUS") {
+          toast.error("Cannot check-in this appointment");
+        } else if (code === "INVALID_DATE") {
+          toast.error("Cannot check-in future appointment");
+        } else if (code === "NOT_FOUND") {
+          toast.error("Appointment not found");
+        } else if (code === "PERMISSION_DENIED") {
+          toast.error("Not allowed");
+        } else if (code === "CONFLICT") {
+          toast.error(msg || "Conflict occurred");
+        } else {
+          toast.error("Something went wrong");
+        }
       }
     },
     [checkInAppointment]
@@ -92,6 +110,7 @@ export default function HelpdeskAppointmentsListPage() {
         onCancel={openCancelDialog}
         onCheckIn={handleCheckIn}
         actionDisabled={busy}
+        checkInPending={mutationKey === "checkin"}
         isLoading={isLoading}
       />
 

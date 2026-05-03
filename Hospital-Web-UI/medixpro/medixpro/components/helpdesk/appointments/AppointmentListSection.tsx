@@ -13,6 +13,8 @@ export interface AppointmentListSectionProps {
   onCancel: (a: Appointment) => void;
   onCheckIn: (a: Appointment) => void;
   actionDisabled?: boolean;
+  /** True while appointment check-in POST is in flight (shows "Checking..." on Check-in). */
+  checkInPending?: boolean;
   isLoading?: boolean;
   className?: string;
 }
@@ -25,6 +27,7 @@ export function AppointmentListSection({
   onCancel,
   onCheckIn,
   actionDisabled,
+  checkInPending,
   isLoading,
   className,
 }: AppointmentListSectionProps) {
@@ -76,6 +79,7 @@ export function AppointmentListSection({
                     onCancel={onCancel}
                     onCheckIn={onCheckIn}
                     actionDisabled={actionDisabled}
+                    isChecking={checkInPending}
                   />
                 </li>
               ))}

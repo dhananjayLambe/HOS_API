@@ -44,6 +44,19 @@ class IsHelpdeskOrPatient(BasePermission):
         )
 
 
+class IsHelpdeskOrAdmin(BasePermission):
+    """Helpdesk, helpdesk_admin, or superuser — for helpdesk-only operational APIs (e.g. check-in)."""
+
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
+        if request.user.is_superuser:
+            return True
+        return bool(
+            request.user.groups.filter(name__in=["helpdesk", "helpdesk_admin"]).exists()
+        )
+
+
 class IsDoctorOrHelpdeskOrOwnerOrAdmin(BasePermission):
     def has_object_permission(self, request, view, obj):
         if request.user.is_superuser:

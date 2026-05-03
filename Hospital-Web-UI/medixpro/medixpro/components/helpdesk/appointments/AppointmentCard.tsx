@@ -30,6 +30,8 @@ export interface AppointmentCardProps {
   onCancel: (a: Appointment) => void;
   onCheckIn: (a: Appointment) => void;
   actionDisabled?: boolean;
+  /** Global check-in mutation in flight — Check-in button shows "Checking...". */
+  isChecking?: boolean;
   className?: string;
 }
 
@@ -39,6 +41,7 @@ export function AppointmentCard({
   onCancel,
   onCheckIn,
   actionDisabled,
+  isChecking,
   className,
 }: AppointmentCardProps) {
   const canReschedule = a.status === "scheduled";
@@ -89,7 +92,7 @@ export function AppointmentCard({
             disabled={actionDisabled}
             onClick={() => onCheckIn(a)}
           >
-            Check-in
+            {isChecking ? "Checking..." : "Check-in"}
           </Button>
         )}
         {canReschedule && (

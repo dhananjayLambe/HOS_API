@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 from django.conf import settings
 from django.core.cache import cache
 from django.core.paginator import Paginator
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.utils import timezone
 from django.utils.timezone import localdate, localtime, now, timedelta
@@ -17,7 +17,12 @@ from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
-from account.permissions import IsDoctorOrHelpdesk, IsDoctorOrHelpdeskOrPatient, IsHelpdeskOrPatient
+from account.permissions import (
+    IsDoctorOrHelpdesk,
+    IsDoctorOrHelpdeskOrPatient,
+    IsHelpdeskOrAdmin,
+    IsHelpdeskOrPatient,
+)
 from appointments.api.serializers import (
     AppointmentCancelRequestSerializer,
     AppointmentCreatedResponseSerializer,
@@ -45,6 +50,11 @@ from appointments.utils.slot_generation import (
     slot_bucket_counts,
 )
 from clinic.models import Clinic
+from consultations_core.services.encounter_service import EncounterService
+from queue_management.services.queue_service import (
+    InvalidEncounterForQueueError,
+    add_to_queue,
+)
 from doctor.models import DoctorLeave, doctor
 
 logger = logging.getLogger(__name__)
@@ -300,6 +310,181 @@ class AppointmentCancelView(APIView):
                 "status": "cancelled",
                 "message": "Appointment cancelled successfully",
             },
+            status=status.HTTP_200_OK,
+        )
+
+
+class AppointmentCheckInView(APIView):
+    """POST /api/appointments/<id>/check-in/ — scheduled → checked_in + ClinicalEncounter (helpdesk / superuser)."""
+
+    permission_classes = [IsAuthenticated, IsHelpdeskOrAdmin]
+    authentication_classes = [JWTAuthentication]
+
+    @staticmethod
+    def _error_all(code, message, http_status):
+        return Response({"all": {"code": code, "message": message}}, status=http_status)
+
+    def _get_scoped_appointment(self, request, pk):
+        user = request.user
+        qs = (
+            Appointment.objects.select_related(
+                "doctor",
+                "clinic",
+                "patient_profile",
+                "patient_account",
+            )
+            .prefetch_related("encounters")
+            .select_for_update()
+        )
+        if user.is_superuser:
+            return qs.get(id=pk)
+        if user.groups.filter(name__in=["helpdesk", "helpdesk_admin"]).exists():
+            hp = getattr(user, "helpdesk_profile", None)
+            if hp is None:
+                raise PermissionDenied("No helpdesk clinic assignment for this user.")
+            return qs.get(id=pk, clinic_id=hp.clinic_id)
+        raise PermissionDenied("You do not have permission to check in this appointment.")
+
+    @staticmethod
+    def _success_body(appointment, encounter, message, queue=None):
+        body = {
+            "id": str(appointment.id),
+            "status": "checked_in",
+            "encounter_id": str(encounter.id),
+            "check_in_time": appointment.check_in_time.isoformat() if appointment.check_in_time else None,
+            "message": message,
+        }
+        if queue is not None:
+            body["queue_position"] = int(queue.position_in_queue)
+        return body
+
+    @transaction.atomic
+    def post(self, request, pk):
+        try:
+            appointment = self._get_scoped_appointment(request, pk)
+        except Appointment.DoesNotExist:
+            logger.warning("Check-in: appointment not found or out of scope pk=%s", pk)
+            return self._error_all(
+                "NOT_FOUND",
+                "Appointment not found.",
+                status.HTTP_404_NOT_FOUND,
+            )
+        except PermissionDenied as exc:
+            return self._error_all(
+                "PERMISSION_DENIED",
+                str(exc),
+                status.HTTP_403_FORBIDDEN,
+            )
+
+        today = timezone.localdate()
+        if appointment.appointment_date > today:
+            return self._error_all(
+                "INVALID_DATE",
+                "Cannot check in for a future-dated appointment",
+                status.HTTP_400_BAD_REQUEST,
+            )
+
+        if appointment.status not in ("scheduled", "checked_in"):
+            return self._error_all(
+                "INVALID_STATUS",
+                "Only scheduled appointments can be checked in",
+                status.HTTP_400_BAD_REQUEST,
+            )
+
+        if appointment.status == "checked_in":
+            encounter = appointment.encounter
+            if encounter is None:
+                return self._error_all(
+                    "CONFLICT",
+                    "Encounter missing for checked-in appointment",
+                    status.HTTP_409_CONFLICT,
+                )
+            try:
+                queue = add_to_queue(encounter, request.user)
+            except InvalidEncounterForQueueError:
+                return self._error_all(
+                    "QUEUE_ERROR",
+                    "Failed to add patient to queue",
+                    status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+            except IntegrityError:
+                return self._error_all(
+                    "QUEUE_ERROR",
+                    "Failed to add patient to queue",
+                    status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+            return Response(
+                self._success_body(appointment, encounter, "Appointment already checked in", queue=queue),
+                status=status.HTTP_200_OK,
+            )
+
+        try:
+            encounter, _created = EncounterService.get_or_create_encounter(
+                clinic=appointment.clinic,
+                patient_account=appointment.patient_account,
+                patient_profile=appointment.patient_profile,
+                doctor=appointment.doctor,
+                appointment=appointment,
+                encounter_type="appointment",
+                entry_mode="helpdesk",
+                created_by=request.user,
+                consultation_type="FULL",
+            )
+        except IntegrityError:
+            encounter = EncounterService.get_active_encounter(
+                appointment.patient_account,
+                appointment.clinic,
+            )
+            if encounter is None:
+                return self._error_all(
+                    "CONFLICT",
+                    "Could not resolve active encounter. Please retry.",
+                    status.HTTP_409_CONFLICT,
+                )
+
+        if encounter.appointment_id is None:
+            encounter.appointment = appointment
+            encounter.updated_by = request.user
+            encounter.save(update_fields=["appointment", "updated_by"])
+
+        now = timezone.now()
+        appointment.status = "checked_in"
+        appointment.check_in_time = now
+        appointment.updated_by = request.user
+        appointment.save(update_fields=["status", "check_in_time", "updated_by", "updated_at"])
+
+        log_appointment_history(
+            appointment=appointment,
+            status="checked_in",
+            changed_by=request.user,
+            comment="Patient checked in",
+        )
+
+        logger.info(
+            "Appointment checked-in: id=%s, encounter=%s, clinic=%s, user=%s",
+            appointment.id,
+            encounter.id,
+            appointment.clinic_id,
+            request.user.id,
+        )
+
+        try:
+            queue = add_to_queue(encounter, request.user)
+        except InvalidEncounterForQueueError:
+            return self._error_all(
+                "QUEUE_ERROR",
+                "Failed to add patient to queue",
+                status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+        except IntegrityError:
+            return self._error_all(
+                "QUEUE_ERROR",
+                "Failed to add patient to queue",
+                status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        return Response(
+            self._success_body(appointment, encounter, "Patient checked in successfully", queue=queue),
             status=status.HTTP_200_OK,
         )
 

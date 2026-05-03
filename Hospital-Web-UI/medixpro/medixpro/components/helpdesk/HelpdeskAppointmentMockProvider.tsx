@@ -26,6 +26,8 @@ import {
   fetchAppointmentDetail,
   getAppointments,
   patchRescheduleAppointment,
+  postAppointmentCheckIn,
+  type AppointmentCheckInResponse,
   type GetAppointmentsParams,
 } from "@/lib/api/appointments";
 import { mapAppointmentListApiRow } from "@/lib/helpdesk/mapAppointmentListRow";
@@ -58,7 +60,7 @@ export interface HelpdeskAppointmentMockContextValue {
   createAppointment: (input: CreateAppointmentInput) => Promise<Appointment>;
   updateAppointment: (input: UpdateAppointmentInput) => Promise<Appointment>;
   cancelAppointment: (id: string) => Promise<void>;
-  checkInAppointment: (id: string) => Promise<void>;
+  checkInAppointment: (id: string) => Promise<AppointmentCheckInResponse>;
   todayIso: string;
 }
 
@@ -318,33 +320,25 @@ export function HelpdeskAppointmentMockProvider({ children }: { children: ReactN
   );
 
   const checkInAppointment = useCallback(
-    async (id: string) => {
+    async (id: string): Promise<AppointmentCheckInResponse> => {
       setMutationKey("checkin");
       try {
-        const row = listRows.find((a) => a.id === id);
-        if (!row) throw new Error("NOT_FOUND");
-        const clinic = row.clinicId ?? clinicId ?? "";
-        const patientAccountId = row.patientAccountId?.trim();
-        const patientProfileId = row.patientProfileId?.trim();
-        if (!clinic || !patientAccountId || !patientProfileId) {
-          throw new Error("MISSING_CHECKIN_FIELDS");
-        }
-        const { status } = await axiosClient.post("/queue/check-in/", {
-          clinic_id: clinic,
-          doctor_id: row.doctorId,
-          patient_account_id: patientAccountId,
-          patient_profile_id: patientProfileId,
-          appointment_id: id,
-        });
-        if (status < 200 || status >= 300) {
-          throw new Error("CHECKIN_FAILED");
+        const res = await postAppointmentCheckIn(id);
+        if (res.status < 200 || res.status >= 300) {
+          const raw = res.data as { all?: { code?: string; message?: string } } | undefined;
+          const code = raw?.all?.code ?? "UNKNOWN_ERROR";
+          const message = raw?.all?.message ?? "Something went wrong";
+          const err = new Error(message);
+          (err as { code?: string }).code = code;
+          throw err;
         }
         await fetchAppointments();
+        return res.data as AppointmentCheckInResponse;
       } finally {
         setMutationKey(null);
       }
     },
-    [listRows, clinicId, fetchAppointments]
+    [fetchAppointments]
   );
 
   const todayIso = useMemo(() => todayStr(), []);

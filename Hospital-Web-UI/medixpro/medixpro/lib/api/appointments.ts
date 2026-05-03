@@ -76,6 +76,33 @@ export async function fetchAppointmentDetail(
   );
 }
 
+/** POST /api/appointments/<id>/check-in/ (Next BFF → Django). */
+export interface AppointmentCheckInResponse {
+  id: string;
+  status: string;
+  encounter_id: string;
+  check_in_time: string | null;
+  message: string;
+}
+
+/**
+ * Low-level check-in POST. Use {@link HelpdeskAppointmentMockProvider}'s `checkInAppointment` for refetch + mutation state.
+ * Path is relative to axios base (`/api` + `/appointments/...`).
+ */
+export async function postAppointmentCheckIn(
+  appointmentId: string,
+  options?: { signal?: AbortSignal }
+) {
+  return axiosClient.post<AppointmentCheckInResponse>(
+    `/appointments/${appointmentId}/check-in/`,
+    {},
+    {
+      validateStatus: () => true,
+      ...options,
+    }
+  );
+}
+
 /** PATCH /api/appointments/<id>/cancel/ (Next BFF → Django). */
 export async function cancelAppointmentRequest(
   appointmentId: string,
