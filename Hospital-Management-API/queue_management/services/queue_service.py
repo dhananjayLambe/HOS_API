@@ -53,7 +53,13 @@ def add_to_queue(encounter, user):
         if existing:
             return existing
 
-    existing = Queue.objects.filter(encounter=encounter).first()
+    # Only reuse an encounter-linked row that is still in the helpdesk/doctor "active" queue states.
+    # Returning in_consultation/completed rows would make check-in "succeed" while GET …/today/ omits them.
+    existing = (
+        Queue.objects.filter(encounter=encounter, status__in=("waiting", "vitals_done"))
+        .order_by("-created_at")
+        .first()
+    )
     if existing:
         return existing
 

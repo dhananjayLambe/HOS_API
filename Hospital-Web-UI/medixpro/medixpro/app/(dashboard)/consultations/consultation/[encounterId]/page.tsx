@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { backendAxiosClient } from "@/lib/axiosClient";
+import { syncQueueAfterConsultationStart } from "@/lib/syncQueueAfterConsultationStart";
 import { Button } from "@/components/ui/button";
 import { Loader2, Stethoscope, ArrowLeft } from "lucide-react";
 import Link from "next/link";
@@ -109,7 +110,8 @@ export default function ConsultationByEncounterPage() {
     toast.success("Starting consultation...");
     backendAxiosClient
       .post<{ redirect_url?: string }>(`/consultations/encounter/${encounterId}/consultation/start/`)
-      .then((response) => {
+      .then(async (response) => {
+        await syncQueueAfterConsultationStart(encounterId);
         const redirectUrl =
           response.data?.redirect_url || `/consultations/start-consultation?encounter_id=${encounterId}`;
         router.push(redirectUrl);
@@ -136,6 +138,7 @@ export default function ConsultationByEncounterPage() {
         status?: string;
         detail?: string;
       }>(`/consultations/encounter/${encounterId}/consultation/start/`);
+      await syncQueueAfterConsultationStart(encounterId);
       const redirectUrl =
         response.data?.redirect_url || `/consultations/start-consultation?encounter_id=${encounterId}`;
       router.push(redirectUrl);

@@ -257,9 +257,10 @@ export function PreConsultationView() {
           setEncounterId(encId);
           setVisitPnr(enc.visit_pnr || null);
           setEntryState("active");
-          router.replace(`/consultations/pre-consultation?encounter_id=${encId}`, { scroll: false });
           if (response.data.redirect_to === "consultation") {
-            router.replace(`/consultations/start-consultation?encounter_id=${encId}`);
+            router.replace(`/consultations/start-consultation?encounter_id=${encId}`, { scroll: false });
+          } else {
+            router.replace(`/consultations/pre-consultation?encounter_id=${encId}`, { scroll: false });
           }
         } else if (state === "completed" || state === "none") {
           // No active visit: show Start New Visit page so user explicitly starts a new visit (avoids auto-create errors/race)
@@ -276,7 +277,7 @@ export function PreConsultationView() {
     resolveEntry();
   }, [selectedPatient?.id, encounterId, isResolvingEntry, router]);
 
-  // When encounter_id in URL, fetch encounter detail to know status (redirect to consultation if in progress, or redirect when cancelled)
+  // When encounter_id in URL, fetch encounter detail (cancelled → dashboard only; no auto-redirect to consultation on mount)
   useEffect(() => {
     if (!encounterId) return;
     if (redirectingDueToCancelledRef.current && redirectedForEncounterIdRef.current === encounterId) return;
@@ -286,6 +287,9 @@ export function PreConsultationView() {
         if (cancelled || !encounter) return;
         const st = (encounter.status || "").toUpperCase().replace(/\s/g, "_");
         setEncounterStatus(st);
+        if (process.env.NODE_ENV === "development") {
+          console.log("Encounter status:", encounter.status, "→", st);
+        }
         if (encounter.visit_pnr) {
           setVisitPnr(encounter.visit_pnr);
         }
@@ -295,9 +299,6 @@ export function PreConsultationView() {
           toast.error("Visit already cancelled.");
           router.replace("/doctor-dashboard");
           return;
-        }
-        if (st === "CONSULTATION_IN_PROGRESS") {
-          router.replace(`/consultations/start-consultation?encounter_id=${encounterId}`);
         }
       })
       .catch(() => {
@@ -1029,11 +1030,20 @@ export function PreConsultationView() {
       </div>
 
       {preLocked && (
-        <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 flex items-center gap-2">
-          <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0" />
-          <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
-            Consultation already started. Pre-consultation is locked.
-          </p>
+        <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0" />
+            <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
+              {encounterStatus === "CONSULTATION_IN_PROGRESS"
+                ? "Consultation already started. Pre-consultation is locked."
+                : "This visit cannot be edited from pre-consultation in its current state."}
+            </p>
+          </div>
+          {encounterStatus === "CONSULTATION_IN_PROGRESS" && encounterId && (
+            <Button asChild className="shrink-0 bg-purple-600 hover:bg-purple-700 w-full sm:w-auto">
+              <Link href={`/consultations/start-consultation?encounter_id=${encounterId}`}>Continue to consultation</Link>
+            </Button>
+          )}
         </div>
       )}
 

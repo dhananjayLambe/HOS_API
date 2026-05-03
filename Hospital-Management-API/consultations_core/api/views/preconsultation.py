@@ -35,7 +35,7 @@ from consultations_core.services.consultation_start_service import start_consult
 from consultations_core.services.encounter_service import EncounterService
 from consultations_core.services.encounter_state_machine import EncounterStateMachine
 from consultations_core.services.end_consultation_service import persist_consultation_end_state
-from consultations_core.domain.encounter_status import encounter_status_for_api
+from consultations_core.domain.encounter_status import encounter_status_for_api, normalize_encounter_status
 from patient_account.models import PatientProfile
 from clinic.models import Clinic
 
@@ -526,7 +526,11 @@ class EntryResolveAPIView(APIView):
             return err_response
         active = EncounterService.get_active_encounter(patient_account, clinic)
         if active:
-            redirect_to = "consultation" if active.status == "consultation_in_progress" else "pre"
+            redirect_to = (
+                "consultation"
+                if normalize_encounter_status(active.status) == "consultation_in_progress"
+                else "pre"
+            )
             return Response(
                 {
                     "entry_state": "active",

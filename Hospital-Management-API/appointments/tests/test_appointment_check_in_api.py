@@ -217,6 +217,7 @@ class AppointmentCheckInAPITests(TestCase):
         enc = ClinicalEncounter.objects.get(id=r.data["encounter_id"])
         self.assertEqual(enc.encounter_type, "appointment")
         self.assertEqual(enc.appointment_id, appt.id)
+        self.assertEqual(enc.status, "created")
 
     def test_check_in_already_checked_in_idempotent(self):
         appt = self.appt_today_idempotent

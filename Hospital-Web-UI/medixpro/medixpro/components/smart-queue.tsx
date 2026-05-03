@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { usePatient, type Patient } from "@/lib/patientContext";
 import { Check, Users, Clock, AlertCircle } from "lucide-react";
@@ -92,6 +93,7 @@ function queueRowToSelectedPatient(patient: QueuePatient): Patient {
 }
 
 export function SmartQueue() {
+  const router = useRouter();
   const { selectedPatient, isLocked, setSelectedPatient, triggerSearchHighlight } = usePatient();
   const toast = useToastNotification();
   const [queue, setQueue] = useState<QueuePatient[]>([]);
@@ -242,13 +244,13 @@ export function SmartQueue() {
     return () => clearInterval(interval);
   }, [clinicId, doctorId, wsLive, fetchQueue]);
 
-  const handleStartConsultation = async (patient: QueuePatient) => {
+  const handleOpenPreConsultation = (patient: QueuePatient) => {
     if (isLocked) {
       toast.info("Please end or pause the current consultation to switch patients");
       return;
     }
-    if (!clinicId || !patient.encounter_id) {
-      toast.error("Unable to start consultation for this patient.");
+    if (!patient.encounter_id) {
+      toast.error("No visit linked for this patient. Check in at helpdesk first.");
       return;
     }
 
@@ -257,21 +259,7 @@ export function SmartQueue() {
       triggerSearchHighlight();
     }
 
-    try {
-      await axiosClient.patch("/queue/start/", {
-        clinic_id: clinicId,
-        queue_id: patient.id,
-        encounter_id: patient.encounter_id,
-      });
-      toast.success(`Consultation started for ${patient.patient_name}.`);
-    } catch (error: any) {
-      const statusCode = error?.response?.status;
-      if (statusCode === 409) {
-        toast.error("Consultation already started or patient is no longer active in queue.");
-      } else {
-        toast.error("Failed to start consultation. Please try again.");
-      }
-    }
+    router.push(`/consultations/pre-consultation?encounter_id=${patient.encounter_id}`);
   };
 
   const displayQueue = queue.slice(0, 3);
@@ -315,7 +303,7 @@ export function SmartQueue() {
               return (
                 <button
                   key={patient.id}
-                  onClick={() => handleStartConsultation(patient)}
+                  onClick={() => handleOpenPreConsultation(patient)}
                   disabled={isLocked}
                   className={cn(
                     "group relative w-full text-left px-2 py-1.5 rounded-md",
@@ -330,7 +318,7 @@ export function SmartQueue() {
                   title={
                     isLocked
                       ? "End or pause consultation to switch patient"
-                      : `Start consultation for ${patient.patient_name}`
+                      : `Open pre-consultation for ${patient.patient_name}`
                   }
                 >
                   <div className="flex-1 min-w-0">

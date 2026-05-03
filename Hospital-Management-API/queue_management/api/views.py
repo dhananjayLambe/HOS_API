@@ -36,12 +36,11 @@ from queue_management.services.queue_service import add_to_queue
 from queue_management.services.queue_sync import _sync_queue_realtime
 from queue_management.tasks import sync_queue_realtime_task
 
-# Once encounter reaches these (raw DB values; includes legacy), hide row from helpdesk "today"
-# even if Queue.status is still waiting/vitals_done (stale op row).
-# Active helpdesk work stays on created / pre_consult* only.
+# Hide helpdesk "today" rows when the *clinical* visit is finished/cancelled but the Queue row was
+# never updated (stale waiting row). Do NOT exclude consultation_in_progress / in_consultation:
+# if consultation started but PATCH /queue/start/ failed, encounter advances while Queue.status
+# can still be waiting — those patients must remain visible for helpdesk triage.
 HELPDESK_TODAY_EXCLUDE_IF_ENCOUNTER_STATUS_IN = (
-    "consultation_in_progress",
-    "in_consultation",
     "consultation_completed",
     "closed",
     "cancelled",

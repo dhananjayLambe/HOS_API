@@ -395,6 +395,41 @@ class HelpdeskQueueEncounterTests(TestCase):
         self.assertEqual(r.data[0]["patient_name"], "Pat Test")
         self.assertEqual(r.data[0]["patient_mobile"], self.patient_account.user.username)
 
+    def test_helpdesk_today_shows_waiting_row_when_encounter_in_progress_but_queue_still_waiting(self):
+        """
+        If consultation started (encounter advanced) but queue was never PATCHed to
+        in_consultation, helpdesk must still list the patient for triage (regression guard).
+        """
+        HelpdeskClinicUser.objects.create(
+            user=self.helpdesk_user,
+            clinic=self.clinic,
+            is_active=True,
+        )
+        self.client.post(
+            reverse("queue-check-in"),
+            {
+                "clinic_id": str(self.clinic.id),
+                "patient_account_id": str(self.patient_account.id),
+                "patient_profile_id": str(self.profile.id),
+                "doctor_id": str(self.doctor.id),
+            },
+            format="json",
+        )
+        q = Queue.objects.latest("created_at")
+        self.assertEqual(q.status, "waiting")
+        enc = ClinicalEncounter.objects.get(id=q.encounter_id)
+        EncounterStateMachine.start_consultation(enc, user=self.doctor.user)
+        enc.refresh_from_db()
+        self.assertEqual(normalize_encounter_status(enc.status), "consultation_in_progress")
+        q.refresh_from_db()
+        self.assertEqual(q.status, "waiting")
+
+        url = reverse("helpdesk-clinic-queue-today")
+        r = self.client.get(url)
+        self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
+        self.assertEqual(len(r.data), 1, r.data)
+        self.assertEqual(r.data[0]["patient_name"], "Pat Test")
+
     def test_helpdesk_today_hides_stale_vitals_done_when_encounter_completed(self):
         """
         Queue row can remain status=vitals_done if never reconciled; helpdesk list must

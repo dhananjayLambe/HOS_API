@@ -39,6 +39,7 @@ import {
   isMedicinesSectionExpandedByDefault,
 } from "@/lib/consultation-workflow";
 import { isUuidLike, loadPreConsultPreviewVitals } from "@/lib/loadPreConsultPreviewVitals";
+import { syncQueueAfterConsultationStart } from "@/lib/syncQueueAfterConsultationStart";
 
 function StartConsultationLoading() {
   return (
@@ -229,6 +230,7 @@ function StartConsultationContent() {
                 toast.success("Opening existing visit.");
                 setEncounterId(encounterId);
                 entryFlowDoneRef.current = true;
+                void syncQueueAfterConsultationStart(encounterId);
                 router.replace(`/consultations/start-consultation?encounter_id=${encounterId}`, { scroll: false });
                 throw startErr;
               }
@@ -241,6 +243,7 @@ function StartConsultationContent() {
           }
         };
         await startConsultation();
+        await syncQueueAfterConsultationStart(encounterId);
 
         setEncounterId(encounterId);
         entryFlowDoneRef.current = true;
