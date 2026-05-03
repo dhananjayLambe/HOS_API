@@ -120,19 +120,30 @@ class FullJourneyE2ETests(TestCase):
         self.helpdesk_client.force_authenticate(user=self.helpdesk_user)
 
     def _booking_today_after_now(self):
-        """Today + slot strictly in the future (required for create + same-day check-in)."""
-        today = timezone.localdate()
-        now = timezone.now()
+        """Local calendar today + slot strictly in the future (create + same-day check-in).
+
+        Date/time must be derived from ``timezone.localtime(...)`` so we never mix a UTC
+        ``.time()`` with ``timezone.localdate()`` (that mismatch caused false "clock skew" skips).
+        """
         tz = timezone.get_current_timezone()
-        start_dt = now + timedelta(minutes=45)
-        end_dt = now + timedelta(minutes=75)
-        if start_dt.date() != today or end_dt.date() != today:
+        now = timezone.now()
+        slot_start_aware = now + timedelta(minutes=45)
+        slot_end_aware = now + timedelta(minutes=75)
+        local_start = timezone.localtime(slot_start_aware, tz)
+        local_end = timezone.localtime(slot_end_aware, tz)
+        today = timezone.localdate()
+        if local_start.date() != today or local_end.date() != today:
             self.skipTest("Day boundary: appointment would fall on next calendar day")
-        st = start_dt.time().replace(microsecond=0)
-        et = end_dt.time().replace(microsecond=0)
-        if timezone.make_aware(datetime.combine(today, st), tz) <= now:
+        appointment_date = local_start.date()
+        st = local_start.time().replace(microsecond=0)
+        et = local_end.time().replace(microsecond=0)
+        appointment_dt = timezone.make_aware(
+            datetime.combine(appointment_date, st),
+            tz,
+        )
+        if appointment_dt <= now:
             self.skipTest("Clock skew: could not build a future slot on local today")
-        return today, st, et
+        return appointment_date, st, et
 
     def _create_appointment(self):
         d, s, e = self._booking_today_after_now()

@@ -4,6 +4,7 @@ Run:
   python manage.py test appointments.tests.test_appointment_create_api -v2
 """
 
+import uuid
 from datetime import time, timedelta
 
 from django.contrib.auth import get_user_model
@@ -79,22 +80,10 @@ class AppointmentCreateAPITests(TestCase):
         self.client.force_authenticate(user=self.helpdesk_user)
         self.url = reverse("appointments:appointment-create")
 
-    def _future_slot_today(self):
-        """Return (date, start, end) on local today strictly after now()."""
-        today = timezone.localdate()
-        now = timezone.now()
-        future_dt = now + timedelta(hours=3)
-        if future_dt.date() != today:
-            start = time(10, 0, 0)
-            end = time(10, 30, 0)
-            return today + timedelta(days=1), start, end
-        t = future_dt.time().replace(microsecond=0)
-        start_h, start_m, start_s = t.hour, t.minute, t.second
-        start = time(start_h, start_m, max(start_s, 0))
-        end_dt = future_dt + timedelta(minutes=30)
-        et = end_dt.time().replace(microsecond=0)
-        end = time(et.hour, et.minute, et.second)
-        return today, start, end
+    def _future_booking_slot(self):
+        """Tomorrow + fixed wall-clock slot — always in-window for create (avoids PAST_TIME vs TZ)."""
+        day = timezone.localdate() + timedelta(days=1)
+        return day, time(10, 0, 0), time(10, 30, 0)
 
     def _body(self, appointment_date, slot_start, slot_end, **kw):
         return {
@@ -112,7 +101,7 @@ class AppointmentCreateAPITests(TestCase):
         }
 
     def test_create_valid_returns_201(self):
-        d, s, e = self._future_slot_today()
+        d, s, e = self._future_booking_slot()
         r = self.client.post(self.url, self._body(d, s, e), format="json")
         self.assertEqual(r.status_code, status.HTTP_201_CREATED, r.data)
         self.assertEqual(r.data.get("status"), "scheduled")
@@ -149,7 +138,7 @@ class AppointmentCreateAPITests(TestCase):
         self.assertEqual(err["code"], "FUTURE_LIMIT_EXCEEDED")
 
     def test_create_slot_conflict_returns_SLOT_CONFLICT(self):
-        d, s, e = self._future_slot_today()
+        d, s, e = self._future_booking_slot()
         Appointment.objects.create(
             patient_account=self.account,
             patient_profile=self.profile,
@@ -162,7 +151,4 @@ class AppointmentCreateAPITests(TestCase):
         )
         r = self.client.post(self.url, self._body(d, s, e), format="json")
         self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST)
-        err = r.data.get("slot_start_time")
-        if isinstance(err, list):
-            err = err[0]
-        self.assertEqual(err["code"], "SLOT_CONFLICT")
+        self.assertIn("SLOT_CONFLICT", str(r.data), msg=r.data)

@@ -402,12 +402,14 @@ class AppointmentCheckInView(APIView):
             try:
                 queue = add_to_queue(encounter, request.user)
             except InvalidEncounterForQueueError:
+                transaction.set_rollback(True)
                 return self._error_all(
                     "QUEUE_ERROR",
                     "Failed to add patient to queue",
                     status.HTTP_500_INTERNAL_SERVER_ERROR,
                 )
             except IntegrityError:
+                transaction.set_rollback(True)
                 return self._error_all(
                     "QUEUE_ERROR",
                     "Failed to add patient to queue",
@@ -471,12 +473,14 @@ class AppointmentCheckInView(APIView):
         try:
             queue = add_to_queue(encounter, request.user)
         except InvalidEncounterForQueueError:
+            transaction.set_rollback(True)
             return self._error_all(
                 "QUEUE_ERROR",
                 "Failed to add patient to queue",
                 status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
         except IntegrityError:
+            transaction.set_rollback(True)
             return self._error_all(
                 "QUEUE_ERROR",
                 "Failed to add patient to queue",
