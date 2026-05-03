@@ -9,6 +9,7 @@ import { Loader2, Stethoscope, ArrowLeft, AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { useToastNotification } from "@/hooks/use-toast-notification";
 import { useEncounterMultiTabLeader } from "@/hooks/useEncounterMultiTabLeader";
+import { useEncounter } from "@/lib/encounterContext";
 
 type EncounterStatus =
   | "CREATED"
@@ -43,6 +44,7 @@ export default function ConsultationByEncounterPage() {
   const redirectedForCancelledRef = useRef(false);
 
   const { isSecondaryTab } = useEncounterMultiTabLeader(encounterId);
+  const { invalidateEncounterById } = useEncounter();
 
   const fetchEncounter = async () => {
     if (!encounterId) return;
@@ -99,11 +101,12 @@ export default function ConsultationByEncounterPage() {
 
   useEffect(() => {
     if (encounterId && openConsultationDirectly) {
+      invalidateEncounterById(encounterId);
       router.replace(
         `/consultations/start-consultation?encounter_id=${encounterId}`
       );
     }
-  }, [encounterId, openConsultationDirectly, router]);
+  }, [encounterId, openConsultationDirectly, router, invalidateEncounterById]);
 
   // Auto-start consultation when pre-consultation is completed (no extra click). Run once per encounter.
   useEffect(() => {
@@ -116,6 +119,7 @@ export default function ConsultationByEncounterPage() {
       .post<{ redirect_url?: string }>(`/consultations/encounter/${encounterId}/consultation/start/`)
       .then(async (response) => {
         await syncQueueAfterConsultationStart(encounterId);
+        invalidateEncounterById(encounterId);
         const redirectUrl =
           response.data?.redirect_url || `/consultations/start-consultation?encounter_id=${encounterId}`;
         router.push(redirectUrl);
@@ -147,6 +151,7 @@ export default function ConsultationByEncounterPage() {
         detail?: string;
       }>(`/consultations/encounter/${encounterId}/consultation/start/`);
       await syncQueueAfterConsultationStart(encounterId);
+      invalidateEncounterById(encounterId);
       const redirectUrl =
         response.data?.redirect_url || `/consultations/start-consultation?encounter_id=${encounterId}`;
       router.push(redirectUrl);

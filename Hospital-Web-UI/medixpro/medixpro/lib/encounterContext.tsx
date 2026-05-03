@@ -15,35 +15,55 @@ export interface EncounterSummary {
 interface EncounterContextType {
   fetchEncounterById: (encounterId: string, opts?: { force?: boolean }) => Promise<EncounterSummary | null>;
   getEncounterById: (encounterId?: string | null) => EncounterSummary | null;
+  /** Bump detail version and drop cache so the next fetch wins; in-flight responses with an older version are ignored. */
+  invalidateEncounterById: (encounterId: string) => void;
 }
 
 const EncounterContext = createContext<EncounterContextType | undefined>(undefined);
 
 export function EncounterProvider({ children }: { children: React.ReactNode }) {
   const [encounterCache, setEncounterCache] = useState<Record<string, EncounterSummary>>({});
+  const encounterCacheRef = useRef<Record<string, EncounterSummary>>({});
+  encounterCacheRef.current = encounterCache;
+
+  const encounterDetailVersionRef = useRef<Record<string, number>>({});
   const inFlightRef = useRef<Map<string, Promise<EncounterSummary | null>>>(new Map());
 
-  const getEncounterById = useCallback(
-    (encounterId?: string | null): EncounterSummary | null => {
-      if (!encounterId) return null;
-      return encounterCache[encounterId] ?? null;
-    },
-    [encounterCache]
-  );
+  const invalidateEncounterById = useCallback((encounterId: string) => {
+    encounterDetailVersionRef.current[encounterId] =
+      (encounterDetailVersionRef.current[encounterId] ?? 0) + 1;
+    setEncounterCache((prev) => {
+      if (!(encounterId in prev)) return prev;
+      const next = { ...prev };
+      delete next[encounterId];
+      return next;
+    });
+  }, []);
 
   const fetchEncounterById = useCallback(
     async (encounterId: string, opts?: { force?: boolean }): Promise<EncounterSummary | null> => {
       if (!encounterId) return null;
-      if (!opts?.force && encounterCache[encounterId]) {
-        return encounterCache[encounterId];
+
+      if (opts?.force) {
+        invalidateEncounterById(encounterId);
+      } else if (encounterCacheRef.current[encounterId]) {
+        return encounterCacheRef.current[encounterId];
       }
 
       const inFlight = inFlightRef.current.get(encounterId);
-      if (inFlight) return inFlight;
+      if (inFlight && !opts?.force) {
+        return inFlight;
+      }
+
+      const versionAtFetchStart = encounterDetailVersionRef.current[encounterId] ?? 0;
 
       const request = backendAxiosClient
         .get<EncounterSummary>(`/consultations/encounter/${encounterId}/`)
         .then((res) => {
+          const currentVersion = encounterDetailVersionRef.current[encounterId] ?? 0;
+          if (versionAtFetchStart !== currentVersion) {
+            return null;
+          }
           const payload: EncounterSummary = {
             id: encounterId,
             status: res.data?.status,
@@ -61,11 +81,21 @@ export function EncounterProvider({ children }: { children: React.ReactNode }) {
           throw error;
         })
         .finally(() => {
-          inFlightRef.current.delete(encounterId);
+          if (inFlightRef.current.get(encounterId) === request) {
+            inFlightRef.current.delete(encounterId);
+          }
         });
 
       inFlightRef.current.set(encounterId, request);
       return request;
+    },
+    [invalidateEncounterById]
+  );
+
+  const getEncounterById = useCallback(
+    (encounterId?: string | null): EncounterSummary | null => {
+      if (!encounterId) return null;
+      return encounterCache[encounterId] ?? null;
     },
     [encounterCache]
   );
@@ -74,8 +104,9 @@ export function EncounterProvider({ children }: { children: React.ReactNode }) {
     () => ({
       fetchEncounterById,
       getEncounterById,
+      invalidateEncounterById,
     }),
-    [fetchEncounterById, getEncounterById]
+    [fetchEncounterById, getEncounterById, invalidateEncounterById]
   );
 
   return <EncounterContext.Provider value={value}>{children}</EncounterContext.Provider>;

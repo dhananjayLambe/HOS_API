@@ -43,6 +43,7 @@ import {
 import { isUuidLike, loadPreConsultPreviewVitals } from "@/lib/loadPreConsultPreviewVitals";
 import { syncQueueAfterConsultationStart } from "@/lib/syncQueueAfterConsultationStart";
 import { useEncounterMultiTabLeader } from "@/hooks/useEncounterMultiTabLeader";
+import { useEncounter } from "@/lib/encounterContext";
 
 function StartConsultationLoading() {
   return (
@@ -68,6 +69,7 @@ function StartConsultationContent() {
     encounterIdFromUrl && isUuidLike(encounterIdFromUrl) ? encounterIdFromUrl : null;
   const { isSecondaryTab } = useEncounterMultiTabLeader(encounterIdForLock);
   const multiTabLocked = Boolean(encounterIdForLock && isSecondaryTab);
+  const { invalidateEncounterById } = useEncounter();
 
   const {
     consultationType,
@@ -205,12 +207,16 @@ function StartConsultationContent() {
           return;
         }
 
-        // Existing encounter returned (200): go straight to consultation page; do not call start again.
+        // Existing encounter (200): follow API redirect (usually pre-consultation) so we do not open
+        // start-consultation without a Consultation row (Preview Rx would stay disabled).
         const isExistingEncounter = startNewVisitRes.status === 200;
         if (isExistingEncounter) {
           setEncounterId(encounterId);
           entryFlowDoneRef.current = true;
-          router.replace(`/consultations/start-consultation?encounter_id=${encounterId}`, { scroll: false });
+          const redirect =
+            startNewVisitRes.data?.redirect_url?.trim() ||
+            `/consultations/pre-consultation?encounter_id=${encounterId}`;
+          router.replace(redirect, { scroll: false });
           return;
         }
 
@@ -238,6 +244,7 @@ function StartConsultationContent() {
                 setEncounterId(encounterId);
                 entryFlowDoneRef.current = true;
                 void syncQueueAfterConsultationStart(encounterId);
+                invalidateEncounterById(encounterId);
                 router.replace(`/consultations/start-consultation?encounter_id=${encounterId}`, { scroll: false });
                 throw startErr;
               }
@@ -251,6 +258,7 @@ function StartConsultationContent() {
         };
         await startConsultation();
         await syncQueueAfterConsultationStart(encounterId);
+        invalidateEncounterById(encounterId);
 
         setEncounterId(encounterId);
         entryFlowDoneRef.current = true;

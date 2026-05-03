@@ -303,7 +303,9 @@ export function ConsultationActionBar() {
       return;
     }
     let cancelled = false;
-    fetchEncounterById(encounterId)
+    // Force refetch: encounter cache may still hold pre-consultation payload (consultation_id null)
+    // after the doctor completes pre-consult and consultation/start runs.
+    fetchEncounterById(encounterId, { force: true })
       .then((encounter) => {
         if (cancelled || !encounter) return;
         setVisitPnr(encounter.visit_pnr ?? null);
