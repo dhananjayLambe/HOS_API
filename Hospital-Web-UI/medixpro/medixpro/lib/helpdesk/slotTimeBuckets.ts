@@ -39,15 +39,43 @@ export function isTodayIso(dateIso: string, now: Date = new Date()): boolean {
   return format(now, "yyyy-MM-dd") === dateIso;
 }
 
-export function getDefaultBucketForDate(selectedDateIso: string, slots: Slot[], now: Date = new Date()): TimeBucket {
-  if (isTodayIso(selectedDateIso, now)) {
-    const d = now;
-    return bucketForWallClockMinutes(d.getHours() * 60 + d.getMinutes());
-  }
+function firstBucketWithAnySlots(counts: Record<TimeBucket, number>): TimeBucket | null {
   for (const b of TIME_BUCKET_ORDER) {
-    if (slots.some((s) => getSlotBucket(s) === b)) return b;
+    if (counts[b] > 0) return b;
   }
-  return "morning";
+  return null;
+}
+
+/**
+ * Default tab: first bucket that has slots. For today, start from the wall-clock
+ * bucket (e.g. afternoon at 4:30pm) and move forward so empty morning/afternoon
+ * skips to evening when that is where slots actually exist.
+ */
+export function getDefaultBucketForDate(selectedDateIso: string, slots: Slot[], now: Date = new Date()): TimeBucket {
+  const counts = countSlotsPerBucket(slots);
+
+  if (slots.length === 0) {
+    if (isTodayIso(selectedDateIso, now)) {
+      return bucketForWallClockMinutes(now.getHours() * 60 + now.getMinutes());
+    }
+    return "morning";
+  }
+
+  if (isTodayIso(selectedDateIso, now)) {
+    const wallBucket = bucketForWallClockMinutes(now.getHours() * 60 + now.getMinutes());
+    const startIdx = TIME_BUCKET_ORDER.indexOf(wallBucket);
+    for (let i = startIdx; i < TIME_BUCKET_ORDER.length; i++) {
+      const b = TIME_BUCKET_ORDER[i];
+      if (counts[b] > 0) return b;
+    }
+    for (let i = 0; i < startIdx; i++) {
+      const b = TIME_BUCKET_ORDER[i];
+      if (counts[b] > 0) return b;
+    }
+    return wallBucket;
+  }
+
+  return firstBucketWithAnySlots(counts) ?? "morning";
 }
 
 export function filterSlotsByBucket(slots: Slot[], bucket: TimeBucket): Slot[] {

@@ -88,6 +88,8 @@ class AppointmentCreateSerializer(serializers.Serializer):
         max_days = int(getattr(settings, "MAX_BOOKING_DAYS", MAX_BOOKING_DAYS))
         today = timezone.localdate()
         max_date = today + timedelta(days=max_days)
+        if appointment_date < today:
+            raise serializers.ValidationError({"appointment_date": err_past_time()})
         if appointment_date > max_date:
             raise serializers.ValidationError(
                 {"appointment_date": err_future_limit_exceeded(max_days)}
@@ -98,7 +100,9 @@ class AppointmentCreateSerializer(serializers.Serializer):
             datetime.combine(appointment_date, slot_start_time),
             tz,
         )
-        if appointment_datetime <= timezone.now():
+        lead_min = max(0, int(getattr(settings, "BOOKING_SLOT_LEAD_BUFFER_MINUTES", 5)))
+        earliest_bookable = timezone.now() + timedelta(minutes=lead_min)
+        if appointment_datetime <= earliest_bookable:
             raise serializers.ValidationError({"appointment_date": err_past_time()})
 
         active_statuses = ["scheduled", "checked_in", "in_consultation"]
@@ -264,6 +268,10 @@ class AppointmentRescheduleSerializer(serializers.Serializer):
         if slot_start_time >= slot_end_time:
             raise serializers.ValidationError({"slot_start_time": err_invalid_slot_range()})
 
+        today = timezone.localdate()
+        if appointment_date < today:
+            raise serializers.ValidationError({"appointment_date": err_past_time()})
+
         fee_unchanged = instance.consultation_fee == consultation_fee
         notes_unchanged = (instance.notes or "").strip() == notes.strip()
         if (
@@ -285,11 +293,12 @@ class AppointmentRescheduleSerializer(serializers.Serializer):
             datetime.combine(appointment_date, slot_start_time),
             tz,
         )
-        if appointment_datetime < timezone.now():
+        lead_min = max(0, int(getattr(settings, "BOOKING_SLOT_LEAD_BUFFER_MINUTES", 5)))
+        earliest_bookable = timezone.now() + timedelta(minutes=lead_min)
+        if appointment_datetime <= earliest_bookable:
             raise serializers.ValidationError({"appointment_date": err_past_time()})
 
         max_days = int(getattr(settings, "MAX_BOOKING_DAYS", MAX_BOOKING_DAYS))
-        today = timezone.localdate()
         max_date = today + timedelta(days=max_days)
         if appointment_date > max_date:
             raise serializers.ValidationError(
@@ -474,11 +483,14 @@ class WalkInAppointmentSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"slot_start_time": err_invalid_slot_range()})
 
         today = timezone.localdate()
-        now_time = timezone.localtime().time()
+        tz = timezone.get_current_timezone()
+        lead_min = max(0, int(getattr(settings, "BOOKING_SLOT_LEAD_BUFFER_MINUTES", 5)))
+        slot_start_dt = timezone.make_aware(datetime.combine(appointment_date, slot_start_time), tz)
+        earliest = timezone.now() + timedelta(minutes=lead_min)
 
         if appointment_date < today:
             raise serializers.ValidationError("Appointment date cannot be in the past.")
-        if appointment_date == today and slot_start_time < now_time:
+        if slot_start_dt <= earliest:
             raise serializers.ValidationError("Appointment slot cannot be in the past.")
 
         if clinic not in doctor.clinics.all():

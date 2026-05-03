@@ -1,10 +1,12 @@
 "use client";
 
+import { addMinutes, format } from "date-fns";
 import { useCallback, useEffect, useState } from "react";
 import { isAxiosError } from "axios";
 import { toast } from "sonner";
 
 import { getAppointmentSlots, type AppointmentSlotsEnvelope } from "@/lib/api/appointments";
+import { SLOT_LEAD_BUFFER_MINUTES } from "@/lib/helpdesk/bookingCalendarLimits";
 import type { Slot, SlotState } from "@/lib/helpdesk/helpdeskAppointmentTypes";
 import { MOCK_DOCTOR_UNAVAILABLE_ID } from "@/lib/helpdesk/helpdeskAppointmentMockStore";
 
@@ -34,6 +36,22 @@ function mapRowToSlot(
 
 function isSuccessStatus(s: unknown): boolean {
   return typeof s === "string" && s.trim().toLowerCase() === "success";
+}
+
+function localTodayIso(): string {
+  return format(new Date(), "yyyy-MM-dd");
+}
+
+function slotStartLocalDate(dateIso: string, startTimeHhMm: string): Date {
+  const [y, mo, d] = dateIso.split("-").map(Number);
+  const [hh, mm] = startTimeHhMm.split(":").map(Number);
+  return new Date(y, mo - 1, d, hh, mm, 0, 0);
+}
+
+function filterPastSlotsForToday(slots: Slot[], dateIso: string): Slot[] {
+  if (dateIso !== localTodayIso()) return slots;
+  const cutoff = addMinutes(new Date(), SLOT_LEAD_BUFFER_MINUTES);
+  return slots.filter((s) => slotStartLocalDate(dateIso, s.startTime) > cutoff);
 }
 
 function readMessage(body: unknown): string | null {
@@ -142,12 +160,21 @@ export function useHelpdeskAppointmentSlots({
             )
           );
         }
-        setSlots(mapped);
-        setSlotsEmptyHint(
-          mapped.length === 0
-            ? readMessage(envelope) || "No time windows for this doctor on this date."
-            : null
-        );
+        const beforeUiFilter = mapped.length;
+        const filtered = filterPastSlotsForToday(mapped, date);
+        setSlots(filtered);
+        if (filtered.length === 0) {
+          const isToday = date === localTodayIso();
+          if (isToday && beforeUiFilter > 0) {
+            setSlotsEmptyHint("No slots available for today.");
+          } else {
+            setSlotsEmptyHint(
+              readMessage(envelope) || "No time windows for this doctor on this date."
+            );
+          }
+        } else {
+          setSlotsEmptyHint(null);
+        }
       } catch (e) {
         if (signal.aborted) return;
         if (isAxiosError(e) && (e.code === "ERR_CANCELED" || e.message === "canceled")) return;

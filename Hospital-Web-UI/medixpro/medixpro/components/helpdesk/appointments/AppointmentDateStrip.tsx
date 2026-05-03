@@ -1,6 +1,8 @@
 "use client";
 
-import { addDays, addMonths, format, isAfter, startOfDay } from "date-fns";
+import { addDays, format, isAfter, isBefore, startOfDay } from "date-fns";
+
+import { HELPBOOK_MAX_BOOKING_DAYS } from "@/lib/helpdesk/bookingCalendarLimits";
 import { CalendarDays } from "lucide-react";
 import { useMemo, useState } from "react";
 
@@ -34,6 +36,8 @@ export function AppointmentDateStrip({
   const [pickerOpen, setPickerOpen] = useState(false);
 
   const base = new Date();
+  const todayStart = startOfDay(base);
+  const lastBookableDay = startOfDay(addDays(todayStart, HELPBOOK_MAX_BOOKING_DAYS));
   const chips = Array.from({ length: stripDays }, (_, i) => {
     const d = addDays(base, i);
     const iso = format(d, "yyyy-MM-dd");
@@ -84,9 +88,7 @@ export function AppointmentDateStrip({
               initialFocus
               disabled={(date) => {
                 const d = startOfDay(date);
-                const today = startOfDay(new Date());
-                const max = addMonths(today, 6);
-                return d < today || isAfter(d, max);
+                return isBefore(d, todayStart) || isAfter(d, lastBookableDay);
               }}
             />
           </PopoverContent>

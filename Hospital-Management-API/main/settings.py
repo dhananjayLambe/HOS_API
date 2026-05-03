@@ -59,6 +59,8 @@ PRESCRIPTION_TIMING_SLOT_MAX = int(os.getenv("PRESCRIPTION_TIMING_SLOT_MAX", "2"
 
 # Appointment booking: max days from today that a slot can be booked (create API).
 MAX_BOOKING_DAYS = int(os.getenv("MAX_BOOKING_DAYS", "30"))
+# Minimum lead time before slot start for same-day booking (slots API + create validation).
+BOOKING_SLOT_LEAD_BUFFER_MINUTES = int(os.getenv("BOOKING_SLOT_LEAD_BUFFER_MINUTES", "5"))
 
 APPOINTMENT_SLOTS_THROTTLE = os.getenv("APPOINTMENT_SLOTS_THROTTLE", "120/min")
 

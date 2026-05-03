@@ -42,6 +42,7 @@ from appointments.models import Appointment, AppointmentHistory
 from appointments.utils.history import log_appointment_history
 from appointments.utils.booking_validation import MAX_BOOKING_DAYS as DEFAULT_MAX_BOOKING_DAYS
 from appointments.utils.default_doctor_availability import ensure_doctor_availability
+from appointments.utils.slot_booking_visibility import filter_same_day_past_slots
 from appointments.utils.slot_generation import (
     format_slot_time,
     generate_slots,
@@ -875,6 +876,13 @@ class AppointmentSlotView(APIView):
                     continue
                 for slot in generate_slots(target_date, ws, we, duration, buffer_min):
                     flat_slots.append(slot)
+
+            flat_slots = filter_same_day_past_slots(
+                flat_slots,
+                target_date,
+                today,
+                int(getattr(settings, "BOOKING_SLOT_LEAD_BUFFER_MINUTES", 5)),
+            )
 
             booked_times = set(
                 Appointment.objects.filter(
