@@ -11,6 +11,7 @@ import { CancelAppointmentDialog } from "@/components/helpdesk/appointments/Canc
 import { Button } from "@/components/ui/button";
 import { useHelpdeskAppointmentsMock } from "@/hooks/use-helpdesk-appointments";
 import type { Appointment } from "@/lib/helpdesk/helpdeskAppointmentTypes";
+import { useHelpdeskQueueStore } from "@/lib/helpdeskQueueStore";
 
 export default function HelpdeskAppointmentsListPage() {
   const router = useRouter();
@@ -50,6 +51,7 @@ export default function HelpdeskAppointmentsListPage() {
     async (a: Appointment) => {
       try {
         const data = await checkInAppointment(a.id);
+        void useHelpdeskQueueStore.getState().fetchTodayQueue().catch(() => undefined);
         if (data.message?.toLowerCase().includes("already")) {
           toast.info("Already checked in");
         } else {
