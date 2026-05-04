@@ -4,11 +4,10 @@ import logging
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, transaction
 
-from consultations_core.domain.vitals_meaningful import vitals_data_is_meaningful
 from consultations_core.domain.encounter_status import normalize_encounter_status
+from consultations_core.domain.preconsultation_clinical import preconsultation_has_meaningful_vitals
 from consultations_core.models.consultation import Consultation
 from consultations_core.models.encounter import ClinicalEncounter
-from consultations_core.models.pre_consultation import PreConsultationVitals
 from consultations_core.services.encounter_state_machine import EncounterStateMachine
 from consultations_core.services.preconsultation_lifecycle import (
     get_or_create_preconsultation_for_start_safe,
@@ -22,14 +21,6 @@ class StartConsultationResult:
     encounter: ClinicalEncounter
     consultation: Consultation
     already_started: bool
-
-
-def _preconsultation_has_meaningful_vitals(pre) -> bool:
-    try:
-        row = PreConsultationVitals.objects.get(pre_consultation=pre)
-    except PreConsultationVitals.DoesNotExist:
-        return False
-    return vitals_data_is_meaningful(row.data or {})
 
 
 @transaction.atomic
@@ -77,7 +68,7 @@ def start_consultation_for_encounter(*, encounter_id, user=None, source: str = "
         )
 
     pre = get_or_create_preconsultation_for_start_safe(encounter, created_by=user)
-    if not pre.is_completed and not _preconsultation_has_meaningful_vitals(pre):
+    if not pre.is_completed and not preconsultation_has_meaningful_vitals(pre):
         pre.is_skipped = True
         pre.save(update_fields=["is_skipped"])
         logger.info(
