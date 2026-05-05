@@ -36,14 +36,26 @@ export async function createAppointment(payload: AppointmentCreatePayload) {
 }
 
 export type GetAppointmentsParams = {
-  tab: string;
+  /** Legacy tab (today | upcoming | completed | cancelled). Prefer `section` for helpdesk. */
+  tab?: string;
+  section?: string;
   doctor_id?: string;
   clinic_id?: string;
   date?: string;
+  status?: string;
+  search?: string;
+  cursor?: string;
 };
 
+/** DRF cursor page shape from GET /api/appointments/. */
+export interface AppointmentsListPage {
+  next: string | null;
+  previous: string | null;
+  results: AppointmentListApiRow[];
+}
+
 /**
- * GET /api/appointments/ (Next BFF → Django). Returns raw list JSON; use validateStatus to read 4xx bodies.
+ * GET /api/appointments/ (Next BFF → Django). Paginated list; use validateStatus to read 4xx bodies.
  */
 export async function getAppointments(
   params: GetAppointmentsParams,
@@ -52,7 +64,7 @@ export async function getAppointments(
   const query = Object.fromEntries(
     Object.entries(params).filter(([, v]) => v !== undefined && v !== null && String(v).trim() !== "")
   ) as Record<string, string>;
-  return axiosClient.get<AppointmentListApiRow[]>("/appointments/", {
+  return axiosClient.get<AppointmentsListPage>("/appointments/", {
     params: query,
     validateStatus: () => true,
     ...options,

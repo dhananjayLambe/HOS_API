@@ -196,15 +196,24 @@ class AppointmentListAPITests(TestCase):
         self.client.force_authenticate(user=self.helpdesk_user)
         self.url = reverse("appointments:appointment-create")
 
+    def _rows(self, response):
+        self.assertIn("results", response.data)
+        return response.data["results"]
+
     def test_invalid_tab_returns_400(self):
         r = self.client.get(self.url, {"tab": "unknown"})
         self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("tab", r.data)
 
+    def test_invalid_section_returns_400(self):
+        r = self.client.get(self.url, {"section": "nope"})
+        self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("section", r.data)
+
     def test_today_tab_excludes_cancelled(self):
         r = self.client.get(self.url, {"tab": "today"})
         self.assertEqual(r.status_code, status.HTTP_200_OK)
-        ids = {row["id"] for row in r.data}
+        ids = {row["id"] for row in self._rows(r)}
         self.assertIn(str(self.appt_today.id), ids)
         self.assertNotIn(str(self.appt_today_cancelled.id), ids)
         self.assertNotIn(
@@ -216,30 +225,49 @@ class AppointmentListAPITests(TestCase):
     def test_default_tab_is_today(self):
         r = self.client.get(self.url)
         self.assertEqual(r.status_code, status.HTTP_200_OK)
-        ids = {row["id"] for row in r.data}
+        ids = {row["id"] for row in self._rows(r)}
         self.assertIn(str(self.appt_today.id), ids)
         self.assertNotIn(str(self.appt_today_cancelled.id), ids)
 
     def test_upcoming_only_future_non_cancelled(self):
         r = self.client.get(self.url, {"tab": "upcoming"})
         self.assertEqual(r.status_code, status.HTTP_200_OK)
-        ids = {row["id"] for row in r.data}
+        ids = {row["id"] for row in self._rows(r)}
         self.assertIn(str(self.appt_future.id), ids)
         self.assertNotIn(str(self.appt_today.id), ids)
 
     def test_completed_only_completed_status(self):
         r = self.client.get(self.url, {"tab": "completed"})
         self.assertEqual(r.status_code, status.HTTP_200_OK)
-        ids = {row["id"] for row in r.data}
+        ids = {row["id"] for row in self._rows(r)}
         self.assertIn(str(self.appt_completed.id), ids)
         self.assertNotIn(str(self.appt_no_show.id), ids)
 
     def test_cancelled_includes_no_show(self):
         r = self.client.get(self.url, {"tab": "cancelled"})
         self.assertEqual(r.status_code, status.HTTP_200_OK)
-        ids = {row["id"] for row in r.data}
+        ids = {row["id"] for row in self._rows(r)}
         self.assertIn(str(self.appt_today_cancelled.id), ids)
         self.assertIn(str(self.appt_no_show.id), ids)
+
+    def test_archive_section_includes_completed_and_no_show_within_window(self):
+        r = self.client.get(self.url, {"section": "archive"})
+        self.assertEqual(r.status_code, status.HTTP_200_OK)
+        ids = {row["id"] for row in self._rows(r)}
+        self.assertIn(str(self.appt_completed.id), ids)
+        self.assertIn(str(self.appt_no_show.id), ids)
+
+    def test_primary_section_includes_today_scheduled(self):
+        r = self.client.get(self.url, {"section": "primary"})
+        self.assertEqual(r.status_code, status.HTTP_200_OK)
+        ids = {row["id"] for row in self._rows(r)}
+        self.assertIn(str(self.appt_today.id), ids)
+
+    def test_secondary_section_includes_tomorrow_scheduled(self):
+        r = self.client.get(self.url, {"section": "secondary"})
+        self.assertEqual(r.status_code, status.HTTP_200_OK)
+        ids = {row["id"] for row in self._rows(r)}
+        self.assertIn(str(self.appt_future.id), ids)
 
     def test_filter_by_doctor(self):
         r = self.client.get(
@@ -247,7 +275,7 @@ class AppointmentListAPITests(TestCase):
             {"tab": "upcoming", "doctor_id": str(self.doctor2.id)},
         )
         self.assertEqual(r.status_code, status.HTTP_200_OK)
-        ids = {row["id"] for row in r.data}
+        ids = {row["id"] for row in self._rows(r)}
         self.assertEqual(ids, {str(self.appt_future.id)})
 
     def test_filter_doctor_empty_subset(self):
@@ -256,7 +284,7 @@ class AppointmentListAPITests(TestCase):
             {"tab": "today", "doctor_id": str(self.doctor2.id)},
         )
         self.assertEqual(r.status_code, status.HTTP_200_OK)
-        self.assertEqual(r.data, [])
+        self.assertEqual(self._rows(r), [])
 
     def test_patient_sees_only_own(self):
         other_user = User.objects.create_user(
@@ -289,14 +317,18 @@ class AppointmentListAPITests(TestCase):
         self.client.force_authenticate(user=self.pat_user)
         r = self.client.get(self.url, {"tab": "today"})
         self.assertEqual(r.status_code, status.HTTP_200_OK)
-        ids = {row["id"] for row in r.data}
+        ids = {row["id"] for row in self._rows(r)}
         self.assertEqual(ids, {str(self.appt_today.id)})
 
     def test_list_row_shape(self):
         r = self.client.get(self.url, {"tab": "today"})
         self.assertEqual(r.status_code, status.HTTP_200_OK)
-        row = next(x for x in r.data if x["id"] == str(self.appt_today.id))
+        rows = self._rows(r)
+        row = next(x for x in rows if x["id"] == str(self.appt_today.id))
         self.assertEqual(row["patient_name"], "Pat Client")
         self.assertEqual(row["doctor_name"], "Ann Smith")
         self.assertEqual(row["status"], "scheduled")
         self.assertEqual(str(row["patient_account_id"]), str(self.account.id))
+        self.assertIn("priority", row)
+        self.assertIn("time_bucket", row)
+        self.assertIn("is_overdue", row)

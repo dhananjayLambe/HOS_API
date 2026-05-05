@@ -15,8 +15,8 @@ import { toast } from "sonner";
 
 import type {
   Appointment,
-  AppointmentListTab,
   CreateAppointmentInput,
+  HelpdeskAppointmentSection,
   MockDoctor,
   UpdateAppointmentInput,
 } from "@/lib/helpdesk/helpdeskAppointmentTypes";
@@ -31,6 +31,10 @@ import {
   type GetAppointmentsParams,
 } from "@/lib/api/appointments";
 import { mapAppointmentListApiRow } from "@/lib/helpdesk/mapAppointmentListRow";
+import {
+  mergeFirstAppointmentPage,
+  parseCursorFromNext,
+} from "@/lib/helpdesk/appointmentListMerge";
 import axiosClient from "@/lib/axiosClient";
 
 function todayStr(): string {
@@ -45,17 +49,23 @@ export interface HelpdeskAppointmentMockContextValue {
   doctorsLoading: boolean;
   /** Helpdesk clinic from GET /api/queue/helpdesk/context/ (for booking payload). */
   clinicId: string | null;
-  listTab: AppointmentListTab;
-  setListTab: (t: AppointmentListTab) => void;
-  /** Optional list filters (wired to API when set). */
+  listSection: HelpdeskAppointmentSection;
+  setListSection: (s: HelpdeskAppointmentSection) => void;
   listDoctorId: string;
   setListDoctorId: (id: string) => void;
   listDate: string;
   setListDate: (d: string) => void;
+  listSearch: string;
+  setListSearch: (q: string) => void;
+  /** Empty string = all statuses */
+  listStatus: string;
+  setListStatus: (s: string) => void;
   isLoading: boolean;
+  isLoadingMore: boolean;
+  hasMore: boolean;
   mutationKey: string | null;
   fetchAppointments: () => Promise<void>;
-  /** Load one appointment for reschedule when it is not in the current list tab. */
+  loadMore: () => Promise<void>;
   resolveAppointmentForEdit: (id: string) => Promise<Appointment | null>;
   createAppointment: (input: CreateAppointmentInput) => Promise<Appointment>;
   updateAppointment: (input: UpdateAppointmentInput) => Promise<Appointment>;
@@ -77,10 +87,15 @@ type HelpdeskContextApi = {
 
 export function HelpdeskAppointmentMockProvider({ children }: { children: ReactNode }) {
   const [listRows, setListRows] = useState<Appointment[]>([]);
-  const [listTab, setListTab] = useState<AppointmentListTab>("today");
+  const [listSection, setListSection] = useState<HelpdeskAppointmentSection>("primary");
   const [listDoctorId, setListDoctorId] = useState("");
   const [listDate, setListDate] = useState("");
+  const [listSearch, setListSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [listStatus, setListStatus] = useState("");
+  const [nextCursor, setNextCursor] = useState<string | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [mutationKey, setMutationKey] = useState<string | null>(null);
   const [doctors, setDoctors] = useState<MockDoctor[]>([]);
   const [doctorsLoading, setDoctorsLoading] = useState(true);
@@ -88,48 +103,21 @@ export function HelpdeskAppointmentMockProvider({ children }: { children: ReactN
   const listFetchAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setDoctorsLoading(true);
-      try {
-        const { data } = await axiosClient.get<HelpdeskContextApi>("/queue/helpdesk/context/");
-        if (cancelled) return;
-        setClinicId(data.clinic_id);
-        if (data.doctors?.length) {
-          setDoctors(
-            data.doctors.map((d) => ({
-              id: d.id,
-              name: (d.name && d.name.trim()) || "Doctor",
-              specialization: (d.specialization ?? "").trim(),
-            }))
-          );
-        } else {
-          const ids = data.doctor_ids?.length ? data.doctor_ids : data.doctor_id ? [data.doctor_id] : [];
-          setDoctors(
-            ids.map((id) => ({
-              id,
-              name: "Doctor",
-              specialization: "",
-            }))
-          );
-        }
-      } catch {
-        if (!cancelled) {
-          setClinicId(null);
-          setDoctors([]);
-        }
-      } finally {
-        if (!cancelled) {
-          setDoctorsLoading(false);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    const t = window.setTimeout(() => setDebouncedSearch(listSearch.trim()), 350);
+    return () => window.clearTimeout(t);
+  }, [listSearch]);
 
-  const fetchAppointments = useCallback(async () => {
+  const buildListParams = useCallback((): GetAppointmentsParams => {
+    const params: GetAppointmentsParams = { section: listSection };
+    if (clinicId?.trim()) params.clinic_id = clinicId.trim();
+    if (listDoctorId.trim()) params.doctor_id = listDoctorId.trim();
+    if (listDate.trim()) params.date = listDate.trim();
+    if (debouncedSearch) params.search = debouncedSearch;
+    if (listStatus.trim()) params.status = listStatus.trim();
+    return params;
+  }, [listSection, clinicId, listDoctorId, listDate, debouncedSearch, listStatus]);
+
+  const loadInitial = useCallback(async () => {
     if (doctorsLoading) return;
 
     listFetchAbortRef.current?.abort();
@@ -138,19 +126,16 @@ export function HelpdeskAppointmentMockProvider({ children }: { children: ReactN
 
     setIsLoading(true);
     try {
-      const params: GetAppointmentsParams = { tab: listTab };
-      if (clinicId?.trim()) params.clinic_id = clinicId.trim();
-      if (listDoctorId.trim()) params.doctor_id = listDoctorId.trim();
-      if (listDate.trim()) params.date = listDate.trim();
-
-      const res = await getAppointments(params, { signal: ac.signal });
+      const res = await getAppointments(buildListParams(), { signal: ac.signal });
       if (ac.signal.aborted) return;
 
-      if (res.status >= 200 && res.status < 300 && Array.isArray(res.data)) {
-        setListRows(res.data.map((row) => mapAppointmentListApiRow(row)));
+      if (res.status >= 200 && res.status < 300 && res.data && Array.isArray(res.data.results)) {
+        setListRows(res.data.results.map((row) => mapAppointmentListApiRow(row)));
+        setNextCursor(parseCursorFromNext(res.data.next));
       } else {
         toast.error("Failed to load appointments");
         setListRows([]);
+        setNextCursor(undefined);
       }
     } catch (e: unknown) {
       const code = (e as { code?: string })?.code;
@@ -158,16 +143,65 @@ export function HelpdeskAppointmentMockProvider({ children }: { children: ReactN
       if (code === "ERR_CANCELED" || name === "CanceledError") return;
       toast.error("Failed to load appointments");
       setListRows([]);
+      setNextCursor(undefined);
     } finally {
       if (!ac.signal.aborted) {
         setIsLoading(false);
       }
     }
-  }, [listTab, clinicId, listDoctorId, listDate, doctorsLoading]);
+  }, [buildListParams, doctorsLoading]);
 
   useEffect(() => {
-    void fetchAppointments();
-  }, [fetchAppointments]);
+    void loadInitial();
+  }, [loadInitial]);
+
+  const loadMore = useCallback(async () => {
+    if (!nextCursor || isLoadingMore || isLoading) return;
+    setIsLoadingMore(true);
+    try {
+      const res = await getAppointments({ ...buildListParams(), cursor: nextCursor });
+      if (res.status >= 200 && res.status < 300 && res.data && Array.isArray(res.data.results)) {
+        const mapped = res.data.results.map((row) => mapAppointmentListApiRow(row));
+        setListRows((prev) => {
+          const seen = new Set(prev.map((x) => x.id));
+          const append = mapped.filter((x) => !seen.has(x.id));
+          return [...prev, ...append];
+        });
+        setNextCursor(parseCursorFromNext(res.data.next));
+      }
+    } catch {
+      toast.error("Could not load more appointments");
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [nextCursor, isLoadingMore, isLoading, buildListParams]);
+
+  const pollFirstPage = useCallback(async () => {
+    if (doctorsLoading || mutationKey) return;
+    try {
+      const res = await getAppointments(buildListParams());
+      if (res.status >= 200 && res.status < 300 && res.data && Array.isArray(res.data.results)) {
+        const mapped = res.data.results.map((row) => mapAppointmentListApiRow(row));
+        setListRows((prev) => mergeFirstAppointmentPage(prev, mapped));
+        setNextCursor(parseCursorFromNext(res.data.next));
+      }
+    } catch {
+      /* ignore transient poll errors */
+    }
+  }, [buildListParams, doctorsLoading, mutationKey]);
+
+  useEffect(() => {
+    if (listSection !== "primary") return;
+    if (doctorsLoading) return;
+    const id = window.setInterval(() => {
+      void pollFirstPage();
+    }, 30_000);
+    return () => window.clearInterval(id);
+  }, [listSection, doctorsLoading, pollFirstPage]);
+
+  const fetchAppointments = useCallback(async () => {
+    await loadInitial();
+  }, [loadInitial]);
 
   const resolveAppointmentForEdit = useCallback(
     async (lookupId: string): Promise<Appointment | null> => {
@@ -255,10 +289,10 @@ export function HelpdeskAppointmentMockProvider({ children }: { children: ReactN
 
   const updateAppointment = useCallback(
     async (input: UpdateAppointmentInput): Promise<Appointment> => {
-      const clinicId = input.clinicId?.trim();
+      const cid = input.clinicId?.trim();
       const slotStartTime = input.slotStartTime?.trim();
       const slotEndTime = input.slotEndTime?.trim();
-      if (!clinicId || !slotStartTime || !slotEndTime) {
+      if (!cid || !slotStartTime || !slotEndTime) {
         throw new Error("MISSING_BOOKING_FIELDS");
       }
 
@@ -266,7 +300,7 @@ export function HelpdeskAppointmentMockProvider({ children }: { children: ReactN
       try {
         const { data } = await patchRescheduleAppointment(input.id, {
           doctor_id: input.doctorId,
-          clinic_id: clinicId,
+          clinic_id: cid,
           appointment_date: input.appointmentDate,
           slot_start_time: slotStartTime,
           slot_end_time: slotEndTime,
@@ -282,7 +316,7 @@ export function HelpdeskAppointmentMockProvider({ children }: { children: ReactN
           id: String(data.id),
           patientProfileId: input.patientProfileId,
           patientAccountId: input.patientAccountId?.trim(),
-          clinicId,
+          clinicId: cid,
           patientName: data.patient_name,
           doctorId: input.doctorId,
           doctorName: data.doctor_name,
@@ -342,6 +376,7 @@ export function HelpdeskAppointmentMockProvider({ children }: { children: ReactN
   );
 
   const todayIso = useMemo(() => todayStr(), []);
+  const hasMore = Boolean(nextCursor);
 
   const value = useMemo<HelpdeskAppointmentMockContextValue>(
     () => ({
@@ -350,15 +385,22 @@ export function HelpdeskAppointmentMockProvider({ children }: { children: ReactN
       doctors,
       doctorsLoading,
       clinicId,
-      listTab,
-      setListTab,
+      listSection,
+      setListSection,
       listDoctorId,
       setListDoctorId,
       listDate,
       setListDate,
+      listSearch,
+      setListSearch,
+      listStatus,
+      setListStatus,
       isLoading,
+      isLoadingMore,
+      hasMore,
       mutationKey,
       fetchAppointments,
+      loadMore,
       resolveAppointmentForEdit,
       createAppointment,
       updateAppointment,
@@ -371,12 +413,17 @@ export function HelpdeskAppointmentMockProvider({ children }: { children: ReactN
       doctors,
       doctorsLoading,
       clinicId,
-      listTab,
+      listSection,
       listDoctorId,
       listDate,
+      listSearch,
+      listStatus,
       isLoading,
+      isLoadingMore,
+      hasMore,
       mutationKey,
       fetchAppointments,
+      loadMore,
       resolveAppointmentForEdit,
       createAppointment,
       updateAppointment,
@@ -385,6 +432,48 @@ export function HelpdeskAppointmentMockProvider({ children }: { children: ReactN
       todayIso,
     ]
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setDoctorsLoading(true);
+      try {
+        const { data } = await axiosClient.get<HelpdeskContextApi>("/queue/helpdesk/context/");
+        if (cancelled) return;
+        setClinicId(data.clinic_id);
+        if (data.doctors?.length) {
+          setDoctors(
+            data.doctors.map((d) => ({
+              id: d.id,
+              name: (d.name && d.name.trim()) || "Doctor",
+              specialization: (d.specialization ?? "").trim(),
+            }))
+          );
+        } else {
+          const ids = data.doctor_ids?.length ? data.doctor_ids : data.doctor_id ? [data.doctor_id] : [];
+          setDoctors(
+            ids.map((id) => ({
+              id,
+              name: "Doctor",
+              specialization: "",
+            }))
+          );
+        }
+      } catch {
+        if (!cancelled) {
+          setClinicId(null);
+          setDoctors([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setDoctorsLoading(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <HelpdeskAppointmentMockContext.Provider value={value}>

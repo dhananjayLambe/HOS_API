@@ -17,6 +17,9 @@ export interface AppointmentListApiRow {
   appointment_type?: string;
   consultation_fee?: string | number;
   notes?: string | null;
+  priority?: string;
+  time_bucket?: string;
+  is_overdue?: boolean;
 }
 
 function normalizeStatus(raw: string): AppointmentStatus {
@@ -41,6 +44,31 @@ function normalizeKind(raw: string | undefined): AppointmentKind {
   return raw === "follow_up" ? "follow_up" : "new";
 }
 
+const TIME_BUCKETS = new Set([
+  "now",
+  "overdue",
+  "next_1h",
+  "later_today",
+  "future",
+  "archive",
+]);
+
+function normalizeTimeBucket(raw: string | undefined): Appointment["timeBucket"] {
+  if (raw && TIME_BUCKETS.has(raw)) {
+    return raw as Appointment["timeBucket"];
+  }
+  return undefined;
+}
+
+const PRIORITIES = new Set(["highest", "high", "medium", "low"]);
+
+function normalizePriority(raw: string | undefined): Appointment["priority"] {
+  if (raw && PRIORITIES.has(raw)) {
+    return raw as Appointment["priority"];
+  }
+  return undefined;
+}
+
 export function mapAppointmentListApiRow(row: AppointmentListApiRow): Appointment {
   const timeRaw = row.slot_start_time ?? "00:00:00";
   const timeDisplay = timeRaw.length >= 5 ? timeRaw.slice(0, 5) : timeRaw;
@@ -62,5 +90,8 @@ export function mapAppointmentListApiRow(row: AppointmentListApiRow): Appointmen
     consultationFee: Number.isFinite(feeNum) ? feeNum : 0,
     notes: typeof row.notes === "string" ? row.notes : "",
     status: normalizeStatus(row.status),
+    priority: normalizePriority(row.priority),
+    timeBucket: normalizeTimeBucket(row.time_bucket),
+    isOverdue: Boolean(row.is_overdue),
   };
 }

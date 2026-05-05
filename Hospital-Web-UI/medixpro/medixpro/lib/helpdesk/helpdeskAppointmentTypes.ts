@@ -17,6 +17,9 @@ export type AppointmentStatus =
 
 export type AppointmentListTab = "today" | "upcoming" | "completed" | "cancelled";
 
+/** Helpdesk list scope (maps to GET ?section=). */
+export type HelpdeskAppointmentSection = "primary" | "secondary" | "archive";
+
 export type SlotState = "available" | "booked" | "blocked";
 
 /** One booked or bookable appointment row (mirrors future API). */
@@ -37,6 +40,10 @@ export interface Appointment {
   consultationFee: number;
   notes: string;
   status: AppointmentStatus;
+  /** From GET list serializer (operational triage). */
+  priority?: "highest" | "high" | "medium" | "low";
+  timeBucket?: "now" | "overdue" | "next_1h" | "later_today" | "future" | "archive";
+  isOverdue?: boolean;
 }
 
 /** A single time slot in the grid (mirrors future slots API). */

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { CalendarClock, Stethoscope, User } from "lucide-react";
 
 import type { Appointment, AppointmentStatus } from "@/lib/helpdesk/helpdeskAppointmentTypes";
@@ -47,11 +48,14 @@ export function AppointmentCard({
   const canReschedule = a.status === "scheduled";
   const canCancel = a.status === "scheduled";
   const canCheckIn = a.status === "scheduled";
+  const showQueue =
+    a.status === "checked_in" || a.status === "in_consultation";
 
   return (
     <article
       className={cn(
         "rounded-xl border border-border/80 bg-card p-4 shadow-sm",
+        a.isOverdue && "border-l-4 border-l-destructive",
         className
       )}
     >
@@ -73,17 +77,29 @@ export function AppointmentCard({
             <span className="text-xs">· {a.consultationMode === "video" ? "Video" : "Clinic"}</span>
           </div>
         </div>
-        <span
-          className={cn(
-            "shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium",
-            statusClass[a.status]
-          )}
-        >
-          {statusLabel[a.status]}
-        </span>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <span
+            className={cn(
+              "rounded-full px-2.5 py-0.5 text-xs font-medium",
+              statusClass[a.status]
+            )}
+          >
+            {statusLabel[a.status]}
+          </span>
+          {a.priority ? (
+            <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              {a.priority.replace("_", " ")}
+            </span>
+          ) : null}
+        </div>
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2">
+        {showQueue && (
+          <Button type="button" size="sm" variant="secondary" asChild>
+            <Link href="/helpdesk/queue">Open queue</Link>
+          </Button>
+        )}
         {canCheckIn && (
           <Button
             type="button"

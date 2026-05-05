@@ -17,9 +17,22 @@ export default function HelpdeskAppointmentsListPage() {
   const router = useRouter();
   const {
     appointments,
-    listTab,
-    setListTab,
+    doctors,
+    doctorsLoading,
+    listSection,
+    setListSection,
+    listDoctorId,
+    setListDoctorId,
+    listDate,
+    setListDate,
+    listSearch,
+    setListSearch,
+    listStatus,
+    setListStatus,
     isLoading,
+    isLoadingMore,
+    hasMore,
+    loadMore,
     mutationKey,
     cancelAppointment,
     checkInAppointment,
@@ -105,15 +118,28 @@ export default function HelpdeskAppointmentsListPage() {
       </header>
 
       <AppointmentListSection
-        listTab={listTab}
-        onListTabChange={setListTab}
+        listSection={listSection}
+        onListSectionChange={setListSection}
         appointments={appointments}
+        doctors={doctors}
+        doctorsLoading={doctorsLoading}
+        listDoctorId={listDoctorId}
+        onListDoctorIdChange={setListDoctorId}
+        listDate={listDate}
+        onListDateChange={setListDate}
+        listSearch={listSearch}
+        onListSearchChange={setListSearch}
+        listStatus={listStatus}
+        onListStatusChange={setListStatus}
         onReschedule={handleReschedule}
         onCancel={openCancelDialog}
         onCheckIn={handleCheckIn}
         actionDisabled={busy}
         checkInPending={mutationKey === "checkin"}
         isLoading={isLoading}
+        isLoadingMore={isLoadingMore}
+        hasMore={hasMore}
+        onLoadMore={() => void loadMore()}
       />
 
       <CancelAppointmentDialog

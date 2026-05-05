@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from django.conf import settings
 from django.db import IntegrityError
 from django.utils import timezone
+from django.utils.timezone import localdate
 from rest_framework import serializers
 
 from appointments.models import Appointment, AppointmentHistory
@@ -181,6 +182,9 @@ class AppointmentListSerializer(serializers.ModelSerializer):
     patient_name = serializers.SerializerMethodField()
     doctor_name = serializers.SerializerMethodField()
     patient_id = serializers.UUIDField(source="patient_profile_id", read_only=True)
+    priority = serializers.SerializerMethodField()
+    time_bucket = serializers.SerializerMethodField()
+    is_overdue = serializers.SerializerMethodField()
 
     class Meta:
         model = Appointment
@@ -201,7 +205,52 @@ class AppointmentListSerializer(serializers.ModelSerializer):
             "consultation_fee",
             "notes",
             "check_in_time",
+            "priority",
+            "time_bucket",
+            "is_overdue",
         ]
+
+    def _slot_datetime(self, obj):
+        tz = timezone.get_current_timezone()
+        return timezone.make_aware(
+            datetime.combine(obj.appointment_date, obj.slot_start_time),
+            tz,
+        )
+
+    def get_is_overdue(self, obj):
+        if obj.status != "scheduled":
+            return False
+        return self._slot_datetime(obj) < timezone.now()
+
+    def get_priority(self, obj):
+        if obj.status in ("checked_in", "in_consultation"):
+            return "highest"
+        if obj.status == "scheduled" and self.get_is_overdue(obj):
+            return "high"
+        if obj.status == "scheduled":
+            return "medium"
+        return "low"
+
+    def get_time_bucket(self, obj):
+        st = obj.status
+        if st in ("checked_in", "in_consultation"):
+            return "now"
+        if st in ("completed", "cancelled", "no_show"):
+            return "archive"
+        today = localdate()
+        now = timezone.now()
+        slot_dt = self._slot_datetime(obj)
+        if obj.appointment_date > today:
+            return "future"
+        if obj.appointment_date < today and st == "scheduled":
+            return "overdue"
+        if obj.appointment_date == today and st == "scheduled":
+            if slot_dt < now:
+                return "overdue"
+            if slot_dt <= now + timedelta(hours=1):
+                return "next_1h"
+            return "later_today"
+        return "later_today"
 
     def get_patient_name(self, obj):
         return obj.patient_profile.get_full_name()

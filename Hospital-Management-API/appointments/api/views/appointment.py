@@ -23,6 +23,14 @@ from account.permissions import (
     IsHelpdeskOrAdmin,
     IsHelpdeskOrPatient,
 )
+from appointments.api.list_scope import (
+    archive_section_q,
+    build_appointment_search_q,
+    normalize_search,
+    primary_section_q,
+    secondary_section_q,
+)
+from appointments.api.pagination import AppointmentCursorPagination
 from appointments.api.serializers import (
     AppointmentCancelRequestSerializer,
     AppointmentCreatedResponseSerializer,
@@ -63,19 +71,20 @@ IST = ZoneInfo("Asia/Kolkata")
 CACHE_TIMEOUT = 300
 
 APPOINTMENT_LIST_TABS = frozenset({"today", "upcoming", "completed", "cancelled"})
+APPOINTMENT_LIST_SECTIONS = frozenset({"primary", "secondary", "archive"})
 CANCELLED_LIKE_STATUSES = ("cancelled", "no_show")
 
 
 class AppointmentListView(generics.ListCreateAPIView):
     """
-    GET /api/appointments/ — tabbed, filterable list for helpdesk UI.
+    GET /api/appointments/ — section or tabbed, filterable list (cursor-paginated).
     POST /api/appointments/ — create appointment (unchanged contract).
     """
 
     permission_classes = [IsAuthenticated, IsHelpdeskOrPatient]
     authentication_classes = [JWTAuthentication]
     queryset = Appointment.objects.none()
-    pagination_class = None
+    pagination_class = AppointmentCursorPagination
 
     def get_serializer_class(self):
         if self.request.method == "POST":
@@ -109,23 +118,39 @@ class AppointmentListView(generics.ListCreateAPIView):
         else:
             return Appointment.objects.none()
 
-        tab = request.query_params.get("tab") or "today"
-        if tab not in APPOINTMENT_LIST_TABS:
-            raise ValidationError(
-                {"tab": f"Invalid tab. Allowed: {', '.join(sorted(APPOINTMENT_LIST_TABS))}."},
-            )
-
         today = localdate()
-        non_cancelled = ~Q(status__in=CANCELLED_LIKE_STATUSES)
+        now_dt = timezone.now()
+        section = request.query_params.get("section")
+        tab = request.query_params.get("tab")
 
-        if tab == "today":
-            qs = qs.filter(appointment_date=today).filter(non_cancelled)
-        elif tab == "upcoming":
-            qs = qs.filter(appointment_date__gt=today).filter(non_cancelled)
-        elif tab == "completed":
-            qs = qs.filter(status="completed")
-        elif tab == "cancelled":
-            qs = qs.filter(status__in=CANCELLED_LIKE_STATUSES)
+        if section is not None and section != "":
+            if section not in APPOINTMENT_LIST_SECTIONS:
+                raise ValidationError(
+                    {
+                        "section": f"Invalid section. Allowed: {', '.join(sorted(APPOINTMENT_LIST_SECTIONS))}.",
+                    },
+                )
+            if section == "primary":
+                qs = qs.filter(primary_section_q(today, now_dt))
+            elif section == "secondary":
+                qs = qs.filter(secondary_section_q(today, now_dt))
+            else:
+                qs = qs.filter(archive_section_q(today))
+        else:
+            tab = tab or "today"
+            if tab not in APPOINTMENT_LIST_TABS:
+                raise ValidationError(
+                    {"tab": f"Invalid tab. Allowed: {', '.join(sorted(APPOINTMENT_LIST_TABS))}."},
+                )
+            non_cancelled = ~Q(status__in=CANCELLED_LIKE_STATUSES)
+            if tab == "today":
+                qs = qs.filter(appointment_date=today).filter(non_cancelled)
+            elif tab == "upcoming":
+                qs = qs.filter(appointment_date__gt=today).filter(non_cancelled)
+            elif tab == "completed":
+                qs = qs.filter(status="completed")
+            elif tab == "cancelled":
+                qs = qs.filter(status__in=CANCELLED_LIKE_STATUSES)
 
         doctor_id = request.query_params.get("doctor_id")
         if doctor_id:
@@ -147,17 +172,19 @@ class AppointmentListView(generics.ListCreateAPIView):
         if status_override:
             qs = qs.filter(status=status_override)
 
-        if tab in ("completed", "cancelled"):
-            qs = qs.order_by("-appointment_date", "-slot_start_time")
-        else:
-            qs = qs.order_by("appointment_date", "slot_start_time")
+        search_raw = request.query_params.get("search")
+        term = normalize_search(search_raw)
+        if term:
+            qs = qs.filter(build_appointment_search_q(term))
 
         return qs
 
     def list(self, request, *args, **kwargs):
         tab = request.query_params.get("tab") or "today"
+        section = request.query_params.get("section")
         logger.info(
-            "appointment_list tab=%s doctor_id=%s clinic_id=%s user_id=%s",
+            "appointment_list section=%s tab=%s doctor_id=%s clinic_id=%s user_id=%s",
+            section,
             tab,
             request.query_params.get("doctor_id"),
             request.query_params.get("clinic_id"),
