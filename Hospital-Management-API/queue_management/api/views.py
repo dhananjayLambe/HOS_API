@@ -88,8 +88,10 @@ class CheckInQueueAPIView(APIView):
         if appointment_id:
             appointment = Appointment.objects.filter(id=appointment_id).first()
 
-        with transaction.atomic():
-            try:
+        # Inner atomic so IntegrityError only rolls back the create; queries in except
+        # must not run inside a doomed outer block (see StartNewVisitAPIView).
+        try:
+            with transaction.atomic():
                 encounter, _enc_created = EncounterService.get_or_create_encounter(
                     clinic=clinic,
                     patient_account=patient_account,
@@ -101,13 +103,15 @@ class CheckInQueueAPIView(APIView):
                     created_by=request.user,
                     consultation_type="FULL",
                 )
-            except IntegrityError:
-                encounter = EncounterService.get_active_encounter(patient_account, clinic)
-                if encounter is None:
-                    return Response(
-                        {"error": "Could not resolve active encounter. Please retry check-in."},
-                        status=status.HTTP_409_CONFLICT,
-                    )
+        except IntegrityError:
+            encounter = EncounterService.get_active_encounter(patient_account, clinic)
+            if encounter is None:
+                return Response(
+                    {"error": "Could not resolve active encounter. Please retry check-in."},
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+        with transaction.atomic():
             update_fields = []
             if encounter.doctor_id != doctor_obj.id:
                 encounter.doctor = doctor_obj
