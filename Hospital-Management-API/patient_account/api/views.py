@@ -38,6 +38,7 @@ from rest_framework.throttling import UserRateThrottle
 from django.utils import timezone
 import traceback
 from patient_account.services.patient_search_service import search_patients_for_suggestions
+from patient_account.services.patient_list_service import list_patients_for_workspace
 
 # Set up logger
 logger = logging.getLogger(__name__)
@@ -341,6 +342,26 @@ class PatientProfileSearchView(ListAPIView):
         query = request.query_params.get("query", "")
         limit = request.query_params.get("limit", 10)
         data = search_patients_for_suggestions(query=query, limit=limit)
+        return Response(data, status=status.HTTP_200_OK)
+
+
+class PatientListView(APIView):
+    permission_classes = [IsAuthenticated, IsDoctorOrHelpdesk]
+    authentication_classes = [JWTAuthentication]
+
+    class PatientListThrottle(UserRateThrottle):
+        rate = "60/min"
+
+    throttle_classes = [PatientListThrottle]
+
+    def get(self, request, *args, **kwargs):
+        data = list_patients_for_workspace(
+            user=request.user,
+            query=request.query_params.get("q", ""),
+            filter_key=request.query_params.get("filter", "recent"),
+            page=request.query_params.get("page", 1),
+            page_size=request.query_params.get("page_size", 20),
+        )
         return Response(data, status=status.HTTP_200_OK)
 
 
