@@ -112,17 +112,17 @@ export function Sidebar({ isOpen, setIsOpen, alignBelowHeader }: SidebarProps) {
       href: "/patients",
       icon: UserRound,
     },
-    {
-      title: "Appointments",
-      href: "/appointments",
-      icon: Calendar,
-      submenu: [
-        { title: "All Appointments", href: "/appointments" },
-        { title: "Add Appointment", href: "/appointments/add" },
-        { title: "Calendar View", href: "/appointments/calendar" },
-        { title: "Appointment Requests", href: "/appointments/requests" },
-      ],
-    },
+    // {
+    //   title: "Appointments",
+    //   href: "/appointments",
+    //   icon: Calendar,
+    //   submenu: [
+    //     { title: "All Appointments", href: "/appointments" },
+    //     { title: "Add Appointment", href: "/appointments/add" },
+    //     { title: "Calendar View", href: "/appointments/calendar" },
+    //     { title: "Appointment Requests", href: "/appointments/requests" },
+    //   ],
+    // },
 
     {
       title: "Prescriptions",
@@ -130,8 +130,8 @@ export function Sidebar({ isOpen, setIsOpen, alignBelowHeader }: SidebarProps) {
       icon: Pill,
       submenu: [
         { title: "All Prescriptions", href: "/prescriptions" },
-        { title: "Create Prescription", href: "/prescriptions/create" },
-        { title: "Medicine Templates", href: "/prescriptions/templates" },
+        //{ title: "Create Prescription", href: "/prescriptions/create" },
+        //{ title: "Medicine Templates", href: "/prescriptions/templates" },
       ],
     },
     {
@@ -144,17 +144,17 @@ export function Sidebar({ isOpen, setIsOpen, alignBelowHeader }: SidebarProps) {
         // { title: "Lab Test Report Templates", href: "/lab-tests-reports/templates" },
       ],
     },
-    {
-      title: "Billing",
-      href: "/billing",
-      icon: Receipt,
-      submenu: [
-        { title: "Invoices List", href: "/billing" },
-        { title: "Create Invoice", href: "/billing/create" },
-        { title: "Payments History", href: "/billing/payments" },
-        { title: "Insurance Claims", href: "/billing/insurance" },
-      ],
-    },
+    // {
+    //   title: "Billing",
+    //   href: "/billing",
+    //   icon: Receipt,
+    //   submenu: [
+    //     { title: "Invoices List", href: "/billing" },
+    //     { title: "Create Invoice", href: "/billing/create" },
+    //     { title: "Payments History", href: "/billing/payments" },
+    //     { title: "Insurance Claims", href: "/billing/insurance" },
+    //   ],
+    // },
     {
       title: "Calendar",
       href: "/calendar",

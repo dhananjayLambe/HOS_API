@@ -7,12 +7,16 @@ at end consultation), separated from pre-consultation views for clearer boundari
 
 import logging
 import json
+import re
+from datetime import date
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.http import HttpResponse
 from django.template.loader import render_to_string
+from django.db.models import Q
 from rest_framework import status
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.exceptions import NotFound
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -438,6 +442,139 @@ class ConsultationSummaryLitePDFAPIView(ConsultationSummaryLiteHTMLAPIView):
             request=request,
             consultation_id=consultation_id,
             draft_payload=draft_payload,
+        )
+
+
+class DoctorPrescriptionListPagination(PageNumberPagination):
+    page_size = 20
+    page_size_query_param = "page_size"
+    max_page_size = 50
+
+
+def _safe_age_display(patient_profile):
+    years = getattr(patient_profile, "age_years", None)
+    if years is not None:
+        return f"{years}Y"
+    dob = getattr(patient_profile, "date_of_birth", None)
+    if not dob:
+        return "-"
+    today = date.today()
+    computed_years = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+    return f"{computed_years}Y"
+
+
+class DoctorPrescriptionsListAPIView(APIView):
+    """
+    Doctor-scoped list endpoint for prescription workspace.
+    GET /api/consultations/prescriptions/
+    """
+
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctor]
+    pagination_class = DoctorPrescriptionListPagination
+
+    def get(self, request):
+        queryset = (
+            Prescription.objects.select_related(
+                "consultation",
+                "consultation__encounter",
+                "consultation__encounter__patient_profile",
+                "consultation__encounter__patient_account",
+                "consultation__encounter__patient_account__user",
+            )
+            .prefetch_related("lines", "consultation__diagnoses")
+            .filter(
+                is_active=True,
+                status__in=[PrescriptionStatus.FINALIZED, PrescriptionStatus.CANCELLED],
+                consultation__encounter__doctor__user_id=request.user.id,
+            )
+            .order_by("-created_at")
+        )
+
+        search = str(request.query_params.get("search") or "").strip()
+        if search:
+            base_q = (
+                Q(consultation__encounter__patient_profile__first_name__icontains=search)
+                | Q(consultation__encounter__patient_profile__last_name__icontains=search)
+                | Q(consultation__encounter__patient_profile__public_id__icontains=search)
+                | Q(prescription_pnr__icontains=search)
+                | Q(consultation__encounter__visit_pnr__icontains=search)
+            )
+            digits = re.sub(r"\D", "", search)
+            if digits:
+                base_q |= Q(consultation__encounter__patient_account__user__username__icontains=digits)
+            queryset = queryset.filter(base_q)
+
+        status_filter = str(request.query_params.get("status") or "all").strip().lower()
+        if status_filter == "active":
+            queryset = queryset.filter(status=PrescriptionStatus.FINALIZED)
+        elif status_filter == "cancelled":
+            queryset = queryset.filter(status=PrescriptionStatus.CANCELLED)
+
+        date_from = str(request.query_params.get("date_from") or "").strip()
+        date_to = str(request.query_params.get("date_to") or "").strip()
+        if date_from:
+            queryset = queryset.filter(created_at__date__gte=date_from)
+        if date_to:
+            queryset = queryset.filter(created_at__date__lte=date_to)
+
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(queryset, request, view=self)
+        results = []
+        for prescription in page:
+            encounter = prescription.consultation.encounter
+            patient = encounter.patient_profile
+            full_name = f"{(patient.first_name or '').strip()} {(patient.last_name or '').strip()}".strip() or "Unknown"
+
+            diagnoses = list(
+                prescription.consultation.diagnoses.all()
+            )
+            diagnoses.sort(key=lambda d: (not bool(getattr(d, "is_primary", False)), getattr(d, "created_at", None)))
+            diagnosis_summary = "-"
+            if diagnoses:
+                first_diagnosis = diagnoses[0]
+                diagnosis_summary = (
+                    getattr(first_diagnosis, "display_name", "")
+                    or getattr(first_diagnosis, "label", "")
+                    or "-"
+                )
+
+            lines = list(prescription.lines.all())
+            medicines_preview = [
+                (line.drug_name_snapshot or "").strip()
+                for line in lines
+                if (line.drug_name_snapshot or "").strip()
+            ][:3]
+
+            results.append(
+                {
+                    "consultation_id": str(prescription.consultation_id),
+                    "encounter_id": str(encounter.id),
+                    "prescription_id": str(prescription.id),
+                    "pnr": prescription.prescription_pnr,
+                    "patient": {
+                        "full_name": full_name,
+                        "age_display": _safe_age_display(patient),
+                        "gender": (patient.gender or "").capitalize() if patient.gender else "-",
+                        "mobile": getattr(encounter.patient_account.user, "username", ""),
+                    },
+                    "diagnosis_summary": diagnosis_summary,
+                    "medicines_count": len(lines),
+                    "medicines_preview": medicines_preview,
+                    "consultation_date": prescription.created_at.isoformat() if prescription.created_at else None,
+                    "is_cancelled": prescription.status == PrescriptionStatus.CANCELLED,
+                    "cancelled_at": prescription.cancelled_at.isoformat() if prescription.cancelled_at else None,
+                }
+            )
+
+        return Response(
+            {
+                "count": paginator.page.paginator.count,
+                "page": paginator.page.number,
+                "page_size": paginator.get_page_size(request),
+                "results": results,
+            },
+            status=status.HTTP_200_OK,
         )
 
 

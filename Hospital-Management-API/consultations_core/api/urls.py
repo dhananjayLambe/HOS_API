@@ -17,6 +17,7 @@ from consultations_core.api.views.preconsultation import (
 )
 from consultations_core.api.views.consultation import (
     EndConsultationAPIView,
+    DoctorPrescriptionsListAPIView,
     ConsultationSummaryAPIView,
     ConsultationSummaryLiteAPIView,
     ConsultationSummaryLiteHTMLAPIView,
@@ -148,6 +149,11 @@ urlpatterns = [
         "<uuid:consultation_id>/investigations/items/<uuid:item_id>/",
         ConsultationInvestigationItemDetailAPIView.as_view(),
         name="consultation-investigation-item-detail",
+    ),
+    path(
+        "prescriptions/",
+        DoctorPrescriptionsListAPIView.as_view(),
+        name="doctor-prescriptions-list",
     ),
     path(
         "<uuid:consultation_id>/summary/",
