@@ -402,7 +402,11 @@ def _build_diagnoses(consultation: Consultation) -> list[dict[str, Any]]:
     rows = []
     seen_names: set[str] = set()
     for item in consultation.diagnoses.all():
-        name = (item.display_name or item.label or "").strip()
+        display_name = (item.display_name or "").strip()
+        # Older rows may keep model default "Unknown"; prefer label in that case.
+        if display_name.lower() == "unknown":
+            display_name = ""
+        name = (display_name or item.label or "").strip()
         if not name:
             continue
         key = name.lower()

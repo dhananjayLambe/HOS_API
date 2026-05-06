@@ -627,29 +627,28 @@ export function ConsultationActionBar() {
     URL.revokeObjectURL(url);
   };
 
-  const renderCompletedPreviewAndRedirect = async (
-    previewTab: Window,
-    payload: ReturnType<typeof buildEndConsultationPayload>
-  ) => {
-    if (consultationId) {
-      const previewRes = await backendAxiosClient.post<{ html?: string }>(
-        `/consultations/${consultationId}/summary-lite/html/`,
-        payload
-      );
-      const html = (previewRes.data?.html || "").trim();
-      if (html) {
-        openPreviewWindow(html, previewTab, consultationId, payload);
-      } else {
-        previewTab.close();
-        toast.error("Failed to load prescription preview.");
-      }
-    } else {
-      previewTab.close();
+  const renderCompletedPreviewAndRedirect = async () => {
+    if (!encounterId) {
+      toast.error("Encounter unavailable. Unable to open completion workspace.");
+      return;
     }
+    if (!consultationId) {
+      toast.error("Consultation not ready. Please refresh and try again.");
+      return;
+    }
+    window.sessionStorage.setItem(
+      `rx-completion:${encounterId}`,
+      JSON.stringify({
+        consultation_id: consultationId,
+        encounter_id: encounterId,
+        visit_pnr: visitPnr ?? "",
+        completed_at: new Date().toISOString(),
+      })
+    );
     toast.success("Consultation completed successfully");
     setTimeout(() => {
       useConsultationStore.getState().reset();
-      router.replace("/doctor-dashboard");
+      router.replace(`/prescriptions/completed/${encodeURIComponent(encounterId)}`);
     }, 0);
   };
 
@@ -703,15 +702,6 @@ export function ConsultationActionBar() {
       toast.warning(warnings.vitals);
     }
 
-    const previewTab = window.open("", "_blank");
-    if (!previewTab) {
-      toast.error("Popup blocked. Please allow popups and try again.");
-      return;
-    }
-    previewTab.document.title = "Preparing prescription preview...";
-    previewTab.document.body.innerHTML =
-      "<div style='font-family: Arial, sans-serif; padding: 24px; color: #374151;'>Preparing prescription preview...</div>";
-
     setIsEndingConsultation(true);
     setIsFinalizationOverlayVisible(true);
     try {
@@ -723,7 +713,7 @@ export function ConsultationActionBar() {
       );
       clearSectionValidationUi();
       setShowEndConsultationConfirm(false);
-      await renderCompletedPreviewAndRedirect(previewTab, payloadForPost);
+      await renderCompletedPreviewAndRedirect();
     } catch (err: any) {
       const responseData = err?.response?.data;
       const rawErrors = responseData?.errors;
@@ -742,8 +732,7 @@ export function ConsultationActionBar() {
       if (alreadyCompleted) {
         try {
           setShowEndConsultationConfirm(false);
-          const payload = buildEndConsultationPayload(useConsultationStore.getState());
-          await renderCompletedPreviewAndRedirect(previewTab, payload);
+          await renderCompletedPreviewAndRedirect();
           return;
         } catch {
           // continue to generic failure handling
@@ -755,7 +744,6 @@ export function ConsultationActionBar() {
           ? `Validation: ${errorsText}`
           : message || "Failed to finalize consultation. Please try again."
       );
-      if (!previewTab.closed) previewTab.close();
     } finally {
       setIsEndingConsultation(false);
       setIsFinalizationOverlayVisible(false);

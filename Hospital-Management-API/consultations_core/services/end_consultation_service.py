@@ -1257,6 +1257,7 @@ def _persist_diagnoses(consultation, user, raw_diagnoses):
                 consultation=consultation,
                 master=None,
                 custom_diagnosis=custom_obj,
+                display_name=custom_obj.name or custom_name,
                 is_primary=is_primary,
                 diagnosis_type=diagnosis_type,
                 severity=severity,
@@ -1326,6 +1327,7 @@ def _persist_diagnoses(consultation, user, raw_diagnoses):
                 created_by=user,
             )
         row.custom_diagnosis = None
+        row.display_name = diagnosis_label or master.label or diagnosis_key or diagnosis_icd_code
         row.is_primary = is_primary
         row.diagnosis_type = diagnosis_type
         row.severity = severity

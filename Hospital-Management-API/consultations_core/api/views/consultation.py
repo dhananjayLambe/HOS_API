@@ -314,6 +314,57 @@ class EndConsultationAPIView(_EndConsultationAPIView):
         return response
 
 
+class ConsultationByPnrAPIView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctor]
+
+    def get(self, request, visit_pnr):
+        encounter = (
+            ClinicalEncounter.objects.select_related(
+                "consultation",
+                "patient_profile",
+                "patient_account__user",
+            )
+            .filter(visit_pnr=visit_pnr)
+            .first()
+        )
+        if encounter is None:
+            return Response({"detail": "Encounter not found for the provided PNR."}, status=status.HTTP_404_NOT_FOUND)
+
+        status_normalized = str(encounter.status or "").upper().replace(" ", "_")
+        consultation = getattr(encounter, "consultation", None)
+        patient_profile = getattr(encounter, "patient_profile", None)
+        patient_gender = (getattr(patient_profile, "gender", None) or getattr(patient_profile, "sex", None) or "").strip()
+
+        age_display = ""
+        if patient_profile is not None:
+            try:
+                age_display = patient_profile.get_age()
+            except Exception:
+                age_display = ""
+
+        return Response(
+            {
+                "visit_pnr": encounter.visit_pnr or "",
+                "encounter_id": str(encounter.id),
+                "consultation_id": str(consultation.id) if consultation else None,
+                "encounter_status": status_normalized,
+                "completed_at": encounter.consultation_end_time.isoformat() if encounter.consultation_end_time else None,
+                "completed": status_normalized == "CONSULTATION_COMPLETED",
+                "patient": {
+                    "full_name": (
+                        getattr(patient_profile, "full_name", None)
+                        or f"{getattr(patient_profile, 'first_name', '')} {getattr(patient_profile, 'last_name', '')}".strip()
+                        or "Unknown patient"
+                    ),
+                    "age_display": age_display or "",
+                    "gender": patient_gender or "",
+                },
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
 class _BaseConsultationSummaryAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated, IsDoctor]
