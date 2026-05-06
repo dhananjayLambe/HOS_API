@@ -39,6 +39,10 @@ from django.utils import timezone
 import traceback
 from patient_account.services.patient_search_service import search_patients_for_suggestions
 from patient_account.services.patient_list_service import list_patients_for_workspace
+from patient_account.services.patient_summary_service import (
+    build_patient_summary,
+    get_accessible_patient_profile_or_404,
+)
 
 # Set up logger
 logger = logging.getLogger(__name__)
@@ -362,6 +366,29 @@ class PatientListView(APIView):
             page=request.query_params.get("page", 1),
             page_size=request.query_params.get("page_size", 20),
         )
+        return Response(data, status=status.HTTP_200_OK)
+
+
+class PatientSummaryAPIView(APIView):
+    """
+    GET /api/patients/<patient_profile_id>/summary/
+    Lightweight orchestrated payload for Patient Summary workspace (same shape as frontend contract).
+    """
+
+    permission_classes = [IsAuthenticated, IsDoctorOrHelpdesk]
+    authentication_classes = [JWTAuthentication]
+
+    class PatientSummaryThrottle(UserRateThrottle):
+        rate = "60/min"
+
+    throttle_classes = [PatientSummaryThrottle]
+
+    def get(self, request, patient_profile_id, *args, **kwargs):
+        profile = get_accessible_patient_profile_or_404(
+            user=request.user,
+            patient_profile_id=patient_profile_id,
+        )
+        data = build_patient_summary(patient_profile=profile)
         return Response(data, status=status.HTTP_200_OK)
 
 

@@ -10,6 +10,7 @@ from patient_account.api.views import (
     CheckMobileView,CreatePatientView,PatientProfilesByAccountView,
     SelectPatientView,GetSelectedPatientView,ClearSelectedPatientView,
     PatientListView,
+    PatientSummaryAPIView,
     )
 app_name = 'patient_account'
 
@@ -36,6 +37,7 @@ urlpatterns = [
     path("check-patient/", CheckPatientView.as_view(), name="check-patient"),
     path("search/", PatientProfileSearchView.as_view(), name="patient-search"),
     path("list/", PatientListView.as_view(), name="patient-list"),
+    path("<uuid:patient_profile_id>/summary/", PatientSummaryAPIView.as_view(), name="patient-summary"),
     
     # Doctor EMR Patient Creation APIs
     path("check-mobile/", CheckMobileView.as_view(), name="check-mobile"),
