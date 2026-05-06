@@ -26,6 +26,7 @@
         main {
             max-width: 180mm;
             margin: 0 auto;
+            position: relative;
         }
 
         header.running-header {
@@ -180,6 +181,25 @@
             margin: 2px 0;
         }
 
+        .cancelled-watermark {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+            z-index: 9999;
+        }
+
+        .cancelled-watermark span {
+            transform: rotate(-28deg);
+            font-size: 110px;
+            font-weight: 700;
+            letter-spacing: 0.32em;
+            color: rgba(220, 38, 38, 0.14);
+            white-space: nowrap;
+        }
+
         /* Browser print/PDF does not reliably support running() footers. Keep inline footer visible for print. */
         @media print {
             .running-footer {
@@ -229,6 +249,9 @@
 </footer>
 
 <main>
+    {% if prescription.is_cancelled %}
+    <div class="cancelled-watermark"><span>CANCELLED</span></div>
+    {% endif %}
     <div class="header">
         <div class="header-top">
             <div class="clinic-left">

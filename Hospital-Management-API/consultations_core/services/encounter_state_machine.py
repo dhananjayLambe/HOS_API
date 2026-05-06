@@ -310,9 +310,9 @@ class EncounterStateMachine:
         return result
 
     @staticmethod
-    def cancel(encounter, user=None):
+    def cancel(encounter, user=None, reason: str = None):
         result = EncounterStateMachine.transition(
-            encounter, "cancelled", user
+            encounter, "cancelled", user, reason=reason
         )
         _sync_queue_for_encounter_terminal(result, "cancelled")
         return result

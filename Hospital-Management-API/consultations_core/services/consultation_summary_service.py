@@ -249,6 +249,7 @@ def _compose_summary(consultation: Consultation, sections: set[str], profile: st
         "doctor": _build_doctor(encounter),
         "patient": _build_patient(encounter),
         "visit": _build_visit(encounter),
+        "prescription": _build_prescription_header(consultation),
         "vitals": _build_vitals(consultation=consultation, pre_consultation=pre_consultation),
         "symptoms": _build_symptoms(consultation, pre_consultation) if "symptoms" in sections else [],
         "findings": _build_findings(consultation) if "findings" in sections else [],
@@ -260,6 +261,23 @@ def _compose_summary(consultation: Consultation, sections: set[str], profile: st
         "follow_up": _build_follow_up(consultation) if "follow_up" in sections else {"date": None, "notes": "", "type": ""},
     }
     return summary
+
+
+def _build_prescription_header(consultation: Consultation) -> dict[str, Any]:
+    active = next((item for item in consultation.prescriptions.all() if item.is_active), None)
+    if not active:
+        return {
+            "pnr": "",
+            "status": "",
+            "is_cancelled": False,
+            "cancelled_at": None,
+        }
+    return {
+        "pnr": active.prescription_pnr,
+        "status": active.status,
+        "is_cancelled": active.status == "cancelled",
+        "cancelled_at": _iso_datetime(active.cancelled_at),
+    }
 
 
 def _build_clinic(encounter) -> dict[str, Any]:

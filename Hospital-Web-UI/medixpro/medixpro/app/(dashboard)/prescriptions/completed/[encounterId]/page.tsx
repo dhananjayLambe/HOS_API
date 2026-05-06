@@ -161,6 +161,18 @@ export default function CompletedPrescriptionPage() {
   }, [getCancelState]);
 
   useEffect(() => {
+    if (!summary?.prescription?.is_cancelled || cancelState || !encounterId) return;
+    const nextCancelState: CancelState = {
+      reason: "already_cancelled",
+      reasonText: "",
+      cancelledAt: formatDateTime(summary.prescription.cancelled_at || ""),
+      cancelledBy: "Doctor",
+    };
+    window.sessionStorage.setItem(cancelKey(encounterId), JSON.stringify(nextCancelState));
+    setCancelState(nextCancelState);
+  }, [cancelState, encounterId, summary?.prescription?.cancelled_at, summary?.prescription?.is_cancelled]);
+
+  useEffect(() => {
     if (!encounterId) return;
     let isMounted = true;
 
@@ -230,12 +242,17 @@ export default function CompletedPrescriptionPage() {
 
   const handleCancelConfirm = useCallback(
     async (reason: string, reasonText?: string) => {
+      if (!consultationId) {
+        toast.error("Consultation not found for cancellation.");
+        return;
+      }
       const doctorName = `${user?.first_name || ""} ${user?.last_name || ""}`.trim() || "Doctor";
       setIsCancellingPrescription(true);
       try {
-        await backendAxiosClient.post(`/consultations/encounter/${encodeURIComponent(encounterId)}/cancel/`, {
-          reason,
+        await backendAxiosClient.post(`/consultations/${encodeURIComponent(consultationId)}/prescription/cancel/`, {
+          reason_code: reason,
           reason_text: reasonText || "",
+          source: "doctor",
         });
         const nextCancelState: CancelState = {
           reason,
@@ -257,7 +274,7 @@ export default function CompletedPrescriptionPage() {
         setIsCancellingPrescription(false);
       }
     },
-    [encounterId, toast, user?.first_name, user?.last_name]
+    [consultationId, encounterId, toast, user?.first_name, user?.last_name]
   );
 
   if (loading) {

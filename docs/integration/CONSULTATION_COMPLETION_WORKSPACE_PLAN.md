@@ -67,12 +67,25 @@ flowchart LR
 - Sticky success header and sticky right actions panel.
 - PNR shown in completion metadata, encounter id not shown.
 - Preview is locked/read-only with explicit lock note.
-- Cancel is frontend-only state (status + watermark + action disable).
+- Cancel uses backend prescription lifecycle endpoint and persists audit metadata.
 
 ## Future-ready notes
 
-- Cancel flow includes TODO hook for future backend endpoint:
-  - `POST /consultations/prescription/{id}/cancel/`
+- Encounter cancel and prescription cancel are distinct:
+  - `POST /consultations/encounter/{encounter_id}/cancel/` cancels visit workflow.
+  - `POST /consultations/{consultation_id}/prescription/cancel/` invalidates prescription only.
+- Prescription cancel audit model (nullable fields on `Prescription`):
+  - `cancelled_at`, `cancelled_by`, `cancelled_by_source`
+  - `cancel_reason_code`, `cancel_reason_text`
+  - `cancelled_by_patient_profile` (future patient support)
+- Lifecycle rule:
+  - Only `FINALIZED -> CANCELLED` allowed in cancel flow.
+  - `PrescriptionLine` rows remain immutable.
+- API contract (doctor-side):
+  - Request: `{ "reason_code": "...", "reason_text": "", "source": "doctor" }`
+  - Response: current cancelled state, idempotent `200` if already cancelled.
+- Future patient compatibility:
+  - planned `POST /patient/prescriptions/{prescription_pnr}/cancel/` reusing same service.
 - Remaining roadmap (out of phase 1):
   - WhatsApp sharing
   - patient app sync

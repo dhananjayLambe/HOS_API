@@ -9,6 +9,7 @@ import logging
 import json
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.http import HttpResponse
 from django.template.loader import render_to_string
 from rest_framework import status
@@ -24,6 +25,11 @@ from consultations_core.api.views.preconsultation import (
 )
 from consultations_core.models.consultation import Consultation
 from consultations_core.models.encounter import ClinicalEncounter
+from consultations_core.models.prescription import (
+    Prescription,
+    PrescriptionStatus,
+    PrescriptionCancellationSource,
+)
 from consultations_core.services.consultation_summary_service import (
     build_consultation_summary,
     build_numeric_dose_display,
@@ -314,57 +320,6 @@ class EndConsultationAPIView(_EndConsultationAPIView):
         return response
 
 
-class ConsultationByPnrAPIView(APIView):
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAuthenticated, IsDoctor]
-
-    def get(self, request, visit_pnr):
-        encounter = (
-            ClinicalEncounter.objects.select_related(
-                "consultation",
-                "patient_profile",
-                "patient_account__user",
-            )
-            .filter(visit_pnr=visit_pnr)
-            .first()
-        )
-        if encounter is None:
-            return Response({"detail": "Encounter not found for the provided PNR."}, status=status.HTTP_404_NOT_FOUND)
-
-        status_normalized = str(encounter.status or "").upper().replace(" ", "_")
-        consultation = getattr(encounter, "consultation", None)
-        patient_profile = getattr(encounter, "patient_profile", None)
-        patient_gender = (getattr(patient_profile, "gender", None) or getattr(patient_profile, "sex", None) or "").strip()
-
-        age_display = ""
-        if patient_profile is not None:
-            try:
-                age_display = patient_profile.get_age()
-            except Exception:
-                age_display = ""
-
-        return Response(
-            {
-                "visit_pnr": encounter.visit_pnr or "",
-                "encounter_id": str(encounter.id),
-                "consultation_id": str(consultation.id) if consultation else None,
-                "encounter_status": status_normalized,
-                "completed_at": encounter.consultation_end_time.isoformat() if encounter.consultation_end_time else None,
-                "completed": status_normalized == "CONSULTATION_COMPLETED",
-                "patient": {
-                    "full_name": (
-                        getattr(patient_profile, "full_name", None)
-                        or f"{getattr(patient_profile, 'first_name', '')} {getattr(patient_profile, 'last_name', '')}".strip()
-                        or "Unknown patient"
-                    ),
-                    "age_display": age_display or "",
-                    "gender": patient_gender or "",
-                },
-            },
-            status=status.HTTP_200_OK,
-        )
-
-
 class _BaseConsultationSummaryAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated, IsDoctor]
@@ -483,4 +438,79 @@ class ConsultationSummaryLitePDFAPIView(ConsultationSummaryLiteHTMLAPIView):
             request=request,
             consultation_id=consultation_id,
             draft_payload=draft_payload,
+        )
+
+
+class CancelConsultationPrescriptionAPIView(APIView):
+    """
+    Invalidate finalized prescription for a consultation (doctor-side v1).
+    """
+
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctor]
+
+    def post(self, request, consultation_id):
+        consultation = Consultation.objects.select_related("encounter", "encounter__doctor").filter(
+            id=consultation_id
+        ).first()
+        if consultation is None:
+            return Response({"detail": "Consultation not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        encounter = consultation.encounter
+        encounter_doctor = getattr(encounter, "doctor", None)
+        encounter_doctor_user_id = getattr(encounter_doctor, "user_id", None)
+        if encounter_doctor_user_id and encounter_doctor_user_id != request.user.id:
+            return Response(
+                {"detail": "You are not allowed to cancel this prescription."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        payload = request.data if isinstance(request.data, dict) else {}
+        reason_code = str(payload.get("reason_code") or "").strip()
+        reason_text = str(payload.get("reason_text") or "").strip()
+        source = str(payload.get("source") or PrescriptionCancellationSource.DOCTOR).strip().lower()
+
+        if source != PrescriptionCancellationSource.DOCTOR:
+            return Response(
+                {"detail": "Only doctor source is supported on this endpoint."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        prescription = (
+            Prescription.objects.filter(
+                consultation=consultation,
+                is_active=True,
+                status__in=[PrescriptionStatus.FINALIZED, PrescriptionStatus.CANCELLED],
+            )
+            .order_by("-created_at")
+            .first()
+        )
+        if prescription is None:
+            return Response(
+                {"detail": "No active finalized prescription found for this consultation."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            prescription.cancel(
+                source=source,
+                reason_code=reason_code,
+                reason_text=reason_text,
+                actor_user=request.user,
+            )
+        except ValidationError as exc:
+            detail = exc.messages[0] if getattr(exc, "messages", None) else str(exc)
+            return Response({"detail": detail}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(
+            {
+                "status": prescription.status,
+                "prescription_id": str(prescription.id),
+                "prescription_pnr": prescription.prescription_pnr,
+                "cancelled_at": prescription.cancelled_at.isoformat() if prescription.cancelled_at else None,
+                "cancelled_by_source": prescription.cancelled_by_source,
+                "cancel_reason_code": prescription.cancel_reason_code,
+                "cancel_reason_text": prescription.cancel_reason_text,
+            },
+            status=status.HTTP_200_OK,
         )

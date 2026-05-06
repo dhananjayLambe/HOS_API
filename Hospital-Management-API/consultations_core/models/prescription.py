@@ -215,6 +215,13 @@ class PrescriptionStatus(models.TextChoices):
     CANCELLED = "cancelled", "Cancelled"
 
 
+class PrescriptionCancellationSource(models.TextChoices):
+    DOCTOR = "doctor", "Doctor"
+    PATIENT = "patient", "Patient"
+    ADMIN = "admin", "Admin"
+    SYSTEM = "system", "System"
+
+
 # =====================================================
 # 1️⃣ PRESCRIPTION HEADER
 # =====================================================
@@ -279,6 +286,29 @@ class Prescription(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    cancelled_by = models.ForeignKey(
+        "account.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="prescriptions_cancelled",
+    )
+    cancelled_by_source = models.CharField(
+        max_length=20,
+        choices=PrescriptionCancellationSource.choices,
+        null=True,
+        blank=True,
+    )
+    cancel_reason_code = models.CharField(max_length=100, null=True, blank=True)
+    cancel_reason_text = models.TextField(blank=True, default="")
+    cancelled_by_patient_profile = models.ForeignKey(
+        "patient_account.PatientProfile",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="prescriptions_cancelled",
+    )
 
     class Meta:
         ordering = ["-created_at"]
@@ -298,13 +328,17 @@ class Prescription(models.Model):
         indexes = [
             models.Index(fields=["consultation"]),
             models.Index(fields=["status"]),
+            models.Index(fields=["status", "consultation"]),
         ]
     # =====================================================
     # VALIDATION
     # =====================================================
 
     def clean(self):
-        EncounterLockValidator.validate(self.consultation)
+        if getattr(self, "_allow_cancel_after_finalize", False):
+            EncounterLockValidator.validate_prescription_cancellation(self.consultation)
+        else:
+            EncounterLockValidator.validate(self.consultation)
 
         if self.status == PrescriptionStatus.FINALIZED and not self.finalized_at:
             raise ValidationError("Finalized prescription must have timestamp.")
@@ -314,6 +348,7 @@ class Prescription(models.Model):
     # =====================================================
 
     def save(self, *args, **kwargs):
+        allow_finalize_to_cancel = bool(kwargs.pop("allow_finalize_to_cancel", False))
 
         with transaction.atomic():
 
@@ -335,10 +370,19 @@ class Prescription(models.Model):
 
                 # 🚫 Prevent modification after finalization
                 if old.status == PrescriptionStatus.FINALIZED:
-                    raise ValidationError("Cannot modify finalized prescription.")
+                    allowed_transition = (
+                        allow_finalize_to_cancel
+                        and self.status == PrescriptionStatus.CANCELLED
+                    )
+                    if not allowed_transition:
+                        raise ValidationError("Cannot modify finalized prescription.")
 
-            self.full_clean()
-            super().save(*args, **kwargs)
+            self._allow_cancel_after_finalize = allow_finalize_to_cancel
+            try:
+                self.full_clean()
+                super().save(*args, **kwargs)
+            finally:
+                self._allow_cancel_after_finalize = False
     # =====================================================
     # VERSIONING
     # =====================================================
@@ -427,6 +471,54 @@ class Prescription(models.Model):
                 )
 
         self.save(update_fields=["status", "finalized_at"])
+
+    @transaction.atomic
+    def cancel(
+        self,
+        *,
+        source,
+        reason_code,
+        reason_text="",
+        actor_user=None,
+        actor_patient_profile=None,
+    ):
+        source_value = str(source or "").strip().lower()
+        if source_value not in PrescriptionCancellationSource.values:
+            raise ValidationError("Invalid cancellation source.")
+
+        reason_code_value = str(reason_code or "").strip()
+        if not reason_code_value:
+            raise ValidationError("Cancellation reason code is required.")
+
+        locked = type(self).objects.select_for_update().get(pk=self.pk)
+        if locked.status == PrescriptionStatus.CANCELLED:
+            self.refresh_from_db()
+            return self
+        if locked.status != PrescriptionStatus.FINALIZED:
+            raise ValidationError("Only finalized prescriptions can be cancelled.")
+
+        locked.status = PrescriptionStatus.CANCELLED
+        locked.cancelled_at = timezone.now()
+        locked.cancelled_by = actor_user
+        locked.cancelled_by_source = source_value
+        locked.cancel_reason_code = reason_code_value
+        locked.cancel_reason_text = str(reason_text or "").strip()
+        locked.cancelled_by_patient_profile = actor_patient_profile
+        locked.save(
+            allow_finalize_to_cancel=True,
+            update_fields=[
+                "status",
+                "cancelled_at",
+                "cancelled_by",
+                "cancelled_by_source",
+                "cancel_reason_code",
+                "cancel_reason_text",
+                "cancelled_by_patient_profile",
+                "updated_at",
+            ],
+        )
+        self.refresh_from_db()
+        return self
 
     def __str__(self):
         return f"{self.prescription_pnr} (v{self.version_number})"

@@ -1395,10 +1395,13 @@ class CancelEncounterAPIView(APIView):
                 status=status.HTTP_200_OK,
             )
         prior_normalized = normalize_encounter_status(encounter.status)
+        reason = str(request.data.get("reason") or "").strip() if isinstance(request.data, dict) else ""
+        reason_text = str(request.data.get("reason_text") or "").strip() if isinstance(request.data, dict) else ""
+        cancel_reason = " - ".join(part for part in [reason, reason_text] if part).strip() or None
         try:
             # Required for state integrity: transition to cancelled and set cancelled_at, cancelled_by
             # so the encounter leaves consultation_in_progress and user can start a new visit.
-            EncounterStateMachine.cancel(encounter, user=request.user)
+            EncounterStateMachine.cancel(encounter, user=request.user, reason=cancel_reason)
         except DjangoValidationError as e:
             return Response(
                 {"detail": str(e) or "Cannot cancel this encounter."},

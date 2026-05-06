@@ -35,6 +35,13 @@ export interface PrescriptionSummaryVisit {
   type?: string;
 }
 
+export interface PrescriptionSummaryHeader {
+  pnr?: string;
+  status?: string;
+  is_cancelled?: boolean;
+  cancelled_at?: string | null;
+}
+
 export interface PrescriptionSummaryVitals {
   bp?: string;
   pulse?: string;
@@ -80,6 +87,7 @@ export interface PrescriptionSummaryPayload {
   doctor?: PrescriptionSummaryDoctor;
   patient?: PrescriptionSummaryPatient;
   visit?: PrescriptionSummaryVisit;
+  prescription?: PrescriptionSummaryHeader;
   vitals?: PrescriptionSummaryVitals;
   diagnoses?: PrescriptionSummaryDiagnosis[];
   prescriptions?: PrescriptionSummaryMedicine[];

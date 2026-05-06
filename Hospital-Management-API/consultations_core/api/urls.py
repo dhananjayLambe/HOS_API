@@ -17,11 +17,11 @@ from consultations_core.api.views.preconsultation import (
 )
 from consultations_core.api.views.consultation import (
     EndConsultationAPIView,
-    ConsultationByPnrAPIView,
     ConsultationSummaryAPIView,
     ConsultationSummaryLiteAPIView,
     ConsultationSummaryLiteHTMLAPIView,
     ConsultationSummaryLitePDFAPIView,
+    CancelConsultationPrescriptionAPIView,
 )
 from consultations_core.api.views.instructions import (
     InstructionTemplatesAPIView,
@@ -70,11 +70,6 @@ urlpatterns = [
         "encounter/<uuid:encounter_id>/",
         EncounterDetailAPIView.as_view(),
         name="encounter-detail",
-    ),
-    path(
-        "by-pnr/<str:visit_pnr>/",
-        ConsultationByPnrAPIView.as_view(),
-        name="consultation-by-pnr",
     ),
     path(
         "encounter/<uuid:encounter_id>/pre-consultation/start/",
@@ -173,5 +168,10 @@ urlpatterns = [
         "<uuid:consultation_id>/summary-lite/pdf/",
         ConsultationSummaryLitePDFAPIView.as_view(),
         name="consultation-summary-lite-pdf",
+    ),
+    path(
+        "<uuid:consultation_id>/prescription/cancel/",
+        CancelConsultationPrescriptionAPIView.as_view(),
+        name="consultation-prescription-cancel",
     ),
 ]

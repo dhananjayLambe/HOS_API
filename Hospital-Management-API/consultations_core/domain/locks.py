@@ -91,3 +91,18 @@ class EncounterLockValidator:
             return
 
         raise ValidationError("Investigations cannot be edited in this encounter state.")
+
+    @classmethod
+    def validate_prescription_cancellation(cls, consultation):
+        """
+        Prescription cancellation is a narrow, audit-only transition that is allowed
+        after consultation finalization/completion.
+        """
+        if not consultation:
+            return
+
+        encounter = consultation.encounter
+        if encounter.status in ("cancelled", "no_show"):
+            raise ValidationError(
+                "Cannot cancel prescription for a cancelled or no-show encounter."
+            )
