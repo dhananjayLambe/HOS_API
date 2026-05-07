@@ -111,6 +111,7 @@ export function Sidebar({ isOpen, setIsOpen, alignBelowHeader }: SidebarProps) {
       title: "Patients",
       href: "/patients",
       icon: UserRound,
+      
     },
     // {
     //   title: "Appointments",

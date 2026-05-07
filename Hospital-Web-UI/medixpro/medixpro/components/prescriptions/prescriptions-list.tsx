@@ -113,12 +113,15 @@ const DesktopRow = memo(function DesktopRow({ row, onRowOpen, onAction, busy }: 
     <div
       role="button"
       tabIndex={0}
+      title="Open prescription"
       onClick={() => onRowOpen(row)}
       onKeyDown={handleRowKeyDown}
       className={cn(
-        "group grid grid-cols-12 items-center gap-3 border-b border-border/60 px-4 py-2 text-sm transition-colors cursor-pointer",
-        "hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:bg-muted/45",
-        row.is_cancelled && "bg-red-50/70 text-foreground/90 hover:bg-red-50"
+        "group grid cursor-pointer grid-cols-12 items-center gap-3 border-b border-border/60 px-4 py-2 text-sm transition-colors duration-150",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        row.is_cancelled
+          ? "bg-red-50/70 text-foreground/90 hover:bg-red-100/85 hover:shadow-[inset_3px_0_0_0_rgb(220_38_38_/_0.38)] focus-visible:bg-red-100/80 dark:hover:bg-red-950/35"
+          : "hover:bg-primary/10 hover:shadow-[inset_3px_0_0_0_hsl(var(--primary)_/_0.35)] focus-visible:bg-primary/10 dark:hover:bg-primary/15",
       )}
     >
       <div className="col-span-3 min-w-0">
@@ -242,6 +245,7 @@ const MobileCard = memo(function MobileCard({ row, onRowOpen, onAction, busy }: 
     <div
       role="button"
       tabIndex={0}
+      title="Open prescription"
       onClick={() => onRowOpen(row)}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
@@ -250,9 +254,11 @@ const MobileCard = memo(function MobileCard({ row, onRowOpen, onAction, busy }: 
         }
       }}
       className={cn(
-        "rounded-xl border border-border/70 bg-card p-4 shadow-sm transition-colors",
+        "cursor-pointer rounded-xl border border-border/70 bg-card p-4 shadow-sm transition-colors duration-150",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        row.is_cancelled && "bg-red-50/65"
+        row.is_cancelled
+          ? "bg-red-50/65 hover:border-red-400/35 hover:bg-red-100/75 hover:shadow-sm active:bg-red-100/90 dark:hover:bg-red-950/30"
+          : "hover:border-primary/35 hover:bg-primary/[0.06] hover:shadow-sm active:bg-muted/50 dark:hover:bg-primary/[0.1]",
       )}
     >
       <div className="flex items-start justify-between gap-3">
