@@ -47,6 +47,7 @@ urlpatterns = [
     path('api/clinic/', include('clinic.api.urls')),
     path('api/helpdesk/', include('helpdesk.api.urls')),
     path('api/appointments/', include('appointments.api.urls')),
+    path('api/reports/', include('reports.api.urls')),
     path('api/queue/', include('queue_management.api.urls')),
     path('api/visits/<uuid:visit_id>/vitals/', VisitVitalsAPIView.as_view(), name='visit-vitals'),
     path('api/consultations/', include('consultations_core.api.urls')),

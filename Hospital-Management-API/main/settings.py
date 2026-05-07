@@ -85,6 +85,7 @@ INSTALLED_APPS = [
     'patient_account.apps.PatientAccountConfig',
     'helpdesk.apps.HelpdeskConfig',
     'appointments.apps.AppointmentsConfig',
+    'reports.apps.ReportsConfig',
     'queue_management.apps.QueueManagementConfig',
     'consultations_core.apps.ConsultationsCoreConfig',
     'consultation_config.apps.ConsultationConfigConfig',
