@@ -64,8 +64,8 @@ export default function ReportsPage() {
                 <span className="font-medium">+12.8%</span>
               </div>
             </div>
-            <Button asChild>
-              <Link href="/reports/financial">View Report</Link>
+            <Button variant="outline" disabled>
+              Coming Soon
             </Button>
           </CardContent>
         </Card>
@@ -93,8 +93,8 @@ export default function ReportsPage() {
                 <span className="font-medium">32 min</span>
               </div>
             </div>
-            <Button asChild>
-              <Link href="/reports/patients">View Report</Link>
+            <Button variant="outline" disabled>
+              Coming Soon
             </Button>
           </CardContent>
         </Card>
@@ -122,8 +122,8 @@ export default function ReportsPage() {
                 <span className="font-medium">$248,320</span>
               </div>
             </div>
-            <Button asChild>
-              <Link href="/reports/inventory">View Report</Link>
+            <Button variant="outline" disabled>
+              Coming Soon
             </Button>
           </CardContent>
         </Card>

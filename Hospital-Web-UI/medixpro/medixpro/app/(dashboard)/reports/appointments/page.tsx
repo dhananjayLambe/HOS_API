@@ -1,33 +1,13 @@
 "use client"
 
-import { Button } from "@/components/ui/button"
+import { useMemo, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { CalendarDateRangePicker as DateRangePicker } from "@/components/date-range-picker"
-import {
-  ArrowDownIcon,
-  ArrowUpIcon,
-  CalendarIcon,
-  CheckCircleIcon,
-  ClockIcon,
-  DownloadIcon,
-  FileTextIcon,
-  FilterIcon,
-  RefreshCcwIcon,
-  XCircleIcon,
-} from "lucide-react"
+import { ArrowUpRightIcon, CalendarClockIcon, CheckCircle2Icon, Clock3Icon, CircleAlertIcon, TrendingUpIcon, UserCheck2Icon, UserRoundPlusIcon, UserRoundXIcon } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import {
   BarChart,
   Bar,
@@ -42,775 +22,647 @@ import {
   Cell,
   LineChart,
   Line,
-  AreaChart,
-  Area,
 } from "recharts"
+import { Skeleton } from "@/components/ui/skeleton"
 
 export default function AppointmentReportsPage() {
+  const [dateRange, setDateRange] = useState<DateRangeOption>("last-7-days")
+  const [doctor, setDoctor] = useState("dr-dhananjay-lambe")
+  const [appointmentType, setAppointmentType] = useState<AppointmentTypeFilter>("all")
+  const [status, setStatus] = useState<StatusFilter>("all")
+  const [activeTab, setActiveTab] = useState("overview")
+  const isLoading = false
+
+  const filteredAppointments = useMemo(() => {
+    return appointmentReportData.recentAppointments.filter((item) => {
+      const doctorMatch = doctor === "dr-dhananjay-lambe" ? item.doctor === "Dr. Dhananjay Lambe" : true
+      const typeMatch = appointmentType === "all" ? true : item.appointmentType.toLowerCase() === appointmentType
+      const statusMatch = status === "all" ? true : normalizeStatus(item.status) === status
+      return doctorMatch && typeMatch && statusMatch
+    })
+  }, [doctor, appointmentType, status])
+
+  const hasFilteredData = filteredAppointments.length > 0
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-2">
         <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">Appointment Reports</h1>
-        <p className="text-muted-foreground">Analyze appointment data, track trends, and generate detailed reports</p>
+        <p className="text-muted-foreground">Analyze OPD appointments, patient flow, and operational trends</p>
       </div>
 
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div className="flex flex-col gap-2 md:flex-row md:items-center">
-          <DateRangePicker />
-          <Select defaultValue="all-departments">
-            <SelectTrigger className="w-full md:w-[180px]">
-              <SelectValue placeholder="Department" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all-departments">All Departments</SelectItem>
-              <SelectItem value="cardiology">Cardiology</SelectItem>
-              <SelectItem value="neurology">Neurology</SelectItem>
-              <SelectItem value="orthopedics">Orthopedics</SelectItem>
-              <SelectItem value="pediatrics">Pediatrics</SelectItem>
-              <SelectItem value="dermatology">Dermatology</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select defaultValue="all-doctors">
-            <SelectTrigger className="w-full md:w-[180px]">
-              <SelectValue placeholder="Doctor" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all-doctors">All Doctors</SelectItem>
-              <SelectItem value="dr-smith">Dr. Smith</SelectItem>
-              <SelectItem value="dr-johnson">Dr. Johnson</SelectItem>
-              <SelectItem value="dr-williams">Dr. Williams</SelectItem>
-              <SelectItem value="dr-brown">Dr. Brown</SelectItem>
-              <SelectItem value="dr-jones">Dr. Jones</SelectItem>
-            </SelectContent>
-          </Select>
+      <div className="grid gap-2 lg:grid-cols-[180px_180px_180px_180px_auto]">
+        <Select value={dateRange} onValueChange={(value) => setDateRange(value as DateRangeOption)}>
+          <SelectTrigger className="h-9 w-full">
+            <SelectValue placeholder="Date Range" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="today">Today</SelectItem>
+            <SelectItem value="yesterday">Yesterday</SelectItem>
+            <SelectItem value="last-7-days">Last 7 Days</SelectItem>
+            <SelectItem value="last-30-days">Last 30 Days</SelectItem>
+            <SelectItem value="this-month">This Month</SelectItem>
+            <SelectItem value="custom">Custom Range</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={doctor} onValueChange={setDoctor}>
+          <SelectTrigger className="h-9 w-full">
+            <SelectValue placeholder="Doctor" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="dr-dhananjay-lambe">Dr. Dhananjay Lambe</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={appointmentType} onValueChange={(value) => setAppointmentType(value as AppointmentTypeFilter)}>
+          <SelectTrigger className="h-9 w-full">
+            <SelectValue placeholder="Appointment Type" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All</SelectItem>
+            <SelectItem value="walk-in">Walk-In</SelectItem>
+            <SelectItem value="scheduled">Scheduled</SelectItem>
+            <SelectItem value="follow-up">Follow-Up</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={status} onValueChange={(value) => setStatus(value as StatusFilter)}>
+          <SelectTrigger className="h-9 w-full">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All</SelectItem>
+            <SelectItem value="booked">Booked</SelectItem>
+            <SelectItem value="checked-in">Checked-In</SelectItem>
+            <SelectItem value="completed">Completed</SelectItem>
+            <SelectItem value="cancelled">Cancelled</SelectItem>
+            <SelectItem value="no-show">No-Show</SelectItem>
+          </SelectContent>
+        </Select>
+        <div className="w-full lg:w-[250px]">
+          {dateRange === "custom" ? <DateRangePicker /> : <div className="h-9 rounded-md border bg-background px-3 text-sm text-muted-foreground flex items-center">Using preset date range</div>}
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm">
-            <RefreshCcwIcon className="mr-2 h-4 w-4" />
-            Refresh
-          </Button>
-          <Button variant="outline" size="sm">
-            <DownloadIcon className="mr-2 h-4 w-4" />
-            Export
-          </Button>
+      </div>
+
+      {isLoading ? (
+        <KpiSkeletonGrid />
+      ) : hasFilteredData ? (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {appointmentReportData.summary.map((metric) => (
+            <Card key={metric.key}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">{metric.title}</CardTitle>
+                {metric.icon === "calendar" && <CalendarClockIcon className="h-5 w-5 text-muted-foreground" />}
+                {metric.icon === "check" && <CheckCircle2Icon className="h-5 w-5 text-muted-foreground" />}
+                {metric.icon === "checkedin" && <UserCheck2Icon className="h-5 w-5 text-muted-foreground" />}
+                {metric.icon === "noshow" && <Clock3Icon className="h-5 w-5 text-muted-foreground" />}
+                {metric.icon === "cancelled" && <UserRoundXIcon className="h-5 w-5 text-muted-foreground" />}
+                {metric.icon === "walkin" && <CalendarClockIcon className="h-5 w-5 text-muted-foreground" />}
+                {metric.icon === "new" && <UserRoundPlusIcon className="h-5 w-5 text-muted-foreground" />}
+                {metric.icon === "returning" && <UserCheck2Icon className="h-5 w-5 text-muted-foreground" />}
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{metric.value}</div>
+                <p className="mt-1 text-xs text-muted-foreground">{metric.note}</p>
+                <div className="mt-2 flex items-center gap-1 text-xs">
+                  {metric.trendDirection === "up" ? <ArrowUpRightIcon className="h-3.5 w-3.5 text-teal-700" /> : <ArrowUpRightIcon className="h-3.5 w-3.5 rotate-90 text-amber-700" />}
+                  <span className={metric.trendDirection === "up" ? "text-teal-800" : "text-amber-800"}>{metric.trendLabel}</span>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
         </div>
+      ) : (
+        <EmptyStateCard message="No appointment data available for the selected filters" />
+      )}
+
+      <div className="grid gap-3 rounded-lg border bg-card p-3 md:grid-cols-2 xl:grid-cols-4">
+        {appointmentReportData.summaryStrip.map((item) => (
+          <div key={item.label} className="rounded-md border bg-background px-3 py-2">
+            <p className="text-[11px] text-muted-foreground">{item.label}</p>
+            <p className="text-sm font-semibold">{item.value}</p>
+          </div>
+        ))}
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm xl:text-lg font-medium">Total Appointments</CardTitle>
-            <CalendarIcon className="size-8 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <h2 className="text-2xl lg:text-4xl mb-2 font-bold">1,248</h2>
-            <p className="text-xs text-muted-foreground">+12.5% from last month</p>
-            <div className="mt-4 h-1 w-full rounded-full bg-secondary">
-              <div className="h-1 w-[75%] rounded-full bg-primary"></div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card className="border-teal-200 bg-teal-50/70">
+          <CardHeader className="pb-2">
+            <div className="flex items-center gap-2">
+              <TrendingUpIcon className="h-4 w-4 text-teal-700" />
+              <CardTitle className="text-base">Performing Well</CardTitle>
             </div>
+            <CardDescription className="text-teal-800">Healthy operational signals</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {appointmentReportData.performanceInsights.performingWell.map((item) => (
+              <InsightRow key={item.text} tone="positive" text={item.text} value={item.value} badge={item.badge} />
+            ))}
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm xl:text-lg font-medium">Completed</CardTitle>
-            <CheckCircleIcon className="size-8 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <h2 className="text-2xl lg:text-4xl mb-2 font-bold">876</h2>
-            <p className="text-xs text-muted-foreground">70.2% completion rate</p>
-            <div className="mt-4 h-1 w-full rounded-full bg-secondary">
-              <div className="h-1 w-[70%] rounded-full bg-green-500"></div>
+
+        <Card className="border-amber-200 bg-amber-50/80">
+          <CardHeader className="pb-2">
+            <div className="flex items-center gap-2">
+              <CircleAlertIcon className="h-4 w-4 text-amber-600" />
+              <CardTitle className="text-base">Needs Attention</CardTitle>
             </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm xl:text-lg font-medium">Canceled</CardTitle>
-            <XCircleIcon className="size-8 text-muted-foreground" />
+            <CardDescription className="text-amber-700">Operational areas requiring monitoring</CardDescription>
           </CardHeader>
-          <CardContent>
-            <h2 className="text-2xl lg:text-4xl mb-2 font-bold">187</h2>
-            <p className="text-xs text-muted-foreground">15% cancellation rate</p>
-            <div className="mt-4 h-1 w-full rounded-full bg-secondary">
-              <div className="h-1 w-[15%] rounded-full bg-red-500"></div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm xl:text-lg font-medium">No-Shows</CardTitle>
-            <ClockIcon className="size-8 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <h2 className="text-2xl lg:text-4xl mb-2 font-bold">85</h2>
-            <p className="text-xs text-muted-foreground">6.8% no-show rate</p>
-            <div className="mt-4 h-1 w-full rounded-full bg-secondary">
-              <div className="h-1 w-[7%] rounded-full bg-amber-500"></div>
-            </div>
+          <CardContent className="space-y-2">
+            {appointmentReportData.performanceInsights.needsAttention.map((item) => (
+              <InsightRow key={item.text} tone="attention" text={item.text} value={item.value} badge={item.badge} />
+            ))}
           </CardContent>
         </Card>
       </div>
 
-      <Tabs defaultValue="overview" className="w-full">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="trends">Trends</TabsTrigger>
-          <TabsTrigger value="by-doctor">By Doctor</TabsTrigger>
-          <TabsTrigger value="by-service">By Service</TabsTrigger>
+          <TabsTrigger value="patient-flow">Patient Flow</TabsTrigger>
+          <TabsTrigger value="doctor-load">Doctor Load</TabsTrigger>
         </TabsList>
-        <TabsContent value="overview" className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <Card className="col-span-1">
-              <CardHeader>
-                <CardTitle>Appointment Status Distribution</CardTitle>
-                <CardDescription>Breakdown of appointments by their current status</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="h-[300px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={statusDistributionData}
-                        cx="50%"
-                        cy="50%"
-                        labelLine={false}
-                        label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                        outerRadius={100}
-                        fill="#8884d8"
-                        dataKey="value"
-                      >
-                        {statusDistributionData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip formatter={(value, name) => [`${value} appointments`, name]} />
-                      <Legend />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="col-span-1">
-              <CardHeader>
-                <CardTitle>Appointments by Department</CardTitle>
-                <CardDescription>Distribution of appointments across different departments</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="h-[300px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      layout="vertical"
-                      data={departmentData}
-                      margin={{
-                        top: 5,
-                        right: 30,
-                        left: 80,
-                        bottom: 5,
-                      }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis type="number" />
-                      <YAxis dataKey="name" type="category" />
-                      <Tooltip />
-                      <Legend />
-                      <Bar dataKey="appointments" fill="#8884d8" name="Appointments" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between gap-4 flex-wrap">
-                <div>
-                  <CardTitle>Recent Appointments</CardTitle>
-                  <CardDescription>Detailed view of the last 10 appointments</CardDescription>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Input placeholder="Search appointments..." className="h-8 w-[150px] lg:w-[250px]" />
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="sm" className="h-8 gap-1">
-                        <FilterIcon className="h-3.5 w-3.5" />
-                        <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">Filter</span>
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuLabel>Filter by Status</DropdownMenuLabel>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem>All</DropdownMenuItem>
-                      <DropdownMenuItem>Completed</DropdownMenuItem>
-                      <DropdownMenuItem>Scheduled</DropdownMenuItem>
-                      <DropdownMenuItem>Canceled</DropdownMenuItem>
-                      <DropdownMenuItem>No-Show</DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
+        {activeTab === "overview" && (
+          <TabsContent value="overview" className="space-y-4">
+            {isLoading ? (
+              <ChartSkeletonGrid />
+            ) : hasFilteredData ? (
+              <div className="grid gap-4 lg:grid-cols-2">
+                <ChartCard title="Appointment Status Distribution" description="Completed, checked-in, cancelled and no-show ratios" heightClassName="h-[250px]">
+                  <PieChart>
+                    <Pie data={appointmentReportData.distributions.statusDistribution} dataKey="value" nameKey="name" innerRadius={50} outerRadius={78}>
+                      {appointmentReportData.distributions.statusDistribution.map((entry) => (
+                        <Cell key={entry.name} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                    <Legend />
+                  </PieChart>
+                </ChartCard>
+                <ChartCard title="Appointment Volume by Type" description="Walk-In, Scheduled and Follow-Up counts" heightClassName="h-[250px]">
+                  <BarChart layout="vertical" data={appointmentReportData.distributions.appointmentTypeVolume} margin={{ left: 10, right: 10 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis type="number" />
+                    <YAxis type="category" dataKey="name" width={90} />
+                    <Tooltip />
+                    <Bar dataKey="value" fill="#3f7f95" radius={[0, 6, 6, 0]} />
+                  </BarChart>
+                </ChartCard>
+                <ChartCard title="Walk-In vs Scheduled Ratio" description="Visit mix by appointment category" heightClassName="h-[250px]">
+                  <PieChart>
+                    <Pie data={appointmentReportData.patientFlow.visitMix} dataKey="value" nameKey="name" innerRadius={50} outerRadius={78}>
+                      {appointmentReportData.patientFlow.visitMix.map((entry) => (
+                        <Cell key={entry.name} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                    <Legend />
+                  </PieChart>
+                </ChartCard>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>New vs Returning Patients</CardTitle>
+                    <CardDescription>Patient split for selected period</CardDescription>
+                  </CardHeader>
+                  <CardContent className="grid gap-3 pt-2 sm:grid-cols-2">
+                    <Card className="border-dashed">
+                      <CardContent className="pt-4">
+                        <p className="text-xs text-muted-foreground">New Patients</p>
+                        <p className="text-2xl font-semibold">{appointmentReportData.patientFlow.patientSplit.new}</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="border-dashed">
+                      <CardContent className="pt-4">
+                        <p className="text-xs text-muted-foreground">Returning Patients</p>
+                        <p className="text-2xl font-semibold">{appointmentReportData.patientFlow.patientSplit.returning}</p>
+                      </CardContent>
+                    </Card>
+                  </CardContent>
+                </Card>
               </div>
-            </CardHeader>
-            <CardContent>
+            ) : (
+              <EmptyStateCard message="No chart data available for the selected filters" />
+            )}
+          </TabsContent>
+        )}
+
+        {activeTab === "trends" && (
+          <TabsContent value="trends" className="space-y-4">
+            {isLoading ? (
+              <ChartSkeletonGrid />
+            ) : hasFilteredData ? (
+              <div className="grid gap-4">
+                <ChartCard title="Daily Appointment Trend" description="7-day OPD movement across key statuses" heightClassName="h-[260px]">
+                  <LineChart data={appointmentReportData.trends.daily} margin={{ left: 5, right: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="day" />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Line type="monotone" dataKey="total" stroke="#1d4e89" strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="completed" stroke="#0f766e" strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="cancelled" stroke="#b45309" strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="noShow" stroke="#a16207" strokeWidth={2} dot={false} />
+                  </LineChart>
+                </ChartCard>
+                <ChartCard title="Monthly Appointment Trend" description="Last 6 months appointment growth" heightClassName="h-[220px]">
+                  <BarChart data={appointmentReportData.trends.monthly} margin={{ left: 5, right: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="month" />
+                    <YAxis />
+                    <Tooltip />
+                    <Bar dataKey="appointments" fill="#3f7f95" radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ChartCard>
+              </div>
+            ) : (
+              <EmptyStateCard message="No trend data available for the selected filters" />
+            )}
+          </TabsContent>
+        )}
+
+        {activeTab === "patient-flow" && (
+          <TabsContent value="patient-flow" className="space-y-4">
+            {isLoading ? (
+              <ChartSkeletonGrid />
+            ) : hasFilteredData ? (
+              <div className="grid gap-3 lg:grid-cols-2">
+                <div className="rounded-lg border bg-card p-3 text-sm text-muted-foreground lg:col-span-2">
+                  OPD rush is highest during <span className="font-semibold text-foreground">10 AM - 11 AM</span>; returning patient share remains at{" "}
+                  <span className="font-semibold text-foreground">78%</span> with walk-ins stable in morning sessions.
+                </div>
+                <ChartCard title="Peak Hours Analysis" description="Most crowded OPD slots for staffing decisions" heightClassName="h-[240px]">
+                  <BarChart layout="vertical" data={appointmentReportData.patientFlow.peakHours} margin={{ left: 25, right: 10 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis type="number" />
+                    <YAxis type="category" dataKey="slot" width={90} />
+                    <Tooltip />
+                    <Bar dataKey="patients" fill="#2f7a74" radius={[0, 6, 6, 0]} />
+                  </BarChart>
+                </ChartCard>
+                <ChartCard title="Visit Mix" description="Walk-In, Scheduled, Follow-Up ratio" heightClassName="h-[240px]">
+                  <PieChart>
+                    <Pie data={appointmentReportData.patientFlow.visitMix} dataKey="value" nameKey="name" innerRadius={48} outerRadius={76}>
+                      {appointmentReportData.patientFlow.visitMix.map((entry) => (
+                        <Cell key={entry.name} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                    <Legend />
+                  </PieChart>
+                </ChartCard>
+                <Card className="lg:col-span-2">
+                  <CardHeader>
+                    <CardTitle>Patient Split</CardTitle>
+                    <CardDescription>Retention pattern for OPD continuity planning</CardDescription>
+                  </CardHeader>
+                  <CardContent className="grid gap-3 pt-2 sm:grid-cols-2">
+                    <Card className="border-dashed">
+                      <CardContent className="pt-4">
+                        <p className="text-xs text-muted-foreground">New</p>
+                        <p className="text-3xl font-bold">{appointmentReportData.patientFlow.patientSplit.new}</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="border-dashed">
+                      <CardContent className="pt-4">
+                        <p className="text-xs text-muted-foreground">Returning</p>
+                        <p className="text-3xl font-bold">{appointmentReportData.patientFlow.patientSplit.returning}</p>
+                      </CardContent>
+                    </Card>
+                  </CardContent>
+                </Card>
+              </div>
+            ) : (
+              <EmptyStateCard message="No patient flow data available for the selected filters" />
+            )}
+          </TabsContent>
+        )}
+
+        {activeTab === "doctor-load" && (
+          <TabsContent value="doctor-load">
+            <Card>
+              <CardHeader>
+                <CardTitle>Doctor Performance</CardTitle>
+                <CardDescription>Future-ready doctor workload structure</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {isLoading ? (
+                  <TableSkeleton />
+                ) : appointmentReportData.doctorLoad.length === 0 ? (
+                  <EmptyStateCard message="No doctor load data available for the selected filters" />
+                ) : (
+                  <div className="space-y-3">
+                    <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+                      Dr. Dhananjay Lambe handled 1,248 appointments during the selected period with an average OPD load of 41 patients/day.
+                    </div>
+                    <div className="overflow-auto">
+                    <Table className="whitespace-nowrap">
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Doctor</TableHead>
+                          <TableHead className="text-right">Total</TableHead>
+                          <TableHead className="text-right">Completed</TableHead>
+                          <TableHead className="text-right">Cancelled</TableHead>
+                          <TableHead className="text-right">No-Show</TableHead>
+                          <TableHead className="text-right">Avg/Day</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {appointmentReportData.doctorLoad.map((row) => (
+                          <TableRow key={row.doctor}>
+                            <TableCell className="font-medium">{row.doctor}</TableCell>
+                            <TableCell className="text-right">{row.total}</TableCell>
+                            <TableCell className="text-right">{row.completed}</TableCell>
+                            <TableCell className="text-right">{row.cancelled}</TableCell>
+                            <TableCell className="text-right">{row.noShow}</TableCell>
+                            <TableCell className="text-right">{row.avgPerDay}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+      </Tabs>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent Appointments</CardTitle>
+          <CardDescription>Operational snapshot of the latest patient visits</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <TableSkeleton />
+          ) : filteredAppointments.length === 0 ? (
+            <EmptyStateCard message="No recent appointments available for the selected filters" />
+          ) : (
+            <div className="overflow-auto">
               <Table className="whitespace-nowrap">
                 <TableHeader>
                   <TableRow>
                     <TableHead>Patient</TableHead>
-                    <TableHead>Doctor</TableHead>
-                    <TableHead>Date & Time</TableHead>
-                    <TableHead>Service</TableHead>
+                    <TableHead>Visit Type</TableHead>
+                    <TableHead>Appointment Type</TableHead>
+                    <TableHead>Time</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
-                <TableBody className="whitespace-nowrap">
-                  {appointmentData.map((appointment) => (
-                    <TableRow key={appointment.id}>
-                      <TableCell className="font-medium">{appointment.patient}</TableCell>
-                      <TableCell>{appointment.doctor}</TableCell>
-                      <TableCell>{appointment.dateTime}</TableCell>
-                      <TableCell>{appointment.service}</TableCell>
+                <TableBody>
+                  {filteredAppointments.map((item) => (
+                    <TableRow key={item.patient + item.time}>
+                      <TableCell className="font-medium">{item.patient}</TableCell>
                       <TableCell>
-                        <Badge
-                          variant="outline"
-                          className={
-                            appointment.status === "Completed"
-                              ? "border-green-500 bg-green-500/10 text-green-500"
-                              : appointment.status === "Scheduled"
-                                ? "border-blue-500 bg-blue-500/10 text-blue-500"
-                                : appointment.status === "Canceled"
-                                  ? "border-red-500 bg-red-500/10 text-red-500"
-                                  : "border-amber-500 bg-amber-500/10 text-amber-500"
-                          }
-                        >
-                          {appointment.status}
+                        <Badge variant="secondary" className="font-medium">
+                          {item.visitType}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <FileTextIcon className="h-4 w-4" />
-                          <span className="sr-only">View details</span>
-                        </Button>
+                      <TableCell>{item.appointmentType}</TableCell>
+                      <TableCell>{item.time}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={statusBadgeClass(item.status)}>
+                          {item.status}
+                        </Badge>
                       </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        <TabsContent value="trends" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Appointment Trends</CardTitle>
-              <CardDescription>Monthly appointment volume over the past year</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="h-[400px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart
-                    data={monthlyTrendsData}
-                    margin={{
-                      top: 5,
-                      right: 30,
-                      left: 20,
-                      bottom: 5,
-                    }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="month" />
-                    <YAxis />
-                    <Tooltip />
-                    <Legend />
-                    <Line type="monotone" dataKey="total" stroke="#8884d8" name="Total Appointments" />
-                    <Line type="monotone" dataKey="completed" stroke="#82ca9d" name="Completed" />
-                    <Line type="monotone" dataKey="canceled" stroke="#ff7300" name="Canceled" />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
-          <div className="grid gap-4 md:grid-cols-2">
-            <Card className="col-span-1">
-              <CardHeader>
-                <CardTitle>Weekly Distribution</CardTitle>
-                <CardDescription>Appointment distribution by day of week</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="h-[300px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={weeklyDistributionData}
-                      margin={{
-                        top: 5,
-                        right: 30,
-                        left: 20,
-                        bottom: 5,
-                      }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="day" />
-                      <YAxis />
-                      <Tooltip />
-                      <Legend />
-                      <Bar dataKey="appointments" fill="#8884d8" name="Appointments" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="col-span-1">
-              <CardHeader>
-                <CardTitle>Hourly Distribution</CardTitle>
-                <CardDescription>Appointment distribution by time of day</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="h-[300px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart
-                      data={hourlyDistributionData}
-                      margin={{
-                        top: 10,
-                        right: 30,
-                        left: 0,
-                        bottom: 0,
-                      }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="hour" />
-                      <YAxis />
-                      <Tooltip />
-                      <Area
-                        type="monotone"
-                        dataKey="appointments"
-                        stroke="#8884d8"
-                        fill="#8884d8"
-                        name="Appointments"
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-        <TabsContent value="by-doctor" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Appointments by Doctor</CardTitle>
-              <CardDescription>Comparison of appointment volume and completion rates by doctor</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Table className="whitespace-nowrap">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Doctor</TableHead>
-                    <TableHead>Department</TableHead>
-                    <TableHead className="text-right">Total Appointments</TableHead>
-                    <TableHead className="text-right">Completed</TableHead>
-                    <TableHead className="text-right">Canceled</TableHead>
-                    <TableHead className="text-right">No-Shows</TableHead>
-                    <TableHead className="text-right">Completion Rate</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody className="whitespace-nowrap">
-                  {doctorStats.map((doctor) => (
-                    <TableRow key={doctor.id}>
-                      <TableCell className="font-medium">{doctor.name}</TableCell>
-                      <TableCell>{doctor.department}</TableCell>
-                      <TableCell className="text-right">{doctor.total}</TableCell>
-                      <TableCell className="text-right">{doctor.completed}</TableCell>
-                      <TableCell className="text-right">{doctor.canceled}</TableCell>
-                      <TableCell className="text-right">{doctor.noShows}</TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <span>{doctor.completionRate}%</span>
-                          {doctor.trend === "up" ? (
-                            <ArrowUpIcon className="h-4 w-4 text-green-500" />
-                          ) : (
-                            <ArrowDownIcon className="h-4 w-4 text-red-500" />
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Doctor Performance Comparison</CardTitle>
-              <CardDescription>Visual comparison of key metrics across doctors</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="h-[400px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={doctorPerformanceData}
-                    margin={{
-                      top: 20,
-                      right: 30,
-                      left: 20,
-                      bottom: 5,
-                    }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
-                    <YAxis />
-                    <Tooltip />
-                    <Legend />
-                    <Bar dataKey="completed" stackId="a" fill="#82ca9d" name="Completed" />
-                    <Bar dataKey="canceled" stackId="a" fill="#ff7300" name="Canceled" />
-                    <Bar dataKey="noShows" stackId="a" fill="#8884d8" name="No-Shows" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        <TabsContent value="by-service" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Appointments by Service Type</CardTitle>
-              <CardDescription>Distribution and trends of different service types</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="h-[400px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart
-                    data={serviceOverTimeData}
-                    margin={{
-                      top: 5,
-                      right: 30,
-                      left: 20,
-                      bottom: 5,
-                    }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="month" />
-                    <YAxis />
-                    <Tooltip />
-                    <Legend />
-                    <Line type="monotone" dataKey="generalCheckup" stroke="#8884d8" name="General Checkup" />
-                    <Line type="monotone" dataKey="cardiology" stroke="#82ca9d" name="Cardiology" />
-                    <Line type="monotone" dataKey="dermatology" stroke="#ffc658" name="Dermatology" />
-                    <Line type="monotone" dataKey="orthopedics" stroke="#ff7300" name="Orthopedics" />
-                    <Line type="monotone" dataKey="pediatrics" stroke="#0088fe" name="Pediatrics" />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Service Popularity</CardTitle>
-              <CardDescription>Most requested services ranked by volume</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Table className="whitespace-nowrap">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Service</TableHead>
-                    <TableHead>Department</TableHead>
-                    <TableHead className="text-right">Appointments</TableHead>
-                    <TableHead className="text-right">Avg. Duration</TableHead>
-                    <TableHead className="text-right">Trend</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody className="whitespace-nowrap">
-                  {serviceStats.map((service) => (
-                    <TableRow key={service.id}>
-                      <TableCell className="font-medium">{service.name}</TableCell>
-                      <TableCell>{service.department}</TableCell>
-                      <TableCell className="text-right">{service.count}</TableCell>
-                      <TableCell className="text-right">{service.avgDuration}</TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          {service.trend === "up" ? (
-                            <>
-                              <span className="text-green-500">+{service.trendValue}%</span>
-                              <ArrowUpIcon className="h-4 w-4 text-green-500" />
-                            </>
-                          ) : (
-                            <>
-                              <span className="text-red-500">-{service.trendValue}%</span>
-                              <ArrowDownIcon className="h-4 w-4 text-red-500" />
-                            </>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 }
 
-// Chart colors
-const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884D8"]
+function ChartCard({
+  title,
+  description,
+  children,
+  heightClassName = "h-[320px]",
+}: {
+  title: string
+  description: string
+  children: React.ReactElement
+  heightClassName?: string
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+        <CardDescription>{description}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className={`${heightClassName} w-full`}>
+          <ResponsiveContainer width="100%" height="100%">
+            {children}
+          </ResponsiveContainer>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
 
-// Sample data for the charts
-const statusDistributionData = [
-  { name: "Completed", value: 876 },
-  { name: "Scheduled", value: 100 },
-  { name: "Canceled", value: 187 },
-  { name: "No-Show", value: 85 },
-]
+function InsightRow({
+  text,
+  value,
+  badge,
+  tone,
+}: {
+  text: string
+  value?: string
+  badge?: string
+  tone: "positive" | "attention"
+}) {
+  return (
+    <div className="flex items-start gap-2 rounded-md border bg-background/80 px-2.5 py-2">
+      <span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${tone === "positive" ? "bg-teal-600" : "bg-amber-600"}`} />
+      <div className="flex-1 text-sm leading-5 text-foreground">{text}</div>
+      {badge ? (
+        <Badge variant="secondary" className={tone === "positive" ? "text-teal-800" : "text-amber-800"}>
+          {badge}
+        </Badge>
+      ) : null}
+      {value ? <span className={`text-xs font-semibold ${tone === "positive" ? "text-teal-800" : "text-amber-800"}`}>{value}</span> : null}
+    </div>
+  )
+}
 
-const departmentData = [
-  { name: "Cardiology", appointments: 245 },
-  { name: "Neurology", appointments: 187 },
-  { name: "Orthopedics", appointments: 201 },
-  { name: "Pediatrics", appointments: 224 },
-  { name: "Dermatology", appointments: 163 },
-  { name: "General Medicine", appointments: 228 },
-]
+function EmptyStateCard({ message }: { message: string }) {
+  return (
+    <Card>
+      <CardContent className="flex min-h-[220px] flex-col items-center justify-center gap-3 text-center">
+        <div className="rounded-full bg-muted p-3">
+          <CalendarClockIcon className="h-6 w-6 text-muted-foreground" />
+        </div>
+        <p className="text-sm text-muted-foreground">{message}</p>
+      </CardContent>
+    </Card>
+  )
+}
 
-const monthlyTrendsData = [
-  { month: "Jan", total: 120, completed: 95, canceled: 15, noShows: 10 },
-  { month: "Feb", total: 135, completed: 110, canceled: 18, noShows: 7 },
-  { month: "Mar", total: 150, completed: 125, canceled: 15, noShows: 10 },
-  { month: "Apr", total: 145, completed: 115, canceled: 20, noShows: 10 },
-  { month: "May", total: 160, completed: 130, canceled: 22, noShows: 8 },
-  { month: "Jun", total: 175, completed: 145, canceled: 20, noShows: 10 },
-  { month: "Jul", total: 190, completed: 155, canceled: 25, noShows: 10 },
-  { month: "Aug", total: 180, completed: 150, canceled: 20, noShows: 10 },
-  { month: "Sep", total: 195, completed: 160, canceled: 25, noShows: 10 },
-  { month: "Oct", total: 210, completed: 175, canceled: 25, noShows: 10 },
-  { month: "Nov", total: 225, completed: 185, canceled: 30, noShows: 10 },
-  { month: "Dec", total: 240, completed: 200, canceled: 30, noShows: 10 },
-]
+function KpiSkeletonGrid() {
+  return (
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      {Array.from({ length: 8 }).map((_, index) => (
+        <Card key={index}>
+          <CardHeader>
+            <Skeleton className="h-4 w-24" />
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <Skeleton className="h-8 w-16" />
+            <Skeleton className="h-3 w-36" />
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  )
+}
 
-const weeklyDistributionData = [
-  { day: "Mon", appointments: 45 },
-  { day: "Tue", appointments: 52 },
-  { day: "Wed", appointments: 48 },
-  { day: "Thu", appointments: 50 },
-  { day: "Fri", appointments: 40 },
-  { day: "Sat", appointments: 35 },
-  { day: "Sun", appointments: 15 },
-]
+function ChartSkeletonGrid() {
+  return (
+    <div className="grid gap-4 lg:grid-cols-2">
+      {Array.from({ length: 4 }).map((_, index) => (
+        <Card key={index}>
+          <CardHeader className="space-y-2">
+            <Skeleton className="h-5 w-40" />
+            <Skeleton className="h-3 w-56" />
+          </CardHeader>
+          <CardContent>
+            <Skeleton className="h-[300px] w-full" />
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  )
+}
 
-const hourlyDistributionData = [
-  { hour: "8 AM", appointments: 15 },
-  { hour: "9 AM", appointments: 25 },
-  { hour: "10 AM", appointments: 30 },
-  { hour: "11 AM", appointments: 28 },
-  { hour: "12 PM", appointments: 20 },
-  { hour: "1 PM", appointments: 18 },
-  { hour: "2 PM", appointments: 25 },
-  { hour: "3 PM", appointments: 30 },
-  { hour: "4 PM", appointments: 25 },
-  { hour: "5 PM", appointments: 15 },
-]
+function TableSkeleton() {
+  return (
+    <div className="space-y-2">
+      {Array.from({ length: 5 }).map((_, index) => (
+        <Skeleton key={index} className="h-10 w-full" />
+      ))}
+    </div>
+  )
+}
 
-const doctorPerformanceData = [
-  { name: "Dr. Smith", completed: 198, canceled: 32, noShows: 15 },
-  { name: "Dr. Johnson", completed: 156, canceled: 21, noShows: 10 },
-  { name: "Dr. Williams", completed: 129, canceled: 24, noShows: 10 },
-  { name: "Dr. Brown", completed: 172, canceled: 19, noShows: 10 },
-  { name: "Dr. Jones", completed: 183, canceled: 29, noShows: 12 },
-]
+function normalizeStatus(status: string): StatusFilter {
+  return status.toLowerCase().replace(" ", "-") as StatusFilter
+}
 
-const serviceOverTimeData = [
-  { month: "Jan", generalCheckup: 45, cardiology: 30, dermatology: 25, orthopedics: 20, pediatrics: 35 },
-  { month: "Feb", generalCheckup: 50, cardiology: 35, dermatology: 28, orthopedics: 22, pediatrics: 38 },
-  { month: "Mar", generalCheckup: 55, cardiology: 38, dermatology: 30, orthopedics: 25, pediatrics: 40 },
-  { month: "Apr", generalCheckup: 52, cardiology: 36, dermatology: 29, orthopedics: 24, pediatrics: 39 },
-  { month: "May", generalCheckup: 58, cardiology: 40, dermatology: 32, orthopedics: 27, pediatrics: 42 },
-  { month: "Jun", generalCheckup: 62, cardiology: 42, dermatology: 34, orthopedics: 29, pediatrics: 45 },
-]
+function statusBadgeClass(status: string) {
+  if (status === "Completed") return "border-teal-500/50 bg-teal-500/10 text-teal-800"
+  if (status === "Checked-In") return "border-sky-500/50 bg-sky-500/10 text-sky-800"
+  if (status === "Cancelled") return "border-orange-500/50 bg-orange-500/10 text-orange-800"
+  if (status === "No-Show") return "border-amber-500/50 bg-amber-500/10 text-amber-800"
+  return "border-slate-400/60 bg-slate-500/10 text-slate-700"
+}
 
-// Sample data for the tables
-const appointmentData = [
-  {
-    id: 1,
-    patient: "Emma Thompson",
-    doctor: "Dr. Smith",
-    dateTime: "Today, 9:30 AM",
-    service: "General Checkup",
-    status: "Completed",
-  },
-  {
-    id: 2,
-    patient: "James Wilson",
-    doctor: "Dr. Johnson",
-    dateTime: "Today, 10:15 AM",
-    service: "Cardiology Consultation",
-    status: "Completed",
-  },
-  {
-    id: 3,
-    patient: "Sophia Martinez",
-    doctor: "Dr. Williams",
-    dateTime: "Today, 11:00 AM",
-    service: "Dermatology Screening",
-    status: "Canceled",
-  },
-  {
-    id: 4,
-    patient: "Liam Anderson",
-    doctor: "Dr. Brown",
-    dateTime: "Today, 1:30 PM",
-    service: "Orthopedic Evaluation",
-    status: "Scheduled",
-  },
-  {
-    id: 5,
-    patient: "Olivia Taylor",
-    doctor: "Dr. Jones",
-    dateTime: "Today, 2:45 PM",
-    service: "Pediatric Checkup",
-    status: "Scheduled",
-  },
-  {
-    id: 6,
-    patient: "Noah Garcia",
-    doctor: "Dr. Smith",
-    dateTime: "Today, 3:30 PM",
-    service: "Neurology Consultation",
-    status: "Scheduled",
-  },
-  {
-    id: 7,
-    patient: "Ava Rodriguez",
-    doctor: "Dr. Johnson",
-    dateTime: "Yesterday, 9:00 AM",
-    service: "General Checkup",
-    status: "Completed",
-  },
-  {
-    id: 8,
-    patient: "William Lee",
-    doctor: "Dr. Williams",
-    dateTime: "Yesterday, 10:30 AM",
-    service: "Cardiology Consultation",
-    status: "No-Show",
-  },
-  {
-    id: 9,
-    patient: "Isabella Hernandez",
-    doctor: "Dr. Brown",
-    dateTime: "Yesterday, 1:15 PM",
-    service: "Dermatology Screening",
-    status: "Completed",
-  },
-  {
-    id: 10,
-    patient: "Mason Lopez",
-    doctor: "Dr. Jones",
-    dateTime: "Yesterday, 3:00 PM",
-    service: "Orthopedic Evaluation",
-    status: "Canceled",
-  },
-]
+type DateRangeOption = "today" | "yesterday" | "last-7-days" | "last-30-days" | "this-month" | "custom"
+type AppointmentTypeFilter = "all" | "walk-in" | "scheduled" | "follow-up"
+type StatusFilter = "all" | "booked" | "checked-in" | "completed" | "cancelled" | "no-show"
 
-const doctorStats = [
-  {
-    id: 1,
-    name: "Dr. Smith",
-    department: "General Medicine",
-    total: 245,
-    completed: 198,
-    canceled: 32,
-    noShows: 15,
-    completionRate: 80.8,
-    trend: "up",
+const appointmentReportData = {
+  summary: [
+    { key: "total", title: "Total Appointments", value: "1,248", note: "+12.5% compared to previous month", icon: "calendar", trendDirection: "up", trendLabel: "Up 6% vs previous week" },
+    { key: "completed", title: "Completed Consultations", value: "876", note: "70.2% completion rate", icon: "check", trendDirection: "up", trendLabel: "Up 8% compared to previous week" },
+    { key: "checkedin", title: "Checked-In Patients", value: "142", note: "Currently processed through OPD", icon: "checkedin", trendDirection: "up", trendLabel: "Steady check-in throughput" },
+    { key: "noshow", title: "No-Shows", value: "85", note: "6.8% missed appointments", icon: "noshow", trendDirection: "down", trendLabel: "Down 2% improvement this week" },
+    { key: "cancelled", title: "Cancelled Appointments", value: "187", note: "15% cancellation rate", icon: "cancelled", trendDirection: "down", trendLabel: "Slightly above clinic average" },
+    { key: "walkin", title: "Walk-In Patients", value: "432", note: "34% of total appointments", icon: "walkin", trendDirection: "up", trendLabel: "Morning flow remains consistent" },
+    { key: "new", title: "New Patients", value: "286", note: "22% first-time visitors", icon: "new", trendDirection: "up", trendLabel: "Up 4% vs previous period" },
+    { key: "returning", title: "Returning Patients", value: "962", note: "78% repeat patients", icon: "returning", trendDirection: "up", trendLabel: "Retention remains strong" },
+  ],
+  summaryStrip: [
+    { label: "Peak OPD Hour", value: "10 AM - 11 AM" },
+    { label: "Best Attendance Day", value: "Monday" },
+    { label: "Average Daily Footfall", value: "41 Patients" },
+    { label: "Patient Retention", value: "78%" },
+  ],
+  performanceInsights: {
+    performingWell: [
+      { text: "Returning patient ratio remains strong at 78%", value: "78%", badge: "+8%" },
+      { text: "Appointment completion rate improved compared to last week", badge: "Stable" },
+      { text: "Walk-in patient flow remains consistent during morning OPD hours" },
+      { text: "Average daily patient count increased compared to previous period", value: "41/day" },
+    ],
+    needsAttention: [
+      { text: "Cancellation rate is slightly above operational average", value: "15%" },
+      { text: "No-show appointments are higher during evening slots", value: "6.8%" },
+      { text: "Peak load between 10 AM - 11 AM may require additional support staff", badge: "Peak slot" },
+      { text: "Follow-up visit percentage decreased compared to last month", value: "-3%" },
+    ],
   },
-  {
-    id: 2,
-    name: "Dr. Johnson",
-    department: "Cardiology",
-    total: 187,
-    completed: 156,
-    canceled: 21,
-    noShows: 10,
-    completionRate: 83.4,
-    trend: "up",
+  distributions: {
+    statusDistribution: [
+      { name: "Completed", value: 70, color: "#0f766e" },
+      { name: "Checked-In", value: 8, color: "#1d4e89" },
+      { name: "Cancelled", value: 15, color: "#b45309" },
+      { name: "No-Show", value: 7, color: "#a16207" },
+    ],
+    appointmentTypeVolume: [
+      { name: "Walk-In", value: 432 },
+      { name: "Scheduled", value: 610 },
+      { name: "Follow-Up", value: 206 },
+    ],
   },
-  {
-    id: 3,
-    name: "Dr. Williams",
-    department: "Dermatology",
-    total: 163,
-    completed: 129,
-    canceled: 24,
-    noShows: 10,
-    completionRate: 79.1,
-    trend: "down",
+  trends: {
+    daily: [
+      { day: "Mon", total: 168, completed: 121, cancelled: 25, noShow: 10 },
+      { day: "Tue", total: 182, completed: 131, cancelled: 27, noShow: 12 },
+      { day: "Wed", total: 174, completed: 124, cancelled: 26, noShow: 11 },
+      { day: "Thu", total: 191, completed: 138, cancelled: 29, noShow: 9 },
+      { day: "Fri", total: 205, completed: 149, cancelled: 31, noShow: 11 },
+      { day: "Sat", total: 166, completed: 118, cancelled: 24, noShow: 10 },
+      { day: "Sun", total: 162, completed: 115, cancelled: 25, noShow: 9 },
+    ],
+    monthly: [
+      { month: "Jan", appointments: 1030 },
+      { month: "Feb", appointments: 1088 },
+      { month: "Mar", appointments: 1126 },
+      { month: "Apr", appointments: 1172 },
+      { month: "May", appointments: 1218 },
+      { month: "Jun", appointments: 1248 },
+    ],
   },
-  {
-    id: 4,
-    name: "Dr. Brown",
-    department: "Orthopedics",
-    total: 201,
-    completed: 172,
-    canceled: 19,
-    noShows: 10,
-    completionRate: 85.6,
-    trend: "up",
+  patientFlow: {
+    peakHours: [
+      { slot: "9 AM - 10 AM", patients: 24 },
+      { slot: "10 AM - 11 AM", patients: 31 },
+      { slot: "11 AM - 12 PM", patients: 18 },
+      { slot: "12 PM - 1 PM", patients: 14 },
+      { slot: "5 PM - 6 PM", patients: 27 },
+    ],
+    visitMix: [
+      { name: "Walk-In", value: 34, color: "#2f7a74" },
+      { name: "Scheduled", value: 49, color: "#3f7f95" },
+      { name: "Follow-Up", value: 17, color: "#64748b" },
+    ],
+    patientSplit: {
+      new: 286,
+      returning: 962,
+    },
   },
-  {
-    id: 5,
-    name: "Dr. Jones",
-    department: "Pediatrics",
-    total: 224,
-    completed: 183,
-    canceled: 29,
-    noShows: 12,
-    completionRate: 81.7,
-    trend: "down",
-  },
-]
-
-const serviceStats = [
-  {
-    id: 1,
-    name: "General Checkup",
-    department: "General Medicine",
-    count: 312,
-    avgDuration: "30 min",
-    trend: "up",
-    trendValue: 8.5,
-  },
-  {
-    id: 2,
-    name: "Cardiology Consultation",
-    department: "Cardiology",
-    count: 187,
-    avgDuration: "45 min",
-    trend: "up",
-    trendValue: 12.3,
-  },
-  {
-    id: 3,
-    name: "Dermatology Screening",
-    department: "Dermatology",
-    count: 156,
-    avgDuration: "25 min",
-    trend: "down",
-    trendValue: 3.2,
-  },
-  {
-    id: 4,
-    name: "Orthopedic Evaluation",
-    department: "Orthopedics",
-    count: 143,
-    avgDuration: "40 min",
-    trend: "up",
-    trendValue: 5.7,
-  },
-  {
-    id: 5,
-    name: "Pediatric Checkup",
-    department: "Pediatrics",
-    count: 201,
-    avgDuration: "35 min",
-    trend: "down",
-    trendValue: 2.1,
-  },
-]
+  doctorLoad: [
+    {
+      doctor: "Dr. Dhananjay Lambe",
+      total: 1248,
+      completed: 876,
+      cancelled: 187,
+      noShow: 85,
+      avgPerDay: 41,
+    },
+  ],
+  recentAppointments: [
+    { patient: "Rahul Patil", visitType: "New", appointmentType: "Walk-In", time: "9:30 AM", status: "Completed", doctor: "Dr. Dhananjay Lambe" },
+    { patient: "Sneha Joshi", visitType: "Follow-Up", appointmentType: "Scheduled", time: "10:00 AM", status: "Checked-In", doctor: "Dr. Dhananjay Lambe" },
+    { patient: "Amit Kulkarni", visitType: "Returning", appointmentType: "Walk-In", time: "10:30 AM", status: "Completed", doctor: "Dr. Dhananjay Lambe" },
+    { patient: "Priya Shah", visitType: "New", appointmentType: "Scheduled", time: "11:00 AM", status: "Cancelled", doctor: "Dr. Dhananjay Lambe" },
+    { patient: "Neha Desai", visitType: "Returning", appointmentType: "Follow-Up", time: "11:30 AM", status: "No-Show", doctor: "Dr. Dhananjay Lambe" },
+  ],
+}
