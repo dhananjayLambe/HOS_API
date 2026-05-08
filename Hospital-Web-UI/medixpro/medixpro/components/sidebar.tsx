@@ -336,9 +336,9 @@ export function Sidebar({ isOpen, setIsOpen, alignBelowHeader }: SidebarProps) {
       submenu: [
         { title: "Overview", href: "/reports" },
         { title: "Appointment Reports", href: "/reports/appointments" },
-        { title: "Financial Reports", href: "/reports/financial" },
+        //{ title: "Financial Reports", href: "/reports/financial" },
         //{ title: "Inventory Reports", href: "/reports/inventory" },
-        { title: "Patient Visit Reports", href: "/reports/patients" },
+        //{ title: "Patient Visit Reports", href: "/reports/patients" },
       ],
     },
     {
