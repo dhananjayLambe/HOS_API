@@ -1,11 +1,31 @@
 from __future__ import annotations
 
 from reports.constants.report_constants import RECENT_APPOINTMENTS_LIMIT, STATUS_BOOKED
-from reports.selectors.appointment_report_selectors import doctor_load_rows, recent_appointments
+from reports.selectors.appointment_report_selectors import (
+    doctor_load_rows,
+    merge_standalone_encounters_into_doctor_rows,
+    recent_appointments,
+)
 
 
-def build_doctor_load(current_queryset, start_date, end_date):
-    return doctor_load_rows(current_queryset, start_date, end_date)
+def build_doctor_load(
+    current_queryset,
+    start_date,
+    end_date,
+    *,
+    clinic_id=None,
+    doctor_id=None,
+    appointment_type=None,
+):
+    rows = doctor_load_rows(current_queryset, start_date, end_date)
+    return merge_standalone_encounters_into_doctor_rows(
+        rows,
+        clinic_id=clinic_id,
+        doctor_id=doctor_id,
+        appointment_type=appointment_type,
+        start_date=start_date,
+        end_date=end_date,
+    )
 
 
 def build_recent_appointments(current_queryset):

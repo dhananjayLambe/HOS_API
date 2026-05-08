@@ -50,14 +50,39 @@ class AppointmentSummaryReportView(APIView):
             status=validated.get("status"),
         )
 
-        summary = build_summary(current_queryset, base_queryset, validated["start_date"], validated["end_date"])
+        doctor_load_queryset = build_filtered_queryset(
+            queryset=base_queryset,
+            start_date=validated["start_date"],
+            end_date=validated["end_date"],
+            doctor_id=validated.get("doctor_id"),
+            appointment_type=validated.get("appointment_type"),
+            status=None,
+        )
+
+        summary = build_summary(
+            current_queryset,
+            base_queryset,
+            validated["start_date"],
+            validated["end_date"],
+            clinic_id=clinic_id,
+            doctor_id=validated.get("doctor_id"),
+            appointment_type=validated.get("appointment_type"),
+            status=validated.get("status"),
+        )
         status_distribution = build_status_distribution(current_queryset)
         appointment_type_distribution = build_appointment_type_distribution(current_queryset)
         daily_trends = build_daily_trends(base_queryset, validated["end_date"])
         monthly_trends = build_monthly_trends(base_queryset, validated["end_date"])
         peak_hours = build_peak_hours(current_queryset)
         patient_split = build_patient_split(current_queryset)
-        doctor_load = build_doctor_load(current_queryset, validated["start_date"], validated["end_date"])
+        doctor_load = build_doctor_load(
+            doctor_load_queryset,
+            validated["start_date"],
+            validated["end_date"],
+            clinic_id=clinic_id,
+            doctor_id=validated.get("doctor_id"),
+            appointment_type=validated.get("appointment_type"),
+        )
         recent_appointments = build_recent_appointments(current_queryset)
         operational_summary = build_operational_summary(current_queryset, daily_trends, peak_hours, patient_split)
         performance_insights = build_performance_insights(

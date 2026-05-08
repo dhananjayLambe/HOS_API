@@ -3,6 +3,8 @@ from __future__ import annotations
 from reports.constants.report_constants import STATUS_CHOICES
 from reports.selectors.appointment_report_selectors import (
     appointment_type_counts,
+    count_standalone_completed_encounters_for_summary,
+    patient_visit_counts,
     status_counts,
 )
 from reports.utils.date_utils import get_previous_period
@@ -20,7 +22,17 @@ SUMMARY_KEYS = (
 )
 
 
-def build_summary(current_queryset, base_queryset, start_date, end_date):
+def build_summary(
+    current_queryset,
+    base_queryset,
+    start_date,
+    end_date,
+    *,
+    clinic_id=None,
+    doctor_id=None,
+    appointment_type=None,
+    status=None,
+):
     previous_start, previous_end = get_previous_period(start_date, end_date)
     previous_queryset = base_queryset.filter(appointment_date__range=(previous_start, previous_end))
 
@@ -28,21 +40,49 @@ def build_summary(current_queryset, base_queryset, start_date, end_date):
     previous_status_counts = status_counts(previous_queryset)
     current_type_counts = appointment_type_counts(current_queryset)
     previous_type_counts = appointment_type_counts(previous_queryset)
+    current_visit_split = patient_visit_counts(current_queryset)
+    previous_visit_split = patient_visit_counts(previous_queryset)
 
     current_total = current_queryset.count()
     previous_total = previous_queryset.count()
 
+    enc_current = count_standalone_completed_encounters_for_summary(
+        clinic_id=clinic_id,
+        doctor_id=doctor_id,
+        appointment_type=appointment_type,
+        status=status,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    enc_previous = count_standalone_completed_encounters_for_summary(
+        clinic_id=clinic_id,
+        doctor_id=doctor_id,
+        appointment_type=appointment_type,
+        status=status,
+        start_date=previous_start,
+        end_date=previous_end,
+    )
+
+    current_total_visits = current_total + enc_current
+    previous_total_visits = previous_total + enc_previous
+
     summary = {
-        "total_appointments": metric_payload(current_total, previous_total),
-        "completed": metric_payload(current_status_counts["completed"], previous_status_counts["completed"]),
+        "total_appointments": metric_payload(current_total_visits, previous_total_visits),
+        "completed": metric_payload(
+            current_status_counts["completed"] + enc_current,
+            previous_status_counts["completed"] + enc_previous,
+        ),
         "checked_in": metric_payload(current_status_counts["checked_in"], previous_status_counts["checked_in"]),
         "cancelled": metric_payload(current_status_counts["cancelled"], previous_status_counts["cancelled"]),
         "no_show": metric_payload(current_status_counts["no_show"], previous_status_counts["no_show"]),
-        "walk_in_patients": metric_payload(current_type_counts["walk_in"], previous_type_counts["walk_in"]),
-        "new_patients": metric_payload(current_queryset.filter(appointment_type="new").count(), previous_queryset.filter(appointment_type="new").count()),
+        "walk_in_patients": metric_payload(
+            current_queryset.filter(booking_source="walk_in").count(),
+            previous_queryset.filter(booking_source="walk_in").count(),
+        ),
+        "new_patients": metric_payload(current_visit_split["new_patients"], previous_visit_split["new_patients"]),
         "returning_patients": metric_payload(
-            current_queryset.filter(appointment_type="follow_up").count(),
-            previous_queryset.filter(appointment_type="follow_up").count(),
+            current_visit_split["returning_patients"],
+            previous_visit_split["returning_patients"],
         ),
     }
     return summary

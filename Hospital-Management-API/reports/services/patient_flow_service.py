@@ -48,8 +48,18 @@ def build_operational_summary(current_queryset, daily_trends, peak_hours, patien
     }
 
 
-def weekday_label(date_string: str):
-    from datetime import datetime
+def weekday_label(date_value):
+    from datetime import date, datetime
 
-    dt = datetime.strptime(date_string, "%Y-%m-%d")
+    if hasattr(date_value, "strftime"):
+        return date_value.strftime("%A")
+    s = str(date_value).strip()
+    if not s:
+        return "N/A"
+    # Accept YYYY-MM-DD or ISO datetime strings from DRF JSON.
+    day_part = s[:10]
+    try:
+        dt = datetime.strptime(day_part, "%Y-%m-%d")
+    except ValueError:
+        return "N/A"
     return dt.strftime("%A")
