@@ -156,16 +156,12 @@ export function Sidebar({ isOpen, setIsOpen, alignBelowHeader }: SidebarProps) {
     //     { title: "Insurance Claims", href: "/billing/insurance" },
     //   ],
     // },
-    {
-      title: "Calendar",
-      href: "/calendar",
-      icon: Calendar1,
-    },
-    {
-      title: "Tasks",
-      href: "/tasks",
-      icon: CheckCircle2,
-    },
+    // {
+    //   title: "Calendar",
+    //   href: "/calendar",
+    //   icon: Calendar1,
+    // },
+
     // {
     //   title: "Doctors",
     //   href: "/doctors",
@@ -341,14 +337,19 @@ export function Sidebar({ isOpen, setIsOpen, alignBelowHeader }: SidebarProps) {
         //{ title: "Patient Visit Reports", href: "/reports/patients" },
       ],
     },
+    // {
+    //   title: "Patient Reviews",
+    //   href: "/reviews/patients",
+    //   icon: Star,
+    //   // submenu: [
+    //   //   //{ title: "Doctor Reviews", href: "/reviews/doctors" },
+    //   //   { title: "Patient Reviews", href: "/reviews/patients" },
+    //   // ],
+    // },
     {
-      title: "Patient Reviews",
-      href: "/reviews/patients",
-      icon: Star,
-      // submenu: [
-      //   //{ title: "Doctor Reviews", href: "/reviews/doctors" },
-      //   { title: "Patient Reviews", href: "/reviews/patients" },
-      // ],
+      title: "Tasks",
+      href: "/tasks",
+      icon: CheckCircle2,
     },
     {
       title: "Support",
