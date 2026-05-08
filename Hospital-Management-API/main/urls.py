@@ -52,6 +52,7 @@ urlpatterns = [
     path('api/visits/<uuid:visit_id>/vitals/', VisitVitalsAPIView.as_view(), name='visit-vitals'),
     path('api/consultations/', include('consultations_core.api.urls')),
     path('api/investigations/', include('consultations_core.api.investigation_urls')),
+    path('api/labs/', include('labs.api.urls')),
     path('api/consultation/', include('consultation_config.api.urls')),
     #path('api/consultations/', include('consultations.api.urls')),
     #path('api/prescriptions/', include('prescriptions.api.urls')),

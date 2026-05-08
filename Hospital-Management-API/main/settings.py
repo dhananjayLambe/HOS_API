@@ -88,6 +88,7 @@ INSTALLED_APPS = [
     'reports.apps.ReportsConfig',
     'queue_management.apps.QueueManagementConfig',
     'consultations_core.apps.ConsultationsCoreConfig',
+    'labs.apps.LabsConfig',
     'consultation_config.apps.ConsultationConfigConfig',
     # 'consultations.apps.ConsultationsConfig',
     # 'prescriptions.apps.PrescriptionsConfig',
