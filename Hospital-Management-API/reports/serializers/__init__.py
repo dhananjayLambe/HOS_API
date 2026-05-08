@@ -1,12 +1,9 @@
-from .report import ReportSerializer
-from .appointment_report import (
+from .appointment_report_serializers import (
     AppointmentSummaryFilterSerializer,
     AppointmentSummaryReportResponseSerializer,
 )
 
 __all__ = [
-    "ReportSerializer",
     "AppointmentSummaryFilterSerializer",
     "AppointmentSummaryReportResponseSerializer",
 ]
-

@@ -1,0 +1,34 @@
+APPOINTMENT_TYPE_WALK_IN = "walk_in"
+APPOINTMENT_TYPE_SCHEDULED = "scheduled"
+APPOINTMENT_TYPE_FOLLOW_UP = "follow_up"
+
+APPOINTMENT_TYPE_CHOICES = (
+    APPOINTMENT_TYPE_WALK_IN,
+    APPOINTMENT_TYPE_SCHEDULED,
+    APPOINTMENT_TYPE_FOLLOW_UP,
+)
+
+STATUS_BOOKED = "booked"
+STATUS_CHECKED_IN = "checked_in"
+STATUS_COMPLETED = "completed"
+STATUS_CANCELLED = "cancelled"
+STATUS_NO_SHOW = "no_show"
+
+STATUS_CHOICES = (
+    STATUS_BOOKED,
+    STATUS_CHECKED_IN,
+    STATUS_COMPLETED,
+    STATUS_CANCELLED,
+    STATUS_NO_SHOW,
+)
+
+INSIGHT_THRESHOLDS = {
+    "retention_positive": 70.0,
+    "completion_positive": 65.0,
+    "no_show_warning": 10.0,
+    "peak_hour_attention_count": 25,
+}
+
+RECENT_APPOINTMENTS_LIMIT = 5
+DAILY_TRENDS_DAYS = 7
+MONTHLY_TRENDS_MONTHS = 6
