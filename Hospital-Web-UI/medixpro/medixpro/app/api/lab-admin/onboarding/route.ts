@@ -1,43 +1,34 @@
 import { type NextRequest, NextResponse } from "next/server"
 
-// Backend API endpoint
-const BACKEND_API_URL = "http://127.0.0.1:8000/api/diagnostic/lab-onboard/"
+function labsOnboardingUrl(): string {
+  const base = process.env.DJANGO_API_URL || process.env.NEXT_PUBLIC_DJANGO_API_URL || "http://127.0.0.1:8000/api/"
+  return `${base.replace(/\/$/, "")}/labs/onboarding/`
+}
 
 function parseErrorMessage(errorMessage: string): string[] {
   const errors: string[] = []
-
   try {
-    // Try to extract error details from the error_message string
-    // The error_message is a string representation of a Python dict
     const errorMatches = errorMessage.matchAll(/ErrorDetail\(string='([^']+)'/g)
-
     for (const match of errorMatches) {
-      if (match[1]) {
-        errors.push(match[1])
-      }
+      if (match[1]) errors.push(match[1])
     }
-
-    // If no specific errors found, return the original message
-    if (errors.length === 0) {
-      errors.push(errorMessage)
-    }
-  } catch (e) {
+    if (errors.length === 0) errors.push(errorMessage)
+  } catch {
     errors.push(errorMessage)
   }
-
   return errors
 }
 
 export async function POST(request: NextRequest) {
   try {
-    console.log("[v0] ========== API ROUTE CALLED ==========")
-    console.log("[v0] Timestamp:", new Date().toISOString())
-
-    // Parse the incoming request body
     const formData = await request.json()
-    console.log("[v0] Received form data from client:", formData)
 
-    // Transform the data to match backend API format
+    const labName =
+      formData.lab_name ||
+      [formData.organization_name, formData.display_name].filter(Boolean).join(" — ") ||
+      formData.display_name ||
+      ""
+
     const requestBody = {
       admin_details: {
         first_name: formData.first_name || "",
@@ -45,82 +36,77 @@ export async function POST(request: NextRequest) {
         username: formData.mobile_or_username || "",
         email: formData.email || "",
         designation: formData.designation || "",
+        whatsapp_same_as_mobile: Boolean(formData.whatsapp_same_as_mobile ?? true),
       },
       lab_details: {
-        lab_name: formData.lab_name || "",
+        lab_name: labName,
         lab_type: formData.lab_type || "",
         license_number: formData.license_number || "",
         license_valid_till: formData.license_valid_till || "",
         certifications: formData.certifications || "",
-        service_categories: formData.service_categories || [],
-        home_sample_collection: formData.home_sample_collection || false,
-        pricing_tier: formData.pricing_tier?.toLowerCase() || "medium",
-        turnaround_time_hours: Number.parseInt(formData.turnaround_time_hours) || 24,
+        service_categories: Array.isArray(formData.service_categories) ? formData.service_categories : [],
+        home_sample_collection: Boolean(formData.home_sample_collection),
+        pricing_tier: (formData.pricing_tier || "medium").toLowerCase(),
+        turnaround_time_hours: Number.parseInt(String(formData.turnaround_time_hours), 10) || 24,
+        organization_name: formData.organization_name || "",
+        display_name: formData.display_name || "",
+        registration_number: formData.registration_number || "",
+        walk_in_collection: Boolean(formData.walk_in_collection),
       },
       address_details: {
         address: formData.address_line1 || "",
         address2: formData.address_line2 || "",
+        landmark: formData.landmark || "",
         city: formData.city || "",
         state: formData.state || "",
         pincode: formData.pincode || "",
-        latitude: Number.parseFloat(formData.latitude) || 0,
-        longitude: Number.parseFloat(formData.longitude) || 0,
+        latitude: Number.parseFloat(String(formData.latitude)) || 0,
+        longitude: Number.parseFloat(String(formData.longitude)) || 0,
       },
       kyc_details: {
         kyc_document_type: formData.kyc_document_type || "",
         kyc_document_number: formData.kyc_document_number || "",
+        pan_number: formData.pan_number || "",
+        gst_number: formData.gst_number || "",
+        lab_license_file_name: formData.lab_license_file_name || "",
+        nabl_certificate_file_name: formData.nabl_certificate_file_name || "",
+        lab_license_file_base64: formData.lab_license_file_base64 || "",
+        nabl_certificate_file_base64: formData.nabl_certificate_file_base64 || "",
       },
     }
 
-    console.log("[v0] ========== CALLING BACKEND API ==========")
-    console.log("[v0] Backend URL:", BACKEND_API_URL)
-    console.log("[v0] Request body:", JSON.stringify(requestBody, null, 2))
-
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 30000)
+
+    const backendUrl = labsOnboardingUrl()
 
     let response: Response
     try {
-      response = await fetch(BACKEND_API_URL, {
+      response = await fetch(backendUrl, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(requestBody),
         signal: controller.signal,
       })
       clearTimeout(timeoutId)
     } catch (fetchError) {
       clearTimeout(timeoutId)
-
-      if (fetchError instanceof Error) {
-        if (fetchError.name === "AbortError") {
-          return NextResponse.json(
-            {
-              success: false,
-              error: "Request timeout. Please check your connection and try again.",
-              errorType: "network",
-            },
-            { status: 408 },
-          )
-        }
-
+      if (fetchError instanceof Error && fetchError.name === "AbortError") {
         return NextResponse.json(
-          {
-            success: false,
-            error: "Network error. Please check if the backend server is running.",
-            errorType: "network",
-            details: fetchError.message,
-          },
-          { status: 503 },
+          { success: false, error: "Request timeout. Please try again.", errorType: "network" },
+          { status: 408 },
         )
       }
-
-      throw fetchError
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Registration service is unavailable. Try again later or contact support.",
+          errorType: "network",
+          details: fetchError instanceof Error ? fetchError.message : "Unknown",
+        },
+        { status: 503 },
+      )
     }
-
-    console.log("[v0] Backend response status:", response.status)
-    console.log("[v0] Backend response content-type:", response.headers.get("content-type"))
 
     const contentType = response.headers.get("content-type")
     let responseData: any
@@ -128,72 +114,59 @@ export async function POST(request: NextRequest) {
     if (contentType && contentType.includes("application/json")) {
       try {
         responseData = await response.json()
-        console.log("[v0] ========== BACKEND RESPONSE (JSON) ==========")
-        console.log("[v0] Response data:", JSON.stringify(responseData, null, 2))
-      } catch (jsonError) {
-        console.error("[v0] ========== JSON PARSE ERROR ==========")
-        console.error("[v0] Failed to parse JSON response:", jsonError)
-        const textResponse = await response.text()
-        console.log("[v0] Raw response text:", textResponse)
-
+      } catch {
         return NextResponse.json(
           {
             success: false,
-            error: "Invalid response from server. Please try again later.",
+            error: "Invalid response from server.",
             errorType: "server",
-            errorDetails: [`Server returned invalid JSON: ${textResponse.substring(0, 100)}`],
+            errorDetails: ["Could not parse JSON from registration service"],
           },
           { status: 500 },
         )
       }
     } else {
-      // Response is not JSON, read as text
       const textResponse = await response.text()
-      console.log("[v0] ========== BACKEND RESPONSE (NON-JSON) ==========")
-      console.log("[v0] Content-Type:", contentType)
-      console.log("[v0] Response text:", textResponse)
-
+      const isHtml = textResponse.includes("<!DOCTYPE") || textResponse.includes("<html")
+      const is404 = response.status === 404 || textResponse.includes("Page not found")
+      const hint =
+        isHtml && is404
+          ? "The lab registration API was not found. Use Hospital-Management-API with POST /api/labs/onboarding/ (restart Django after pulling latest)."
+          : "Unexpected response from registration service."
       return NextResponse.json(
         {
           success: false,
-          error: "Server returned an unexpected response format.",
+          error: hint,
           errorType: "server",
-          errorDetails: [textResponse.substring(0, 200)],
+          errorDetails: isHtml ? [] : [textResponse.substring(0, 200)],
         },
         { status: response.status },
       )
     }
 
-    if (!response.ok || responseData.error === true) {
-      console.log("[v0] ========== BACKEND RETURNED ERROR ==========")
-      const errorDetails = parseErrorMessage(responseData.error_message || "")
-      console.log("[v0] Parsed error details:", errorDetails)
-
-      const errorResponse = {
-        success: false,
-        error: responseData.message || "Failed to submit onboarding request",
-        errorDetails: errorDetails,
-        errorType: "validation",
-        rawError: responseData.error_message,
-      }
-
-      console.log("[v0] Returning error response:", JSON.stringify(errorResponse, null, 2))
-
-      return NextResponse.json(errorResponse, { status: response.status })
+    if (!response.ok || responseData.error === true || responseData.success === false) {
+      const fromErrors = responseData.errors
+      const errorDetails = fromErrors
+        ? [typeof fromErrors === "string" ? fromErrors : JSON.stringify(fromErrors)]
+        : parseErrorMessage(responseData.error_message || "")
+      return NextResponse.json(
+        {
+          success: false,
+          error: responseData.message || "Failed to submit registration",
+          errorDetails,
+          errorType: "validation",
+          rawError: responseData.error_message,
+        },
+        { status: response.status },
+      )
     }
 
-    // Return success response
-    console.log("[v0] ========== SUCCESS ==========")
-    console.log("[v0] Returning success response to client")
     return NextResponse.json({
       success: true,
-      message: responseData.message || "Onboarding request submitted successfully",
+      message: responseData.message || "Registration submitted successfully",
       data: responseData.data || responseData,
     })
   } catch (error) {
-    console.error("[v0] ========== UNEXPECTED ERROR ==========")
-    console.error("[v0] Error in onboarding API route:", error)
-
     return NextResponse.json(
       {
         success: false,

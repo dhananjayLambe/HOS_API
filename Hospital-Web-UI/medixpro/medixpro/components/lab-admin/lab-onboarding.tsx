@@ -9,7 +9,7 @@ import { ReviewStep } from "./onboarding-steps/review-step"
 import { SuccessPage } from "./onboarding-steps/success-page"
 import { Stepper } from "@/components/ui/stepper"
 import { Card } from "@/components/ui/card"
-import { Activity } from "lucide-react"
+import { FlaskConical } from "lucide-react"
 
 export interface OnboardingData {
   admin_details: {
@@ -18,55 +18,57 @@ export interface OnboardingData {
     username: string
     email?: string
     designation?: string
+    whatsapp_same_as_mobile?: boolean
   }
   lab_details: {
-    lab_name: string
+    organization_name: string
+    display_name: string
     lab_type: string
     license_number?: string
-    license_valid_till?: string
-    certifications?: string
-    service_categories: string[]
+    registration_number?: string
     home_sample_collection: boolean
-    pricing_tier: "Low" | "Medium" | "Premium"
-    turnaround_time_hours: number
+    walk_in_collection: boolean
   }
   address_details: {
     address: string
     address2?: string
+    landmark?: string
     city: string
     state: string
     pincode: string
-    latitude?: number
-    longitude?: number
   }
   kyc_details?: {
-    kyc_document_type?: string
-    kyc_document_number?: string
+    pan_number?: string
+    gst_number?: string
+    lab_license_file_name?: string
+    nabl_certificate_file_name?: string
+    /** data URL (base64) sent to API for storage as LabDocument */
+    lab_license_file_base64?: string
+    nabl_certificate_file_base64?: string
   }
 }
 
 const steps = [
-  { id: 1, title: "Admin Details", description: "Your information" },
-  { id: 2, title: "Lab Details", description: "Laboratory information" },
-  { id: 3, title: "Address", description: "Location details" },
-  { id: 4, title: "KYC", description: "Verification documents" },
-  { id: 5, title: "Review", description: "Confirm & submit" },
+  { id: 1, title: "Contact Details", description: "How we reach you" },
+  { id: 2, title: "Lab Information", description: "Basic lab details" },
+  { id: 3, title: "Branch Address", description: "Primary branch location" },
+  { id: 4, title: "Compliance Documents (Optional)", description: "Upload now or later" },
+  { id: 5, title: "Review & Submit", description: "Confirm and send" },
 ]
 
 export function LabOnboarding() {
   const [currentStep, setCurrentStep] = useState(1)
   const [formData, setFormData] = useState<Partial<OnboardingData>>({
     lab_details: {
-      lab_name: "",
+      organization_name: "",
+      display_name: "",
       lab_type: "",
-      service_categories: [],
       home_sample_collection: false,
-      pricing_tier: "Medium",
-      turnaround_time_hours: 24,
+      walk_in_collection: true,
     },
   })
   const [isSuccess, setIsSuccess] = useState(false)
-  const [submittedData, setSubmittedData] = useState<any>(null)
+  const [submittedData, setSubmittedData] = useState<Partial<OnboardingData> | null>(null)
 
   const updateFormData = (section: keyof OnboardingData, data: any) => {
     setFormData((prev) => ({
@@ -87,37 +89,36 @@ export function LabOnboarding() {
     setCurrentStep(step)
   }
 
-  const handleSuccess = (data: any) => {
+  const handleSuccess = (data: Partial<OnboardingData>) => {
     setSubmittedData(data)
     setIsSuccess(true)
   }
 
-  if (isSuccess) {
+  if (isSuccess && submittedData) {
     return <SuccessPage data={submittedData} />
   }
 
   return (
-    <div className="container mx-auto px-4 py-8 md:py-12">
+    <div className="container mx-auto px-4 py-6 md:py-10">
       <div className="mx-auto max-w-4xl">
-        {/* Header */}
-        <div className="mb-8 text-center">
-          <div className="mb-4 flex items-center justify-center gap-2">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary">
-              <Activity className="h-6 w-6 text-primary-foreground" />
+        <div className="mb-6 text-center">
+          <div className="mb-3 flex items-center justify-center gap-2">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary">
+              <FlaskConical className="h-5 w-5 text-primary-foreground" />
             </div>
-            <h1 className="text-3xl font-bold text-foreground">DoctorProCare</h1>
+            <h1 className="text-2xl font-bold text-foreground md:text-3xl">MedixPro</h1>
           </div>
-          <h2 className="text-2xl font-semibold text-foreground">Diagnostic Lab Registration</h2>
-          <p className="mt-2 text-muted-foreground">Join our network of trusted diagnostic laboratories</p>
+          <h2 className="text-xl font-semibold text-foreground md:text-2xl">Lab registration</h2>
+          <p className="mt-1.5 text-sm text-muted-foreground md:text-base">
+            Quick setup — admin approval required before login
+          </p>
         </div>
 
-        {/* Stepper */}
-        <Card className="mb-8 p-6">
+        <Card className="mb-6 p-4 md:p-5">
           <Stepper steps={steps} currentStep={currentStep} />
         </Card>
 
-        {/* Step Content */}
-        <Card className="p-6 md:p-8">
+        <Card className="p-4 md:p-6">
           {currentStep === 1 && (
             <AdminDetailsStep
               data={formData.admin_details}

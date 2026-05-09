@@ -405,6 +405,90 @@ class CheckUserStatusView(APIView):
                         status=status.HTTP_200_OK,
                     )
 
+        # Lab admin: mirror doctor flow using LabOrganization.registration_status + is_active
+        if "labadmin" in roles:
+            from labs.models import LabUser, RegistrationStatus
+
+            lab_user = (
+                LabUser.objects.filter(user=user)
+                .select_related("organization")
+                .order_by("-is_primary_admin", "created_at")
+                .first()
+            )
+            org = lab_user.organization if lab_user else None
+            if org:
+                rs = org.registration_status
+                if rs in (
+                    RegistrationStatus.PENDING,
+                    RegistrationStatus.UNDER_REVIEW,
+                ):
+                    return Response(
+                        {
+                            "success": True,
+                            "exists": True,
+                            "mobile": phone_number,
+                            "role": roles,
+                            "status": "pending_approval",
+                            "message": "Your lab registration is pending admin approval.",
+                        },
+                        status=status.HTTP_200_OK,
+                    )
+                if rs == RegistrationStatus.REJECTED:
+                    return Response(
+                        {
+                            "success": False,
+                            "exists": True,
+                            "mobile": phone_number,
+                            "role": roles,
+                            "status": "rejected",
+                            "message": (
+                                "Your lab registration was rejected. Reason: "
+                                f"{org.rejection_reason or 'Not specified'}"
+                            ),
+                        },
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+                if rs in (
+                    RegistrationStatus.SUSPENDED,
+                    RegistrationStatus.BLOCKED,
+                    RegistrationStatus.INACTIVE,
+                ):
+                    return Response(
+                        {
+                            "success": False,
+                            "exists": True,
+                            "mobile": phone_number,
+                            "role": roles,
+                            "status": "rejected",
+                            "message": f"Your lab account is not active ({rs}). Please contact support.",
+                        },
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+                if rs == RegistrationStatus.APPROVED and user.is_active:
+                    return Response(
+                        {
+                            "success": True,
+                            "exists": True,
+                            "mobile": phone_number,
+                            "role": roles,
+                            "status": "approved",
+                            "message": "User exists and approved as lab admin.",
+                        },
+                        status=status.HTTP_200_OK,
+                    )
+                if rs == RegistrationStatus.APPROVED and not user.is_active:
+                    return Response(
+                        {
+                            "success": True,
+                            "exists": True,
+                            "mobile": phone_number,
+                            "role": roles,
+                            "status": "pending_approval",
+                            "message": "Your lab is approved; your login will be enabled shortly by admin.",
+                        },
+                        status=status.HTTP_200_OK,
+                    )
+
         # Non-doctor roles (helpdesk, labadmin, patient, superadmin)
         if not user.is_active:
             return Response(

@@ -92,7 +92,6 @@ INSTALLED_APPS = [
     'consultation_config.apps.ConsultationConfigConfig',
     # 'consultations.apps.ConsultationsConfig',
     # 'prescriptions.apps.PrescriptionsConfig',
-    # 'diagnostic.apps.DiagnosticConfig',
     'support.apps.SupportConfig',
     'tasks.apps.TasksConfig',
     'caleder_events.apps.CalederEventsConfig',
@@ -256,8 +255,9 @@ TIME_ZONE = os.environ.get("DJANGO_TIME_ZONE", "Asia/Kolkata")
 STATIC_URL = '/static/'
 STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
 
-MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+MEDIA_URL = "/media/"
+# Labs (and other apps) store uploads under this tree; Labs uses labs/organizations/<uuid>/… (see labs.utils.upload_paths).
+MEDIA_ROOT = os.path.join(BASE_DIR, "media")
 
 
 #REDIS AND CHANNELS SETTINGS

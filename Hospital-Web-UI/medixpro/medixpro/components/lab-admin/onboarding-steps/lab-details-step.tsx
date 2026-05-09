@@ -4,28 +4,23 @@ import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
 import { Button } from "@/components/ui/button"
-import { Form, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
+import { Form, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Badge } from "@/components/ui/badge"
-import { Building2, FileText, Award, Clock, X } from "lucide-react"
-import { useState } from "react"
+import { Building2, FileText } from "lucide-react"
 
 const labDetailsSchema = z.object({
-  lab_name: z.string().min(2, "Lab name is required"),
-  lab_type: z.string().min(1, "Please select a lab type"),
+  organization_name: z.string().min(2, "Organization name is required"),
+  display_name: z.string().min(2, "Display name is required"),
+  lab_type: z.string().min(1, "Select a lab type"),
   license_number: z.string().optional(),
-  license_valid_till: z.string().optional(),
-  certifications: z.string().optional(),
-  service_categories: z.array(z.string()).min(1, "Select at least one service"),
+  registration_number: z.string().optional(),
   home_sample_collection: z.boolean(),
-  pricing_tier: z.enum(["Low", "Medium", "Premium"]),
-  turnaround_time_hours: z.number().min(1).max(168),
+  walk_in_collection: z.boolean(),
 })
 
-type LabDetailsForm = z.infer<typeof labDetailsSchema>
+export type LabDetailsForm = z.infer<typeof labDetailsSchema>
 
 interface LabDetailsStepProps {
   data?: Partial<LabDetailsForm>
@@ -33,107 +28,144 @@ interface LabDetailsStepProps {
   onBack: () => void
 }
 
-const serviceOptions = [
-  "Blood Tests",
-  "Urine Tests",
-  "X-Ray",
-  "CT Scan",
-  "MRI",
-  "Ultrasound",
-  "ECG",
-  "Pathology",
-  "Microbiology",
-  "Biochemistry",
-]
+const LAB_TYPES = [
+  "Diagnostic Center",
+  "Pathology Lab",
+  "Radiology Center",
+  "Clinic Lab",
+  "Hospital Lab",
+  "Multispeciality Diagnostics",
+] as const
 
 export function LabDetailsStep({ data, onNext, onBack }: LabDetailsStepProps) {
-  const [selectedServices, setSelectedServices] = useState<string[]>(data?.service_categories || [])
-
   const form = useForm<LabDetailsForm>({
-    // ⚠️ IMPORTANT: VALIDATION IS TEMPORARILY DISABLED FOR TESTING
-    // TODO: Uncomment the zodResolver line below to re-enable form validation
     resolver: zodResolver(labDetailsSchema),
     defaultValues: {
-      lab_name: data?.lab_name ?? "",
+      organization_name: data?.organization_name ?? "",
+      display_name: data?.display_name ?? "",
       lab_type: data?.lab_type ?? "",
       license_number: data?.license_number ?? "",
-      license_valid_till: data?.license_valid_till ?? "",
-      certifications: data?.certifications ?? "",
-      service_categories: data?.service_categories ?? [],
+      registration_number: data?.registration_number ?? "",
       home_sample_collection: data?.home_sample_collection ?? false,
-      pricing_tier: data?.pricing_tier ?? "Medium",
-      turnaround_time_hours: data?.turnaround_time_hours ?? 24,
+      walk_in_collection: data?.walk_in_collection ?? true,
     },
   })
 
-  const toggleService = (service: string) => {
-    const updated = selectedServices.includes(service)
-      ? selectedServices.filter((s) => s !== service)
-      : [...selectedServices, service]
-    setSelectedServices(updated)
-    form.setValue("service_categories", updated)
-  }
-
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div>
-        <h3 className="text-xl font-semibold text-foreground">Lab Details</h3>
-        <p className="mt-1 text-sm text-muted-foreground">Provide information about your diagnostic laboratory</p>
+        <h3 className="text-lg font-semibold text-foreground md:text-xl">Lab Information</h3>
+        <p className="mt-0.5 text-sm text-muted-foreground">Basic details for your lab</p>
       </div>
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onNext)} className="space-y-6">
+        <form onSubmit={form.handleSubmit(onNext)} className="space-y-5">
           <FormField
             control={form.control}
-            name="lab_name"
+            name="organization_name"
             render={({ field }) => (
               <FormItem>
                 <FormLabel>
-                  Lab Name <span className="text-destructive text-red-500">*</span>
+                  Organization name <span className="text-destructive">*</span>
                 </FormLabel>
                 <div className="relative">
-                  <Building2 className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                  <Input placeholder="City Diagnostic Center" className="pl-10" {...field} />
+                  <Building2 className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input placeholder="Registered legal name" className="pl-9" {...field} />
                 </div>
                 <FormMessage />
               </FormItem>
             )}
           />
 
-          <div className="grid gap-6 md:grid-cols-2">
+          <FormField
+            control={form.control}
+            name="display_name"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>
+                  Display name <span className="text-destructive">*</span>
+                </FormLabel>
+                <div className="relative">
+                  <Building2 className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input placeholder="Name shown to patients" className="pl-9" {...field} />
+                </div>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="lab_type"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>
+                  Lab type <span className="text-destructive">*</span>
+                </FormLabel>
+                <Select onValueChange={field.onChange} value={field.value || undefined}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {LAB_TYPES.map((t) => (
+                      <SelectItem key={t} value={t}>
+                        {t}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <div className="grid gap-4 md:grid-cols-2">
             <FormField
               control={form.control}
-              name="lab_type"
+              name="home_sample_collection"
               render={({ field }) => (
-                <FormItem>
-                  <FormLabel>
-                    Lab Type <span className="text-destructive text-red-500">*</span>
-                  </FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select lab type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Diagnostic Lab">Diagnostic Lab</SelectItem>
-                      <SelectItem value="Pathology">Pathology</SelectItem>
-                      <SelectItem value="Radiology">Radiology</SelectItem>
-                      <SelectItem value="Multi-Specialty">Multi-Specialty</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
+                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
+                  <FormLabel className="text-sm font-medium">Home collection</FormLabel>
+                  <Switch checked={field.value} onCheckedChange={field.onChange} />
                 </FormItem>
               )}
             />
+            <FormField
+              control={form.control}
+              name="walk_in_collection"
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
+                  <FormLabel className="text-sm font-medium">Walk-in available</FormLabel>
+                  <Switch checked={field.value} onCheckedChange={field.onChange} />
+                </FormItem>
+              )}
+            />
+          </div>
 
+          <div className="grid gap-4 md:grid-cols-2">
             <FormField
               control={form.control}
               name="license_number"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>License Number</FormLabel>
+                  <FormLabel>License number (optional)</FormLabel>
                   <div className="relative">
-                    <FileText className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                    <Input placeholder="LIC123456" className="pl-10" {...field} />
+                    <FileText className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input placeholder="If available" className="pl-9" {...field} />
+                  </div>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="registration_number"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Registration number (optional)</FormLabel>
+                  <div className="relative">
+                    <FileText className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input placeholder="If available" className="pl-9" {...field} />
                   </div>
                   <FormMessage />
                 </FormItem>
@@ -141,132 +173,11 @@ export function LabDetailsStep({ data, onNext, onBack }: LabDetailsStepProps) {
             />
           </div>
 
-          <div className="grid gap-6 md:grid-cols-2">
-            <FormField
-              control={form.control}
-              name="license_valid_till"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>License Valid Till</FormLabel>
-                  <Input type="date" {...field} />
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="certifications"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Certifications</FormLabel>
-                  <div className="relative">
-                    <Award className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                    <Input placeholder="NABL, ISO 9001" className="pl-10" {...field} />
-                  </div>
-                  <FormDescription>Comma-separated (e.g., NABL, ISO)</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
-
-          <FormField
-            control={form.control}
-            name="service_categories"
-            render={() => (
-              <FormItem>
-                <FormLabel>
-                  Service Categories <span className="text-destructive text-red-500">*</span>
-                </FormLabel>
-                <div className="flex flex-wrap gap-2">
-                  {serviceOptions.map((service) => (
-                    <Badge
-                      key={service}
-                      variant={selectedServices.includes(service) ? "default" : "outline"}
-                      className="cursor-pointer"
-                      onClick={() => toggleService(service)}
-                    >
-                      {service}
-                      {selectedServices.includes(service) && <X className="ml-1 h-3 w-3" />}
-                    </Badge>
-                  ))}
-                </div>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="home_sample_collection"
-            render={({ field }) => (
-              <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                <div className="space-y-0.5">
-                  <FormLabel className="text-base">Home Sample Collection</FormLabel>
-                  <FormDescription>Do you offer home sample collection services?</FormDescription>
-                </div>
-                <Switch checked={field.value} onCheckedChange={field.onChange} />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="pricing_tier"
-            render={({ field }) => (
-              <FormItem className="space-y-3">
-                <FormLabel>Pricing Tier</FormLabel>
-                <RadioGroup
-                  onValueChange={field.onChange}
-                  defaultValue={field.value}
-                  className="flex flex-col space-y-1"
-                >
-                  <div className="flex items-center space-x-3 space-y-0">
-                    <RadioGroupItem value="Low" />
-                    <FormLabel className="font-normal">Low - Budget-friendly pricing</FormLabel>
-                  </div>
-                  <div className="flex items-center space-x-3 space-y-0">
-                    <RadioGroupItem value="Medium" />
-                    <FormLabel className="font-normal">Medium - Standard market pricing</FormLabel>
-                  </div>
-                  <div className="flex items-center space-x-3 space-y-0">
-                    <RadioGroupItem value="Premium" />
-                    <FormLabel className="font-normal">Premium - High-end services</FormLabel>
-                  </div>
-                </RadioGroup>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="turnaround_time_hours"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Turnaround Time (hours)</FormLabel>
-                <div className="relative">
-                  <Clock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    type="number"
-                    placeholder="24"
-                    className="pl-10"
-                    {...field}
-                    onChange={(e) => field.onChange(Number.parseInt(e.target.value) || 0)}
-                  />
-                </div>
-                <FormDescription>Average time to deliver test results</FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <div className="flex justify-between">
+          <div className="flex justify-between pt-1">
             <Button type="button" variant="outline" onClick={onBack}>
               Back
             </Button>
-            <Button type="submit" size="lg" className="min-w-32">
+            <Button type="submit" size="lg" className="min-w-28">
               Next
             </Button>
           </div>

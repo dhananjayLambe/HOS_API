@@ -5,6 +5,7 @@ from django.utils.translation import gettext_lazy as _
 
 from account.models import User
 from core.models import BaseModel
+from labs.utils.upload_paths import lab_document_upload_path, lab_logo_upload_path
 
 # =========================================================
 # CHOICES
@@ -182,7 +183,7 @@ class LabOrganization(BaseModel):
     # =====================================================
 
     logo = models.ImageField(
-        upload_to="labs/logo/",
+        upload_to=lab_logo_upload_path,
         blank=True,
         null=True,
     )
@@ -261,6 +262,8 @@ class LabOrganization(BaseModel):
 class LabBranch(BaseModel):
     """
     Operational branch of organization.
+
+    For branch-level FileField/ImageField uploads, use ``labs.utils.upload_paths.lab_branch_file_upload_path``.
     """
 
     organization = models.ForeignKey(
@@ -555,7 +558,7 @@ class LabDocument(BaseModel):
     )
 
     file = models.FileField(
-        upload_to="labs/documents/",
+        upload_to=lab_document_upload_path,
     )
 
     expiry_date = models.DateField(
