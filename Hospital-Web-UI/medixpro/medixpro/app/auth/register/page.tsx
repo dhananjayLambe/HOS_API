@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useState } from "react"
-import { Stethoscope, Users, FlaskConical, Check } from "lucide-react"
+import { Stethoscope, Users, FlaskConical, Shield, Check } from "lucide-react"
 import { REGISTRATION_ROLE_PATHS } from "@/lib/registrationRolePaths"
 
 const Card = ({ className = "", ...props }: React.HTMLAttributes<HTMLDivElement>) => (
@@ -101,6 +101,7 @@ export default function RegistrationPage() {
     { name: "Doctor", icon: Stethoscope, path: REGISTRATION_ROLE_PATHS.doctor },
     //{ name: "HelpDesk", icon: Users, path: "/helpdesk-registration" },
     { name: "LabAdmin", icon: FlaskConical, path: REGISTRATION_ROLE_PATHS.lab },
+    { name: "Super Admin", icon: Shield, path: REGISTRATION_ROLE_PATHS.superuser },
   ]
 
   const handleRoleSelect = (role: Role) => {
@@ -253,7 +254,7 @@ export default function RegistrationPage() {
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4 mb-8">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-8">
                     {roles.map((role) => {
                       const Icon = role.icon
                       return (

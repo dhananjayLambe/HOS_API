@@ -7,4 +7,6 @@ export const REGISTRATION_ROLE_PATHS = {
   clinic: "/auth/register/clinic-registration/",
   doctor: "/auth/register/doctor-registration/",
   lab: "/auth/register/lab-registration/",
+  /** Placeholder route — full super admin onboarding TBD. */
+  superuser: "/auth/register/superuser-registration/",
 } as const

@@ -16,12 +16,14 @@ function looksLikeChunkFailure(text: string): boolean {
 }
 
 /**
- * One automatic full reload when a Next/Webpack route chunk fails to load (common in dev after
- * HMR or `next dev` restart while a tab still references old chunk URLs). Mounted from root layout
- * so it stays active even when a leaf route chunk fails.
+ * Dev-only: one automatic full reload when a Next/Webpack route chunk fails to load (common after
+ * HMR or `next dev` restart). In production this component is inert so the root layout change does
+ * not affect other features or user sessions.
  */
 export function ChunkLoadRecovery() {
   useEffect(() => {
+    if (process.env.NODE_ENV !== "development") return
+
     const tryReload = (detail: string) => {
       if (!looksLikeChunkFailure(detail)) return
       if (typeof window === "undefined") return
@@ -37,10 +39,8 @@ export function ChunkLoadRecovery() {
       const parts = [e.message, e.error?.message, e.error?.name].filter(Boolean) as string[]
       tryReload(parts.join(" "))
 
-      const el = e.target as unknown as { tagName?: string; src?: string }
-      if (el?.tagName === "SCRIPT" && typeof el.src === "string" && el.src.includes("/_next/static/")) {
-        tryReload("script chunk " + el.src)
-      }
+      // Only treat as chunk failure if the message matches; do not reload on every failed script
+      // under `/_next/static/` (avoids false positives from unrelated script errors).
     }
 
     const onRejection = (e: PromiseRejectionEvent) => {
