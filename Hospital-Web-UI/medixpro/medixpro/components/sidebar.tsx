@@ -346,11 +346,11 @@ export function Sidebar({ isOpen, setIsOpen, alignBelowHeader }: SidebarProps) {
     //   //   { title: "Patient Reviews", href: "/reviews/patients" },
     //   // ],
     // },
-    {
-      title: "Tasks",
-      href: "/tasks",
-      icon: CheckCircle2,
-    },
+    // {
+    //   title: "Tasks",
+    //   href: "/tasks",
+    //   icon: CheckCircle2,
+    // },
     {
       title: "Support",
       href: "/support",
