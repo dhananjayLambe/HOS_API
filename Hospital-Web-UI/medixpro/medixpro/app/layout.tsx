@@ -8,6 +8,7 @@ import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"] });
 import GlobalLoader from "@/components/GlobalLoader";
+import { ChunkLoadRecovery } from "@/components/chunk-load-recovery";
 import { Toaster } from "react-hot-toast";
 
 export const viewport: Viewport = {
@@ -38,6 +39,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={inter.className} suppressHydrationWarning>
         <AuthProvider>
+          <ChunkLoadRecovery />
           <ThemeProvider>{children}</ThemeProvider>
           <GlobalLoader />
           <Toaster position="top-center" />

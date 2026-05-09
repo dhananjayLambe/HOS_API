@@ -2,7 +2,8 @@
 
 import type React from "react"
 import { useState } from "react"
-import { Stethoscope, Users, FlaskConical, Shield, Check } from "lucide-react"
+import { Stethoscope, Users, FlaskConical, Check } from "lucide-react"
+import { REGISTRATION_ROLE_PATHS } from "@/lib/registrationRolePaths"
 
 const Card = ({ className = "", ...props }: React.HTMLAttributes<HTMLDivElement>) => (
   <div className={`rounded-xl border bg-card text-card-foreground shadow-sm ${className}`} {...props} />
@@ -96,18 +97,17 @@ export default function RegistrationPage() {
   const [statusResult, setStatusResult] = useState<null | { status: string; message: string }>(null)
 
   const roles: Role[] = [
-    { name: "Clinic", icon: Users, path: "register/clinic-registration" },
-    { name: "Doctor", icon: Stethoscope, path: "register/doctor-registration" },
+    { name: "Clinic", icon: Users, path: REGISTRATION_ROLE_PATHS.clinic },
+    { name: "Doctor", icon: Stethoscope, path: REGISTRATION_ROLE_PATHS.doctor },
     //{ name: "HelpDesk", icon: Users, path: "/helpdesk-registration" },
-    { name: "LabAdmin", icon: FlaskConical, path: "register/lab-registration" },
-    { name: "SuperUser", icon: Shield, path: "register/superuser-registration" },
+    { name: "LabAdmin", icon: FlaskConical, path: REGISTRATION_ROLE_PATHS.lab },
   ]
 
   const handleRoleSelect = (role: Role) => {
     setSelectedRole(role)
     setIsRedirecting(true)
-    // Keep existing navigation behavior
-    window.location.href = role.path
+    // Full navigation (not client router) — reliable with `trailingSlash: true` and after chunk/HMR issues where `router.push` can leave the UI stuck on "Redirecting...".
+    window.location.assign(role.path)
   }
 
   const handleStatusCheck = async (e: React.FormEvent) => {
@@ -168,9 +168,9 @@ export default function RegistrationPage() {
                 {/* Step 1 - Clinic Registration */}
                 <div 
                   onClick={() =>
-                        handleRoleSelect({ name: "Clinic", icon: Users, path: "register/clinic-registration" })
+                        handleRoleSelect({ name: "Clinic", icon: Users, path: REGISTRATION_ROLE_PATHS.clinic })
                 }
-                className="group relative overflow-hidden rounded-2xl bg-gradient-to-r from-purple-600 to-violet-600 p-[2px] shadow-lg hover:shadow-2xl transition-all duration-300">
+                className="group relative cursor-pointer overflow-hidden rounded-2xl bg-gradient-to-r from-purple-600 to-violet-600 p-[2px] shadow-lg hover:shadow-2xl transition-all duration-300">
                   <div className="flex items-center gap-4 p-5 rounded-2xl bg-white dark:bg-slate-900">
                     <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-gradient-to-br from-purple-600 to-violet-600 flex items-center justify-center shadow-md">
                       <Users className="h-6 w-6 text-white" />
@@ -185,9 +185,9 @@ export default function RegistrationPage() {
                 {/* Step 2 - Doctor Registration */}
                 <div
                   onClick={() =>
-                    handleRoleSelect({ name: "Doctor", icon: Stethoscope, path: "register/doctor-registration" })
+                    handleRoleSelect({ name: "Doctor", icon: Stethoscope, path: REGISTRATION_ROLE_PATHS.doctor })
                 } 
-                className="group relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-200 to-slate-300 dark:from-slate-800 dark:to-slate-700 p-[2px] hover:from-purple-400 hover:to-violet-400 dark:hover:from-purple-600 dark:hover:to-violet-600 transition-all duration-300">
+                className="group relative cursor-pointer overflow-hidden rounded-2xl bg-gradient-to-r from-slate-200 to-slate-300 dark:from-slate-800 dark:to-slate-700 p-[2px] hover:from-purple-400 hover:to-violet-400 dark:hover:from-purple-600 dark:hover:to-violet-600 transition-all duration-300">
                   <div className="flex items-center gap-4 p-5 rounded-2xl bg-white dark:bg-slate-900">
                     <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-800 group-hover:bg-purple-100 dark:group-hover:bg-purple-900/30 flex items-center justify-center transition-colors duration-300">
                       <Check className="h-6 w-6 text-slate-600 dark:text-slate-400 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors duration-300" />
@@ -253,7 +253,7 @@ export default function RegistrationPage() {
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-8">
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4 mb-8">
                     {roles.map((role) => {
                       const Icon = role.icon
                       return (
