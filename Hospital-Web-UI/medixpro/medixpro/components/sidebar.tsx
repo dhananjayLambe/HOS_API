@@ -9,7 +9,9 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type React from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { labSidebarNavItems } from "@/components/labs/labNavConfig";
+import type { SidebarNavItem } from "@/lib/sidebarNavTypes";
 import AnimateHeight from "react-animate-height";
 import { useAuth } from "@/lib/authContext";
 import { SmartQueue } from "@/components/smart-queue";
@@ -24,12 +26,7 @@ interface SidebarProps {
   alignBelowHeader?: boolean;
 }
 
-interface SidebarItem {
-  title: string;
-  href: string;
-  icon: React.ElementType;
-  submenu?: { title: string; href: string }[];
-}
+export type SidebarItem = SidebarNavItem;
 
 export function Sidebar({ isOpen, setIsOpen, alignBelowHeader }: SidebarProps) {
   const pathname = usePathname();
@@ -40,7 +37,10 @@ export function Sidebar({ isOpen, setIsOpen, alignBelowHeader }: SidebarProps) {
   const router = useRouter();
   const [showPatientAlert, setShowPatientAlert] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
-  const hideSmartQueue = pathname.startsWith("/consultations/");
+  const hideSmartQueue =
+    pathname.startsWith("/consultations/") ||
+    (role?.toLowerCase() === "labadmin" &&
+      (pathname === "/profile" || pathname.startsWith("/profile/")));
 
   // Helper function to get user's full name
   const getUserFullName = () => {
@@ -48,7 +48,10 @@ export function Sidebar({ isOpen, setIsOpen, alignBelowHeader }: SidebarProps) {
       const firstName = user.first_name || "";
       const lastName = user.last_name || "";
       const fullName = `${firstName} ${lastName}`.trim();
-      return `Dr. ${fullName}`;
+      if (role?.toLowerCase() === "doctor") {
+        return `Dr. ${fullName}`;
+      }
+      return fullName;
     }
     return "User";
   };
@@ -364,10 +367,29 @@ export function Sidebar({ isOpen, setIsOpen, alignBelowHeader }: SidebarProps) {
     // },
   ];
 
-  const navItems =
-    role?.toLowerCase() === "helpdesk"
-      ? sidebarItems.filter((item) => item.title !== "Staff")
-      : sidebarItems;
+  const navItems = useMemo(() => {
+    const r = role?.toLowerCase();
+    if (
+      r === "labadmin" &&
+      (pathname === "/profile" || pathname.startsWith("/profile/"))
+    ) {
+      return labSidebarNavItems;
+    }
+    if (r === "helpdesk") {
+      return sidebarItems.filter((item) => item.title !== "Staff");
+    }
+    return sidebarItems;
+  }, [role, pathname]);
+
+  const isSidebarLinkActive = (href: string) => {
+    if (href === "/lab-dashboard/") {
+      return pathname === "/lab-dashboard/" || pathname === "/lab-dashboard";
+    }
+    if (pathname === href) return true;
+    const hrefNoSlash = href.replace(/\/$/, "");
+    if (pathname === hrefNoSlash) return true;
+    return pathname.startsWith(href);
+  };
 
   const toggleSubmenu = (title: string) => {
     if (openSubmenu === title) {
@@ -400,33 +422,41 @@ export function Sidebar({ isOpen, setIsOpen, alignBelowHeader }: SidebarProps) {
     }
   );
   useEffect(() => {
-    const foundItem = sidebarItems.find((item) => {
+    const foundItem = navItems.find((item) => {
       if (item.submenu) {
         return item.submenu.some((subItem) => pathname === subItem.href);
       }
-      return pathname === item.href;
+      return isSidebarLinkActive(item.href);
     });
     if (foundItem?.submenu) {
       setOpenSubmenu(foundItem.title);
     }
-  }, [pathname]);
+  }, [pathname, navItems]);
 
   // Auto-expand Consultations only when patient is first selected (don't override user opening other submenus)
   useEffect(() => {
-    if (selectedPatient) {
+    if (selectedPatient && role?.toLowerCase() === "doctor") {
       const consultationsItem = sidebarItems.find((item) => item.title === "Consultations");
       if (consultationsItem) {
         setOpenSubmenu("Consultations");
       }
     }
-  }, [selectedPatient]);
+  }, [selectedPatient, role]);
   return (
     <aside
       className={sidebarClasses}
       style={alignBelowHeader ? { top: 64, height: "calc(100vh - 64px)" } : undefined}
     >
       <div className={cn("flex items-center justify-between px-4", alignBelowHeader ? "py-2" : "py-3 xl:py-3.5")}>
-        <Link href="/doctor-dashboard" className="flex items-center space-x-2">
+        <Link
+          href={
+            role?.toLowerCase() === "labadmin" &&
+            (pathname === "/profile" || pathname.startsWith("/profile/"))
+              ? "/lab-dashboard/"
+              : "/doctor-dashboard"
+          }
+          className="flex items-center space-x-2"
+        >
           <Image src={logo} alt="Medixpro" width={36} height={36} />
           <span className="font-bold inline-block">MedixPro</span>
         </Link>
@@ -523,7 +553,14 @@ export function Sidebar({ isOpen, setIsOpen, alignBelowHeader }: SidebarProps) {
                   </AnimateHeight>
                 </>
               ) : (
-                <Link href={item.href} className={cn("flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors", pathname === item.href ? "bg-primary/10 text-primary" : " hover:bg-muted hover:text-foreground")} onClick={() => isMobile && setIsOpen(false)}>
+                <Link
+                  href={item.href}
+                  className={cn(
+                    "flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                    isSidebarLinkActive(item.href) ? "bg-primary/10 text-primary" : " hover:bg-muted hover:text-foreground"
+                  )}
+                  onClick={() => isMobile && setIsOpen(false)}
+                >
                   <item.icon className="mr-2 h-4 w-4" />
                   {item.title}
                 </Link>

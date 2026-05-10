@@ -17,7 +17,7 @@ export function UserNav() {
       const firstName = user.first_name || "";
       const lastName = user.last_name || "";
       const fullName = `${firstName} ${lastName}`.trim();
-      if (role?.toLowerCase() === "helpdesk") return fullName;
+      if (role?.toLowerCase() === "helpdesk" || role?.toLowerCase() === "labadmin") return fullName;
       return `Dr. ${fullName}`;
     }
     return "User";
