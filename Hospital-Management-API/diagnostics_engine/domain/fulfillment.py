@@ -4,11 +4,11 @@ from django.db.models import Q
 from django.utils import timezone
 
 from diagnostics_engine.models.catalog import DiagnosticPackage
-from diagnostics_engine.models.providers import (
+from labs.models import (
     BranchPackagePricing,
     BranchServiceArea,
     BranchServicePricing,
-    DiagnosticProviderBranch,
+    LabBranch,
 )
 
 
@@ -16,7 +16,7 @@ class FulfillmentValidationService:
     @classmethod
     def branch_fulfills_package(
         cls,
-        branch: DiagnosticProviderBranch,
+        branch: LabBranch,
         package: DiagnosticPackage,
         pincode: str | None = None,
     ) -> tuple[bool, str]:
@@ -61,7 +61,7 @@ class FulfillmentValidationService:
             ).exists():
                 return False, "Pincode not in branch service area."
 
-        if not branch.is_active:
+        if not branch.is_active or not branch.is_active_for_orders or branch.is_deleted:
             return False, "Branch inactive."
 
         return True, ""

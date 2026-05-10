@@ -2,6 +2,5 @@
 
 from .choices import *
 from .catalog import *
-from .providers import *
 from .orders import *
 from .reports import *

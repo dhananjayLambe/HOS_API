@@ -5,7 +5,6 @@ from django.db import models
 
 from .catalog import DiagnosticPackage, DiagnosticServiceMaster
 from .choices import ExecutionType, OrderLineType, OrderStatus, OrderTestLineStatus
-from .providers import DiagnosticProviderBranch
 
 
 class DiagnosticOrder(models.Model):
@@ -40,9 +39,9 @@ class DiagnosticOrder(models.Model):
     )
 
     branch = models.ForeignKey(
-        DiagnosticProviderBranch,
+        "labs.LabBranch",
         on_delete=models.PROTECT,
-        related_name="orders",
+        related_name="diagnostic_orders",
     )
 
     status = models.CharField(

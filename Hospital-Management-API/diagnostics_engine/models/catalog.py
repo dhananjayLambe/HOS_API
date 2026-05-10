@@ -136,7 +136,7 @@ class DiagnosticServiceMaster(models.Model):
 class DiagnosticPackage(models.Model):
     """
     Versioned sellable package definition (composition lives in DiagnosticPackageItem).
-    Authoritative price is on BranchPackagePricing, not here.
+    Authoritative price is on labs.BranchPackagePricing, not here.
     """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

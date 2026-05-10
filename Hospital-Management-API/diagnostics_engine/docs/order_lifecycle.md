@@ -1,5 +1,7 @@
 # Diagnostic order lifecycle
 
+`DiagnosticOrder.branch` references `labs.LabBranch` (fulfilling network branch).
+
 ## Status transitions
 
 Core flow remains: `created` → `confirmed` → `sample_collected` → `in_processing` → `report_ready` → `completed`, with `cancelled` and **`partial`** where some lines finish and others cancel.

@@ -8,7 +8,8 @@ from rest_framework.views import APIView
 
 from diagnostics_engine.domain.fulfillment import FulfillmentValidationService
 from diagnostics_engine.domain.pricing import PricingQuoteService
-from diagnostics_engine.models import DiagnosticPackage, DiagnosticProviderBranch, DiagnosticServiceMaster
+from diagnostics_engine.models import DiagnosticPackage, DiagnosticServiceMaster
+from labs.models import LabBranch
 
 from ..serializers.catalog import (
     DiagnosticPackageSerializer,
@@ -37,12 +38,12 @@ class DiagnosticPackageViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class PackageQuoteView(APIView):
-    """POST: resolve price for a versioned package at a branch (hierarchy in PricingQuoteService)."""
+    """POST: resolve price for a versioned package at a labs.LabBranch (PricingQuoteService; branch_id = LabBranch UUID)."""
 
     def post(self, request, *args, **kwargs):
         ser = PackageQuoteRequestSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
-        branch = get_object_or_404(DiagnosticProviderBranch, pk=ser.validated_data["branch_id"])
+        branch = get_object_or_404(LabBranch, pk=ser.validated_data["branch_id"])
         package = get_object_or_404(DiagnosticPackage, pk=ser.validated_data["package_id"])
         try:
             quote = PricingQuoteService.quote_package_line(branch, package)
@@ -60,16 +61,18 @@ class PackageQuoteView(APIView):
 
 
 class ProvidersForPackageView(APIView):
-    """GET: branches that STRICT-fulfill a package; optional ?pincode= """
+    """GET: LabBranch ids that STRICT-fulfill a package; optional ?pincode=. branch_ids are labs.LabBranch UUIDs."""
 
     def get(self, request, package_id, *args, **kwargs):
         qser = ProvidersForPackageQuerySerializer(data=request.query_params)
         qser.is_valid(raise_exception=True)
         pincode = (qser.validated_data.get("pincode") or "").strip() or None
         package = get_object_or_404(DiagnosticPackage, pk=package_id)
-        branches = DiagnosticProviderBranch.objects.filter(is_active=True, deleted_at__isnull=True).select_related(
-            "provider"
-        )
+        branches = LabBranch.objects.filter(
+            is_active=True,
+            is_active_for_orders=True,
+            is_deleted=False,
+        ).select_related("organization")
         ok_ids = []
         for br in branches:
             ok, _msg = FulfillmentValidationService.branch_fulfills_package(br, package, pincode=pincode)

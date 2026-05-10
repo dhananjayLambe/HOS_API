@@ -90,19 +90,29 @@ class DiagnosticPackageSerializer(serializers.ModelSerializer):
 
 
 class PackageQuoteRequestSerializer(serializers.Serializer):
-    branch_id = serializers.UUIDField()
-    package_id = serializers.UUIDField()
+    branch_id = serializers.UUIDField(
+        help_text="labs.LabBranch primary key (UUID). Same as branch_id from labs onboarding—not legacy DiagnosticProviderBranch.",
+    )
+    package_id = serializers.UUIDField(help_text="Diagnostics DiagnosticPackage primary key (UUID).")
 
 
 class PackageQuoteResponseSerializer(serializers.Serializer):
     selling_price = serializers.DecimalField(max_digits=12, decimal_places=2)
     mrp = serializers.DecimalField(max_digits=12, decimal_places=2)
     is_price_derived = serializers.BooleanField()
-    branch_package_pricing_id = serializers.UUIDField(allow_null=True)
+    branch_package_pricing_id = serializers.UUIDField(
+        allow_null=True,
+        help_text="labs.BranchPackagePricing row id when quote used package-level pricing; null if derived sum.",
+    )
 
 
 class ProvidersForPackageQuerySerializer(serializers.Serializer):
-    pincode = serializers.CharField(max_length=10, required=False, allow_blank=True)
+    pincode = serializers.CharField(
+        max_length=10,
+        required=False,
+        allow_blank=True,
+        help_text="Optional. When set, branches must have labs.BranchServiceArea coverage for STRICT fulfillment.",
+    )
 
 
 class UnifiedSearchQuerySerializer(serializers.Serializer):

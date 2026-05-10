@@ -2,21 +2,27 @@ from decimal import Decimal
 
 from django.core.management.base import BaseCommand
 from django.db import transaction
+from django.utils.text import slugify
 
 from diagnostics_engine.models import (
-    BranchServicePricing,
     CommissionType,
     DiagnosticCategory,
-    DiagnosticProvider,
-    DiagnosticProviderBranch,
     DiagnosticServiceMaster,
+)
+from labs.models import (
+    BranchServicePricing,
+    LabAddress,
+    LabBranch,
+    LabOrganization,
+    LabType,
+    RegistrationStatus,
 )
 
 
 class Command(BaseCommand):
     help = (
-        "Seed diagnostics_engine master mock data: categories, services, providers, "
-        "branches, and branch pricing."
+        "Seed diagnostics_engine master mock data: categories, services, lab org/branches, "
+        "and branch pricing."
     )
 
     def add_arguments(self, parser):
@@ -203,39 +209,60 @@ class Command(BaseCommand):
 
         branches = []
         for provider_spec in provider_specs:
-            provider, provider_created = DiagnosticProvider.objects.get_or_create(
-                code=provider_spec["code"],
-                defaults={
-                    "name": provider_spec["name"],
-                    "is_active": True,
-                },
+            slug = (slugify(provider_spec["code"]) or provider_spec["code"])[:255]
+            org_defaults = {
+                "organization_name": provider_spec["name"],
+                "display_name": provider_spec["name"],
+                "slug": slug,
+                "lab_type": LabType.PATHOLOGY_LAB,
+                "owner_name": "Seed",
+                "primary_contact_number": "0000000000",
+                "registration_status": RegistrationStatus.APPROVED,
+                "is_verified": True,
+                "onboarding_completed": True,
+                "is_active_for_orders": True,
+                "is_active": True,
+            }
+            org, org_created = LabOrganization.objects.get_or_create(
+                organization_code=provider_spec["code"],
+                defaults=org_defaults,
             )
-            if provider_created:
+            if org_created:
                 summary["providers_created"] += 1
             else:
                 summary["providers_reused"] += 1
 
             for branch_spec in provider_spec["branches"]:
-                branch, branch_created = DiagnosticProviderBranch.objects.get_or_create(
-                    provider=provider,
-                    branch_code=branch_spec["branch_code"],
+                global_code = f"{provider_spec['code']}-{branch_spec['branch_code']}"[:50]
+                branch, branch_created = LabBranch.objects.get_or_create(
+                    organization=org,
+                    branch_code=global_code,
                     defaults={
                         "branch_name": branch_spec["branch_name"],
-                        "contact_number": branch_spec["contact_number"],
-                        "email": branch_spec["email"],
-                        "address_line_1": branch_spec["address_line_1"],
-                        "city": branch_spec["city"],
-                        "state": branch_spec["state"],
-                        "pincode": branch_spec["pincode"],
-                        "country": "India",
-                        "home_collection_supported": branch_spec["home_collection_supported"],
+                        "home_collection_available": branch_spec["home_collection_supported"],
                         "is_active": True,
+                        "is_active_for_orders": True,
                     },
                 )
                 if branch_created:
                     summary["branches_created"] += 1
                 else:
                     summary["branches_reused"] += 1
+                meta = {"contact_number": branch_spec["contact_number"], "email": branch_spec["email"]}
+                if branch.metadata != meta:
+                    branch.metadata = meta
+                    branch.save(update_fields=["metadata", "updated_at"])
+                LabAddress.objects.update_or_create(
+                    branch=branch,
+                    defaults={
+                        "address_line_1": branch_spec["address_line_1"],
+                        "city": branch_spec["city"],
+                        "state": branch_spec["state"],
+                        "country": "India",
+                        "pincode": branch_spec["pincode"],
+                        "is_active": True,
+                    },
+                )
                 branches.append(branch)
 
         return branches

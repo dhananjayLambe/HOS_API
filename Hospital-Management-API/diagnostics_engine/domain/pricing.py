@@ -7,7 +7,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from diagnostics_engine.models.catalog import DiagnosticPackage
-from diagnostics_engine.models.providers import BranchPackagePricing, BranchServicePricing, DiagnosticProviderBranch
+from labs.models import BranchPackagePricing, BranchServicePricing, LabBranch
 
 
 class PricingQuoteService:
@@ -16,7 +16,7 @@ class PricingQuoteService:
     @classmethod
     def quote_package_line(
         cls,
-        branch: DiagnosticProviderBranch,
+        branch: LabBranch,
         package: DiagnosticPackage,
     ) -> dict:
         today = timezone.now().date()
