@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth } from "@/lib/authContext";
-import { getRoleRedirectPath } from "@/lib/jwtUtils";
+import { getRoleRedirectPath, isLabAdminRole } from "@/lib/jwtUtils";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo } from "react";
 
@@ -12,7 +12,7 @@ export function isLabDashboardPath(pathname: string) {
 /**
  * Blocks helpdesk users from the doctor `(dashboard)` shell — redirect to helpdesk queue.
  * Lab routes under `app/lab-dashboard/` (`/lab-dashboard/*`) are allowed only for labadmin; other roles are redirected away.
- * Labadmin may use `/lab-dashboard/*` or legacy `/profile` inside this layout.
+ * Labadmin may only use `/lab-dashboard/*` — not doctor `(dashboard)` routes (including `/profile`).
  */
 export function DashboardRoleGate({ children }: { children: React.ReactNode }) {
   const { role, sessionChecked } = useAuth();
@@ -23,13 +23,7 @@ export function DashboardRoleGate({ children }: { children: React.ReactNode }) {
     return pathname === "/profile" || pathname.startsWith("/profile/");
   }, [pathname]);
 
-  const allowLabadminOnDashboard = useMemo(() => {
-    return (
-      isLabDashboardPath(pathname) ||
-      pathname === "/profile" ||
-      pathname.startsWith("/profile/")
-    );
-  }, [pathname]);
+  const allowLabadminOnDashboard = useMemo(() => isLabDashboardPath(pathname), [pathname]);
 
   const onLabPath = useMemo(() => isLabDashboardPath(pathname), [pathname]);
 
@@ -42,14 +36,14 @@ export function DashboardRoleGate({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!sessionChecked) return;
-    if (role?.toLowerCase() === "labadmin" && !allowLabadminOnDashboard) {
+    if (isLabAdminRole(role) && !allowLabadminOnDashboard) {
       router.replace("/lab-dashboard/");
     }
   }, [role, sessionChecked, router, allowLabadminOnDashboard]);
 
   useEffect(() => {
     if (!sessionChecked || !role) return;
-    if (onLabPath && role.toLowerCase() !== "labadmin") {
+    if (onLabPath && !isLabAdminRole(role)) {
       router.replace(getRoleRedirectPath(role));
     }
   }, [role, sessionChecked, router, onLabPath]);
@@ -64,11 +58,11 @@ export function DashboardRoleGate({ children }: { children: React.ReactNode }) {
     return null;
   }
 
-  if (role?.toLowerCase() === "labadmin" && !allowLabadminOnDashboard) {
+  if (isLabAdminRole(role) && !allowLabadminOnDashboard) {
     return null;
   }
 
-  if (onLabPath && role?.toLowerCase() !== "labadmin") {
+  if (onLabPath && !isLabAdminRole(role)) {
     return null;
   }
 

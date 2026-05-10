@@ -1,10 +1,9 @@
 "use client";
 
 import { LabPageHeader } from "@/components/labs/common/LabPageHeader";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/lib/authContext";
-import Link from "next/link";
+import { isLabAdminRole } from "@/lib/jwtUtils";
 
 export default function LabProfilePage() {
   const { user, role } = useAuth();
@@ -17,7 +16,9 @@ export default function LabProfilePage() {
       <Card>
         <CardHeader>
           <CardTitle>Your account</CardTitle>
-          <CardDescription>Signed in as {role?.toLowerCase() === "labadmin" ? "lab administrator" : role}</CardDescription>
+          <CardDescription>
+            Signed in as {isLabAdminRole(role) ? "lab administrator" : role ?? "—"}
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
           <p>
@@ -27,12 +28,8 @@ export default function LabProfilePage() {
             <span className="text-muted-foreground">Email / username:</span> {email}
           </p>
           <p className="pt-2 text-xs text-muted-foreground">
-            Full clinic profile editing may use shared account screens later. For doctor-specific profile UI, the
-            legacy route is separate from the lab console.
+            Lab account details and editing flows live here in the lab console only.
           </p>
-          <Button variant="outline" size="sm" className="mt-4" asChild>
-            <Link href="/profile/">Open legacy profile page</Link>
-          </Button>
         </CardContent>
       </Card>
     </div>

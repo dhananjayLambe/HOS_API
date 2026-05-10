@@ -47,6 +47,11 @@ export function isTokenValid(token: string | null): boolean {
   return !isTokenExpired(token);
 }
 
+/** Staff JWT role for lab workspace (lowercase). */
+export function isLabAdminRole(role: string | null | undefined): boolean {
+  return role != null && typeof role === "string" && role.trim().toLowerCase() === "labadmin";
+}
+
 /**
  * Get redirect path based on role
  */

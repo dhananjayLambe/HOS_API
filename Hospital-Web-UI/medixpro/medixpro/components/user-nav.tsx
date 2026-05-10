@@ -6,7 +6,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem,
 import { HelpCircle, LogOut, Settings, User } from "lucide-react";
 import { NotificationDropdown } from "./notification-dropdown";
 import Link from "next/link";
-import { useAuth } from "@/lib/authContext" 
+import { useAuth } from "@/lib/authContext";
+import { isLabAdminRole } from "@/lib/jwtUtils";
 
 export function UserNav() {
   const { logout, user, role } = useAuth();
@@ -46,6 +47,7 @@ export function UserNav() {
   const displayEmail = getUserEmail();
   const initials = getUserInitials();
   const isHelpdesk = role?.toLowerCase() === "helpdesk";
+  const showDoctorShellAccountLinks = !isHelpdesk && !isLabAdminRole(role);
 
   return (
     <div className="flex items-center gap-2 sm:gap-3 flex-nowrap">
@@ -71,7 +73,7 @@ export function UserNav() {
             </div>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          {!isHelpdesk && (
+          {showDoctorShellAccountLinks && (
             <>
               <DropdownMenuGroup>
                 <DropdownMenuItem asChild>

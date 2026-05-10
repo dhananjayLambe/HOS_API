@@ -14,6 +14,7 @@ import { labSidebarNavItems } from "@/components/labs/labNavConfig";
 import type { SidebarNavItem } from "@/lib/sidebarNavTypes";
 import AnimateHeight from "react-animate-height";
 import { useAuth } from "@/lib/authContext";
+import { isLabAdminRole } from "@/lib/jwtUtils";
 import { SmartQueue } from "@/components/smart-queue";
 import { usePatient } from "@/lib/patientContext";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -37,10 +38,7 @@ export function Sidebar({ isOpen, setIsOpen, alignBelowHeader }: SidebarProps) {
   const router = useRouter();
   const [showPatientAlert, setShowPatientAlert] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
-  const hideSmartQueue =
-    pathname.startsWith("/consultations/") ||
-    (role?.toLowerCase() === "labadmin" &&
-      (pathname === "/profile" || pathname.startsWith("/profile/")));
+  const hideSmartQueue = pathname.startsWith("/consultations/") || isLabAdminRole(role);
 
   // Helper function to get user's full name
   const getUserFullName = () => {
@@ -369,17 +367,14 @@ export function Sidebar({ isOpen, setIsOpen, alignBelowHeader }: SidebarProps) {
 
   const navItems = useMemo(() => {
     const r = role?.toLowerCase();
-    if (
-      r === "labadmin" &&
-      (pathname === "/profile" || pathname.startsWith("/profile/"))
-    ) {
+    if (isLabAdminRole(role)) {
       return labSidebarNavItems;
     }
     if (r === "helpdesk") {
       return sidebarItems.filter((item) => item.title !== "Staff");
     }
     return sidebarItems;
-  }, [role, pathname]);
+  }, [role]);
 
   const isSidebarLinkActive = (href: string) => {
     if (href === "/lab-dashboard/") {
@@ -448,13 +443,7 @@ export function Sidebar({ isOpen, setIsOpen, alignBelowHeader }: SidebarProps) {
       style={alignBelowHeader ? { top: 64, height: "calc(100vh - 64px)" } : undefined}
     >
       <div className={cn("flex items-center justify-between px-4", alignBelowHeader ? "py-2" : "py-3 xl:py-3.5")}>
-        <Link
-          href={
-            role?.toLowerCase() === "labadmin" &&
-            (pathname === "/profile" || pathname.startsWith("/profile/"))
-              ? "/lab-dashboard/"
-              : "/doctor-dashboard"
-          }
+        <Link href={isLabAdminRole(role) ? "/lab-dashboard/" : "/doctor-dashboard"}
           className="flex items-center space-x-2"
         >
           <Image src={logo} alt="Medixpro" width={36} height={36} />
