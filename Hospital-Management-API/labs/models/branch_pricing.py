@@ -1,19 +1,40 @@
-"""Branch-level catalog pricing and service areas (provider network; FK to LabBranch)."""
+"""
+Branch-level catalog pricing, package pricing,
+and geographic serviceability models.
+
+These models represent the fulfillment-side
+commercial layer for diagnostics execution.
+"""
 
 import uuid
 
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
+from django.utils.translation import gettext_lazy as _
+
+from core.models import BaseModel
 
 from labs.models.lab_auth import LabBranch
 
 # Diagnostics catalog + commission enums (labs → diagnostics dependency is intentional).
-from diagnostics_engine.models.catalog import DiagnosticPackage, DiagnosticServiceMaster
-from diagnostics_engine.models.choices import CommissionSource, CommissionType, FulfillmentMode
+from diagnostics_engine.models.catalog import (
+    DiagnosticPackage,
+    DiagnosticServiceMaster,
+)
+from diagnostics_engine.models.choices import (
+    CommissionSource,
+    CommissionType,
+    FulfillmentMode,
+)
 
 
-class BranchServiceArea(models.Model):
+class BranchServiceArea(BaseModel):
+    """
+    Represents a postal code (pincode), city, or state that a lab branch can service.
+    This model allows for managing geographic serviceability, including home collection
+    availability and additional metadata for operational or business logic.
+    """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
     branch = models.ForeignKey(
@@ -21,18 +42,27 @@ class BranchServiceArea(models.Model):
         on_delete=models.CASCADE,
         related_name="service_areas",
     )
-
     pincode = models.CharField(max_length=10)
 
-    is_active = models.BooleanField(default=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    deleted_at = models.DateTimeField(null=True, blank=True)
-    deleted_by = models.ForeignKey(
-        "account.User",
-        on_delete=models.SET_NULL,
-        null=True,
+    city = models.CharField(
+        max_length=100,
         blank=True,
-        related_name="lab_branch_service_areas_deleted",
+        null=True,
+        db_index=True,
+    )
+    state = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        db_index=True,
+    )
+    is_home_collection_available = models.BooleanField(
+        default=True,
+    )
+    is_active = models.BooleanField(default=True)
+    metadata = models.JSONField(
+        default=dict,
+        blank=True,
     )
 
     class Meta:
@@ -46,13 +76,21 @@ class BranchServiceArea(models.Model):
         indexes = [
             models.Index(fields=["branch"]),
             models.Index(fields=["pincode"]),
+            models.Index(fields=["city"]),
+            models.Index(fields=["state"]),
         ]
+        ordering = ["pincode"]
 
     def __str__(self):
         return f"{self.branch_id} — {self.pincode}"
 
 
-class BranchServicePricing(models.Model):
+class BranchServicePricing(BaseModel):
+    """
+    Stores the pricing and commission structure for a specific diagnostic service at a lab branch.
+    Includes validity windows, margin/commission breakdowns, and operational metadata.
+    Designed for robust pricing history and compliance with business rules.
+    """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
     branch = models.ForeignKey(
@@ -60,14 +98,17 @@ class BranchServicePricing(models.Model):
         on_delete=models.CASCADE,
         related_name="service_pricing",
     )
-
     service = models.ForeignKey(
         DiagnosticServiceMaster,
         on_delete=models.CASCADE,
         related_name="branch_pricing",
     )
 
-    selling_price = models.DecimalField(max_digits=10, decimal_places=2)
+    selling_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        help_text=_("Net price offered to the customer for this service."),
+    )
     cost_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     platform_margin_snapshot = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     doctor_margin_snapshot = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
@@ -78,14 +119,22 @@ class BranchServicePricing(models.Model):
         choices=CommissionType.choices,
         default=CommissionType.FLAT,
     )
-    platform_margin_value = models.DecimalField(max_digits=10, decimal_places=2)
+    platform_margin_value = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        help_text=_("Margin retained by platform per service (flat or percent)."),
+    )
 
     doctor_commission_type = models.CharField(
         max_length=10,
         choices=CommissionType.choices,
         default=CommissionType.FLAT,
     )
-    doctor_commission_value = models.DecimalField(max_digits=10, decimal_places=2)
+    doctor_commission_value = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        help_text=_("Commission paid to doctor (flat or percent)."),
+    )
 
     valid_from = models.DateField(default=timezone.now)
     valid_to = models.DateField(blank=True, null=True)
@@ -93,18 +142,22 @@ class BranchServicePricing(models.Model):
     is_active = models.BooleanField(default=True)
     is_available = models.BooleanField(
         default=True,
-        help_text="Temporarily hide SKU without deleting pricing history.",
+        help_text=_("Temporarily hide SKU without deleting pricing history."),
     )
 
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    deleted_at = models.DateTimeField(null=True, blank=True)
-    deleted_by = models.ForeignKey(
-        "account.User",
-        on_delete=models.SET_NULL,
-        null=True,
+    currency = models.CharField(
+        max_length=10,
+        default="INR",
+    )
+    home_collection_supported = models.BooleanField(
+        default=False,
+    )
+    report_delivery_hours = models.PositiveIntegerField(
+        default=24,
+    )
+    metadata = models.JSONField(
+        default=dict,
         blank=True,
-        related_name="lab_branch_service_pricing_deleted",
     )
 
     class Meta:
@@ -119,12 +172,14 @@ class BranchServicePricing(models.Model):
         indexes = [
             models.Index(fields=["branch"]),
             models.Index(fields=["service"]),
+            models.Index(fields=["is_active", "is_available"]),
+            models.Index(fields=["valid_from", "valid_to"]),
         ]
+        ordering = ["service__name"]
 
     def clean(self):
         if self.selling_price <= 0:
             raise ValidationError("Selling price must be positive.")
-
         if self.valid_to and self.valid_to < self.valid_from:
             raise ValidationError("valid_to cannot be before valid_from.")
 
@@ -132,9 +187,12 @@ class BranchServicePricing(models.Model):
         return f"{self.branch} - {self.service}"
 
 
-class BranchPackagePricing(models.Model):
-    """Sell-side price for a specific package version at a branch (version-linked)."""
-
+class BranchPackagePricing(BaseModel):
+    """
+    Defines the sell-side price and commission structure for a specific diagnostic package version
+    at a branch. Tracks MRP, pricing, commission splits, fulfillment mode, and operational metadata.
+    Enables versioned, branch-specific pricing and robust auditability.
+    """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
     branch = models.ForeignKey(
@@ -142,29 +200,46 @@ class BranchPackagePricing(models.Model):
         on_delete=models.CASCADE,
         related_name="package_pricing",
     )
-
     package = models.ForeignKey(
         DiagnosticPackage,
         on_delete=models.CASCADE,
         related_name="branch_pricing",
     )
 
-    mrp = models.DecimalField(max_digits=10, decimal_places=2)
-    selling_price = models.DecimalField(max_digits=10, decimal_places=2)
+    mrp = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        help_text=_("Maximum Retail Price for the package."),
+    )
+    selling_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        help_text=_("Net price offered to the customer for this package."),
+    )
 
     platform_margin_type = models.CharField(
         max_length=10,
         choices=CommissionType.choices,
         default=CommissionType.FLAT,
     )
-    platform_margin_value = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    platform_margin_value = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        help_text=_("Margin retained by platform per package (flat or percent)."),
+    )
 
     doctor_commission_type = models.CharField(
         max_length=10,
         choices=CommissionType.choices,
         default=CommissionType.FLAT,
     )
-    doctor_commission_value = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    doctor_commission_value = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        help_text=_("Commission paid to doctor (flat or percent)."),
+    )
 
     lab_payout_snapshot = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
 
@@ -188,8 +263,6 @@ class BranchPackagePricing(models.Model):
     is_active = models.BooleanField(default=True)
     is_available = models.BooleanField(default=True)
 
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey(
         "account.User",
         on_delete=models.SET_NULL,
@@ -204,13 +277,20 @@ class BranchPackagePricing(models.Model):
         blank=True,
         related_name="lab_branch_package_pricing_updated",
     )
-    deleted_at = models.DateTimeField(null=True, blank=True)
-    deleted_by = models.ForeignKey(
-        "account.User",
-        on_delete=models.SET_NULL,
-        null=True,
+
+    currency = models.CharField(
+        max_length=10,
+        default="INR",
+    )
+    home_collection_supported = models.BooleanField(
+        default=False,
+    )
+    report_delivery_hours = models.PositiveIntegerField(
+        default=24,
+    )
+    metadata = models.JSONField(
+        default=dict,
         blank=True,
-        related_name="lab_branch_package_pricing_deleted",
     )
 
     class Meta:
@@ -225,7 +305,10 @@ class BranchPackagePricing(models.Model):
         indexes = [
             models.Index(fields=["branch"]),
             models.Index(fields=["package"]),
+            models.Index(fields=["is_active", "is_available"]),
+            models.Index(fields=["valid_from", "valid_to"]),
         ]
+        ordering = ["package__name"]
 
     def clean(self):
         if self.selling_price <= 0:
