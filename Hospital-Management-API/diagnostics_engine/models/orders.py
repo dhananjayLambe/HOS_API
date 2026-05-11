@@ -12,6 +12,33 @@ from .choices import (
 )
 
 
+# =========================================================
+# DIAGNOSTIC ORDER DOMAIN
+# =========================================================
+# This module represents the commercial + operational layer
+# of the diagnostics system.
+#
+# Clinical flow:
+# Consultation -> InvestigationItem
+#
+# Operational/commercial flow:
+# Consultation -> DiagnosticOrder -> DiagnosticOrderItem
+# -> DiagnosticOrderTestLine
+#
+# Key idea:
+# - InvestigationItem represents what the doctor prescribed.
+# - DiagnosticOrder represents the real executable lab order.
+# - DiagnosticOrderItem stores pricing + earning snapshots.
+# - DiagnosticOrderTestLine represents execution-level work.
+#
+# Future scalable architecture:
+# - multi-lab routing
+# - home collection
+# - provider assignment
+# - pricing snapshotting
+# - commission calculations
+# - asynchronous orchestration
+# =========================================================
 class DiagnosticOrder(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
@@ -43,12 +70,19 @@ class DiagnosticOrder(models.Model):
         related_name="diagnostic_orders",
     )
 
+    # Optional during initial creation.
+    # Orders can first be created in an "awaiting assignment"
+    # state and later mapped to a lab branch/provider.
     branch = models.ForeignKey(
         "labs.LabBranch",
         on_delete=models.PROTECT,
+        null=True,
+        blank=True,
         related_name="diagnostic_orders",
     )
 
+    # Order lifecycle state.
+    # This is operational status, NOT clinical consultation status.
     status = models.CharField(
         max_length=30,
         choices=OrderStatus.choices,
@@ -66,6 +100,9 @@ class DiagnosticOrder(models.Model):
         db_index=True,
     )
 
+    # Snapshot fields.
+    # Values are frozen at order creation/confirmation time
+    # so future catalog pricing changes do not affect old orders.
     total_amount_snapshot = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     discount_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     final_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
@@ -73,6 +110,9 @@ class DiagnosticOrder(models.Model):
     accepted_by_lab = models.BooleanField(default=False)
     accepted_at = models.DateTimeField(null=True, blank=True)
 
+    # Execution preference selected for the order.
+    # Future flows may support dynamic routing between
+    # home collection and branch visit.
     sample_collection_mode = models.CharField(
         max_length=20,
         choices=[
@@ -123,6 +163,13 @@ class DiagnosticOrder(models.Model):
             models.Index(fields=["consultation"]),
         ]
 
+    # Centralized state transition handler.
+    #
+    # Responsibilities:
+    # - validates allowed transitions
+    # - stores audit trail
+    # - expands packages after confirmation
+    # - creates execution test lines
     def update_status(self, new_status, user=None, source="system", reason=None):
         allowed_transitions = {
             OrderStatus.CREATED: [OrderStatus.CONFIRMED, OrderStatus.CANCELLED],
@@ -172,6 +219,17 @@ class DiagnosticOrder(models.Model):
         return self.order_number
 
 
+# =========================================================
+# ORDER ITEM
+# =========================================================
+# Represents a billable/orderable unit inside a DiagnosticOrder.
+#
+# Can represent:
+# - individual test
+# - package/bundle
+#
+# Stores immutable pricing + earning snapshots.
+# =========================================================
 class DiagnosticOrderItem(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
@@ -226,6 +284,9 @@ class DiagnosticOrderItem(models.Model):
     requires_fasting = models.BooleanField(default=False)
     requires_appointment = models.BooleanField(default=False)
 
+    # Flexible snapshot storage.
+    # Useful for preserving recommendation metadata,
+    # execution hints, future AI context, etc.
     metadata_snapshot = models.JSONField(
         default=dict,
         blank=True,
@@ -266,6 +327,9 @@ class DiagnosticOrderItem(models.Model):
 
     is_active = models.BooleanField(default=True)
 
+    # Tracks how this investigation entered the order.
+    # Useful for analytics, AI explainability, and
+    # future recommendation engines.
     recommendation_source = models.CharField(
         max_length=20,
         choices=[
@@ -319,8 +383,10 @@ class DiagnosticOrderItem(models.Model):
         if self.line_type == OrderLineType.PACKAGE and not self.diagnostic_package_id:
             raise ValidationError("Package lines require diagnostic_package.")
 
+    # Once an order is confirmed, core commercial fields
+    # become immutable to preserve financial integrity.
     def save(self, *args, **kwargs):
-        if self.pk:
+        if self.pk and not self._state.adding:
             existing = DiagnosticOrderItem.objects.get(pk=self.pk)
 
             if self.order.status != OrderStatus.CREATED:
@@ -342,18 +408,47 @@ class DiagnosticOrderItem(models.Model):
         self.full_clean()
         super().save(*args, **kwargs)
 
-    # Expected reverse relation:
-    # InvestigationItem.diagnostic_order_item -> related_name="investigation_items"
+    # InvestigationItem.diagnostic_order_item -> related_name="consultation_investigation_items"
     @property
     def linked_investigation_items(self):
-        return self.investigation_items.all()
+        return self.consultation_investigation_items.all()
 
     def __str__(self):
         return f"{self.name_snapshot} - {self.order.order_number}"
 
 
+# =========================================================
+# EXECUTION TEST LINE
+# =========================================================
+# Lowest execution-level entity.
+#
+# Example:
+# A package may expand into multiple execution test lines.
+#
+# Used for:
+# - lab workflow tracking
+# - collection lifecycle
+# - report processing
+# - operational dashboards
+# =========================================================
 class DiagnosticOrderTestLine(models.Model):
-    """Queryable execution row per service (lab or imaging)."""
+    """
+    Queryable execution-level row.
+
+    Each row represents an actual executable diagnostic service.
+
+    Examples:
+    - CBC
+    - X-Ray Chest
+    - Lipid Profile
+
+    This layer powers:
+    - operational execution
+    - sample collection
+    - processing workflow
+    - report lifecycle
+    - provider dashboards
+    """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 

@@ -39,10 +39,13 @@ from consultations_core.models.symptoms import ConsultationSymptom
 from consultations_core.services.encounter_service import EncounterService
 from diagnostics_engine.models import (
     DiagnosticCategory,
+    DiagnosticOrder,
+    DiagnosticOrderTestLine,
     DiagnosticPackage,
     DiagnosticPackageItem,
     DiagnosticServiceMaster,
 )
+from doctor.models import doctor as DoctorModel
 from medicines.models import DrugMaster, DrugType, FormulationMaster
 from patient_account.models import PatientAccount, PatientProfile
 
@@ -65,6 +68,11 @@ def _doctor_client():
 
 def _encounter_in_consultation(doctor_user):
     clinic = Clinic.objects.create(name=f"Clinic {uuid.uuid4().hex[:6]}")
+    doc_profile, _ = DoctorModel.objects.get_or_create(
+        user=doctor_user,
+        defaults={"primary_specialization": "General"},
+    )
+    doc_profile.clinics.add(clinic)
     pu = User.objects.create_user(
         username=f"pat_eci_{uuid.uuid4().hex[:10]}",
         password="testpass123",
@@ -73,11 +81,19 @@ def _encounter_in_consultation(doctor_user):
     )
     pa = PatientAccount.objects.create(user=pu)
     pa.clinics.add(clinic)
-    profile = PatientProfile.objects.create(account=pa, first_name="Pat", relation="self", gender="male")
+    profile = PatientProfile.objects.create(
+        account=pa,
+        first_name="Pat",
+        last_name="Test",
+        relation="self",
+        gender="male",
+        age_years=30,
+    )
     encounter = EncounterService.create_encounter(
         clinic=clinic,
         patient_account=pa,
         patient_profile=profile,
+        doctor=doc_profile,
         created_by=doctor_user,
     )
     consultation = Consultation.objects.create(encounter=encounter)
@@ -164,6 +180,8 @@ class EndConsultationIntegrationTests(TestCase):
     def test_01_minimal_empty_sections_finalizes_encounter(self):
         r = self._post_complete(_base_payload())
         self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
+        self.assertTrue(r.data.get("diagnostic_order_skipped"), r.data)
+        self.assertIn("investigations", (r.data.get("diagnostic_order_skip_reason") or "").lower())
         self.consultation.refresh_from_db()
         self.encounter.refresh_from_db()
         self.assertTrue(self.consultation.is_finalized)
@@ -171,6 +189,7 @@ class EndConsultationIntegrationTests(TestCase):
         self.assertEqual(self.encounter.status, "consultation_completed")
         self.assertFalse(self.encounter.is_active)
         self.assertEqual(InvestigationItem.objects.filter(investigations__consultation=self.consultation).count(), 0)
+        self.assertEqual(DiagnosticOrder.objects.filter(consultation=self.consultation).count(), 0)
 
     def test_02_symptoms_persisted(self):
         payload = _base_payload(
@@ -254,12 +273,17 @@ class EndConsultationIntegrationTests(TestCase):
         )
         r = self._post_complete(payload)
         self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
+        self.assertTrue(r.data.get("diagnostic_order_created"), r.data)
         items = InvestigationItem.objects.filter(
             investigations__consultation=self.consultation,
             is_deleted=False,
         )
         self.assertEqual(items.count(), 1)
         self.assertEqual(items.first().source, InvestigationSource.CATALOG)
+        self.assertIsNotNone(items.first().diagnostic_order_item_id)
+        order = DiagnosticOrder.objects.filter(consultation=self.consultation).first()
+        self.assertIsNotNone(order)
+        self.assertGreaterEqual(DiagnosticOrderTestLine.objects.filter(order_id=order.pk).count(), 1)
 
     def test_07_investigations_custom_creates_master_row(self):
         payload = _base_payload(
@@ -275,6 +299,7 @@ class EndConsultationIntegrationTests(TestCase):
         )
         r = self._post_complete(payload)
         self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
+        self.assertTrue(r.data.get("diagnostic_order_skipped"), r.data)
         self.assertTrue(
             CustomInvestigation.objects.filter(
                 clinic=self.clinic,
@@ -302,12 +327,14 @@ class EndConsultationIntegrationTests(TestCase):
         )
         r = self._post_complete(payload)
         self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
+        self.assertTrue(r.data.get("diagnostic_order_created"), r.data)
         item = InvestigationItem.objects.filter(
             investigations__consultation=self.consultation,
             is_deleted=False,
         ).first()
         self.assertIsNotNone(item)
         self.assertEqual(item.source, InvestigationSource.PACKAGE)
+        self.assertIsNotNone(item.diagnostic_order_item_id)
 
     def test_09_validation_failure_rolls_back_all_persist(self):
         payload = _base_payload(
@@ -557,3 +584,27 @@ class EndConsultationIntegrationTests(TestCase):
         self.assertEqual(r.status_code, status.HTTP_200_OK, getattr(r, "data", r.content))
         self.assertIn("summary", r.data)
         self.assertEqual(r.data["summary"]["meta"]["status"], "completed")
+
+    def test_25_end_consultation_diagnostic_order_idempotent_on_second_complete_blocked(self):
+        """Order is created on first complete; second complete is rejected before duplicate order."""
+        payload = _base_payload(
+            investigations=[
+                {
+                    "service_id": str(self.svc.id),
+                    "name": self.svc.name,
+                    "is_custom": False,
+                    "label": self.svc.name,
+                }
+            ],
+        )
+        r1 = self._post_complete(payload)
+        self.assertEqual(r1.status_code, status.HTTP_200_OK, r1.data)
+        self.assertTrue(r1.data.get("diagnostic_order_created"), r1.data)
+        oid = DiagnosticOrder.objects.filter(consultation=self.consultation).values_list("pk", flat=True).first()
+        self.assertIsNotNone(oid)
+        self.consultation.refresh_from_db()
+        self.encounter.refresh_from_db()
+        self.assertTrue(self.consultation.is_finalized)
+        r2 = self._post_complete(payload)
+        self.assertEqual(r2.status_code, status.HTTP_400_BAD_REQUEST, r2.data)
+        self.assertEqual(DiagnosticOrder.objects.filter(consultation=self.consultation).count(), 1)

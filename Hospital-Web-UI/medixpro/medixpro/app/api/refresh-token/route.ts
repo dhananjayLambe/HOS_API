@@ -1,5 +1,16 @@
 import { NextResponse } from "next/server";
 
+/** Log-safe base URL (no path/query secrets). */
+function backendOriginForLog(baseUrl: string): string {
+  try {
+    const normalized = baseUrl.includes("://") ? baseUrl : `http://${baseUrl}`;
+    const u = new URL(normalized);
+    return `${u.protocol}//${u.host}`;
+  } catch {
+    return "(invalid BACKEND_URL)";
+  }
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -13,9 +24,10 @@ export async function POST(req: Request) {
     }
 
     const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8000/api/";
-    
+    const refreshUrl = `${BACKEND_URL}auth/refresh-token/`;
+
     try {
-      const backendRes = await fetch(`${BACKEND_URL}auth/refresh-token/`, {
+      const backendRes = await fetch(refreshUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ refresh_token: refreshToken }),
@@ -58,13 +70,21 @@ export async function POST(req: Request) {
 
       // Return tokens in response body
       return NextResponse.json(data, { status: 200 });
-    } catch (fetchError: any) {
-      // Network or connection errors
-      console.error("Error connecting to backend:", fetchError);
+    } catch (fetchError: unknown) {
+      // Network or connection errors (e.g. ECONNREFUSED — Django not listening on BACKEND_URL host/port)
+      const err = fetchError as { message?: string; cause?: { code?: string } };
+      console.error("Error connecting to backend (refresh-token):", {
+        backendOrigin: backendOriginForLog(BACKEND_URL),
+        authPath: "auth/refresh-token/",
+        message: err?.message,
+        causeCode: err?.cause && typeof err.cause === "object" && "code" in err.cause ? err.cause.code : undefined,
+        hint: "Ensure Django is running and Hospital-Web-UI BACKEND_URL matches (e.g. http://127.0.0.1:8000/api/).",
+      });
       return NextResponse.json(
-        { 
+        {
           error: "Failed to connect to backend server",
-          message: fetchError.message || "Please check if the backend server is running"
+          message: err?.message || "Please check if the backend server is running",
+          backend_origin: backendOriginForLog(BACKEND_URL),
         },
         { status: 503 }
       );

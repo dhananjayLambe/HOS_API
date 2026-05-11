@@ -179,3 +179,19 @@ class IsDoctorOrHelpdeskOrClinicAdminOrSuperuser(BasePermission):
         return bool(
             request.user.groups.filter(name__in=['doctor', 'helpdesk', 'clinic_admin']).exists()
         )
+
+
+class IsDiagnosticOrderOrchestrationActor(BasePermission):
+    """Doctor, helpdesk, helpdesk_admin, clinic_admin, or superuser — create diagnostic order from consultation."""
+
+    def has_permission(self, request, view):
+        user = request.user
+        if not user or not user.is_authenticated:
+            return False
+        if user.is_superuser:
+            return True
+        return bool(
+            user.groups.filter(
+                name__in=["doctor", "helpdesk", "helpdesk_admin", "clinic_admin"],
+            ).exists()
+        )

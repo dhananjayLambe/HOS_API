@@ -8,12 +8,46 @@ from django.db import models
 from .choices import CollectionType, GenderApplicability, PackageType
 
 
+ # =========================================================
+ # DIAGNOSTIC CATALOG DOMAIN
+ # =========================================================
+ # This module represents the master diagnostic catalog.
+ #
+ # This is the clinical + commercial source-of-truth layer
+ # used by:
+ # - consultation investigations
+ # - recommendation engines
+ # - diagnostic orders
+ # - pricing systems
+ # - lab execution workflows
+ # - future AI recommendation pipelines
+ #
+ # High-level architecture:
+ #
+ # DiagnosticCategory
+ #     -> DiagnosticServiceMaster
+ #     -> DiagnosticPackage
+ #            -> DiagnosticPackageItem
+ #
+ # Clinical intelligence layer:
+ # DiagnosisTestMapping
+ # SymptomTestMapping
+ #
+ # Important distinction:
+ # - Catalog models define WHAT can be ordered.
+ # - Order models define WHAT WAS ordered.
+ # - Execution models define WHAT IS being processed.
+ # =========================================================
+
 class DiagnosticCategory(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
     name = models.CharField(max_length=150, unique=True)
     code = models.CharField(max_length=50, unique=True)
 
+    # Supports hierarchical catalog grouping.
+    # Example:
+    # Pathology -> Hematology -> CBC
     parent = models.ForeignKey(
         "self",
         on_delete=models.SET_NULL,
@@ -60,6 +94,23 @@ class DiagnosticCategory(models.Model):
         return self.name
 
 
+ # =========================================================
+ # DIAGNOSTIC SERVICE MASTER
+ # =========================================================
+ # Canonical diagnostic service definition.
+ #
+ # Represents a single executable diagnostic investigation.
+ #
+ # Examples:
+ # - CBC
+ # - HbA1c
+ # - X-Ray Chest
+ # - MRI Brain
+ #
+ # This is NOT pricing-specific.
+ # Pricing is resolved later through provider/lab pricing tables.
+ # =========================================================
+
 class DiagnosticServiceMaster(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
@@ -72,6 +123,8 @@ class DiagnosticServiceMaster(models.Model):
         related_name="services",
     )
 
+    # Operational collection metadata.
+    # Used during collection workflow and lab execution.
     sample_type = models.CharField(max_length=100, blank=True, null=True)
     home_collection_possible = models.BooleanField(default=False)
     appointment_required = models.BooleanField(default=False)
@@ -81,6 +134,10 @@ class DiagnosticServiceMaster(models.Model):
     preparation_notes = models.TextField(blank=True, null=True)
 
     short_name = models.CharField(max_length=100, blank=True, default="")
+    # Search optimization fields.
+    # Enables flexible doctor search experience.
+    # Example:
+    # CBC -> Complete Blood Count
     synonyms = ArrayField(models.CharField(max_length=200), default=list, blank=True)
     tags = ArrayField(
         models.CharField(max_length=200),
@@ -88,8 +145,13 @@ class DiagnosticServiceMaster(models.Model):
         blank=True,
         help_text="Search tags for catalog search (Postgres ArrayField).",
     )
+    # Pre-computed normalized search document.
+    # Used for trigram/fuzzy search performance.
     search_text = models.TextField(blank=True, default="")
     synopsis = models.CharField(max_length=500, blank=True, default="")
+    # Ranking signals.
+    # Future recommendation engine and smart ordering
+    # systems can use these signals.
     popularity_score = models.FloatField(default=0.0)
     doctor_usage_score = models.FloatField(default=0.0)
 
@@ -117,6 +179,10 @@ class DiagnosticServiceMaster(models.Model):
         ]
         ordering = ["name"]
 
+    # Automatically refreshes searchable normalized text.
+    #
+    # Avoids expensive runtime concatenation during
+    # catalog search operations.
     def save(self, *args, **kwargs):
         from diagnostics_engine.text_normalize import compose_service_search_text
 
@@ -133,6 +199,22 @@ class DiagnosticServiceMaster(models.Model):
         return self.name
 
 
+ # =========================================================
+ # DIAGNOSTIC PACKAGE
+ # =========================================================
+ # Represents a grouped sellable diagnostic bundle.
+ #
+ # Examples:
+ # - Full Body Checkup
+ # - Diabetes Package
+ # - Women's Wellness Package
+ #
+ # IMPORTANT:
+ # Package composition is versioned.
+ # Old orders should continue referencing old package versions
+ # even after package updates.
+ # =========================================================
+
 class DiagnosticPackage(models.Model):
     """
     Versioned sellable package definition (composition lives in DiagnosticPackageItem).
@@ -141,6 +223,10 @@ class DiagnosticPackage(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
+    # Stable business identifier shared across versions.
+    # Example:
+    # HEALTH-PLUS v1
+    # HEALTH-PLUS v2
     lineage_code = models.CharField(
         max_length=100,
         db_index=True,
@@ -149,6 +235,8 @@ class DiagnosticPackage(models.Model):
     version = models.PositiveIntegerField(default=1)
     is_latest = models.BooleanField(default=True, db_index=True)
 
+    # Links package version history.
+    # Helps preserve auditability and historical integrity.
     parent_package = models.ForeignKey(
         "self",
         on_delete=models.SET_NULL,
@@ -177,6 +265,8 @@ class DiagnosticPackage(models.Model):
         default=PackageType.SYSTEM,
     )
 
+    # Defines operational execution mode.
+    # Future orchestration may dynamically route based on this.
     collection_type = models.CharField(
         max_length=10,
         choices=CollectionType.choices,
@@ -187,6 +277,8 @@ class DiagnosticPackage(models.Model):
     max_tat_hours = models.PositiveIntegerField(null=True, blank=True)
     fasting_required = models.BooleanField(default=False)
 
+    # Clinical applicability filters.
+    # Used for recommendation engines and package eligibility.
     gender_applicability = models.CharField(
         max_length=20,
         choices=GenderApplicability.choices,
@@ -197,6 +289,8 @@ class DiagnosticPackage(models.Model):
 
     tags = models.JSONField(blank=True, null=True)
     conditions_supported = models.JSONField(blank=True, null=True)
+    # Ranking + recommendation signal.
+    # Useful for smart package recommendation systems.
     package_popularity_score = models.DecimalField(
         max_digits=10, decimal_places=4, default=0, blank=True
     )
@@ -252,6 +346,13 @@ class DiagnosticPackage(models.Model):
         super().save(*args, **kwargs)
         self.refresh_search_text()
 
+    # Rebuilds normalized package search document.
+    #
+    # Includes:
+    # - package metadata
+    # - tags
+    # - package item names
+    # - package item codes
     def refresh_search_text(self) -> None:
         from diagnostics_engine.text_normalize import compose_package_search_text
 
@@ -277,6 +378,21 @@ class DiagnosticPackage(models.Model):
         return f"{self.name} ({self.lineage_code} v{self.version})"
 
 
+ # =========================================================
+ # PACKAGE ITEM
+ # =========================================================
+ # Defines package composition.
+ #
+ # Example:
+ # Diabetes Package:
+ # - HbA1c
+ # - Fasting Sugar
+ # - Lipid Profile
+ #
+ # This layer allows package expansion into individual
+ # execution-level diagnostic services.
+ # =========================================================
+
 class DiagnosticPackageItem(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
@@ -291,6 +407,8 @@ class DiagnosticPackageItem(models.Model):
         related_name="package_items",
     )
 
+    # Quantity support is future-safe.
+    # Most investigations are quantity=1 today.
     quantity = models.PositiveIntegerField(default=1)
     is_mandatory = models.BooleanField(default=True)
     display_order = models.PositiveIntegerField(default=0)
@@ -338,11 +456,36 @@ class DiagnosticPackageItem(models.Model):
         return f"{self.package_id} → {self.service_id}"
 
 
+ # =========================================================
+ # CLINICAL RULE ENGINE
+ # =========================================================
+ # These mappings power deterministic recommendation logic.
+ #
+ # Future recommendation pipeline may combine:
+ # - deterministic rules
+ # - statistical ranking
+ # - doctor personalization
+ # - AI recommendation systems
+ # =========================================================
+
 class ClinicalRuleType(models.TextChoices):
     REQUIRED = "required", "Required"
     RECOMMENDED = "recommended", "Recommended"
     OPTIONAL = "optional", "Optional"
 
+
+ # =========================================================
+ # DIAGNOSIS -> TEST MAPPING
+ # =========================================================
+ # Maps diagnoses to clinically relevant investigations.
+ #
+ # Examples:
+ # Diabetes -> HbA1c
+ # Fever -> CBC
+ # Hypertension -> Lipid Profile
+ #
+ # Used before statistical recommendation ranking.
+ # =========================================================
 
 class DiagnosisTestMapping(models.Model):
     """
@@ -367,6 +510,8 @@ class DiagnosisTestMapping(models.Model):
         default=ClinicalRuleType.RECOMMENDED,
         db_index=True,
     )
+    # Relative recommendation strength.
+    # Higher weight increases recommendation priority.
     weight = models.DecimalField(max_digits=5, decimal_places=2, default=1.00)
     reason_template = models.CharField(max_length=255, blank=True, null=True)
     ordering = models.PositiveIntegerField(default=0)
@@ -405,6 +550,20 @@ class DiagnosisTestMapping(models.Model):
     def __str__(self):
         return f"{self.diagnosis_id} -> {self.service_id} ({self.rule_type})"
 
+
+ # =========================================================
+ # SYMPTOM -> TEST MAPPING
+ # =========================================================
+ # Maps symptoms directly to investigations.
+ #
+ # Examples:
+ # Chest pain -> ECG
+ # Fever -> CBC
+ # Cough -> Chest X-Ray
+ #
+ # Useful during early consultation stages before
+ # diagnosis is finalized.
+ # =========================================================
 
 class SymptomTestMapping(models.Model):
     """

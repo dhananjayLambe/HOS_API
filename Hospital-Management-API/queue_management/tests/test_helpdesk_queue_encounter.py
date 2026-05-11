@@ -172,6 +172,29 @@ class HelpdeskQueueEncounterTests(TestCase):
         self.assertTrue(Consultation.objects.filter(encounter=enc).exists())
         self.assertEqual(enc.status, "consultation_in_progress")
 
+    def test_queue_start_second_patch_returns_already_started(self):
+        r = self.client.post(
+            reverse("queue-check-in"),
+            {
+                "clinic_id": str(self.clinic.id),
+                "patient_account_id": str(self.patient_account.id),
+                "patient_profile_id": str(self.profile.id),
+                "doctor_id": str(self.doctor.id),
+            },
+            format="json",
+        )
+        qid = r.data["id"]
+        doc_client = _doctor_client(self.doctor.user)
+        start_url = reverse("queue-start")
+        body = {"queue_id": str(qid), "clinic_id": str(self.clinic.id)}
+        r1 = doc_client.patch(start_url, body, format="json")
+        self.assertEqual(r1.status_code, status.HTTP_200_OK, r1.data)
+        self.assertNotIn("already_started", r1.data or {})
+
+        r2 = doc_client.patch(start_url, body, format="json")
+        self.assertEqual(r2.status_code, status.HTTP_200_OK, r2.data)
+        self.assertTrue(r2.data.get("already_started"))
+
     def test_doctor_queue_start_from_vitals_done_creates_consultation(self):
         r = self.client.post(
             reverse("queue-check-in"),

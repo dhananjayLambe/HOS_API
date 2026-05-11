@@ -1,5 +1,5 @@
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from django.core.exceptions import ValidationError
 from django.test import TestCase
@@ -17,7 +17,14 @@ class EndConsultationViewContractTests(TestCase):
     def _request(self, payload=None):
         raw = self.factory.post("/consultations/end/", payload or {}, format="json")
         request = self.view.initialize_request(raw)
-        request.user = SimpleNamespace(id="user-1")
+        groups = MagicMock()
+        groups.filter.return_value.exists.return_value = False
+        request.user = SimpleNamespace(
+            id="user-1",
+            is_authenticated=True,
+            is_superuser=False,
+            groups=groups,
+        )
         return request
 
     @patch("consultations_core.api.views.preconsultation.get_object_or_404")

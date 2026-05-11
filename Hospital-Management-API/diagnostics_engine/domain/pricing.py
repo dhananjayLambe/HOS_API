@@ -66,6 +66,41 @@ class PricingQuoteService:
             "lab_payout_snapshot": None,
         }
 
+    @classmethod
+    def quote_service_line(cls, branch: LabBranch, service) -> dict:
+        """Active branch price + margin snapshots for a catalog service (orchestration / order lines)."""
+        today = timezone.now().date()
+        row = (
+            BranchServicePricing.objects.filter(
+                branch=branch,
+                service=service,
+                is_active=True,
+                is_available=True,
+                valid_from__lte=today,
+            )
+            .filter(Q(valid_to__isnull=True) | Q(valid_to__gte=today))
+            .order_by("-valid_from")
+            .first()
+        )
+        if not row:
+            raise ValueError(f"No active price for service {service.code} at branch.")
+        plat = row.platform_margin_snapshot
+        if plat is None:
+            plat = row.platform_margin_value
+        doc = row.doctor_margin_snapshot
+        if doc is None:
+            doc = row.doctor_commission_value
+        lab = row.lab_payout_snapshot or Decimal("0")
+        return {
+            "selling_price": row.selling_price,
+            "is_price_derived": False,
+            "branch_service_pricing_id": row.id,
+            "platform_earning_snapshot": plat,
+            "doctor_earning_snapshot": doc,
+            "lab_payout_snapshot": lab,
+            "home_collection_supported": row.home_collection_supported,
+        }
+
     @staticmethod
     def _quote_service(branch, service, today) -> Decimal:
         row = (

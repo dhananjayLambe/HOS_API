@@ -196,13 +196,11 @@ export default function CompletedPrescriptionPage() {
           throw new Error("Consultation not available for this encounter.");
         }
 
-        const summaryRes = await backendAxiosClient.get<PrescriptionSummaryPayload>(
-          `/consultations/${resolvedConsultationId}/summary-lite/`
-        );
-        const previewRes = await backendAxiosClient.post<{ html?: string }>(
-          `/consultations/${resolvedConsultationId}/summary-lite/html/`,
-          {}
-        );
+        const cid = encodeURIComponent(resolvedConsultationId);
+        const [summaryRes, previewRes] = await Promise.all([
+          backendAxiosClient.get<PrescriptionSummaryPayload>(`/consultations/${cid}/summary-lite/`),
+          backendAxiosClient.post<{ html?: string }>(`/consultations/${cid}/summary-lite/html/`, {}),
+        ]);
         if (isMounted) setSummary(summaryRes.data);
         if (isMounted) setPreviewHtml((previewRes.data?.html || "").trim());
       } catch (error: any) {
@@ -230,9 +228,12 @@ export default function CompletedPrescriptionPage() {
     if (!encounterId || !consultationId || loading || lookupFailed) return;
     if (cancelState) return;
     const wasDownloaded = window.sessionStorage.getItem(downloadedKey(encounterId)) === "1";
-    if (!wasDownloaded) {
+    if (wasDownloaded) return;
+    // Defer PDF so summary + iframe paint are not competing with a second heavy request.
+    const t = window.setTimeout(() => {
       void downloadPdf(true);
-    }
+    }, 350);
+    return () => clearTimeout(t);
   }, [cancelState, consultationId, downloadPdf, encounterId, loading, lookupFailed]);
 
   const handlePrint = useCallback(() => {
@@ -279,9 +280,10 @@ export default function CompletedPrescriptionPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-[40vh] items-center justify-center gap-3">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        <span className="text-sm text-muted-foreground">Loading completion workspace...</span>
+      <div className="flex min-h-[40vh] flex-col items-center justify-center gap-2 px-4">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-hidden />
+        <p className="text-center text-sm font-medium text-foreground">Opening prescription summary…</p>
+        <p className="text-center text-xs text-muted-foreground">Loading preview and details</p>
       </div>
     );
   }

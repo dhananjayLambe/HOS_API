@@ -1,8 +1,13 @@
+import { Loader2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function CompletedPrescriptionLoading() {
   return (
     <div className="space-y-5">
+      <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border bg-white py-6 shadow-sm sm:flex-row sm:gap-3">
+        <Loader2 className="h-5 w-5 shrink-0 animate-spin text-muted-foreground" aria-hidden />
+        <p className="text-center text-sm font-medium text-foreground">Opening prescription summary…</p>
+      </div>
       <div className="rounded-2xl border bg-white p-4 shadow-sm">
         <Skeleton className="h-5 w-64" />
         <Skeleton className="mt-2 h-4 w-80" />

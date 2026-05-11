@@ -2,6 +2,7 @@
 
 from diagnostics_engine.domain.cancellation import CancellationService
 from diagnostics_engine.domain.fulfillment import FulfillmentValidationService
+from diagnostics_engine.domain.order_creation import DiagnosticOrderCreationResult, DiagnosticOrderCreationService
 from diagnostics_engine.domain.order_status import OrderStatusAggregationService
 from diagnostics_engine.domain.package_orders import (
     build_composition_snapshot,
@@ -12,6 +13,8 @@ from diagnostics_engine.domain.pricing import PricingQuoteService
 
 __all__ = [
     "CancellationService",
+    "DiagnosticOrderCreationResult",
+    "DiagnosticOrderCreationService",
     "FulfillmentValidationService",
     "OrderStatusAggregationService",
     "PricingQuoteService",

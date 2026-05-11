@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertCircle,
@@ -247,9 +247,29 @@ function extractDurationDisplayFromMedicine(raw: any): string {
   return "";
 }
 
+const ENCOUNTER_FETCH_NULL_RETRIES = 3;
+const ENCOUNTER_FETCH_RETRY_DELAY_MS = 60;
+/** Same-page start: `invalidateEncounterById` does not change pathname, so poll until POST /consultation/start/ wins. */
+const CONSULTATION_ID_POLL_MS = 500;
+const CONSULTATION_ID_POLL_MAX = 40;
+
+function encounterStatusToken(status: string | undefined): string {
+  return (status ?? "").toUpperCase().replace(/\s/g, "_");
+}
+
+function shouldPollForConsultationId(statusToken: string): boolean {
+  return (
+    statusToken === "PRE_CONSULTATION_COMPLETED" ||
+    statusToken === "CREATED" ||
+    statusToken === "CONSULTATION_IN_PROGRESS"
+  );
+}
+
 export function ConsultationActionBar() {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
+  const encounterRouteKey = `${pathname ?? ""}?${searchParams?.toString() ?? ""}`;
   const toast = useToastNotification();
   /** useToastNotification() returns a new object each render; keep a stable ref for effects. */
   const toastErrorRef = useRef(toast.error);
@@ -294,6 +314,16 @@ export function ConsultationActionBar() {
   const [clinicalTemplatesError, setClinicalTemplatesError] = useState<string | null>(null);
   const [templatesRefetchNonce, setTemplatesRefetchNonce] = useState(0);
   const templateSearchInputRef = useRef<HTMLInputElement | null>(null);
+  const finalizationOverlayDismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (finalizationOverlayDismissTimerRef.current != null) {
+        clearTimeout(finalizationOverlayDismissTimerRef.current);
+        finalizationOverlayDismissTimerRef.current = null;
+      }
+    };
+  }, []);
 
   // Fetch visit_pnr when encounterId is available
   useEffect(() => {
@@ -305,16 +335,49 @@ export function ConsultationActionBar() {
     let cancelled = false;
     // Force refetch: encounter cache may still hold pre-consultation payload (consultation_id null)
     // after the doctor completes pre-consult and consultation/start runs.
+    // `encounterRouteKey` (pathname + query) re-runs this when navigating consultation → start-consultation
+    // with the same encounter_id so the action bar is not stuck with a stale null consultation_id.
     void (async () => {
+      const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
       try {
         let encounter = await fetchEncounterById(encounterId, { force: true });
         if (cancelled) return;
         if (!encounter) {
           encounter = await fetchEncounterById(encounterId, { force: false });
         }
+        for (let attempt = 0; !encounter && attempt < ENCOUNTER_FETCH_NULL_RETRIES; attempt += 1) {
+          await sleep(ENCOUNTER_FETCH_RETRY_DELAY_MS);
+          if (cancelled) return;
+          encounter = await fetchEncounterById(encounterId, { force: true });
+          if (cancelled) return;
+          if (!encounter) {
+            encounter = await fetchEncounterById(encounterId, { force: false });
+          }
+        }
         if (cancelled || !encounter) return;
         setVisitPnr(encounter.visit_pnr ?? null);
-        setConsultationId(encounter.consultation_id ?? null);
+        let cid = encounter.consultation_id ?? null;
+        setConsultationId(cid);
+        const st0 = encounterStatusToken(encounter.status);
+        if (!cid && shouldPollForConsultationId(st0)) {
+          for (let p = 0; p < CONSULTATION_ID_POLL_MAX && !cancelled; p += 1) {
+            await sleep(CONSULTATION_ID_POLL_MS);
+            if (cancelled) return;
+            const next = await fetchEncounterById(encounterId, { force: true });
+            if (cancelled || !next) continue;
+            const st = encounterStatusToken(next.status);
+            if (next.consultation_id) {
+              cid = next.consultation_id;
+              setConsultationId(cid);
+              setVisitPnr(next.visit_pnr ?? null);
+              break;
+            }
+            if (!shouldPollForConsultationId(st)) {
+              setVisitPnr(next.visit_pnr ?? null);
+              break;
+            }
+          }
+        }
       } catch {
         if (!cancelled) {
           setVisitPnr(null);
@@ -325,7 +388,7 @@ export function ConsultationActionBar() {
     return () => {
       cancelled = true;
     };
-  }, [encounterId, fetchEncounterById]);
+  }, [encounterId, fetchEncounterById, encounterRouteKey]);
 
   const copyPnrToClipboard = () => {
     if (!visitPnr) return;
@@ -627,14 +690,15 @@ export function ConsultationActionBar() {
     URL.revokeObjectURL(url);
   };
 
-  const renderCompletedPreviewAndRedirect = async () => {
+  /** Returns true when navigation to the completion workspace was scheduled (keep overlay until dismiss timer). */
+  const renderCompletedPreviewAndRedirect = (): boolean => {
     if (!encounterId) {
       toast.error("Encounter unavailable. Unable to open completion workspace.");
-      return;
+      return false;
     }
     if (!consultationId) {
       toast.error("Consultation not ready. Please refresh and try again.");
-      return;
+      return false;
     }
     window.sessionStorage.setItem(
       `rx-completion:${encounterId}`,
@@ -650,6 +714,7 @@ export function ConsultationActionBar() {
       useConsultationStore.getState().reset();
       router.replace(`/prescriptions/completed/${encodeURIComponent(encounterId)}`);
     }, 0);
+    return true;
   };
 
   const handleEndConsultation = async () => {
@@ -704,6 +769,7 @@ export function ConsultationActionBar() {
 
     setIsEndingConsultation(true);
     setIsFinalizationOverlayVisible(true);
+    let scheduledCompletionNavigation = false;
     try {
       const store = useConsultationStore.getState();
       const payloadForPost = buildEndConsultationPayload(store);
@@ -713,7 +779,7 @@ export function ConsultationActionBar() {
       );
       clearSectionValidationUi();
       setShowEndConsultationConfirm(false);
-      await renderCompletedPreviewAndRedirect();
+      scheduledCompletionNavigation = renderCompletedPreviewAndRedirect();
     } catch (err: any) {
       const responseData = err?.response?.data;
       const rawErrors = responseData?.errors;
@@ -732,8 +798,10 @@ export function ConsultationActionBar() {
       if (alreadyCompleted) {
         try {
           setShowEndConsultationConfirm(false);
-          await renderCompletedPreviewAndRedirect();
-          return;
+          scheduledCompletionNavigation = renderCompletedPreviewAndRedirect();
+          if (scheduledCompletionNavigation) {
+            return;
+          }
         } catch {
           // continue to generic failure handling
         }
@@ -746,7 +814,18 @@ export function ConsultationActionBar() {
       );
     } finally {
       setIsEndingConsultation(false);
-      setIsFinalizationOverlayVisible(false);
+      if (finalizationOverlayDismissTimerRef.current != null) {
+        clearTimeout(finalizationOverlayDismissTimerRef.current);
+        finalizationOverlayDismissTimerRef.current = null;
+      }
+      if (scheduledCompletionNavigation) {
+        finalizationOverlayDismissTimerRef.current = setTimeout(() => {
+          finalizationOverlayDismissTimerRef.current = null;
+          setIsFinalizationOverlayVisible(false);
+        }, 800);
+      } else {
+        setIsFinalizationOverlayVisible(false);
+      }
     }
   };
 
@@ -1229,7 +1308,7 @@ export function ConsultationActionBar() {
                 <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
               </div>
               <p className="text-center text-base font-semibold text-gray-900">Finalizing consultation...</p>
-              <p className="mt-1 text-center text-sm text-gray-600">Generating prescription...</p>
+              <p className="mt-1 text-center text-sm text-gray-600">Opening prescription summary…</p>
               <div className="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-blue-100">
                 <div className="h-full w-1/2 animate-pulse rounded-full bg-blue-600" />
               </div>

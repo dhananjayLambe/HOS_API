@@ -7,9 +7,52 @@ from django.utils import timezone
 from .choices import OrderStatus, ReportLifecycleStatus, ReportStorageMode
 from .orders import DiagnosticOrder, DiagnosticOrderTestLine
 
+# =========================================================
+# DIAGNOSTIC REPORT DOMAIN
+# =========================================================
+# This module handles diagnostic result persistence.
+#
+# Two reporting architectures exist:
+#
+# 1. DiagnosticReport
+#    Legacy / order-level reporting.
+#    One report per order.
+#
+# 2. DiagnosticTestReport
+#    Modern execution-level reporting.
+#    One report per execution test line.
+#
+# Why execution-level reporting matters:
+# - package expansion support
+# - partial report delivery
+# - independent workflow tracking
+# - lab technician workflows
+# - enterprise scalability
+#
+# Architecture layering:
+# DiagnosticOrder
+#    -> DiagnosticOrderTestLine
+#           -> DiagnosticTestReport
+#
+# Future direction:
+# DiagnosticTestReport becomes the primary reporting model.
+# =========================================================
+
 
 class DiagnosticReport(models.Model):
-    """Optional rollup / legacy single report per order (older flows)."""
+    """
+    Legacy order-level reporting model.
+
+    Older/simple workflows may generate a single report
+    for the entire diagnostic order.
+
+    Example:
+    CBC + Sugar + Lipid Profile
+        -> one combined PDF/report
+
+    Modern enterprise workflows should prefer
+    DiagnosticTestReport for execution-level tracking.
+    """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
@@ -21,15 +64,33 @@ class DiagnosticReport(models.Model):
         blank=True,
     )
 
+    # Defines how report data is persisted.
+    #
+    # STRUCTURED:
+    #     normalized JSON-style report data.
+    #
+    # FILE:
+    #     uploaded PDF/image report.
+    #
+    # HYBRID:
+    #     structured + uploaded artifacts.
     storage_mode = models.CharField(
         max_length=20,
         choices=ReportStorageMode.choices,
         default=ReportStorageMode.STRUCTURED,
     )
 
+    # Structured machine-readable diagnostic result.
+    # Future AI analytics and longitudinal tracking
+    # will primarily use this layer.
     structured_result = models.JSONField(blank=True, null=True)
     file = models.FileField(upload_to="diagnostic_reports/", null=True, blank=True)
 
+    # Report processing lifecycle.
+    #
+    # Independent from order lifecycle.
+    # Example:
+    # PENDING -> IN_PROGRESS -> READY -> DELIVERED
     status = models.CharField(
         max_length=20,
         choices=ReportLifecycleStatus.choices,
@@ -43,6 +104,8 @@ class DiagnosticReport(models.Model):
         related_name="diagnostic_reports_uploaded",
     )
 
+    # Locked after delivery to preserve
+    # medical/legal audit integrity.
     is_editable = models.BooleanField(default=True)
 
     uploaded_at = models.DateTimeField(auto_now_add=True)
@@ -70,6 +133,11 @@ class DiagnosticReport(models.Model):
             models.Index(fields=["status"]),
         ]
 
+    # Handles:
+    # - edit locking
+    # - legacy order status synchronization
+    # - audit logging
+    # - report delivery timestamping
     def save(self, *args, **kwargs):
         with transaction.atomic():
             old_status = None
@@ -81,6 +149,11 @@ class DiagnosticReport(models.Model):
 
             super().save(*args, **kwargs)
 
+            # Legacy compatibility path.
+            #
+            # If execution-level test lines do not exist,
+            # synchronize order state using the legacy
+            # single-report workflow.
             if self.order_id and not self.order.test_lines.exists():
                 from diagnostics_engine.domain.order_status import OrderStatusAggregationService
 
@@ -109,6 +182,12 @@ class DiagnosticReport(models.Model):
                     reason=None,
                 )
 
+    # Administrative override.
+    #
+    # Useful for:
+    # - corrected reports
+    # - compliance fixes
+    # - upload mistakes
     def allow_admin_edit(self):
         self.is_editable = True
         self.save(update_fields=["is_editable"])
@@ -118,30 +197,67 @@ class DiagnosticReport(models.Model):
 
 
 class DiagnosticTestReport(models.Model):
-    """Per–test-line report (preferred for multi-test / package orders)."""
+    """
+    Execution-level diagnostic reporting model.
+
+    Each DiagnosticOrderTestLine gets its own report.
+
+    Example:
+    Full Body Package
+        -> CBC report
+        -> Lipid Profile report
+        -> HbA1c report
+
+    This is the preferred scalable architecture.
+    """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
+    # Direct linkage to execution-level workflow.
+    #
+    # Enables:
+    # - partial completion
+    # - package expansion tracking
+    # - technician workflows
+    # - granular operational monitoring
     order_test_line = models.OneToOneField(
         DiagnosticOrderTestLine,
         on_delete=models.CASCADE,
         related_name="test_report",
     )
 
+    # Same storage abstraction as DiagnosticReport.
+    # Designed for future structured + AI-ready reporting.
     storage_mode = models.CharField(
         max_length=20,
         choices=ReportStorageMode.choices,
         default=ReportStorageMode.STRUCTURED,
     )
+    # Machine-readable diagnostic result.
+    #
+    # Future use cases:
+    # - AI analytics
+    # - trend tracking
+    # - abnormality detection
+    # - longitudinal patient history
     structured_result = models.JSONField(blank=True, null=True)
     file = models.FileField(upload_to="diagnostic_test_reports/", null=True, blank=True)
 
+    # Execution-level report lifecycle state.
+    #
+    # Used by:
+    # - lab technicians
+    # - doctor dashboards
+    # - patient notifications
+    # - WhatsApp delivery workflows
     status = models.CharField(
         max_length=20,
         choices=ReportLifecycleStatus.choices,
         default=ReportLifecycleStatus.PENDING,
     )
 
+    # Prevents post-delivery modification.
+    # Important for audit + compliance safety.
     is_editable = models.BooleanField(default=True)
 
     uploaded_at = models.DateTimeField(auto_now_add=True)
@@ -177,6 +293,11 @@ class DiagnosticTestReport(models.Model):
             models.Index(fields=["status"]),
         ]
 
+    # Handles:
+    # - edit locking
+    # - execution-level aggregation
+    # - order lifecycle synchronization
+    # - audit logging
     def save(self, *args, **kwargs):
         with transaction.atomic():
             old_status = None
@@ -188,6 +309,8 @@ class DiagnosticTestReport(models.Model):
 
             super().save(*args, **kwargs)
 
+            # Aggregate all execution-level report states
+            # upward into the parent order lifecycle.
             from diagnostics_engine.domain.order_status import OrderStatusAggregationService
 
             OrderStatusAggregationService.sync_from_test_reports(self.order_test_line.order)
@@ -209,6 +332,8 @@ class DiagnosticTestReport(models.Model):
         return f"TestReport - {self.order_test_line_id}"
 
 
+# Public exports for diagnostics reporting domain.
+# Keeps imports standardized across services.
 __all__ = [
     "DiagnosticReport",
     "DiagnosticTestReport",

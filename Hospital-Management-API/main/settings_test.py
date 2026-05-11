@@ -36,6 +36,9 @@ PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 
 DEBUG = False
 LOGGING_CONFIG = None
+
+# django_ratelimit requires shared cache in production; locmem is fine for tests.
+SILENCED_SYSTEM_CHECKS = ["django_ratelimit.E003", "django_ratelimit.W001"]
 MEDIA_ROOT = tempfile.mkdtemp(prefix="hos_test_media_")
 
 REST_FRAMEWORK = {**REST_FRAMEWORK, "DEFAULT_THROTTLE_CLASSES": []}  # noqa: F405

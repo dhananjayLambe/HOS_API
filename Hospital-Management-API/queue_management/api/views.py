@@ -287,6 +287,21 @@ class HelpdeskQueueContextAPIView(APIView):
         )
 
 
+def _queue_start_no_waiting_row_payload(*, clinic_id, queue_id, encounter_id, today):
+    """Structured 409 body so clients and logs can see context (plan: inspect-queue-409)."""
+    payload = {
+        "error": "Patient not found or not in waiting/vitals-done state.",
+        "code": "queue_start_no_waiting_row",
+        "clinic_id": str(clinic_id),
+        "queue_date": today.isoformat(),
+    }
+    if queue_id is not None:
+        payload["queue_id"] = str(queue_id)
+    if encounter_id is not None:
+        payload["encounter_id"] = str(encounter_id)
+    return payload
+
+
 # 3. PATCH /queue/start/ – Mark a patient as In Consultation
 class StartConsultationAPIView(APIView):
     permission_classes = [IsAuthenticated, IsDoctor]
@@ -358,8 +373,31 @@ class StartConsultationAPIView(APIView):
             transaction.on_commit(_dispatch_realtime_sync)
             return Response({"message": "Patient is now in consultation."}, status=status.HTTP_200_OK)
         except Queue.DoesNotExist:
+            # Idempotent success: duplicate PATCH after start (or race) leaves row in_consultation.
+            alt_filters = {
+                "clinic_id": clinic_id,
+                "created_at__date": today,
+                "status": "in_consultation",
+            }
+            if queue_id:
+                alt_filters["id"] = queue_id
+            else:
+                alt_filters["encounter_id"] = encounter_id
+            if Queue.objects.filter(**alt_filters).exists():
+                return Response(
+                    {
+                        "message": "Patient is already in consultation.",
+                        "already_started": True,
+                    },
+                    status=status.HTTP_200_OK,
+                )
             return Response(
-                {"error": "Patient not found or not in waiting/vitals-done state."},
+                _queue_start_no_waiting_row_payload(
+                    clinic_id=clinic_id,
+                    queue_id=queue_id,
+                    encounter_id=encounter_id,
+                    today=today,
+                ),
                 status=status.HTTP_409_CONFLICT,
             )
 

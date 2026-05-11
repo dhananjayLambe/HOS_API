@@ -23,7 +23,7 @@ from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 # Local App Imports
-from account.permissions import IsDoctor
+from account.permissions import IsDiagnosticOrderOrchestrationActor, IsDoctor
 from consultations_core.services.consultation_engine import ConsultationEngine
 from consultations_core.services.metadata_loader import MetadataLoader
 from consultations_core.services.preconsultation_service import (
@@ -35,6 +35,7 @@ from consultations_core.services.consultation_start_service import start_consult
 from consultations_core.services.encounter_service import EncounterService
 from consultations_core.services.encounter_state_machine import EncounterStateMachine
 from consultations_core.services.end_consultation_service import persist_consultation_end_state
+from diagnostics_engine.domain.order_creation import DiagnosticOrderCreationService
 from consultations_core.domain.encounter_status import encounter_status_for_api, normalize_encounter_status
 from patient_account.models import PatientProfile
 from clinic.models import Clinic
@@ -52,6 +53,39 @@ from collections import OrderedDict
 
 
 logger = logging.getLogger(__name__)
+
+
+def _diagnostic_lab_branch_id_from_request(request_data):
+    """Optional branch for EMR → diagnostic order orchestration on end consultation."""
+    if not isinstance(request_data, dict):
+        return None
+    meta = request_data.get("meta")
+    if isinstance(meta, dict):
+        bid = meta.get("diagnostic_lab_branch_id")
+        if bid is None:
+            bid = meta.get("lab_branch_id")
+        if bid not in (None, ""):
+            return bid
+    bid = request_data.get("diagnostic_lab_branch_id")
+    if bid is None:
+        bid = request_data.get("lab_branch_id")
+    if bid in (None, ""):
+        return None
+    return bid
+
+
+def _format_diagnostic_order_skip_reason(exc: DjangoValidationError) -> str:
+    msgs = list(getattr(exc, "messages", []) or [])
+    if not msgs and hasattr(exc, "message_dict"):
+        for _, values in getattr(exc, "message_dict", {}).items():
+            if isinstance(values, (list, tuple)):
+                msgs.extend([str(v) for v in values if str(v).strip()])
+            elif values:
+                msgs.append(str(values))
+    if msgs:
+        return "; ".join(str(m) for m in msgs if str(m).strip())
+    raw = str(exc).strip()
+    return raw or "validation_failed"
 
 
 def _vitals_data_for_api(raw_data):
@@ -1348,6 +1382,36 @@ class EndConsultationAPIView(APIView):
                 status_code=status.HTTP_409_CONFLICT,
             )
 
+        diagnostic_order_response = {}
+        orch_perm = IsDiagnosticOrderOrchestrationActor()
+        if orch_perm.has_permission(request, self):
+            branch_id = _diagnostic_lab_branch_id_from_request(
+                request.data if isinstance(request.data, dict) else None
+            )
+            try:
+                result = DiagnosticOrderCreationService.create_order_from_consultation(
+                    consultation=consultation,
+                    branch_id=branch_id,
+                    source="emr",
+                    created_by=request.user,
+                )
+                diagnostic_order_response = {
+                    "diagnostic_order_created": True,
+                    "diagnostic_order_idempotent": result.idempotent,
+                }
+            except DjangoValidationError as exc:
+                reason = _format_diagnostic_order_skip_reason(exc)
+                logger.warning(
+                    "EndConsultation diagnostic order skipped encounter=%s consultation=%s reason=%s",
+                    encounter_id,
+                    consultation.pk,
+                    reason,
+                )
+                diagnostic_order_response = {
+                    "diagnostic_order_skipped": True,
+                    "diagnostic_order_skip_reason": reason,
+                }
+
         EncounterStateMachine.complete_consultation(encounter, user=request.user)
         encounter.refresh_from_db()
         # Safeguard: terminal state must have is_active=False (prevents zombie active encounter / unique constraint)
@@ -1366,6 +1430,7 @@ class EndConsultationAPIView(APIView):
             {
                 "status": "success",
                 "redirect_url": "/doctor-dashboard",
+                **diagnostic_order_response,
             },
             status=status.HTTP_200_OK,
         )
