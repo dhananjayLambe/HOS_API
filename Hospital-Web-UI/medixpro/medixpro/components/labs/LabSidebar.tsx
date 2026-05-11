@@ -11,10 +11,12 @@ import {
 } from "@/components/labs/labDesignTokens";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useMobile } from "@/hooks/use-mobile";
-import { useAuth } from "@/lib/authContext";
+import { useLabSession } from "@/lib/labs/session/lab-session-context";
+import { labOperationalRoleLabel } from "@/lib/labs/session/lab-role-labels";
+import { organizationInitials } from "@/lib/labs/session/lab-session-display";
 import { cn } from "@/lib/utils";
-import logo from "@/public/icon.png";
 import { FlaskConical, X } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -38,15 +40,20 @@ type LabSidebarProps = {
 export function LabSidebar({ isOpen, setIsOpen }: LabSidebarProps) {
   const pathname = usePathname();
   const isMobile = useMobile();
-  const { user, role } = useAuth();
+  const { data, isPending, isError } = useLabSession();
 
-  const displayName =
-    [user?.first_name, user?.last_name].filter(Boolean).join(" ").trim() || "User";
-  const displayRole = role ? (role.toLowerCase() === "labadmin" ? "Lab administrator" : role) : "";
+  const orgDisplay = data?.organization.display_name || data?.organization.organization_name || "MedixPro";
+  const orgLogo = data?.organization.logo?.trim() || "";
+  const orgInitials = organizationInitials(orgDisplay);
+  const branchLine = data?.branch.branch_name ?? "";
+  const displayName = data
+    ? [data.user.first_name, data.user.last_name].filter(Boolean).join(" ").trim() || "—"
+    : "";
+  const displayRole = data ? labOperationalRoleLabel(data.lab_user.role) : "";
   const initials =
-    user?.first_name && user?.last_name
-      ? `${user.first_name[0]}${user.last_name[0]}`.toUpperCase()
-      : user?.first_name?.[0]?.toUpperCase() || user?.username?.[0]?.toUpperCase() || "U";
+    data?.user.first_name && data.user.last_name
+      ? `${data.user.first_name[0]}${data.user.last_name[0]}`.toUpperCase()
+      : data?.user.first_name?.[0]?.toUpperCase() || data?.user.email?.[0]?.toUpperCase() || "U";
 
   const sidebarClasses = cn(
     labSidebarShell,
@@ -54,20 +61,46 @@ export function LabSidebar({ isOpen, setIsOpen }: LabSidebarProps) {
     {
       "translate-x-0": isOpen,
       "-translate-x-full": !isOpen,
-    }
+    },
   );
 
   return (
     <aside className={sidebarClasses}>
       <div className="flex items-center justify-between border-b border-[#ECEBFF] px-4 py-3.5 xl:py-4">
         <Link href="/lab-dashboard/" className="flex min-w-0 items-center gap-2.5" onClick={() => isMobile && setIsOpen(false)}>
-          <Image src={logo} alt="Medixpro" width={36} height={36} className="rounded-lg ring-1 ring-[color:rgba(124,92,252,0.12)]" />
+          {isPending && !data ? (
+            <Skeleton className="h-9 w-9 shrink-0 rounded-lg" />
+          ) : orgLogo ? (
+            <Image
+              src={orgLogo}
+              alt=""
+              width={36}
+              height={36}
+              className="h-9 w-9 shrink-0 rounded-lg object-cover ring-1 ring-[color:rgba(124,92,252,0.12)]"
+              unoptimized
+            />
+          ) : (
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-[#7C5CFC] to-[#8E6CFF] text-xs font-bold text-white ring-1 ring-[color:rgba(124,92,252,0.12)]">
+              {orgInitials}
+            </div>
+          )}
           <div className="flex min-w-0 flex-col leading-tight">
-            <span className="text-sm font-semibold tracking-tight text-[#111827]">MedixPro</span>
-            <span className="mt-1 inline-flex w-fit items-center gap-1 rounded-full border border-[color:rgba(124,92,252,0.15)] bg-[#F4F1FF] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#6D4FF5]">
-              <FlaskConical className="h-3 w-3 shrink-0 text-[#7C5CFC]" aria-hidden />
-              Lab
-            </span>
+            {isPending && !data ? (
+              <>
+                <Skeleton className="mb-1 h-4 w-28" />
+                <Skeleton className="h-3 w-20" />
+              </>
+            ) : isError ? (
+              <span className="text-xs font-medium text-destructive">Org unavailable</span>
+            ) : (
+              <>
+                <span className="truncate text-sm font-semibold tracking-tight text-[#111827]">{orgDisplay}</span>
+                <span className="mt-1 inline-flex w-fit items-center gap-1 rounded-full border border-[color:rgba(124,92,252,0.15)] bg-[#F4F1FF] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#6D4FF5]">
+                  <FlaskConical className="h-3 w-3 shrink-0 text-[#7C5CFC]" aria-hidden />
+                  Lab
+                </span>
+              </>
+            )}
           </div>
         </Link>
         <Button
@@ -105,16 +138,30 @@ export function LabSidebar({ isOpen, setIsOpen }: LabSidebarProps) {
         <div className="rounded-xl border border-[#ECEBFF] bg-[#F4F1FF]/90 px-3 py-2.5 shadow-[0_4px_14px_rgba(124,92,252,0.08)]">
           <div className="flex items-center gap-2.5">
             <Avatar className="h-9 w-9 ring-1 ring-[color:rgba(124,92,252,0.12)]">
-              <AvatarImage src="/placeholder-user.jpg" alt={displayName} />
+              {data?.user.profile_picture?.trim() ? (
+                <AvatarImage src={data.user.profile_picture} alt={displayName} />
+              ) : null}
               <AvatarFallback className="bg-gradient-to-br from-[#7C5CFC] to-[#8E6CFF] text-xs font-semibold text-white">
-                {initials}
+                {isPending && !data ? "…" : initials}
               </AvatarFallback>
             </Avatar>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-semibold text-[#111827]">{displayName}</p>
-              <span className="mt-1 inline-flex rounded-full border border-[color:rgba(124,92,252,0.12)] bg-white/90 px-2 py-0.5 text-[10px] font-medium capitalize text-[#6B7280]">
-                {displayRole}
-              </span>
+              {isPending && !data ? (
+                <>
+                  <Skeleton className="mb-1 h-3 w-24" />
+                  <Skeleton className="h-3 w-32" />
+                </>
+              ) : (
+                <>
+                  <p className="truncate text-xs font-semibold text-[#111827]">{displayName}</p>
+                  {branchLine ? (
+                    <p className="truncate text-[10px] font-medium text-[#6B7280]">{branchLine}</p>
+                  ) : null}
+                  <span className="mt-1 inline-flex rounded-full border border-[color:rgba(124,92,252,0.12)] bg-white/90 px-2 py-0.5 text-[10px] font-medium text-[#6B7280]">
+                    {displayRole || "—"}
+                  </span>
+                </>
+              )}
             </div>
           </div>
         </div>

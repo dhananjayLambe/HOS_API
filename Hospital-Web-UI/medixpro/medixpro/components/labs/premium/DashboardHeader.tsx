@@ -8,6 +8,9 @@ import {
   labSearchInput,
 } from "@/components/labs/labDesignTokens";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useLabSession } from "@/lib/labs/session/lab-session-context";
+import { labOperationalRoleLabel } from "@/lib/labs/session/lab-role-labels";
 import { cn } from "@/lib/utils";
 import { Bell, Menu, MessageCircle, Search, Upload } from "lucide-react";
 import { useState } from "react";
@@ -24,19 +27,26 @@ function mockQuickAction(label: string) {
 
 export function DashboardHeader({ onMenuClick, sidebarOpen }: DashboardHeaderProps) {
   const [query, setQuery] = useState("");
+  const { data, isPending, isError } = useLabSession();
+
+  const fullName = data
+    ? [data.user.first_name, data.user.last_name].filter(Boolean).join(" ").trim() || "—"
+    : "";
+  const email = data?.user.email ?? "";
+  const roleLabel = data ? labOperationalRoleLabel(data.lab_user.role) : "";
 
   return (
     <header
       className={cn(
         "sticky top-0 z-40 shrink-0 px-3 pt-3 sm:px-4 sm:pt-4",
         sidebarOpen ? labMainOffsetSidebarOpen : labMainOffsetSidebarClosed,
-        "xl:mr-4 xl:pr-0"
+        "xl:mr-4 xl:pr-0",
       )}
     >
       <div
         className={cn(
           "grid h-20 min-h-20 w-full min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-2xl border border-[#ECEBFF] bg-white/88 px-2 shadow-[0_8px_32px_rgba(124,92,252,0.06)] backdrop-blur-xl sm:gap-3 sm:px-3",
-          "supports-[backdrop-filter]:bg-white/82"
+          "supports-[backdrop-filter]:bg-white/82",
         )}
       >
         <button
@@ -62,7 +72,28 @@ export function DashboardHeader({ onMenuClick, sidebarOpen }: DashboardHeaderPro
             aria-label="Lab search"
           />
         </div>
-        <div className="flex shrink-0 items-center justify-end gap-1.5 pl-1 sm:gap-2 sm:pl-2">
+        <div className="flex min-w-0 shrink-0 items-center justify-end gap-1.5 pl-1 sm:gap-2 sm:pl-2">
+          <div className="mr-1 hidden min-w-0 max-w-[200px] flex-col items-end text-right sm:flex lg:max-w-[280px]">
+            {isPending && !data ? (
+              <>
+                <Skeleton className="mb-1 h-3.5 w-32" />
+                <Skeleton className="mb-1 h-3 w-40" />
+                <Skeleton className="h-5 w-24 rounded-full" />
+              </>
+            ) : isError ? (
+              <span className="text-[10px] text-muted-foreground">Session unavailable</span>
+            ) : (
+              <>
+                <span className="truncate text-xs font-semibold text-[#111827]">{fullName}</span>
+                {email ? <span className="truncate text-[10px] text-[#6B7280]">{email}</span> : null}
+                {roleLabel ? (
+                  <span className="mt-0.5 inline-flex max-w-full truncate rounded-full border border-[color:rgba(124,92,252,0.18)] bg-[#F4F1FF] px-2 py-0.5 text-[10px] font-semibold text-[#6D4FF5]">
+                    {roleLabel}
+                  </span>
+                ) : null}
+              </>
+            )}
+          </div>
           <button
             type="button"
             className={labIconButton}

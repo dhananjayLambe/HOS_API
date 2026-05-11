@@ -53,6 +53,10 @@ const nextConfig = {
           destination: `${backendProxyTarget}/api/medicines/:path*/`,
         },
         {
+          source: "/api/labs/:path*",
+          destination: `${backendProxyTarget}/api/labs/:path*/`,
+        },
+        {
           source: "/api/patients/:path*",
           destination: `${backendProxyTarget}/api/patients/:path*/`,
         },
