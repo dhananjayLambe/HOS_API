@@ -4,7 +4,12 @@ from django.core.exceptions import ValidationError
 from django.db import models
 
 from .catalog import DiagnosticPackage, DiagnosticServiceMaster
-from .choices import ExecutionType, OrderLineType, OrderStatus, OrderTestLineStatus
+from .choices import (
+    ExecutionType,
+    OrderLineType,
+    OrderStatus,
+    OrderTestLineStatus,
+)
 
 
 class DiagnosticOrder(models.Model):
@@ -182,6 +187,22 @@ class DiagnosticOrderItem(models.Model):
         default=OrderLineType.TEST,
     )
 
+    status = models.CharField(
+        max_length=30,
+        choices=[
+            ("pending", "Pending"),
+            ("confirmed", "Confirmed"),
+            ("in_progress", "In Progress"),
+            ("partial", "Partial"),
+            ("completed", "Completed"),
+            ("cancelled", "Cancelled"),
+            ("failed", "Failed"),
+            ("rejected", "Rejected"),
+        ],
+        default="pending",
+        db_index=True,
+    )
+
     service = models.ForeignKey(
         DiagnosticServiceMaster,
         on_delete=models.PROTECT,
@@ -200,6 +221,17 @@ class DiagnosticOrderItem(models.Model):
     package_version_snapshot = models.PositiveIntegerField(null=True, blank=True)
     composition_snapshot = models.JSONField(blank=True, null=True)
     is_price_derived = models.BooleanField(default=False)
+
+    is_home_collection_eligible = models.BooleanField(default=False)
+    requires_fasting = models.BooleanField(default=False)
+    requires_appointment = models.BooleanField(default=False)
+
+    metadata_snapshot = models.JSONField(
+        default=dict,
+        blank=True,
+    )
+
+    display_order = models.PositiveIntegerField(default=0)
 
     name_snapshot = models.CharField(max_length=255)
     price_snapshot = models.DecimalField(max_digits=10, decimal_places=2)
@@ -231,6 +263,9 @@ class DiagnosticOrderItem(models.Model):
         blank=True,
         related_name="diagnostic_order_items_deleted",
     )
+
+    is_active = models.BooleanField(default=True)
+
     recommendation_source = models.CharField(
         max_length=20,
         choices=[
@@ -272,6 +307,10 @@ class DiagnosticOrderItem(models.Model):
             models.Index(fields=["order"]),
             models.Index(fields=["line_type"]),
             models.Index(fields=["diagnostic_package"]),
+            models.Index(fields=["order", "status"]),
+            models.Index(fields=["service", "status"]),
+            models.Index(fields=["diagnosis"]),
+            models.Index(fields=["is_active"]),
         ]
 
     def clean(self):
@@ -282,10 +321,32 @@ class DiagnosticOrderItem(models.Model):
 
     def save(self, *args, **kwargs):
         if self.pk:
+            existing = DiagnosticOrderItem.objects.get(pk=self.pk)
+
             if self.order.status != OrderStatus.CREATED:
-                raise ValidationError("Cannot modify items after order confirmation.")
+                immutable_fields = [
+                    "service_id",
+                    "diagnostic_package_id",
+                    "price_snapshot",
+                    "package_version_snapshot",
+                    "composition_snapshot",
+                    "name_snapshot",
+                ]
+
+                for field in immutable_fields:
+                    if getattr(existing, field) != getattr(self, field):
+                        raise ValidationError(
+                            f"Cannot modify '{field}' after order confirmation."
+                        )
+
         self.full_clean()
         super().save(*args, **kwargs)
+
+    # Expected reverse relation:
+    # InvestigationItem.diagnostic_order_item -> related_name="investigation_items"
+    @property
+    def linked_investigation_items(self):
+        return self.investigation_items.all()
 
     def __str__(self):
         return f"{self.name_snapshot} - {self.order.order_number}"
