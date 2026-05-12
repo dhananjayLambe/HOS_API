@@ -4,3 +4,4 @@ from .choices import *
 from .catalog import *
 from .orders import *
 from .reports import *
+from .routing import *

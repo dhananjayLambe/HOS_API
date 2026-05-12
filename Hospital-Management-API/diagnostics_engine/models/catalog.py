@@ -636,3 +636,45 @@ __all__ = [
     "DiagnosticServiceMaster",
     "SymptomTestMapping",
 ]
+
+'''
+Doctor Prescription
+
+        ↓
+
+InvestigationItem
+
+        ↓
+
+DiagnosticOrder
+
+        ↓
+
+Routing Engine
+
+        ↓
+
+Eligible Labs
+
+        ↓
+
+Assignment Logic
+
+        ↓
+
+RoutingLabOrderAssignment
+
+        ↓
+
+Lab Dashboard
+
+Lab Execution
+
+        ↓
+
+DiagnosticReport
+
+        ↓
+
+Patient Notifications
+'''
