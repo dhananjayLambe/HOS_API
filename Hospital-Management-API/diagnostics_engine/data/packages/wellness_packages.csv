@@ -1,0 +1,6 @@
+ordering,lineage_code,version,name,category_code,package_type,collection_type,is_active,is_latest
+
+10,FULLBODY-BASIC,1,Full Body Basic Checkup,FULLBODYPACKAGE,system,home,true,true
+20,FULLBODY-ADVANCED,1,Full Body Advanced Checkup,FULLBODYPACKAGE,system,home,true,true
+30,EXECUTIVE-MALE,1,Executive Male Health Package,PREMIUMPACKAGE,system,home,true,true
+40,EXECUTIVE-FEMALE,1,Executive Female Health Package,PREMIUMPACKAGE,system,home,true,true

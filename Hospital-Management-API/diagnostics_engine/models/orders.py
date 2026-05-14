@@ -4,6 +4,8 @@ from django.core.exceptions import ValidationError
 from django.db import models
 
 from .catalog import DiagnosticPackage, DiagnosticServiceMaster
+from diagnostics_engine.choices.routing import DiagnosticOrderRoutingStatus
+
 from .choices import (
     ExecutionType,
     OrderLineType,
@@ -122,6 +124,13 @@ class DiagnosticOrder(models.Model):
         default="lab",
     )
 
+    routing_status = models.CharField(
+        max_length=32,
+        choices=DiagnosticOrderRoutingStatus.choices,
+        default=DiagnosticOrderRoutingStatus.AWAITING_ASSIGNMENT,
+        db_index=True,
+    )
+
     scheduled_at = models.DateTimeField(null=True, blank=True)
     collected_at = models.DateTimeField(null=True, blank=True)
     processing_started_at = models.DateTimeField(null=True, blank=True)
@@ -161,6 +170,7 @@ class DiagnosticOrder(models.Model):
             models.Index(fields=["encounter"]),
             models.Index(fields=["source"]),
             models.Index(fields=["consultation"]),
+            models.Index(fields=["routing_status"]),
         ]
 
     # Centralized state transition handler.

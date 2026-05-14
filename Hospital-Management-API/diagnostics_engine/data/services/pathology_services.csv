@@ -1,0 +1,138 @@
+ordering,code,name,category_code,short_name,sample_type,home_collection_possible,tat_hours_default,is_active
+
+10,LAB-CBC,Complete Blood Count,HEM,CBC,Blood,true,24,true
+20,LAB-ESR,Erythrocyte Sedimentation Rate,HEM,ESR,Blood,true,24,true
+30,LAB-HB,Hemoglobin,HEM,HB,Blood,true,24,true
+40,LAB-PCV,Packed Cell Volume,HEM,PCV,Blood,true,24,true
+50,LAB-TLC,Total Leukocyte Count,HEM,TLC,Blood,true,24,true
+60,LAB-DLC,Differential Leukocyte Count,HEM,DLC,Blood,true,24,true
+70,LAB-PLATELET,Platelet Count,HEM,Platelet,Blood,true,24,true
+80,LAB-RBC,Red Blood Cell Count,HEM,RBC,Blood,true,24,true
+90,LAB-MCV,Mean Corpuscular Volume,HEM,MCV,Blood,true,24,true
+100,LAB-MCH,Mean Corpuscular Hemoglobin,HEM,MCH,Blood,true,24,true
+110,LAB-MCHC,Mean Corpuscular Hemoglobin Concentration,HEM,MCHC,Blood,true,24,true
+120,LAB-RDW,RDW,HEM,RDW,Blood,true,24,true
+130,LAB-MPD,Mean Platelet Diameter,HEM,MPD,Blood,true,24,true
+140,LAB-PBS,Peripheral Blood Smear,HEM,PBS,Blood,true,24,true
+150,LAB-RETIC,Reticulocyte Count,HEM,Retic,Blood,true,24,true
+160,LAB-BTCT,Bleeding Time Clotting Time,HEM,BTCT,Blood,true,24,true
+170,LAB-PTINR,PT INR,HEM,PT INR,Blood,true,24,true
+180,LAB-APTT,Activated Partial Thromboplastin Time,HEM,APTT,Blood,true,24,true
+190,LAB-DDIMER,D-Dimer,HEM,D-Dimer,Blood,true,12,true
+200,LAB-FIBRINOGEN,Fibrinogen,HEM,Fibrinogen,Blood,true,24,true
+
+210,LAB-FBS,Fasting Blood Sugar,DIABETIC,FBS,Blood,true,24,true
+220,LAB-PPBS,Post Prandial Blood Sugar,DIABETIC,PPBS,Blood,true,24,true
+230,LAB-RBS,Random Blood Sugar,DIABETIC,RBS,Blood,true,24,true
+240,LAB-HBA1C,HbA1c,DIABETIC,HbA1c,Blood,true,24,true
+250,LAB-OGTT,Oral Glucose Tolerance Test,DIABETIC,OGTT,Blood,true,24,true
+260,LAB-FASTING-INSULIN,Fasting Insulin,DIABETIC,Insulin,Blood,true,24,true
+270,LAB-CPEPTIDE,C-Peptide,DIABETIC,C-Peptide,Blood,true,48,true
+280,LAB-HOMAIR,HOMA-IR Assessment,DIABETIC,HOMA-IR,Blood,true,48,true
+
+290,LAB-LFT,Liver Function Test,BIOCHEM,LFT,Blood,true,24,true
+300,LAB-KFT,Kidney Function Test,RENAL,KFT,Blood,true,24,true
+310,LAB-LIPID,Lipid Profile,BIOCHEM,Lipid,Blood,true,24,true
+320,LAB-ELECTROLYTES,Serum Electrolytes,BIOCHEM,Electrolytes,Blood,true,24,true
+330,LAB-CALCIUM,Serum Calcium,BIOCHEM,Calcium,Blood,true,24,true
+340,LAB-PHOSPHORUS,Serum Phosphorus,BIOCHEM,Phosphorus,Blood,true,24,true
+350,LAB-MAGNESIUM,Serum Magnesium,BIOCHEM,Magnesium,Blood,true,24,true
+360,LAB-URICACID,Uric Acid,BIOCHEM,Uric Acid,Blood,true,24,true
+370,LAB-AMYLASE,Serum Amylase,BIOCHEM,Amylase,Blood,true,24,true
+380,LAB-LIPASE,Serum Lipase,BIOCHEM,Lipase,Blood,true,24,true
+390,LAB-FERRITIN,Serum Ferritin,BIOCHEM,Ferritin,Blood,true,24,true
+400,LAB-VITD,Vitamin D Total,BIOCHEM,Vitamin D,Blood,true,24,true
+410,LAB-VITB12,Vitamin B12,BIOCHEM,Vitamin B12,Blood,true,24,true
+420,LAB-FOLATE,Folic Acid,BIOCHEM,Folate,Blood,true,24,true
+430,LAB-ALBUMIN,Serum Albumin,BIOCHEM,Albumin,Blood,true,24,true
+440,LAB-TOTALPROTEIN,Total Protein,BIOCHEM,Protein,Blood,true,24,true
+450,LAB-BILIRUBIN,Bilirubin Total Direct Indirect,BIOCHEM,Bilirubin,Blood,true,24,true
+460,LAB-SGOT,SGOT AST,BIOCHEM,SGOT,Blood,true,24,true
+470,LAB-SGPT,SGPT ALT,BIOCHEM,SGPT,Blood,true,24,true
+480,LAB-ALP,Alkaline Phosphatase,BIOCHEM,ALP,Blood,true,24,true
+490,LAB-GGT,Gamma GT,BIOCHEM,GGT,Blood,true,24,true
+500,LAB-LDH,Lactate Dehydrogenase,BIOCHEM,LDH,Blood,true,24,true
+510,LAB-CPK,Creatine Phosphokinase,BIOCHEM,CPK,Blood,true,24,true
+
+520,LAB-TSH,Thyroid Stimulating Hormone,THYROID,TSH,Blood,true,24,true
+530,LAB-T3,T3 Total,THYROID,T3,Blood,true,24,true
+540,LAB-T4,T4 Total,THYROID,T4,Blood,true,24,true
+550,LAB-FT3,Free T3,THYROID,FT3,Blood,true,24,true
+560,LAB-FT4,Free T4,THYROID,FT4,Blood,true,24,true
+570,LAB-ANTI-TPO,Anti TPO Antibody,THYROID,Anti TPO,Blood,true,48,true
+580,LAB-THYROGLOBULIN,Thyroglobulin,THYROID,Thyroglobulin,Blood,true,48,true
+
+590,LAB-FSH,Follicle Stimulating Hormone,HORMONE,FSH,Blood,true,24,true
+600,LAB-LH,Luteinizing Hormone,HORMONE,LH,Blood,true,24,true
+610,LAB-PROLACTIN,Serum Prolactin,HORMONE,Prolactin,Blood,true,24,true
+620,LAB-ESTRADIOL,Estradiol E2,HORMONE,E2,Blood,true,24,true
+630,LAB-PROGESTERONE,Progesterone,HORMONE,Progesterone,Blood,true,24,true
+640,LAB-AMH,Anti Mullerian Hormone,HORMONE,AMH,Blood,true,48,true
+650,LAB-TESTOSTERONE,Serum Testosterone,HORMONE,Testosterone,Blood,true,24,true
+660,LAB-FREETESTO,Free Testosterone,HORMONE,Free Testosterone,Blood,true,48,true
+670,LAB-DHEAS,DHEAS,HORMONE,DHEAS,Blood,true,24,true
+680,LAB-SHBG,Sex Hormone Binding Globulin,HORMONE,SHBG,Blood,true,48,true
+690,LAB-CORTISOL,Serum Cortisol,HORMONE,Cortisol,Blood,true,24,true
+700,LAB-ACTH,ACTH,HORMONE,ACTH,Blood,true,48,true
+710,LAB-PTH,Parathyroid Hormone,HORMONE,PTH,Blood,true,48,true
+720,LAB-GROWTHHORMONE,Growth Hormone,HORMONE,GH,Blood,true,48,true
+730,LAB-IGF1,IGF-1,HORMONE,IGF1,Blood,true,72,true
+740,LAB-BETAHCG,Beta HCG,PRENATAL,Beta HCG,Blood,true,24,true
+
+750,LAB-CRP,C-Reactive Protein,IMMUNO,CRP,Blood,true,24,true
+760,LAB-HSCRP,High Sensitivity CRP,CARDIO,hsCRP,Blood,true,24,true
+770,LAB-RA,RA Factor,IMMUNO,RA Factor,Blood,true,24,true
+780,LAB-ASO,ASO Titre,IMMUNO,ASO,Blood,true,24,true
+790,LAB-ANA,ANA Profile,AUTOIMMUNE,ANA,Blood,true,48,true
+800,LAB-ANTI-CCP,Anti CCP Antibody,AUTOIMMUNE,Anti CCP,Blood,true,48,true
+810,LAB-ANCA,ANCA Profile,AUTOIMMUNE,ANCA,Blood,true,72,true
+820,LAB-IGE,Serum IgE,IMMUNO,IgE,Blood,true,24,true
+830,LAB-HOMOCYSTEINE,Homocysteine,CARDIO,Homocysteine,Blood,true,24,true
+
+840,LAB-WIDAL,Widal Test,SERO,Widal,Blood,true,24,true
+850,LAB-DENGUE,Dengue Profile,SERO,Dengue,Blood,true,24,true
+860,LAB-MALARIA,Malaria Parasite,SERO,Malaria,Blood,true,24,true
+870,LAB-TYPHOIDIGM,Typhoid IgM,SERO,Typhoid IgM,Blood,true,24,true
+880,LAB-HIV,HIV 1 and 2,SERO,HIV,Blood,true,24,true
+890,LAB-HBSAG,HBsAg,SERO,HBsAg,Blood,true,24,true
+900,LAB-HCV,HCV Antibody,SERO,HCV,Blood,true,24,true
+910,LAB-VDRL,VDRL,SERO,VDRL,Blood,true,24,true
+920,LAB-TORCH,TORCH Panel,SERO,TORCH,Blood,true,48,true
+930,LAB-COVID-RTPCR,COVID 19 RT PCR,MOLEC,COVID RTPCR,Swab,false,24,true
+940,LAB-COVID-ANTIGEN,COVID 19 Rapid Antigen,SERO,COVID Antigen,Swab,false,6,true
+950,LAB-INFLUENZA,Influenza Panel,MOLEC,Influenza,Swab,false,24,true
+
+960,LAB-URINE-RM,Urine Routine Microscopy,CLINPATH,Urine RM,Urine,true,24,true
+970,LAB-STOOL-RM,Stool Routine Microscopy,CLINPATH,Stool RM,Stool,true,24,true
+980,LAB-OCCULT,Stool Occult Blood,CLINPATH,Occult Blood,Stool,true,24,true
+990,LAB-SEMEN,Semen Analysis,CLINPATH,Semen Analysis,Semen,false,24,true
+1000,LAB-MICROALBUMIN,Urine Microalbumin,RENAL,Microalbumin,Urine,true,24,true
+1010,LAB-ACR,Urine Albumin Creatinine Ratio,RENAL,ACR,Urine,true,24,true
+
+1020,LAB-URINE-CULTURE,Urine Culture,MICRO,Urine Culture,Urine,true,48,true
+1030,LAB-BLOOD-CULTURE,Blood Culture,MICRO,Blood Culture,Blood,true,72,true
+1040,LAB-SPUTUM-CULTURE,Sputum Culture,MICRO,Sputum Culture,Sputum,true,72,true
+1050,LAB-STOOL-CULTURE,Stool Culture,MICRO,Stool Culture,Stool,true,72,true
+1060,LAB-VAGINAL-CULTURE,Vaginal Swab Culture,MICRO,Vaginal Culture,Swab,false,48,true
+1070,LAB-THROAT-CULTURE,Throat Swab Culture,MICRO,Throat Culture,Swab,false,48,true
+
+1080,LAB-BIOPSY,Histo Biopsy,HISTO,Biopsy,Tissue,false,72,true
+1090,LAB-PAPSMEAR,Pap Smear,CYTO,Pap Smear,Cervical Sample,false,48,true
+1100,LAB-HPV,HPV DNA Test,CYTO,HPV DNA,Cervical Sample,false,72,true
+1110,LAB-FNAC,FNAC,CYTO,FNAC,Tissue,false,48,true
+
+1120,LAB-CA125,CA125,TUMOR,CA125,Blood,true,48,true
+1130,LAB-CEA,CEA,TUMOR,CEA,Blood,true,48,true
+1140,LAB-AFP,Alpha Fetoprotein,TUMOR,AFP,Blood,true,48,true
+1150,LAB-PSA,Prostate Specific Antigen,TUMOR,PSA,Blood,true,48,true
+1160,LAB-CA199,CA19-9,TUMOR,CA19-9,Blood,true,48,true
+1170,LAB-CA153,CA15-3,TUMOR,CA15-3,Blood,true,48,true
+1180,LAB-B2MICRO,Beta 2 Microglobulin,TUMOR,Beta2Microglobulin,Blood,true,48,true
+
+1190,LAB-PREEMPLOYMENT,Pre Employment Health Panel,WELLNESS,Pre Employment,Blood,true,48,true
+1200,LAB-FULLBODY,Comprehensive Full Body Panel,WELLNESS,Full Body Panel,Blood,true,48,true
+1210,LAB-DIABETIC-PANEL,Comprehensive Diabetes Panel,WELLNESS,Diabetes Panel,Blood,true,48,true
+1220,LAB-CARDIAC-PANEL,Comprehensive Cardiac Risk Panel,WELLNESS,Cardiac Panel,Blood,true,48,true
+1230,LAB-WOMEN-WELLNESS,Women Wellness Panel,WELLNESS,Women Wellness,Blood,true,48,true
+1240,LAB-MEN-WELLNESS,Men Wellness Panel,WELLNESS,Men Wellness,Blood,true,48,true
+1250,LAB-SENIOR-WELLNESS,Senior Citizen Wellness Panel,WELLNESS,Senior Wellness,Blood,true,48,true

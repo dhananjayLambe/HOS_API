@@ -117,6 +117,41 @@ def _normalize_package_composition(inv: InvestigationItem) -> list[dict[str, Any
     return snap
 
 
+def _schedule_diagnostic_routing_if_has_test_lines(*, order: DiagnosticOrder, created_by: Any) -> None:
+    """Queue marketplace routing after this DB transaction commits (non-blocking for callers)."""
+    if not DiagnosticOrderTestLine.objects.filter(order_id=order.pk).exists():
+        return
+    from diagnostics_engine.services.routing.routing_helpers import (
+        describe_diagnostic_order_tests,
+        privacy_patient_label,
+        routing_journey_human,
+        routing_journey_info,
+        schedule_routing_after_commit,
+    )
+
+    patient_full = order.patient_profile.get_full_name() if order.patient_profile else ""
+    tests_h = describe_diagnostic_order_tests(order)
+    routing_journey_human(
+        "Diagnostics · Consultation saved for %s. Order %s is queued for the lab network. "
+        "Selected tests: %s.",
+        privacy_patient_label(patient_full),
+        order.order_number,
+        tests_h,
+    )
+    routing_journey_info(
+        "[routing journey] Order %s (%s): diagnostic order persisted from consultation — scheduling automatic "
+        "lab routing after commit (doctor-selected branch_id=%s remains pricing/catalog context until router "
+        "picks the marketplace winner).",
+        order.pk,
+        order.order_number,
+        order.branch_id,
+    )
+    schedule_routing_after_commit(
+        order.pk,
+        triggered_by_id=getattr(created_by, "pk", None) if created_by else None,
+    )
+
+
 class DiagnosticOrderCreationService:
     """Canonical EMR → commercial diagnostic order → execution rows (one atomic transaction)."""
 
@@ -167,6 +202,7 @@ class DiagnosticOrderCreationService:
             if existing:
                 n_items = existing.items.filter(deleted_at__isnull=True).count()
                 n_lines = DiagnosticOrderTestLine.objects.filter(order_id=existing.pk).count()
+                _schedule_diagnostic_routing_if_has_test_lines(order=existing, created_by=created_by)
                 return DiagnosticOrderCreationResult(
                     order=existing,
                     items_created=n_items,
@@ -201,6 +237,7 @@ class DiagnosticOrderCreationService:
             order.refresh_from_db()
             n_items = order.items.filter(deleted_at__isnull=True).count()
             n_lines = DiagnosticOrderTestLine.objects.filter(order_id=order.pk).count()
+            _schedule_diagnostic_routing_if_has_test_lines(order=order, created_by=created_by)
             return DiagnosticOrderCreationResult(
                 order=order,
                 items_created=n_items,

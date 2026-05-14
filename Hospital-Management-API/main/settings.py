@@ -32,6 +32,24 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # Diagnostics commerce: allow sum-of-service fallback when BranchPackagePricing missing (default off).
 DIAGNOSTICS_ALLOW_DERIVED_PACKAGE_PRICING = False
 
+# When routing finds no eligible lab, persist up to this many ineligible-branch snapshots
+# (is_eligible=False) for support / explainability (full evaluation can be huge).
+DIAGNOSTIC_ROUTING_MAX_REJECT_SNAPSHOTS = int(os.getenv("DIAGNOSTIC_ROUTING_MAX_REJECT_SNAPSHOTS", "50"))
+
+# Verbose routing pipeline + plain-language patient/test/lab lines on logger
+# ``diagnostics_engine.services.routing``. When you set either env below, settings also attach a
+# StreamHandler so INFO lines appear in the runserver terminal (otherwise only WARNING+ may show).
+#   export DIAGNOSTIC_ROUTING_JOURNEY_LOG=1
+#   export DIAGNOSTIC_ROUTING_JOURNEY_HUMAN_LOG=1
+# Eligibility pricing ladder + sample SQL (per branch): export DIAGNOSTIC_ROUTING_PRICING_DEBUG=1
+# or set DIAGNOSTICS_ROUTING_JOURNEY_LOG = True below.
+DIAGNOSTICS_ROUTING_JOURNEY_LOG = os.getenv("DIAGNOSTIC_ROUTING_JOURNEY_LOG", "").lower() in (
+    "1",
+    "true",
+    "yes",
+    "on",
+)
+
 # Investigation suggestions (explicit feature flags and limits)
 ENABLE_SUGGESTIONS = os.getenv("ENABLE_SUGGESTIONS", "true").lower() in ("1", "true", "yes", "on")
 ENABLE_PACKAGE_SUGGESTIONS = os.getenv("ENABLE_PACKAGE_SUGGESTIONS", "true").lower() in (
@@ -337,3 +355,21 @@ LOGGING = {
         },
     },
 }
+
+# Console INFO for diagnostics routing journey (human + technical) when env is set.
+# runserver otherwise often only shows WARNING+ on the root logger, so journey lines were easy to miss.
+_routing_journey_console_env = (
+    os.environ.get("DIAGNOSTIC_ROUTING_JOURNEY_HUMAN_LOG", "").strip().lower() in ("1", "true", "yes", "on")
+    or os.environ.get("DIAGNOSTIC_ROUTING_JOURNEY_LOG", "").strip().lower() in ("1", "true", "yes", "on")
+)
+if _routing_journey_console_env:
+    LOGGING["handlers"]["routing_journey_console"] = {
+        "class": "logging.StreamHandler",
+        "level": "INFO",
+        "formatter": "simple",
+    }
+    LOGGING["loggers"]["diagnostics_engine.services.routing"] = {
+        "handlers": ["routing_journey_console", "file"],
+        "level": "INFO",
+        "propagate": False,
+    }

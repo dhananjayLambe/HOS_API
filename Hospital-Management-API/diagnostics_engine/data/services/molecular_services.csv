@@ -1,0 +1,41 @@
+ordering,code,name,category_code,short_name,sample_type,home_collection_possible,tat_hours_default,is_active
+
+10,MOLEC-TB-PCR,Tuberculosis PCR Molecular Test,MOLEC,TB PCR,Sputum,false,48,true
+20,MOLEC-GENE-XPERT,GeneXpert MTB/RIF Assay,MOLEC,GeneXpert,Sputum,false,24,true
+30,MOLEC-HPV-GENOTYPE,HPV Genotyping Molecular Assay,MOLEC,HPV Genotype,Cervical Sample,false,72,true
+40,MOLEC-HBV-VIRALLOAD,HBV Viral Load Quantification,MOLEC,HBV Viral Load,Blood,true,72,true
+50,MOLEC-HCV-VIRALLOAD,HCV Viral Load Quantification,MOLEC,HCV Viral Load,Blood,true,72,true
+60,MOLEC-HIV-VIRALLOAD,HIV Viral Load Quantification,MOLEC,HIV Viral Load,Blood,true,72,true
+
+70,MOLEC-BCRABL,BCR ABL Mutation Analysis,MOLEC,BCR ABL,Blood,true,96,true
+80,MOLEC-JAK2,JAK2 Mutation Analysis,MOLEC,JAK2 Mutation,Blood,true,96,true
+90,MOLEC-EGFR,EGFR Mutation Analysis,MOLEC,EGFR,Biopsy,false,120,true
+100,MOLEC-KRAS,KRAS Mutation Analysis,MOLEC,KRAS,Biopsy,false,120,true
+110,MOLEC-BRAF,BRAF Mutation Analysis,MOLEC,BRAF,Biopsy,false,120,true
+
+120,MOLEC-BRCA1BRCA2,BRCA1 BRCA2 Mutation Panel,MOLEC,BRCA Panel,Blood,true,168,true
+130,MOLEC-THALASSEMIA-GENETIC,Thalassemia Genetic Analysis,MOLEC,Thalassemia Genetics,Blood,true,120,true
+140,MOLEC-CYSTIC-FIBROSIS,Cystic Fibrosis Mutation Analysis,MOLEC,CF Mutation,Blood,true,168,true
+
+150,MOLEC-NIPT,Non Invasive Prenatal Testing,MOLEC,NIPT,Blood,true,168,true
+160,MOLEC-KARYOTYPE,Karyotyping Genetic Study,MOLEC,Karyotype,Blood,true,168,true
+170,MOLEC-FISH,FISH Genetic Analysis,MOLEC,FISH,Blood,true,168,true
+180,MOLEC-MICROARRAY,Chromosomal Microarray Analysis,MOLEC,Microarray,Blood,true,168,true
+
+190,MOLEC-HLA-TYPING,HLA Typing Molecular Assay,MOLEC,HLA Typing,Blood,true,120,true
+200,MOLEC-PATERNITY,DNA Paternity Analysis,MOLEC,Paternity DNA,Blood,true,168,true
+
+210,MOLEC-PHARMACOGENOMIC,Pharmacogenomic Genetic Panel,MOLEC,Pharmacogenomics,Blood,true,168,true
+220,MOLEC-CANCER-GENOMIC,Comprehensive Cancer Genomic Panel,MOLEC,Cancer Genomics,Biopsy,false,240,true
+
+230,MOLEC-LEUKEMIA-PANEL,Leukemia Molecular Panel,MOLEC,Leukemia Panel,Blood,true,168,true
+240,MOLEC-LYMPHOMA-PANEL,Lymphoma Molecular Panel,MOLEC,Lymphoma Panel,Biopsy,false,168,true
+
+250,MOLEC-NEUROMUSCULAR-GENETIC,Neuromuscular Genetic Disorder Panel,MOLEC,Neuromuscular Genetics,Blood,true,240,true
+260,MOLEC-AUTOINFLAMMATORY,Autoinflammatory Genetic Panel,MOLEC,Autoinflammatory,Blood,true,240,true
+
+270,MOLEC-RARE-DISEASE,Rare Disease Genetic Sequencing,MOLEC,Rare Disease Genetics,Blood,true,336,true
+280,MOLEC-WES,Whole Exome Sequencing,MOLEC,WES,Blood,true,336,true
+290,MOLEC-WGS,Whole Genome Sequencing,MOLEC,WGS,Blood,true,480,true
+
+300,MOLEC-MITOCHONDRIAL, Mitochondrial Genetic Analysis,MOLEC,Mitochondrial Genetics,Blood,true,240,true

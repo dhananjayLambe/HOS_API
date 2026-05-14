@@ -1,0 +1,118 @@
+ordering,code,name,parent_code,is_active
+10,HEM,Hematology,PATH,true
+20,BIOCHEM,Biochemistry,PATH,true
+30,IMMUNO,Immunology,PATH,true
+40,MICRO,Microbiology,PATH,true
+50,SERO,Serology,PATH,true
+60,MOLEC,Molecular Diagnostics,PATH,true
+70,HISTO,Histopathology,PATH,true
+80,CYTO,Cytology,PATH,true
+90,CLINPATH,Clinical Pathology,PATH,true
+
+100,XRAY,X-Ray,RADIO,true
+110,USG,Ultrasound,RADIO,true
+120,CT,CT Scan,RADIO,true
+130,MRI,MRI,RADIO,true
+140,MAMMO,Mammography,RADIO,true
+150,DOPPLER,Doppler & Vascular Imaging,RADIO,true
+160,INTERVENTIONAL,Interventional Radiology,RADIO,true
+
+170,ECG,ECG,CARDIO,true
+180,ECHO,Echocardiography,CARDIO,true
+190,TMT,Treadmill Test,CARDIO,true
+200,HOLTER,Holter Monitoring,CARDIO,true
+
+210,PFT,Pulmonary Function Test,PULMO,true
+220,SLEEPSTUDY,Sleep Study,PULMO,true
+230,BRONCH,Bronchoscopy,PULMO,true
+
+240,ENDOSCOPY,Endoscopy,GASTRO,true
+250,COLONOSCOPY,Colonoscopy,GASTRO,true
+260,HEPATOLOGY,Hepatology Diagnostics,GASTRO,true
+
+270,EEG,EEG,NEURO,true
+280,NCV,NCV & EMG,NEURO,true
+290,NEUROIMAGING,Neuro Imaging,NEURO,true
+
+300,OBSGYN,Obstetrics & Gynecology,GYNAE,true
+310,PRENATAL,Prenatal Diagnostics,GYNAE,true
+320,FETAL,Fetal Medicine,GYNAE,true
+
+330,PEDLAB,Pediatric Laboratory,PED,true
+340,PEDSCAN,Pediatric Imaging,PED,true
+
+350,THYROID,Thyroid Diagnostics,ENDO,true
+360,HORMONE,Hormonal Studies,ENDO,true
+
+370,DIABETIC,Diabetes Diagnostics,DIAB,true
+
+380,RENAL,Renal Diagnostics,NEPHRO,true
+390,DIALYSIS,Dialysis Monitoring,NEPHRO,true
+
+400,UROSCAN,Urology Imaging,URO,true
+410,SEMEN,Semen Analysis,URO,true
+
+420,BONE,Bone & Joint Imaging,ORTHO,true
+430,BMD,Bone Mineral Density,ORTHO,true
+
+440,AUDIO,Audio & Hearing,ENT,true
+450,SINUS,Sinus & ENT Imaging,ENT,true
+
+460,RETINA,Retina Diagnostics,OPHTH,true
+470,EYESCAN,Eye Imaging,OPHTH,true
+
+480,SKIN,Skin Diagnostics,DERM,true
+490,ALLERGYTEST,Allergy Testing,DERM,true
+
+500,VIROLOGY,Virology,INFECT,true
+510,TROPICAL,Tropical Disease Diagnostics,INFECT,true
+
+520,AUTOIMMUNE,Autoimmune Diagnostics,IMMUNO,true
+
+530,ONCOPATH,Oncology Pathology,ONCO,true
+540,PETSCAN,PET Scan,ONCO,true
+550,TUMOR,Tumor Markers,ONCO,true
+
+560,IVF,IVF & Fertility,FERTILITY,true
+570,REPRODUCTIVE,Reproductive Hormonal Studies,FERTILITY,true
+
+580,DENTALXRAY,Dental Imaging,DENTAL,true
+
+590,PREVENTIVE,Preventive Health,WELLNESS,true
+600,CORPORATE,Corporate Wellness,WELLNESS,true
+
+610,NUCLEARSCAN,Nuclear Imaging,NUCLEAR,true
+
+620,VASCULARSCAN,Vascular Studies,VASCULAR,true
+
+630,SLEEPLAB,Sleep Lab,SLEEP,true
+
+640,GENERALPACKAGE,General Health Packages,PACKAGE,true
+650,DIABPACKAGE,Diabetes Packages,PACKAGE,true
+660,WOMENPACKAGE,Women's Health Packages,PACKAGE,true
+670,SENIORPACKAGE,Senior Citizen Packages,PACKAGE,true
+
+671,FULLBODYPACKAGE,Full Body Checkup Packages,PACKAGE,true
+672,PREMIUMPACKAGE,Premium Health Packages,PACKAGE,true
+673,CARDIACPACKAGE,Cardiac Health Packages,PACKAGE,true
+674,RENALPACKAGE,Renal Care Packages,PACKAGE,true
+675,FERTILITYPACKAGE,Fertility Health Packages,PACKAGE,true
+676,PRENATALPACKAGE,Prenatal Care Packages,PACKAGE,true
+
+680,ANGIO,Cardiac Angiography,CARDIO,true
+681,PACEMAKER,Cardiac Device Clinic,CARDIO,true
+682,CARDIACMRI,Cardiac MRI,CARDIO,true
+683,CARDIACCT,Cardiac CT,CARDIO,true
+684,CARDIORISK,Cardiac Risk Assessment,CARDIO,true
+685,CARDIOHF,Heart Failure Evaluation,CARDIO,true
+686,CARDIOVALVE,Valvular Heart Diagnostics,CARDIO,true
+687,CARDIOARRHYTHMIA,Arrhythmia Diagnostics,CARDIO,true
+688,CPET,Cardiopulmonary Exercise Test,CARDIO,true
+689,ELECTROPHYSIOLOGY,Electrophysiology,CARDIO,true
+690,PEDIATRICCARDIO,Pediatric Cardiology,CARDIO,true
+691,GASTROPROC,Gastrointestinal Procedures,GASTRO,true
+692,GYNAEPROC,Gynecology Procedures,GYNAE,true
+
+694,FIBROSCAN,FibroScan,RADIO,true
+695,PETCT,PET-CT Imaging,RADIO,true
+696,HSG,Hysterosalpingography,RADIO,true

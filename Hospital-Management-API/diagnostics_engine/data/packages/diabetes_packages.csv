@@ -1,0 +1,12 @@
+ordering,lineage_code,version,name,category_code,package_type,collection_type,is_active,is_latest
+
+10,DIAB-BASIC,1,Basic Diabetes Checkup,DIABPACKAGE,system,home,true,true
+20,DIAB-ADVANCED,1,Advanced Diabetes Care Package,DIABPACKAGE,system,home,true,true
+30,DIAB-COMPLICATIONS,1,Diabetes Complications Screening Package,DIABPACKAGE,system,home,true,true
+40,DIAB-INSULIN-RESISTANCE,1,Insulin Resistance Evaluation Package,DIABPACKAGE,system,home,true,true
+50,DIAB-GESTATIONAL,1,Gestational Diabetes Screening Package,DIABPACKAGE,system,home,true,true
+60,DIAB-SENIOR,1,Senior Citizen Diabetes Monitoring Package,DIABPACKAGE,system,home,true,true
+70,DIAB-CARDIAC-RISK,1,Diabetic Cardiac Risk Package,DIABPACKAGE,system,home,true,true
+80,DIAB-KIDNEY-CARE,1,Diabetic Kidney Care Package,DIABPACKAGE,system,home,true,true
+90,DIAB-WEIGHT-METABOLIC,1,Weight and Metabolic Syndrome Package,DIABPACKAGE,system,home,true,true
+100,DIAB-EXECUTIVE,1,Executive Diabetes Wellness Package,DIABPACKAGE,system,home,true,true

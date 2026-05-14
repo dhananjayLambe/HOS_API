@@ -65,9 +65,20 @@ class AssignmentType(models.TextChoices):
     HELPDESK_SELECTED = "helpdesk_selected", "Helpdesk Selected"
 
 
+class DiagnosticOrderRoutingStatus(models.TextChoices):
+    """Denormalized routing lifecycle on DiagnosticOrder for cheap dashboard queries."""
+
+    AWAITING_ASSIGNMENT = "awaiting_assignment", "Awaiting assignment"
+    ROUTING_IN_PROGRESS = "routing_in_progress", "Routing in progress"
+    ASSIGNED = "assigned", "Assigned"
+    ROUTING_FAILED = "routing_failed", "Routing failed"
+    NO_MATCH_FOUND = "no_match_found", "No match found"
+
+
 class RoutingEventType(models.TextChoices):
     ROUTING_STARTED = "routing_started", "Routing Started"
     ROUTING_COMPLETED = "routing_completed", "Routing Completed"
+    ROUTING_FAILED = "routing_failed", "Routing Failed"
     NO_ELIGIBLE_LABS = "no_eligible_labs", "No Eligible Labs"
     LAB_SUGGESTED = "lab_suggested", "Lab Suggested"
     ASSIGNMENT_CREATED = "assignment_created", "Assignment Created"
@@ -82,6 +93,7 @@ class RoutingEventType(models.TextChoices):
 __all__ = [
     "AssignmentStatus",
     "AssignmentType",
+    "DiagnosticOrderRoutingStatus",
     "RecommendationConfidence",
     "RecommendationLabel",
     "RoutingEventType",

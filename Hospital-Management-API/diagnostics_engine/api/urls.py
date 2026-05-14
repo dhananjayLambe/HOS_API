@@ -11,12 +11,18 @@ from diagnostics_engine.api.views.catalog import (
 from diagnostics_engine.api.views.search import InvestigationSearchView
 from diagnostics_engine.api.views.suggestions import InvestigationSuggestionsAPIView
 from diagnostics_engine.api.views.order_creation import CreateDiagnosticOrderFromConsultationView
+from diagnostics_engine.api.views.order_routing import DiagnosticOrderRoutingSummaryView
 
 router = DefaultRouter()
 router.register(r"catalog/services", DiagnosticServiceMasterViewSet, basename="diagnostic-services")
 router.register(r"catalog/packages", DiagnosticPackageViewSet, basename="diagnostic-packages")
 
 urlpatterns = [
+    path(
+        "orders/<uuid:order_id>/routing/",
+        DiagnosticOrderRoutingSummaryView.as_view(),
+        name="diagnostic-order-routing-summary",
+    ),
     path(
         "orders/create-from-consultation/",
         CreateDiagnosticOrderFromConsultationView.as_view(),

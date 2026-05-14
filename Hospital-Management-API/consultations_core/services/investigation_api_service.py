@@ -175,6 +175,10 @@ def add_investigation_item(
             pos = position if position is not None else _next_append_position(container)
             if position is not None:
                 _shift_positions_down_from(container, pos)
+            restored.source = InvestigationSource.CATALOG
+            restored.catalog_item = catalog_item
+            restored.custom_investigation = None
+            restored.diagnostic_package = None
             restored.is_deleted = False
             restored.deleted_at = None
             restored.deleted_by = None
@@ -197,6 +201,8 @@ def add_investigation_item(
             investigations=container,
             source=InvestigationSource.CATALOG,
             catalog_item=catalog_item,
+            custom_investigation=None,
+            diagnostic_package=None,
             position=pos,
             instructions=instructions or "",
             notes=notes or "",
@@ -227,6 +233,10 @@ def add_investigation_item(
                 pos = position if position is not None else _next_append_position(container)
                 if position is not None:
                     _shift_positions_down_from(container, pos)
+                restored.source = InvestigationSource.CUSTOM
+                restored.custom_investigation = custom_investigation
+                restored.catalog_item = None
+                restored.diagnostic_package = None
                 restored.is_deleted = False
                 restored.deleted_at = None
                 restored.deleted_by = None
@@ -249,6 +259,8 @@ def add_investigation_item(
                 investigations=container,
                 source=InvestigationSource.CUSTOM,
                 custom_investigation=custom_investigation,
+                catalog_item=None,
+                diagnostic_package=None,
                 position=pos,
                 instructions=instructions or "",
                 notes=notes or "",
@@ -271,6 +283,8 @@ def add_investigation_item(
             investigations=container,
             source=InvestigationSource.CUSTOM,
             custom_investigation=None,
+            catalog_item=None,
+            diagnostic_package=None,
             name=name,
             investigation_type=adhoc_type or "other",
             position=pos,
@@ -305,6 +319,10 @@ def add_investigation_item(
             pos = position if position is not None else _next_append_position(container)
             if position is not None:
                 _shift_positions_down_from(container, pos)
+            restored.source = InvestigationSource.PACKAGE
+            restored.diagnostic_package = diagnostic_package
+            restored.catalog_item = None
+            restored.custom_investigation = None
             restored.is_deleted = False
             restored.deleted_at = None
             restored.deleted_by = None
@@ -328,6 +346,8 @@ def add_investigation_item(
             investigations=container,
             source=InvestigationSource.PACKAGE,
             diagnostic_package=diagnostic_package,
+            catalog_item=None,
+            custom_investigation=None,
             package_expansion_snapshot=snapshot,
             position=pos,
             instructions=instructions or "",

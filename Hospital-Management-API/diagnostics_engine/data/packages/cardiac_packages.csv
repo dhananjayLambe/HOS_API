@@ -1,0 +1,9 @@
+ordering,lineage_code,version,name,category_code,package_type,collection_type,is_active,is_latest
+
+10,CARDIAC-BASIC,1,Basic Cardiac Risk Package,CARDIACPACKAGE,system,home,true,true
+20,CARDIAC-ADVANCED,1,Advanced Cardiac Evaluation Package,CARDIACPACKAGE,system,home,true,true
+30,CARDIAC-DIABETIC,1,Diabetic Cardiac Risk Package,CARDIACPACKAGE,system,home,true,true
+40,CARDIAC-HYPERTENSION,1,Hypertension Cardiac Assessment Package,CARDIACPACKAGE,system,home,true,true
+50,CARDIAC-SENIOR,1,Senior Citizen Cardiac Package,CARDIACPACKAGE,system,home,true,true
+60,CARDIAC-EXECUTIVE,1,Executive Heart Health Package,PREMIUMPACKAGE,system,home,true,true
+70,CARDIAC-PREVENTIVE,1,Preventive Cardiac Screening Package,CARDIACPACKAGE,system,home,true,true

@@ -1,0 +1,507 @@
+DoctorPro Diagnostic Catalog Architecture (Phase 1)
+
+Purpose
+
+This document defines the production-grade diagnostic catalog architecture for DoctorPro.
+
+The catalog becomes the foundation for:
+
+* Consultation investigations
+* Diagnostic orders
+* Routing engine
+* Lab marketplace
+* Pricing
+* Search
+* Recommendations
+* Packages
+* AI recommendation systems
+* Analytics
+* Reporting
+
+This architecture is designed for:
+
+* Long-term scalability
+* Safe imports
+* Idempotent synchronization
+* Stable business identifiers
+* Production-safe healthcare catalog management
+
+
+cd Hospital-Management-API
+python manage.py sync_diagnostic_categories --dry-run --verbose
+python manage.py test diagnostics_engine.tests.test_catalog_import_sync
+⸻
+
+High-Level Catalog Hierarchy
+
+Root Category
+    ↓
+Subcategory
+    ↓
+Diagnostic Service
+    ↓
+Packages
+    ↓
+Diagnostic Orders
+    ↓
+Routing Engine
+    ↓
+Lab Assignment
+
+Example:
+
+PATH (Pathology)
+    ↓
+HEM (Hematology)
+    ↓
+LAB-CBC (Complete Blood Count)
+
+⸻
+
+Data Folder Structure
+
+Location:
+
+Hospital-Management-API/diagnostics_engine/data/
+
+Recommended structure:
+
+Hospital-Management-API/
+└── diagnostics_engine/
+    └── data/
+        ├── categories.csv
+        ├── subcategories.csv
+        │
+        ├── services/
+        │   ├── pathology_services.csv
+        │   ├── radiology_services.csv
+        │   ├── cardiology_services.csv
+        │   ├── gynecology_services.csv
+        │   ├── diabetology_services.csv
+        │   ├── endocrinology_services.csv
+        │   ├── nephrology_services.csv
+        │   ├── pulmonology_services.csv
+        │   ├── gastro_services.csv
+        │   ├── wellness_services.csv
+        │   ├── package_services.csv
+        │   └── misc_services.csv
+        │
+        ├── packages/
+        │   ├── wellness_packages.csv
+        │   ├── diabetes_packages.csv
+        │   └── women_health_packages.csv
+        │
+        └── package_items/
+            ├── wellness_package_items.csv
+            ├── diabetes_package_items.csv
+            └── women_package_items.csv
+
+⸻
+
+Root Categories
+
+File:
+
+categories.csv
+
+Purpose:
+
+* Top-level catalog organization
+* Analytics grouping
+* Dashboard grouping
+* Search grouping
+* Marketplace grouping
+
+Root categories should NOT directly hold diagnostic services.
+
+Services should map to subcategories.
+
+Recommended categories.csv
+
+ordering,code,name,is_active
+10,PATH,Pathology,true
+20,RADIO,Radiology,true
+30,CARDIO,Cardiology,true
+40,PULMO,Pulmonology,true
+50,GASTRO,Gastroenterology,true
+60,NEURO,Neurology,true
+70,GYNAE,Gynecology,true
+80,PED,Pediatrics,true
+90,ENDO,Endocrinology,true
+100,DIAB,Diabetology,true
+110,NEPHRO,Nephrology,true
+120,URO,Urology,true
+130,ORTHO,Orthopedics,true
+140,ENT,ENT,true
+150,OPHTH,Ophthalmology,true
+160,DERM,Dermatology,true
+170,INFECT,Infectious Diseases,true
+180,IMMUNO_CLIN,Clinical Immunology,true
+190,ONCO,Oncology,true
+200,FERTILITY,Fertility & Reproductive Medicine,true
+210,DENTAL,Dental,true
+220,WELLNESS,Wellness & Preventive Health,true
+230,NUCLEAR,Nuclear Medicine,true
+240,VASCULAR,Vascular Diagnostics,true
+250,SLEEP,Sleep Medicine,true
+260,PACKAGE,Health Packages,true
+
+⸻
+
+Subcategories
+
+File:
+
+subcategories.csv
+
+Purpose:
+
+* Operational grouping
+* Service classification
+* Search optimization
+* Routing specialization
+* Lab specialization
+* Recommendation grouping
+
+Diagnostic services should map to these subcategories.
+
+Recommended subcategories.csv
+
+ordering,code,name,parent_code,is_active
+10,HEM,Hematology,PATH,true
+20,BIOCHEM,Biochemistry,PATH,true
+30,IMMUNO,Immunology,PATH,true
+40,MICRO,Microbiology,PATH,true
+50,SERO,Serology,PATH,true
+60,MOLEC,Molecular Diagnostics,PATH,true
+70,HISTO,Histopathology,PATH,true
+80,CYTO,Cytology,PATH,true
+90,CLINPATH,Clinical Pathology,PATH,true
+100,XRAY,X-Ray,RADIO,true
+110,USG,Ultrasound,RADIO,true
+120,CT,CT Scan,RADIO,true
+130,MRI,MRI,RADIO,true
+140,MAMMO,Mammography,RADIO,true
+150,DOPPLER,Doppler & Vascular Imaging,RADIO,true
+160,INTERVENTIONAL,Interventional Radiology,RADIO,true
+170,ECG,ECG,CARDIO,true
+180,ECHO,Echocardiography,CARDIO,true
+190,TMT,Treadmill Test,CARDIO,true
+200,HOLTER,Holter Monitoring,CARDIO,true
+210,PFT,Pulmonary Function Test,PULMO,true
+220,SLEEPSTUDY,Sleep Study,PULMO,true
+230,BRONCH,Bronchoscopy,PULMO,true
+240,ENDOSCOPY,Endoscopy,GASTRO,true
+250,COLONOSCOPY,Colonoscopy,GASTRO,true
+260,HEPATOLOGY,Hepatology Diagnostics,GASTRO,true
+270,EEG,EEG,NEURO,true
+280,NCV,NCV & EMG,NEURO,true
+290,NEUROIMAGING,Neuro Imaging,NEURO,true
+300,OBSGYN,Obstetrics & Gynecology,GYNAE,true
+310,PRENATAL,Prenatal Diagnostics,GYNAE,true
+320,FETAL,Fetal Medicine,GYNAE,true
+330,PEDLAB,Pediatric Laboratory,PED,true
+340,PEDSCAN,Pediatric Imaging,PED,true
+350,THYROID,Thyroid Diagnostics,ENDO,true
+360,HORMONE,Hormonal Studies,ENDO,true
+370,DIABETIC,Diabetes Diagnostics,DIAB,true
+380,RENAL,Renal Diagnostics,NEPHRO,true
+390,DIALYSIS,Dialysis Monitoring,NEPHRO,true
+400,UROSCAN,Urology Imaging,URO,true
+410,SEMEN,Semen Analysis,URO,true
+420,BONE,Bone & Joint Imaging,ORTHO,true
+430,BMD,Bone Mineral Density,ORTHO,true
+440,AUDIO,Audio & Hearing,ENT,true
+450,SINUS,Sinus & ENT Imaging,ENT,true
+460,RETINA,Retina Diagnostics,OPHTH,true
+470,EYESCAN,Eye Imaging,OPHTH,true
+480,SKIN,Skin Diagnostics,DERM,true
+490,ALLERGYTEST,Allergy Testing,DERM,true
+500,VIROLOGY,Virology,INFECT,true
+510,TROPICAL,Tropical Disease Diagnostics,INFECT,true
+520,AUTOIMMUNE,Autoimmune Diagnostics,IMMUNO,true
+530,ONCOPATH,Oncology Pathology,ONCO,true
+540,PETSCAN,PET Scan,ONCO,true
+550,TUMOR,Tumor Markers,ONCO,true
+560,IVF,IVF & Fertility,FERTILITY,true
+570,REPRODUCTIVE,Reproductive Hormonal Studies,FERTILITY,true
+580,DENTALXRAY,Dental Imaging,DENTAL,true
+590,PREVENTIVE,Preventive Health,WELLNESS,true
+600,CORPORATE,Corporate Wellness,WELLNESS,true
+610,NUCLEARSCAN,Nuclear Imaging,NUCLEAR,true
+620,VASCULARSCAN,Vascular Studies,VASCULAR,true
+630,SLEEPLAB,Sleep Lab,SLEEP,true
+640,GENERALPACKAGE,General Health Packages,PACKAGE,true
+650,DIABPACKAGE,Diabetes Packages,PACKAGE,true
+660,WOMENPACKAGE,Women's Health Packages,PACKAGE,true
+670,SENIORPACKAGE,Senior Citizen Packages,PACKAGE,true
+
+⸻
+
+Services Architecture
+
+Services should ALWAYS map to subcategories.
+
+Correct:
+
+PATH
+    ↓
+HEM
+    ↓
+LAB-CBC
+
+Incorrect:
+
+LAB-CBC → PATH
+
+Reason:
+
+* Better analytics
+* Better routing
+* Better recommendations
+* Better filtering
+* Better search
+* Better package organization
+
+⸻
+
+services/*.csv Format
+
+Recommended format:
+
+ordering,code,name,category_code,short_name,sample_type,home_collection_possible,tat_hours_default,is_active
+
+Example:
+
+10,LAB-CBC,Complete Blood Count,HEM,CBC,Blood,true,24,true
+20,LAB-ESR,Erythrocyte Sedimentation Rate,HEM,ESR,Blood,true,24,true
+30,LAB-HBA1C,HbA1c,DIABETIC,HbA1c,Blood,true,24,true
+
+⸻
+
+Service Code Rules
+
+Service codes are immutable business identifiers.
+
+Examples:
+
+LAB-CBC
+LAB-HBA1C
+LAB-CRP
+RAD-XRAY-CHEST
+RAD-USG-ABDOMEN
+CARDIO-ECG
+
+Never rename codes after production rollout.
+
+These codes become dependencies for:
+
+* Pricing
+* Routing
+* Orders
+* Packages
+* Analytics
+* Recommendations
+* Reports
+
+⸻
+
+CSV Import Strategy
+
+Recommended Import Command
+
+Single orchestration command:
+
+python manage.py sync_diagnostic_catalog
+
+This command should:
+
+1. Import categories
+2. Import subcategories
+3. Import all services
+4. Import packages
+5. Import package items
+
+⸻
+
+Import Order
+
+categories.csv
+    ↓
+subcategories.csv
+    ↓
+services/*.csv
+    ↓
+packages/*.csv
+    ↓
+package_items/*.csv
+
+⸻
+
+Import Philosophy
+
+Use update_or_create
+
+Always use:
+
+update_or_create()
+
+Never use:
+
+* blind inserts
+* delete + recreate
+* hard resets in production
+
+Reason:
+
+* preserves UUIDs
+* preserves pricing mappings
+* preserves routing references
+* preserves historical orders
+
+⸻
+
+Soft Delete Strategy
+
+Never automatically hard-delete catalog rows.
+
+Instead:
+
+is_active = False
+
+Reason:
+
+* historical orders exist
+* reports exist
+* pricing references exist
+* routing references exist
+
+⸻
+
+Recommended Import Features
+
+Future-safe importer capabilities:
+
+* Dry run mode
+* Validation summary
+* Duplicate detection
+* Missing category detection
+* Invalid hierarchy detection
+* CSV schema validation
+* Import statistics
+
+Example:
+
+python manage.py sync_diagnostic_catalog --dry-run
+
+⸻
+
+Validation Rules
+
+Categories
+
+* unique code
+* valid ordering
+* no circular hierarchy
+
+Subcategories
+
+* parent_code must exist
+* no self-parenting
+* unique code
+
+Services
+
+* category_code must exist
+* immutable service code
+* no duplicate semantic services
+
+⸻
+
+Important Operational Rules
+
+1. Services Should Be Canonical
+
+Do NOT create:
+
+CBC
+COMPLETE-BLOOD-COUNT
+HEMOGRAM
+
+as separate services.
+
+Instead:
+
+LAB-CBC
+
+with:
+
+* synonyms
+* tags
+* aliases
+
+⸻
+
+2. Root Categories Should Rarely Change
+
+Changing root categories later impacts:
+
+* analytics
+* dashboards
+* recommendations
+* routing
+
+⸻
+
+3. Service Codes Must Never Change
+
+Changing service codes later breaks:
+
+* routing
+* pricing
+* packages
+* orders
+* integrations
+
+⸻
+
+Phase 1 Scope
+
+Recommended target:
+
+250–350 canonical services
+
+This is sufficient for:
+
+* General Physician
+* Gynecology
+* Pediatrics
+* Diabetology
+* Endocrinology
+* Cardiology
+* Orthopedics
+* Gastroenterology
+* Nephrology
+* Pulmonology
+
+This should cover approximately:
+
+80–90% of OPD diagnostic workflows
+
+⸻
+
+Long-Term Vision
+
+This architecture is designed to support:
+
+* Marketplace routing
+* AI recommendations
+* Smart packages
+* Specialty diagnostics
+* Multi-lab pricing
+* Corporate wellness
+* Preventive health
+* Clinical intelligence
+* Advanced analytics
+
+without requiring schema redesign.

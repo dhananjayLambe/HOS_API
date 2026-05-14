@@ -1,0 +1,9 @@
+ordering,lineage_code,version,name,category_code,package_type,collection_type,is_active,is_latest
+
+10,SENIOR-BASIC,1,Senior Citizen Basic Health Package,SENIORPACKAGE,system,home,true,true
+20,SENIOR-ADVANCED,1,Senior Citizen Advanced Wellness Package,SENIORPACKAGE,system,home,true,true
+30,SENIOR-CARDIAC,1,Senior Cardiac Risk Assessment Package,CARDIACPACKAGE,system,home,true,true
+40,SENIOR-DIABETIC,1,Senior Diabetes Monitoring Package,DIABPACKAGE,system,home,true,true
+50,SENIOR-BONE-JOINT,1,Senior Bone and Joint Care Package,SENIORPACKAGE,system,home,true,true
+60,SENIOR-RENAL,1,Senior Kidney Health Package,RENALPACKAGE,system,home,true,true
+70,SENIOR-EXECUTIVE,1,Executive Senior Citizen Health Package,PREMIUMPACKAGE,system,home,true,true

@@ -1,0 +1,45 @@
+ordering,code,name,category_code,short_name,sample_type,home_collection_possible,tat_hours_default,is_active
+
+10,NEPHRO-HEMODIALYSIS-ASSESSMENT,Hemodialysis Evaluation,RENAL,Hemodialysis,None,false,24,true
+20,NEPHRO-PERITONEAL-DIALYSIS,Peritoneal Dialysis Assessment,RENAL,PD Assessment,None,false,24,true
+30,NEPHRO-RENAL-TRANSPLANT-WORKUP,Renal Transplant Evaluation,RENAL,Renal Tx Workup,None,false,48,true
+
+40,NEPHRO-CKD-ASSESSMENT,Chronic Kidney Disease Assessment,RENAL,CKD Assessment,None,false,24,true
+50,NEPHRO-AKI-ASSESSMENT,Acute Kidney Injury Assessment,RENAL,AKI Assessment,None,false,12,true
+60,NEPHRO-GLOMERULAR-ASSESSMENT,Glomerular Disease Evaluation,RENAL,Glomerular Assessment,None,false,24,true
+
+70,NEPHRO-RENAL-BIOPSY,Renal Biopsy Procedure,RENAL,Renal Biopsy,Tissue,false,72,true
+80,NEPHRO-DIALYSIS-ACCESS,Dialysis Access Evaluation,RENAL,Dialysis Access,None,false,24,true
+90,NEPHRO-AV-FISTULA-ASSESSMENT,AV Fistula Assessment,RENAL,AV Fistula,None,false,24,true
+
+100,NEPHRO-HYPERTENSION-RENAL,Renal Hypertension Evaluation,RENAL,Renal HTN,None,false,24,true
+110,NEPHRO-ELECTROLYTE-DISORDER,Renal Electrolyte Disorder Assessment,RENAL,Electrolyte Disorder,None,false,24,true
+
+120,NEPHRO-NEPHROTIC-SYNDROME,Nephrotic Syndrome Evaluation,RENAL,Nephrotic Syndrome,None,false,24,true
+130,NEPHRO-NEPHRITIC-SYNDROME,Nephritic Syndrome Evaluation,RENAL,Nephritic Syndrome,None,false,24,true
+
+140,NEPHRO-STONE-METABOLIC,Metabolic Stone Disease Evaluation,RENAL,Stone Metabolic,None,false,24,true
+150,NEPHRO-RECURRENT-UTI,Recurrent UTI Renal Evaluation,RENAL,Recurrent UTI,None,false,24,true
+
+160,NEPHRO-TRANSPLANT-FOLLOWUP,Renal Transplant Follow Up,RENAL,Renal Tx Follow Up,None,false,24,true
+170,NEPHRO-DIABETIC-KIDNEY,Diabetic Kidney Disease Assessment,RENAL,Diabetic Kidney,None,false,24,true
+
+180,NEPHRO-RENAL-VASCULAR,Renal Vascular Disease Evaluation,RENAL,Renal Vascular,None,false,24,true
+190,NEPHRO-RENAL-BONE-DISEASE,Renal Bone Disease Assessment,RENAL,Renal Bone,None,false,24,true
+
+200,NEPHRO-FLUID-OVERLOAD,Fluid Overload Assessment,RENAL,Fluid Overload,None,false,12,true
+210,NEPHRO-EDEMA-ASSESSMENT,Renal Edema Assessment,RENAL,Edema Assessment,None,false,24,true
+
+220,NEPHRO-PEDIATRIC-RENAL,Pediatric Nephrology Assessment,RENAL,Pediatric Renal,None,false,24,true
+230,NEPHRO-PROTEINURIA-ASSESSMENT,Proteinuria Evaluation,RENAL,Proteinuria,None,false,24,true
+
+240,NEPHRO-RENAL-ANEMIA,Renal Anemia Evaluation,RENAL,Renal Anemia,None,false,24,true
+250,NEPHRO-RENAL-NUTRITION,Renal Nutrition Assessment,RENAL,Renal Nutrition,None,false,24,true
+
+260,NEPHRO-DIALYSIS-ADEQUACY,Dialysis Adequacy Evaluation,RENAL,Dialysis Adequacy,None,false,24,true
+270,NEPHRO-RENAL-RECOVERY,Renal Recovery Assessment,RENAL,Renal Recovery,None,false,24,true
+
+280,NEPHRO-TRANSPLANT-REJECTION,Renal Transplant Rejection Evaluation,RENAL,Transplant Rejection,None,false,24,true
+290,NEPHRO-RENAL-AUTOIMMUNE,Renal Autoimmune Disease Assessment,RENAL,Renal Autoimmune,None,false,24,true
+
+300,NEPHRO-RENAL-FOLLOWUP,Comprehensive Nephrology Follow Up,RENAL,Nephrology Follow Up,None,false,24,true

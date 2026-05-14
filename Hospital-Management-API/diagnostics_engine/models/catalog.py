@@ -97,6 +97,11 @@ class DiagnosticCategory(models.Model):
  # =========================================================
  # DIAGNOSTIC SERVICE MASTER
  # =========================================================
+ # ``code`` is globally unique (``unique=True``): marketplace pricing, orders, and
+ # lab fulfillment all join on ``DiagnosticServiceMaster.id``. Legacy data or imports
+ # must not create a second row for the same business code — that breaks UUID-keyed
+ # joins (e.g. BranchServicePricing.service_id vs DiagnosticOrderTestLine.service_id).
+ #
  # Canonical diagnostic service definition.
  #
  # Represents a single executable diagnostic investigation.

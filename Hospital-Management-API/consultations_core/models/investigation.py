@@ -315,6 +315,19 @@ class InvestigationItem(models.Model):
     # =====================================================
     def save(self, *args, **kwargs):
         with transaction.atomic():
+            # Keep FKs aligned with ``source`` before denormalized fields run (see
+            # ``investigation_item_source_mapping_valid``). Prevents invalid rows if callers
+            # restore or construct instances with stale foreign keys.
+            if self.source == InvestigationSource.CATALOG:
+                self.custom_investigation = None
+                self.diagnostic_package = None
+            elif self.source == InvestigationSource.CUSTOM:
+                self.catalog_item = None
+                self.diagnostic_package = None
+            elif self.source == InvestigationSource.PACKAGE:
+                self.catalog_item = None
+                self.custom_investigation = None
+
             if self.diagnostic_package:
                 self.name = self.diagnostic_package.name
                 self.investigation_type = InvestigationType.PACKAGE

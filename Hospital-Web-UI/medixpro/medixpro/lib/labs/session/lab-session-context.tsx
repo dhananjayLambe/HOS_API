@@ -3,6 +3,7 @@
 import { useAuth } from "@/lib/authContext";
 import { isLabAdminRole } from "@/lib/jwtUtils";
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
+import axios from "axios";
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { fetchLabSession } from "./lab-session";
 import type { LabSession } from "./lab-session-types";
@@ -20,7 +21,7 @@ export type LabSessionContextValue = {
 const LabSessionContext = createContext<LabSessionContextValue | null>(null);
 
 function LabSessionQueryInner({ children }: { children: ReactNode }) {
-  const { sessionChecked, isAuthenticated, role, user } = useAuth();
+  const { sessionChecked, isAuthenticated, role, user, logout } = useAuth();
   const queryClient = useQueryClient();
   const enabled = sessionChecked && isAuthenticated && isLabAdminRole(role);
   const userId = user?.user_id ?? null;
@@ -42,6 +43,13 @@ function LabSessionQueryInner({ children }: { children: ReactNode }) {
     retry: 1,
     refetchOnWindowFocus: false,
   });
+
+  // JWT + localStorage role survive DB deletes; backend rejects with 403 when lab profile or labadmin group is gone.
+  useEffect(() => {
+    if (!query.isError || !query.error) return;
+    if (!axios.isAxiosError(query.error) || query.error.response?.status !== 403) return;
+    void logout();
+  }, [query.isError, query.error, logout]);
 
   useEffect(() => {
     if (process.env.NODE_ENV === "development" && query.isSuccess && query.data) {

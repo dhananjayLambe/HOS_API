@@ -90,6 +90,10 @@ class BranchServicePricing(BaseModel):
     Stores the pricing and commission structure for a specific diagnostic service at a lab branch.
     Includes validity windows, margin/commission breakdowns, and operational metadata.
     Designed for robust pricing history and compliance with business rules.
+
+    ``service`` must be the same ``DiagnosticServiceMaster`` row referenced on order test lines
+    (UUID equality). Routing never matches by human-readable name; mismatched FKs look correct in
+    admin when labels coincide but yield ``missing_test_pricing`` at runtime.
     """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 

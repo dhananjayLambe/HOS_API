@@ -1,0 +1,10 @@
+ordering,lineage_code,version,name,category_code,package_type,collection_type,is_active,is_latest
+
+10,WOMEN-BASIC,1,Women's Basic Health Checkup,WOMENPACKAGE,system,home,true,true
+20,WOMEN-ADVANCED,1,Women's Advanced Wellness Package,WOMENPACKAGE,system,home,true,true
+30,WOMEN-HORMONAL,1,Women's Hormonal Health Package,WOMENPACKAGE,system,home,true,true
+40,WOMEN-FERTILITY,1,Female Fertility Evaluation Package,FERTILITYPACKAGE,system,home,true,true
+50,WOMEN-PCOS,1,PCOS Assessment Package,WOMENPACKAGE,system,home,true,true
+60,WOMEN-PRENATAL,1,Prenatal Pregnancy Screening Package,PRENATALPACKAGE,system,home,true,true
+70,WOMEN-SENIOR,1,Senior Women's Wellness Package,SENIORPACKAGE,system,home,true,true
+80,WOMEN-EXECUTIVE,1,Executive Women's Full Body Package,PREMIUMPACKAGE,system,home,true,true

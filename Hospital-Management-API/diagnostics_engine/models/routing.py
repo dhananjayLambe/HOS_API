@@ -35,12 +35,15 @@ from diagnostics_engine.choices.routing import (
 # RoutingRun
 #     ↓
 # EligibleLabSnapshot
+#     - is_eligible=True, ranking_position set  →  ranked winner path (below continues)
+#     - is_eligible=False, ranking_position null →  no-match samples only; chain stops here
+#         (still: RoutingEvent NO_ELIGIBLE_LABS + ROUTING_COMPLETED on that run)
+#     ↓  (eligible ranked path only)
+# RoutingDecisionSnapshot (one per eligible ranked snapshot)
 #     ↓
-# RoutingDecisionSnapshot
+# RoutingLabOrderAssignment (single winner row)
 #     ↓
-# RoutingLabOrderAssignment
-#     ↓
-# RoutingEvent
+# RoutingEvent (LAB_SUGGESTED, ASSIGNMENT_CREATED, ROUTING_COMPLETED, …)
 #     ↓
 # Lab Dashboard
 #
@@ -205,6 +208,13 @@ class RoutingRun(BaseModel):
         default="consultation_completion",
     )
 
+    routing_engine_version = models.CharField(
+        max_length=32,
+        default="v1",
+        db_index=True,
+        help_text="Algorithm version for historical analytics (e.g. v1, ai_v1).",
+    )
+
     resolved_location_source = models.CharField(
         max_length=50,
         choices=RoutingLocationSource.choices,
@@ -258,6 +268,7 @@ class RoutingRun(BaseModel):
         indexes = [
             models.Index(fields=["routing_status"]),
             models.Index(fields=["routing_strategy"]),
+            models.Index(fields=["routing_engine_version"]),
             models.Index(fields=["resolved_pincode"]),
             models.Index(fields=["encounter"]),
             models.Index(fields=["consultation"]),
@@ -275,7 +286,10 @@ class RoutingRun(BaseModel):
 # ELIGIBLE LAB SNAPSHOT
 # =========================================================
 #
-# Stores all eligible labs evaluated during routing.
+# Stores eligible labs ranked during routing, and a capped set of ineligible
+# branch samples when no lab qualifies (is_eligible=False, ranking_position null)
+# for operational explainability. Reject-sample rows never get a
+# RoutingDecisionSnapshot or RoutingLabOrderAssignment.
 #
 # Snapshot-based design ensures historical routing
 # explainability even after:
@@ -455,6 +469,12 @@ class RoutingDecisionSnapshot(BaseModel):
         max_length=30,
         choices=RecommendationLabel.choices,
         default=RecommendationLabel.RECOMMENDED,
+    )
+
+    recommendation_labels = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Multi-label recommendations (e.g. cheapest + recommended).",
     )
 
     recommendation_confidence = models.CharField(
@@ -806,17 +826,9 @@ class RoutingEvent(BaseModel):
 
 
 __all__ = [
-    "AssignmentStatus",
-    "AssignmentType",
     "EligibleLabSnapshot",
-    "RoutingLabOrderAssignment",
-    "RecommendationConfidence",
-    "RecommendationLabel",
     "RoutingDecisionSnapshot",
     "RoutingEvent",
-    "RoutingEventType",
-    "RoutingLocationSource",
+    "RoutingLabOrderAssignment",
     "RoutingRun",
-    "RoutingStatus",
-    "RoutingStrategy",
 ]

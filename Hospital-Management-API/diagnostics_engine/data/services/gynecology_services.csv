@@ -1,0 +1,41 @@
+ordering,code,name,category_code,short_name,sample_type,home_collection_possible,tat_hours_default,is_active
+
+10,GYNAE-COLPOSCOPY,Colposcopy,GYNAEPROC,Colposcopy,None,false,12,true
+20,GYNAE-HSG,Hysterosalpingography,GYNAEPROC,HSG,None,false,24,true
+30,GYNAE-FOLLICULAR-STUDY,Follicular Monitoring Study,GYNAEPROC,Follicular Study,None,false,12,true
+40,GYNAE-ENDOMETRIAL-STUDY,Endometrial Assessment,GYNAEPROC,Endometrial Study,None,false,24,true
+50,GYNAE-CERVICAL-BIOPSY,Cervical Biopsy,GYNAEPROC,Cervical Biopsy,Tissue,false,72,true
+60,GYNAE-ENDOMETRIAL-BIOPSY,Endometrial Biopsy,GYNAEPROC,Endometrial Biopsy,Tissue,false,72,true
+70,GYNAE-HYSTEROSCOPY,Hysteroscopy,GYNAEPROC,Hysteroscopy,None,false,24,true
+80,GYNAE-LAPAROSCOPY,Diagnostic Gynec Laparoscopy,GYNAEPROC,Gynae Lap,None,false,48,true
+
+90,GYNAE-FETAL-NST,Fetal Non Stress Test,FETAL,NST,None,false,4,true
+100,GYNAE-FETAL-CTG,Cardiotocography,FETAL,CTG,None,false,4,true
+110,GYNAE-FETAL-BPP,Fetal Biophysical Profile,FETAL,BPP,None,false,12,true
+120,GYNAE-FETAL-GROWTH,Fetal Growth Assessment,FETAL,Growth Scan,None,false,12,true
+130,GYNAE-FETAL-WELLBEING,Fetal Wellbeing Scan,FETAL,Fetal Wellbeing,None,false,12,true
+
+140,GYNAE-INFERTILITY-WORKUP,Female Infertility Evaluation,FERTILITY,Infertility Workup,None,false,24,true
+150,GYNAE-IVF-ASSESSMENT,IVF Cycle Assessment,FERTILITY,IVF Assessment,None,false,24,true
+160,GYNAE-OOCYTE-MONITORING,Oocyte Monitoring,FERTILITY,Oocyte Monitoring,None,false,12,true
+170,GYNAE-EMBRYO-TRANSFER-PLAN,Embryo Transfer Assessment,FERTILITY,Embryo Transfer,None,false,24,true
+
+180,GYNAE-PELVIC-FLOOR-ASSESSMENT,Pelvic Floor Evaluation,GYNAEPROC,Pelvic Floor,None,false,24,true
+190,GYNAE-UTERINE-DOPPLER,Uterine Artery Doppler,GYNAEPROC,Uterine Doppler,None,false,24,true
+200,GYNAE-OVARIAN-RESERVE,Advanced Ovarian Reserve Assessment,FERTILITY,Ovarian Reserve,None,false,24,true
+
+210,GYNAE-HIGH-RISK-PREG,High Risk Pregnancy Monitoring,FETAL,High Risk Pregnancy,None,false,12,true
+220,GYNAE-PRECONCEPTION,Preconception Evaluation,FERTILITY,Preconception,None,false,24,true
+230,GYNAE-POSTMENOPAUSAL,Post Menopausal Assessment,GYNAEPROC,Post Menopause,None,false,24,true
+
+240,GYNAE-PCOS-ASSESSMENT,PCOS Clinical Assessment,GYNAEPROC,PCOS Assessment,None,false,24,true
+250,GYNAE-ENDOMETRIOSIS,Endometriosis Evaluation,GYNAEPROC,Endometriosis,None,false,24,true
+260,GYNAE-UTERINE-FIBROID,Fibroid Assessment,GYNAEPROC,Fibroid Assessment,None,false,24,true
+
+270,GYNAE-CERVICAL-LENGTH,Cervical Length Assessment,FETAL,Cervical Length,None,false,12,true
+280,GYNAE-ANOMALY-REVIEW,Detailed Fetal Anomaly Review,FETAL,Anomaly Review,None,false,24,true
+290,GYNAE-FETAL-DOPPLER,Fetal Doppler Assessment,FETAL,Fetal Doppler,None,false,24,true
+
+300,GYNAE-BREAST-LACTATION,Lactation Breast Assessment,GYNAEPROC,Lactation Assessment,None,false,24,true
+310,GYNAE-POSTPARTUM,Postpartum Recovery Assessment,GYNAEPROC,Postpartum,None,false,24,true
+320,GYNAE-REPRODUCTIVE-COUNSEL,Reproductive Health Counseling,GYNAEPROC,Reproductive Counsel,None,false,24,true

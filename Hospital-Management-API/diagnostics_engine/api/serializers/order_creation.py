@@ -29,6 +29,7 @@ class DiagnosticOrderCreationResponseSerializer(serializers.Serializer):
     items_created = serializers.IntegerField()
     test_lines_created = serializers.IntegerField()
     idempotent = serializers.BooleanField()
+    routing_summary_path = serializers.CharField(required=False)
 
     @classmethod
     def from_result(cls, result: DiagnosticOrderCreationResult) -> dict:
@@ -40,4 +41,5 @@ class DiagnosticOrderCreationResponseSerializer(serializers.Serializer):
             "items_created": result.items_created,
             "test_lines_created": result.test_lines_created,
             "idempotent": result.idempotent,
+            "routing_summary_path": f"/api/diagnostics/orders/{o.id}/routing/",
         }

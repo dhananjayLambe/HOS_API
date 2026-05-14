@@ -1,0 +1,100 @@
+ordering,code,name,category_code,short_name,sample_type,home_collection_possible,tat_hours_default,is_active
+
+10,RAD-XRAY-CHEST,X-Ray Chest PA View,XRAY,XR Chest,None,false,6,true
+20,RAD-XRAY-ABDOMEN,X-Ray Abdomen,XRAY,XR Abdomen,None,false,6,true
+30,RAD-XRAY-KNEE,X-Ray Knee Joint,XRAY,XR Knee,None,false,6,true
+40,RAD-XRAY-SPINE-CERVICAL,X-Ray Cervical Spine,XRAY,XR C Spine,None,false,6,true
+50,RAD-XRAY-SPINE-LUMBAR,X-Ray Lumbar Spine,XRAY,XR L Spine,None,false,6,true
+60,RAD-XRAY-PELVIS,X-Ray Pelvis,XRAY,XR Pelvis,None,false,6,true
+70,RAD-XRAY-SHOULDER,X-Ray Shoulder Joint,XRAY,XR Shoulder,None,false,6,true
+80,RAD-XRAY-HAND,X-Ray Hand,XRAY,XR Hand,None,false,6,true
+90,RAD-XRAY-FOOT,X-Ray Foot,XRAY,XR Foot,None,false,6,true
+100,RAD-XRAY-SINUS,X-Ray PNS,XRAY,XR PNS,None,false,6,true
+110,RAD-XRAY-SKULL,X-Ray Skull,XRAY,XR Skull,None,false,6,true
+
+120,RAD-USG-ABDOMEN,Ultrasound Abdomen,USG,USG Abdomen,None,false,12,true
+130,RAD-USG-PELVIS,Ultrasound Pelvis,USG,USG Pelvis,None,false,12,true
+140,RAD-USG-KUB,Ultrasound KUB,USG,USG KUB,None,false,12,true
+150,RAD-USG-OBSTETRIC,Obstetric Ultrasound,USG,USG Obstetric,None,false,12,true
+160,RAD-USG-NTSCAN,NT Scan,USG,NT Scan,None,false,12,true
+170,RAD-USG-ANOMALY,Anomaly Scan,USG,Anomaly Scan,None,false,12,true
+180,RAD-USG-DOPPLER-PREG,Doppler Pregnancy Scan,USG,Pregnancy Doppler,None,false,12,true
+190,RAD-USG-BREAST,Ultrasound Breast,USG,USG Breast,None,false,12,true
+200,RAD-USG-THYROID,Ultrasound Thyroid,USG,USG Thyroid,None,false,12,true
+210,RAD-USG-SCROTUM,Ultrasound Scrotum,USG,USG Scrotum,None,false,12,true
+220,RAD-USG-NECK,Ultrasound Neck,USG,USG Neck,None,false,12,true
+230,RAD-USG-SOFTTISSUE,Ultrasound Soft Tissue,USG,USG Soft Tissue,None,false,12,true
+240,RAD-USG-WHOLEABDOMEN,Ultrasound Whole Abdomen,USG,USG Whole Abdomen,None,false,12,true
+250,RAD-USG-TRANSVAGINAL,Transvaginal Ultrasound,USG,TVS,None,false,12,true
+260,RAD-USG-FOLLICULAR,Follicular Monitoring Scan,USG,Follicular Scan,None,false,12,true
+
+270,RAD-DOPPLER-ARTERIAL,Peripheral Arterial Doppler,DOPPLER,Arterial Doppler,None,false,24,true
+280,RAD-DOPPLER-VENOUS,Peripheral Venous Doppler,DOPPLER,Venous Doppler,None,false,24,true
+290,RAD-DOPPLER-CAROTID,Carotid Doppler,DOPPLER,Carotid Doppler,None,false,24,true
+300,RAD-DOPPLER-RENAL,Renal Doppler,DOPPLER,Renal Doppler,None,false,24,true
+
+310,RAD-CT-BRAIN,CT Brain Plain,CT,CT Brain,None,false,24,true
+320,RAD-CT-BRAIN-CONTRAST,CT Brain Contrast,CT,CECT Brain,None,false,24,true
+330,RAD-CT-CHEST,CT Chest,CT,CT Chest,None,false,24,true
+340,RAD-CT-ABDOMEN,CT Abdomen,CT,CT Abdomen,None,false,24,true
+350,RAD-CT-KUB,CT KUB,CT,CT KUB,None,false,24,true
+360,RAD-CT-PNS,CT PNS,CT,CT PNS,None,false,24,true
+370,RAD-CT-SPINE,CT Spine,CT,CT Spine,None,false,24,true
+380,RAD-CT-HRCT,HRCT Chest,CT,HRCT,None,false,24,true
+390,RAD-CT-ANGIO,CT Angiography,CT,CT Angio,None,false,24,true
+
+400,RAD-MRI-BRAIN,MRI Brain,MRI,MRI Brain,None,false,48,true
+410,RAD-MRI-SPINE-CERVICAL,MRI Cervical Spine,MRI,MRI C Spine,None,false,48,true
+420,RAD-MRI-SPINE-LUMBAR,MRI Lumbar Spine,MRI,MRI L Spine,None,false,48,true
+430,RAD-MRI-KNEE,MRI Knee Joint,MRI,MRI Knee,None,false,48,true
+440,RAD-MRI-SHOULDER,MRI Shoulder Joint,MRI,MRI Shoulder,None,false,48,true
+450,RAD-MRI-PELVIS,MRI Pelvis,MRI,MRI Pelvis,None,false,48,true
+460,RAD-MRI-ABDOMEN,MRI Abdomen,MRI,MRI Abdomen,None,false,48,true
+470,RAD-MRI-PITUITARY,MRI Pituitary,MRI,MRI Pituitary,None,false,48,true
+480,RAD-MRI-ANGIO,MR Angiography,MRI,MR Angio,None,false,48,true
+
+490,RAD-MAMMOGRAPHY,Mammography,MAMMO,Mammography,None,false,24,true
+500,RAD-BMD,Bone Mineral Density,BMD,BMD,None,false,24,true
+510,RAD-FIBROSCAN,Fibroscan Liver,FIBROSCAN,Fibroscan,None,false,24,true
+520,RAD-PETCT,PET CT Whole Body,PETCT,PET CT,None,false,72,true
+
+530,RAD-HSG,Hysterosalpingography,HSG,HSG,None,false,24,true
+540,RAD-IVP,Intravenous Pyelography,XRAY,IVP,None,false,24,true
+550,RAD-MCU,Micturating Cystourethrogram,XRAY,MCU,None,false,24,true
+560,RAD-BARIUM-SWALLOW,Barium Swallow Study,XRAY,Barium Swallow,None,false,24,true
+570,RAD-BARIUM-MEAL,Barium Meal Study,XRAY,Barium Meal,None,false,24,true
+
+580,RAD-OBS-GROWTHSCAN,Growth Scan Pregnancy,USG,Growth Scan,None,false,12,true
+590,RAD-OBS-BPP,Biophysical Profile Scan,USG,BPP,None,false,12,true
+600,RAD-OBS-FETAL-ECHO,Fetal Echocardiography,FETAL,Fetal Echo,None,false,24,true
+
+610,RAD-USG-HIP-INFANT,Infant Hip Ultrasound,USG,Infant Hip USG,None,false,12,true
+620,RAD-USG-CRANIUM,Neurosonography Infant,USG,Neurosonography,None,false,12,true
+
+630,RAD-USG-PROSTATE,Ultrasound Prostate,USG,USG Prostate,None,false,12,true
+640,RAD-USG-TRANSRECTAL,Transrectal Ultrasound,USG,TRUS,None,false,12,true
+
+650,RAD-DENTAL-OPG,OPG Dental X-Ray,DENTAL,OPG,None,false,6,true
+660,RAD-DENTAL-CEPH,Cephalometric X-Ray,DENTAL,Ceph,None,false,6,true
+
+670,RAD-CHEST-PA,X-Ray Chest PA,XRAY,Chest PA,None,false,6,true
+680,RAD-CHEST-AP,X-Ray Chest AP,XRAY,Chest AP,None,false,6,true
+690,RAD-XRAY-ANKLE,X-Ray Ankle,XRAY,XR Ankle,None,false,6,true
+700,RAD-XRAY-ELBOW,X-Ray Elbow,XRAY,XR Elbow,None,false,6,true
+710,RAD-XRAY-WRIST,X-Ray Wrist,XRAY,XR Wrist,None,false,6,true
+720,RAD-XRAY-HIP,X-Ray Hip Joint,XRAY,XR Hip,None,false,6,true
+730,RAD-XRAY-FEMUR,X-Ray Femur,XRAY,XR Femur,None,false,6,true
+740,RAD-XRAY-TIBIA,X-Ray Tibia Fibula,XRAY,XR Tibia,None,false,6,true
+
+750,RAD-USG-DVT,DVT Doppler Study,DOPPLER,DVT Doppler,None,false,24,true
+760,RAD-USG-PORTALDOPPLER,Portal Venous Doppler,DOPPLER,Portal Doppler,None,false,24,true
+770,RAD-USG-OBS-DOPPLER,Obstetric Doppler Study,DOPPLER,Obs Doppler,None,false,24,true
+
+780,RAD-CT-FACE,CT Face,CT,CT Face,None,false,24,true
+790,RAD-CT-NECK,CT Neck,CT,CT Neck,None,false,24,true
+800,RAD-CT-PELVIS,CT Pelvis,CT,CT Pelvis,None,false,24,true
+
+810,RAD-MRI-HIP,MRI Hip Joint,MRI,MRI Hip,None,false,48,true
+820,RAD-MRI-FOOT,MRI Foot,MRI,MRI Foot,None,false,48,true
+830,RAD-MRI-HAND,MRI Hand,MRI,MRI Hand,None,false,48,true
+840,RAD-MRI-TMJ,MRI TM Joint,MRI,MRI TMJ,None,false,48,true

@@ -1,0 +1,44 @@
+ordering,code,name,category_code,short_name,sample_type,home_collection_possible,tat_hours_default,is_active
+
+10,PULMO-PFT,Pulmonary Function Test,PULMO,PFT,None,false,12,true
+20,PULMO-SPIROMETRY,Spirometry,PULMO,Spirometry,None,false,6,true
+30,PULMO-DLCO,Diffusion Lung Capacity Test,PULMO,DLCO,None,false,24,true
+40,PULMO-PEAKFLOW,Peak Expiratory Flow Rate,PULMO,PEFR,None,false,2,true
+
+50,PULMO-BRONCHOSCOPY,Bronchoscopy,PULMO,Bronchoscopy,None,false,24,true
+60,PULMO-BAL,Bronchoalveolar Lavage,PULMO,BAL,Fluid,false,48,true
+70,PULMO-EBUS,Endobronchial Ultrasound,PULMO,EBUS,None,false,48,true
+
+80,PULMO-SLEEP-STUDY,Polysomnography Sleep Study,PULMO,Sleep Study,None,false,48,true
+90,PULMO-CPAP-TITRATION,CPAP Titration Study,PULMO,CPAP Titration,None,false,24,true
+
+100,PULMO-ASTHMA-ASSESSMENT,Asthma Clinical Assessment,PULMO,Asthma Assessment,None,false,24,true
+110,PULMO-COPD-ASSESSMENT,COPD Clinical Assessment,PULMO,COPD Assessment,None,false,24,true
+120,PULMO-ILD-ASSESSMENT,Interstitial Lung Disease Assessment,PULMO,ILD Assessment,None,false,24,true
+
+130,PULMO-TB-ASSESSMENT,Tuberculosis Pulmonary Assessment,PULMO,TB Assessment,None,false,24,true
+140,PULMO-LUNG-FIBROSIS,Lung Fibrosis Evaluation,PULMO,Lung Fibrosis,None,false,24,true
+150,PULMO-PLEURAL-EFFUSION,Pleural Effusion Assessment,PULMO,Pleural Effusion,None,false,24,true
+
+160,PULMO-OXYGEN-ASSESSMENT,Oxygen Dependency Evaluation,PULMO,Oxygen Assessment,None,false,12,true
+170,PULMO-6MWT,Six Minute Walk Test,PULMO,6MWT,None,false,6,true
+
+180,PULMO-LUNG-CANCER-ASSESSMENT,Lung Cancer Pulmonary Assessment,PULMO,Lung Cancer,None,false,24,true
+190,PULMO-SMOKER-LUNG-ASSESSMENT,Smoker Lung Health Evaluation,PULMO,Smoker Lung,None,false,24,true
+
+200,PULMO-OCCUPATIONAL-LUNG,Occupational Lung Disease Assessment,PULMO,Occupational Lung,None,false,24,true
+210,PULMO-ALLERGIC-AIRWAY,Allergic Airway Disease Assessment,PULMO,Allergic Airway,None,false,24,true
+
+220,PULMO-NONINVASIVE-VENTILATION,Non Invasive Ventilation Assessment,PULMO,NIV Assessment,None,false,24,true
+230,PULMO-VENTILATOR-ASSESSMENT,Ventilator Dependency Evaluation,PULMO,Ventilator Assessment,None,false,24,true
+
+240,PULMO-PEDIATRIC-PULMO,Pediatric Pulmonology Assessment,PULMO,Pediatric Pulmo,None,false,24,true
+250,PULMO-SLEEP-APNEA,Obstructive Sleep Apnea Evaluation,PULMO,Sleep Apnea,None,false,24,true
+
+260,PULMO-POST-COVID-LUNG,Post COVID Lung Assessment,PULMO,Post COVID Lung,None,false,24,true
+270,PULMO-RESPIRATORY-REHAB,Respiratory Rehabilitation Assessment,PULMO,Respiratory Rehab,None,false,24,true
+
+280,PULMO-LUNG-TRANSPLANT,Lung Transplant Evaluation,PULMO,Lung Transplant,None,false,48,true
+290,PULMO-CHEST-PHYSICIAN-FOLLOWUP,Comprehensive Pulmonology Follow Up,PULMO,Pulmo Follow Up,None,false,24,true
+
+300,PULMO-ARDS-ASSESSMENT,ARDS Pulmonary Assessment,PULMO,ARDS Assessment,None,false,24,true

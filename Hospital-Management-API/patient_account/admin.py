@@ -39,10 +39,10 @@ class OTPAdmin(admin.ModelAdmin):
 admin.site.register(PatientAccount, PatientAccountAdmin)
 admin.site.register(PatientProfile, PatientProfileAdmin)
 admin.site.register(PatientProfileDetails, PatientProfileDetailsAdmin)
-admin.site.register(MedicalHistory, MedicalHistoryAdmin)
-admin.site.register(HealthMetrics, HealthMetricsAdmin)
-admin.site.register(AuditLog, AuditLogAdmin)
-admin.site.register(OTP, OTPAdmin)
+# admin.site.register(MedicalHistory, MedicalHistoryAdmin)
+# admin.site.register(HealthMetrics, HealthMetricsAdmin)
+# admin.site.register(AuditLog, AuditLogAdmin)
+# admin.site.register(OTP, OTPAdmin)
 
 class AuditLogAdmin(admin.ModelAdmin):
     readonly_fields = ('patient_profile', 'action', 'timestamp')

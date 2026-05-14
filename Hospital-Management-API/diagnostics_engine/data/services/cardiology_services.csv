@@ -1,0 +1,53 @@
+ordering,code,name,category_code,short_name,sample_type,home_collection_possible,tat_hours_default,is_active
+
+10,CARDIO-ECG,Electrocardiogram,ECG,ECG,None,false,1,true
+20,CARDIO-2DECHO,2D Echocardiography,ECHO,2D Echo,None,false,4,true
+30,CARDIO-TMT,Treadmill Test,TMT,TMT,None,false,4,true
+40,CARDIO-HOLTER,24 Hour Holter Monitoring,HOLTER,Holter,None,false,24,true
+50,CARDIO-AMBULATORY-BP,24 Hour Ambulatory Blood Pressure Monitoring,HOLTER,ABPM,None,false,24,true
+60,CARDIO-STRESS-ECHO,Stress Echocardiography,ECHO,Stress Echo,None,false,12,true
+70,CARDIO-COLOR-DOPPLER,Color Doppler Echocardiography,ECHO,Color Doppler,None,false,12,true
+80,CARDIO-TEE,Transesophageal Echocardiography,ECHO,TEE,None,false,24,true
+90,CARDIO-FETAL-ECHO,Fetal Echocardiography,FETAL,Fetal Echo,None,false,24,true
+
+100,CARDIO-CORONARY-ANGIO,Coronary Angiography,ANGIO,Coronary Angio,None,false,48,true
+110,CARDIO-CT-ANGIO,CT Coronary Angiography,ANGIO,CT Angio,None,false,48,true
+120,CARDIO-PERIPHERAL-ANGIO,Peripheral Angiography,ANGIO,Peripheral Angio,None,false,48,true
+130,CARDIO-CAROTID-ANGIO,Carotid Angiography,ANGIO,Carotid Angio,None,false,48,true
+
+140,CARDIO-PACEMAKER-CHECK,Pacemaker Evaluation,PACEMAKER,Pacemaker,None,false,24,true
+150,CARDIO-ICD-CHECK,ICD Device Evaluation,PACEMAKER,ICD Check,None,false,24,true
+
+160,CARDIO-CARDIAC-MRI,Cardiac MRI,CARDIACMRI,Cardiac MRI,None,false,72,true
+170,CARDIO-CARDIAC-CT,Cardiac CT Scan,CARDIACCT,Cardiac CT,None,false,48,true
+180,CARDIO-MYOCARDIAL-PERFUSION,Myocardial Perfusion Scan,NUCLEAR,Perfusion Scan,None,false,72,true
+
+190,CARDIO-ARTERIAL-STIFFNESS,Arterial Stiffness Study,VASCULAR,Arterial Stiffness,None,false,24,true
+200,CARDIO-ANKLE-BRACHIAL,Ankle Brachial Index,VASCULAR,ABI,None,false,12,true
+210,CARDIO-VASCULAR-SCREEN,Vascular Screening Panel,VASCULAR,Vascular Screen,None,false,24,true
+
+220,CARDIO-CARDIAC-RISK-ASSESSMENT,Comprehensive Cardiac Risk Assessment,CARDIORISK,Cardiac Risk,None,false,24,true
+230,CARDIO-PREOP-CLEARANCE,Preoperative Cardiac Evaluation,CARDIORISK,Preop Cardiac,None,false,24,true
+240,CARDIO-SPORTS-CLEARANCE,Sports Cardiac Fitness Evaluation,CARDIORISK,Sports Cardiac,None,false,24,true
+
+250,CARDIO-HEART-FAILURE-ASSESSMENT,Heart Failure Evaluation,CARDIOHF,HF Assessment,None,false,24,true
+260,CARDIO-VALVULAR-ASSESSMENT,Valvular Heart Disease Assessment,CARDIOVALVE,Valve Assessment,None,false,24,true
+270,CARDIO-ARRHYTHMIA-ASSESSMENT,Arrhythmia Evaluation,CARDIOARRHYTHMIA,Arrhythmia,None,false,24,true
+
+280,CARDIO-CONGENITAL-ECHO,Congenital Heart Disease Echocardiography,FETAL,CHD Echo,None,false,24,true
+290,CARDIO-EXERCISE-STRESS,Exercise Stress Testing,TMT,Exercise Stress,None,false,12,true
+
+300,CARDIO-PULMONARY-STRESS,Cardiopulmonary Exercise Test,CPET,CPET,None,false,24,true
+310,CARDIO-ENDOTHELIAL-FUNCTION,Endothelial Function Test,VASCULAR,Endothelial Test,None,false,24,true
+320,CARDIO-CALCIUM-SCORE,Coronary Calcium Score,CARDIACCT,Calcium Score,None,false,48,true
+
+330,CARDIO-RHYTHM-EVALUATION,Advanced Rhythm Evaluation,ELECTROPHYSIOLOGY,Rhythm Study,None,false,48,true
+340,CARDIO-EPS,Electrophysiology Study,ELECTROPHYSIOLOGY,EPS,None,false,72,true
+350,CARDIO-TILT-TABLE,Tilt Table Test,ELECTROPHYSIOLOGY,Tilt Table,None,false,24,true
+
+360,CARDIO-CARDIAC-CHECKUP,Comprehensive Cardiac Checkup,CARDIORISK,Cardiac Checkup,None,false,24,true
+370,CARDIO-HYPERTENSION-WORKUP,Hypertension Cardiac Workup,CARDIORISK,HTN Workup,None,false,24,true
+380,CARDIO-DIABETIC-CARDIAC,Diabetic Cardiac Evaluation,CARDIORISK,Diabetic Cardiac,None,false,24,true
+
+390,CARDIO-PEDIATRIC-ECHO,Pediatric Echocardiography,PEDIATRICCARDIO,Ped Echo,None,false,24,true
+400,CARDIO-PEDIATRIC-ECG,Pediatric ECG,PEDIATRICCARDIO,Ped ECG,None,false,6,true

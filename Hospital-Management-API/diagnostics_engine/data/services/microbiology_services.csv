@@ -1,0 +1,41 @@
+ordering,code,name,category_code,short_name,sample_type,home_collection_possible,tat_hours_default,is_active
+
+10,MICRO-AFB-CULTURE,AFB Mycobacterial Culture,MICRO,AFB Culture,Sputum,false,72,true
+20,MICRO-GRAM-STAIN,Gram Stain Examination,MICRO,Gram Stain,Swab,false,12,true
+30,MICRO-KOH,Microbial KOH Preparation,MICRO,KOH Prep,Skin Scrap,false,12,true
+40,MICRO-FUNGAL-CULTURE,Fungal Culture,MICRO,Fungal Culture,Swab,false,96,true
+50,MICRO-AFB-STAIN,AFB Stain Ziehl Neelsen,MICRO,AFB Stain,Sputum,false,12,true
+
+60,MICRO-SENSITIVITY,Antibiotic Sensitivity Testing,MICRO,Sensitivity Test,Culture,false,72,true
+70,MICRO-MDR-SCREEN,Multi Drug Resistance Screening,MICRO,MDR Screen,Culture,false,96,true
+
+80,MICRO-WOUND-CULTURE,Wound Swab Culture,MICRO,Wound Culture,Swab,false,72,true
+90,MICRO-PUS-CULTURE,Pus Culture and Sensitivity,MICRO,Pus Culture,Pus,false,72,true
+100,MICRO-EAR-SWAB, Ear Swab Culture,MICRO,Ear Swab,Swab,false,72,true
+110,MICRO-EYE-SWAB,Eye Swab Culture,MICRO,Eye Swab,Swab,false,72,true
+
+120,MICRO-CSF-CULTURE,CSF Culture and Sensitivity,MICRO,CSF Culture,CSF,false,72,true
+130,MICRO-PLEURAL-CULTURE,Pleural Fluid Culture,MICRO,Pleural Culture,Fluid,false,72,true
+140,MICRO-ASCITIC-CULTURE,Ascitic Fluid Culture,MICRO,Ascitic Culture,Fluid,false,72,true
+150,MICRO-SYNOVIAL-CULTURE,Synovial Fluid Culture,MICRO,Synovial Culture,Fluid,false,72,true
+
+160,MICRO-SEMEN-CULTURE,Semen Culture,MICRO,Semen Culture,Semen,false,72,true
+170,MICRO-CERVICAL-CULTURE,Cervical Swab Culture,MICRO,Cervical Culture,Swab,false,72,true
+180,MICRO-URETHRAL-CULTURE,Urethral Swab Culture,MICRO,Urethral Culture,Swab,false,72,true
+
+190,MICRO-ANAEROBIC-CULTURE,Anaerobic Culture,MICRO,Anaerobic Culture,Sample,false,96,true
+200,MICRO-FECAL-CULTURE,Fecal Pathogen Culture,MICRO,Fecal Culture,Stool,false,72,true
+
+210,MICRO-BRUCELLA-CULTURE,Brucella Culture,MICRO,Brucella Culture,Blood,false,96,true
+220,MICRO-TB-CULTURE,Tuberculosis Culture,MICRO,TB Culture,Sputum,false,120,true
+
+230,MICRO-MALDI-IDENTIFICATION,MALDI TOF Organism Identification,MICRO,MALDI,None,false,48,true
+240,MICRO-BIOFILM-STUDY,Bacterial Biofilm Study,MICRO,Biofilm Study,Culture,false,96,true
+
+250,MICRO-HOSPITAL-INFECTION,Hospital Acquired Infection Screening,MICRO,HAI Screening,Swab,false,72,true
+260,MICRO-NASAL-MRSA,MRSA Nasal Screening,MICRO,MRSA Screen,Swab,false,48,true
+
+270,MICRO-INFECTION-CONTROL,Infection Control Surveillance,MICRO,Infection Control,Swab,false,72,true
+280,MICRO-FOOD-CULTURE,Food Sample Microbiology Culture,MICRO,Food Culture,Food,false,96,true
+290,MICRO-WATER-CULTURE,Water Microbiology Analysis,MICRO,Water Culture,Water,false,96,true
+300,MICRO-AIR-CULTURE,Air Quality Microbial Analysis,MICRO,Air Culture,Air,false,96,true

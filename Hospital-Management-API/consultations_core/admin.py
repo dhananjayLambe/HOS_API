@@ -1,3 +1,3 @@
 from django.contrib import admin
-
-# Register your models here.
+from consultations_core.models import InvestigationItem
+admin.site.register(InvestigationItem)

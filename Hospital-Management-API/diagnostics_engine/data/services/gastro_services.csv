@@ -1,0 +1,43 @@
+ordering,code,name,category_code,short_name,sample_type,home_collection_possible,tat_hours_default,is_active
+
+10,GASTRO-UPPER-GI-ENDOSCOPY,Upper GI Endoscopy,GASTROPROC,UGI Endoscopy,None,false,12,true
+20,GASTRO-COLONOSCOPY,Colonoscopy,GASTROPROC,Colonoscopy,None,false,24,true
+30,GASTRO-SIGMOIDOSCOPY,Sigmoidoscopy,GASTROPROC,Sigmoidoscopy,None,false,12,true
+40,GASTRO-PROCTOSCOPY,Proctoscopy,GASTROPROC,Proctoscopy,None,false,12,true
+
+50,GASTRO-ERCP,Endoscopic Retrograde Cholangiopancreatography,GASTROPROC,ERCP,None,false,48,true
+60,GASTRO-EUS,Endoscopic Ultrasound,GASTROPROC,EUS,None,false,48,true
+70,GASTRO-CAPSULE-ENDOSCOPY,Capsule Endoscopy,GASTROPROC,Capsule Endoscopy,None,false,48,true
+80,GASTRO-ENTEROSCOPY,Enteroscopy,GASTROPROC,Enteroscopy,None,false,48,true
+
+90,GASTRO-LIVER-FIBROSIS-ASSESSMENT,Liver Fibrosis Clinical Assessment,HEPATOLOGY,Liver Fibrosis,None,false,24,true
+100,GASTRO-CIRRHOSIS-ASSESSMENT,Cirrhosis Evaluation,HEPATOLOGY,Cirrhosis Assessment,None,false,24,true
+110,GASTRO-FATTY-LIVER-ASSESSMENT,Fatty Liver Disease Assessment,HEPATOLOGY,Fatty Liver,None,false,24,true
+
+120,GASTRO-IBD-ASSESSMENT,Inflammatory Bowel Disease Assessment,GASTROPROC,IBD Assessment,None,false,24,true
+130,GASTRO-IBS-ASSESSMENT,Irritable Bowel Syndrome Evaluation,GASTROPROC,IBS Assessment,None,false,24,true
+140,GASTRO-MALABSORPTION-ASSESSMENT,Malabsorption Syndrome Evaluation,GASTROPROC,Malabsorption,None,false,24,true
+
+150,GASTRO-PANCREATIC-ASSESSMENT,Pancreatic Disorder Assessment,GASTROPROC,Pancreatic Assessment,None,false,24,true
+160,GASTRO-HEPATITIS-ASSESSMENT,Hepatitis Clinical Evaluation,HEPATOLOGY,Hepatitis Assessment,None,false,24,true
+
+170,GASTRO-GI-BLEED-ASSESSMENT,Gastrointestinal Bleeding Assessment,GASTROPROC,GI Bleed,None,false,12,true
+180,GASTRO-PORTAL-HYPERTENSION,Portal Hypertension Evaluation,HEPATOLOGY,Portal HTN,None,false,24,true
+
+190,GASTRO-CELIAC-ASSESSMENT,Celiac Disease Clinical Assessment,GASTROPROC,Celiac Assessment,None,false,24,true
+200,GASTRO-REFLUX-ASSESSMENT,Gastroesophageal Reflux Evaluation,GASTROPROC,GERD Assessment,None,false,24,true
+
+210,GASTRO-LIVER-TRANSPLANT-WORKUP,Liver Transplant Evaluation,HEPATOLOGY,Liver Tx Workup,None,false,48,true
+220,GASTRO-HEPATIC-ENCEPHALOPATHY,Hepatic Encephalopathy Assessment,HEPATOLOGY,Hepatic Encephalopathy,None,false,24,true
+
+230,GASTRO-NUTRITION-ASSESSMENT,Gastroenterology Nutrition Assessment,GASTROPROC,Nutrition Assessment,None,false,24,true
+240,GASTRO-ENDOSCOPY-BIOPSY,Endoscopic Biopsy Procedure,GASTROPROC,Endoscopy Biopsy,Tissue,false,72,true
+
+250,GASTRO-BARIATRIC-EVALUATION,Bariatric Surgery GI Evaluation,GASTROPROC,Bariatric GI,None,false,24,true
+260,GASTRO-CHRONIC-DIARRHEA,Chronic Diarrhea Evaluation,GASTROPROC,Chronic Diarrhea,None,false,24,true
+
+270,GASTRO-CONSTIPATION-ASSESSMENT,Chronic Constipation Evaluation,GASTROPROC,Constipation Assessment,None,false,24,true
+280,GASTRO-HEMORRHOID-ASSESSMENT,Hemorrhoid Evaluation,GASTROPROC,Hemorrhoid Assessment,None,false,24,true
+
+290,GASTRO-ANORECTAL-MANOMETRY,Anorectal Manometry,GASTROPROC,Anorectal Manometry,None,false,24,true
+300,GASTRO-ESOPHAGEAL-MANOMETRY,Esophageal Manometry,GASTROPROC,Esophageal Manometry,None,false,24,true

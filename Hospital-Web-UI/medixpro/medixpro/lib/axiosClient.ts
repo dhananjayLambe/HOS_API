@@ -226,6 +226,8 @@ backendAxiosClient.interceptors.response.use(
       const isInvestigationSuggestionsEndpoint = fullUrl.includes(
         "/diagnostics/investigations/suggestions/",
       );
+      /** Lab session: 403 means token/role is stale vs DB (no LabUser / not labadmin) — lab layout logs user out; avoid red herring logs. */
+      const isLabsMeForbidden = fullUrl.includes("labs/me") && error.response?.status === 403;
       /** Optional UI enrichment; investigations section uses static fallback — avoid red logs when Django/proxy is unreachable. */
       const isSuppressedSuggestionsNetwork =
         isInvestigationSuggestionsEndpoint && !error.response;
@@ -258,7 +260,8 @@ backendAxiosClient.interceptors.response.use(
         (!is404 || (!isSectionEndpoint && !isTemplateEndpoint)) &&
         !isExpectedPreview400 &&
         !isAlreadyCompleted400 &&
-        !isSuppressedSuggestionsNetwork
+        !isSuppressedSuggestionsNetwork &&
+        !isLabsMeForbidden
       ) {
         console.error(
           `[backendAxiosClient] Error ${error.response?.status || "Network"} on ${error.config.method?.toUpperCase()} ${fullUrl}`,

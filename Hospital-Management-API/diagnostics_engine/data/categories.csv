@@ -1,0 +1,27 @@
+ordering,code,name,is_active
+10,PATH,Pathology,true
+20,RADIO,Radiology,true
+30,CARDIO,Cardiology,true
+40,PULMO,Pulmonology,true
+50,GASTRO,Gastroenterology,true
+60,NEURO,Neurology,true
+70,GYNAE,Gynecology,true
+80,PED,Pediatrics,true
+90,ENDO,Endocrinology,true
+100,DIAB,Diabetology,true
+110,NEPHRO,Nephrology,true
+120,URO,Urology,true
+130,ORTHO,Orthopedics,true
+140,ENT,ENT,true
+150,OPHTH,Ophthalmology,true
+160,DERM,Dermatology,true
+170,INFECT,Infectious Diseases,true
+180,IMMUNO_CLIN,Clinical Immunology,true
+190,ONCO,Oncology,true
+200,FERTILITY,Fertility & Reproductive Medicine,true
+210,DENTAL,Dental,true
+220,WELLNESS,Wellness & Preventive Health,true
+230,NUCLEAR,Nuclear Medicine,true
+240,VASCULAR,Vascular Diagnostics,true
+250,SLEEP,Sleep Medicine,true
+260,PACKAGE,Health Packages,true

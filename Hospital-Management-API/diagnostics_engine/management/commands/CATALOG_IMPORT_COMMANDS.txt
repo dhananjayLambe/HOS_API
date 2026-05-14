@@ -1,0 +1,225 @@
+================================================================================
+DoctorPro / diagnostics_engine — CATALOG CSV MANAGEMENT COMMANDS (GUIDE)
+================================================================================
+
+Run all commands from the Django project root (folder that contains manage.py),
+with your virtual environment activated:
+
+  cd Hospital-Management-API
+  source .venv/bin/activate    # or your venv path
+
+--------------------------------------------------------------------------------
+1) IMPORT ORDER (RECOMMENDED)
+--------------------------------------------------------------------------------
+
+Categories must exist before services. Packages need categories. Package items
+need packages and services.
+
+  1. sync_diagnostic_categories
+  2. sync_diagnostic_services
+  3. sync_diagnostic_packages
+  4. sync_diagnostic_package_items
+
+Optional: before writing the database, dry-run each step:
+
+  python manage.py sync_diagnostic_categories --dry-run --verbose
+  python manage.py sync_diagnostic_services   --dry-run --verbose
+  python manage.py sync_diagnostic_packages   --dry-run --verbose
+  python manage.py sync_diagnostic_package_items --dry-run --verbose
+
+Then run the same commands without --dry-run to commit.
+
+--------------------------------------------------------------------------------
+2) sync_diagnostic_categories
+--------------------------------------------------------------------------------
+
+Loads:
+  diagnostics_engine/data/categories.csv          (root categories)
+  diagnostics_engine/data/subcategories.csv         (child categories)
+
+Natural key: category "code" (globally unique across both files).
+
+Common usage:
+
+  python manage.py sync_diagnostic_categories --verbose
+
+Flags:
+  --data-dir PATH
+      Override the data folder (default: diagnostics_engine/data/).
+
+  --categories-file PATH
+      Override categories.csv (default: <data-dir>/categories.csv).
+
+  --subcategories-file PATH
+      Override subcategories.csv (default: <data-dir>/subcategories.csv).
+
+  --dry-run
+      Validate and print counts; no database writes.
+
+  --verbose
+      Debug logging + prints resolved absolute paths to the CSV files.
+
+  --strict
+      Stop on the first row-level error (raises CommandError).
+
+--------------------------------------------------------------------------------
+3) sync_diagnostic_services
+--------------------------------------------------------------------------------
+
+Loads all CSV files in:
+  diagnostics_engine/data/services/*.csv
+
+unless you pass explicit files.
+
+Natural key: service "code" (globally unique).
+
+Common usage:
+
+  python manage.py sync_diagnostic_services --verbose
+
+Flags:
+  --data-dir PATH
+      Base folder; services are read from <data-dir>/services/.
+
+  --file PATH
+      Process only this CSV (repeatable). Paths can be absolute, relative to
+      the current working directory, or under --data-dir if not found first.
+
+  --dry-run
+  --verbose
+  --strict
+      Same meaning as for categories.
+
+--------------------------------------------------------------------------------
+4) sync_diagnostic_packages
+--------------------------------------------------------------------------------
+
+Loads all CSV files in:
+  diagnostics_engine/data/packages/*.csv
+
+Natural key: lineage_code + version (together). Maintains at most one row with
+is_latest=true per lineage_code within a single CSV file.
+
+Common usage:
+
+  python manage.py sync_diagnostic_packages --verbose
+
+Flags:
+  --data-dir PATH
+  --file PATH          (repeatable)
+  --dry-run
+  --verbose
+  --strict
+
+--------------------------------------------------------------------------------
+5) sync_diagnostic_package_items
+--------------------------------------------------------------------------------
+
+Loads all CSV files in:
+  diagnostics_engine/data/package_items/*.csv
+
+Resolves package_code to DiagnosticPackage.lineage_code where is_latest=true.
+Resolves service_code to DiagnosticServiceMaster.code.
+
+Common usage:
+
+  python manage.py sync_diagnostic_package_items --verbose
+
+Flags:
+  --data-dir PATH
+  --file PATH          (repeatable)
+  --dry-run
+  --verbose
+  --strict
+
+--------------------------------------------------------------------------------
+6) audit_diagnostic_catalog_csvs
+--------------------------------------------------------------------------------
+
+Read-only check (plus optional fix) for duplicate natural keys in CSV data:
+
+  - category code across categories.csv + subcategories.csv
+  - service code across all services/*.csv
+  - package lineage_code + version across packages/*.csv
+  - package_code + service_code across package_items/*.csv
+
+Usage:
+
+  python manage.py audit_diagnostic_catalog_csvs
+
+Exits with an error if any duplicates are found (good for CI).
+
+  python manage.py audit_diagnostic_catalog_csvs --fix-services
+
+Rewrites services/*.csv so each service "code" appears only once: the first
+occurrence wins (sorted file names, then row order). Use only when the audit
+reports duplicate service codes. Category / package duplicates must be fixed
+manually in the CSVs.
+
+Flags:
+  --data-dir PATH
+  --fix-services
+
+--------------------------------------------------------------------------------
+7) OTHER diagnostics_engine COMMANDS (BRIEF)
+--------------------------------------------------------------------------------
+
+These are for routing/debug, not catalog CSV import:
+
+  python manage.py debug_diagnostic_routing_pricing_catalog --help
+  python manage.py inspect_diagnostic_routing_order --help
+
+--------------------------------------------------------------------------------
+8) CSV LOCATION (DEFAULT)
+--------------------------------------------------------------------------------
+
+Unless you pass --data-dir, paths resolve to:
+
+  <project>/diagnostics_engine/data/
+      categories.csv
+      subcategories.csv
+      services/*.csv
+      packages/*.csv
+      package_items/*.csv
+
+--------------------------------------------------------------------------------
+9) NOTES
+--------------------------------------------------------------------------------
+
+- CSV column "ordering" is used only to sort rows before import; it is not
+  written to arbitrary new model fields for services/packages.
+
+- After changing subcategories or categories, re-run sync_diagnostic_categories
+  before re-running packages or services if new category_code values were
+  added.
+
+- Transaction: each sync command wraps the real import (non dry-run) in a
+  single database transaction.
+
+--------------------------------------------------------------------------------
+10) WHY PACKAGES CAN "SHOW" WITHOUT sync_diagnostic_packages (WEB UI)
+--------------------------------------------------------------------------------
+
+The Medixpro consultation "Investigations" section uses STATIC package bundles
+for search and popular/recommended rows. Those are NOT read from the Django
+DiagnosticPackage table.
+
+  Hospital-Web-UI/medixpro/medixpro/data/consultation-section-data.ts
+      INVESTIGATION_PACKAGES          (e.g. fever-panel, diabetes-panel)
+      INVESTIGATION_POPULAR_PACKAGE_IDS
+
+  Hospital-Web-UI/medixpro/medixpro/components/consultations/sections/
+      investigations-section.tsx    (local search + fallbacks)
+
+Live catalog from the API appears when:
+  - the user types a long enough query and the diagnostics search API succeeds
+    (see InvestigationSearchView -> run_investigation_search), which includes
+    DiagnosticPackage rows from the database.
+
+So: importing CSVs into DiagnosticPackage is required for API/catalog routes
+and orders; the web UI can still show demo/static packages until you change
+the frontend to rely only on API data (or trim INVESTIGATION_PACKAGES).
+
+================================================================================
+END OF GUIDE
+================================================================================

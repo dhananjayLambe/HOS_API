@@ -1,0 +1,43 @@
+ordering,code,name,category_code,short_name,sample_type,home_collection_possible,tat_hours_default,is_active
+
+10,DIAB-DIABETIC-FOOT-ASSESSMENT,Diabetic Foot Assessment,DIABETIC,Diabetic Foot,None,false,24,true
+20,DIAB-NEUROPATHY-ASSESSMENT,Diabetic Neuropathy Assessment,DIABETIC,Neuropathy Assessment,None,false,24,true
+30,DIAB-RETINOPATHY-ASSESSMENT,Diabetic Retinopathy Evaluation,DIABETIC,Retinopathy,None,false,24,true
+40,DIAB-NEPHROPATHY-ASSESSMENT,Diabetic Nephropathy Assessment,DIABETIC,Nephropathy,None,false,24,true
+
+50,DIAB-DIABETIC-CARDIAC-RISK,Diabetic Cardiac Risk Evaluation,DIABETIC,Cardiac Risk,None,false,24,true
+60,DIAB-METABOLIC-SYNDROME,Metabolic Syndrome Clinical Assessment,DIABETIC,Metabolic Syndrome,None,false,24,true
+70,DIAB-OBESITY-DIABETIC,Obesity and Diabetes Evaluation,DIABETIC,Obesity Diabetes,None,false,24,true
+
+80,DIAB-INSULIN-THERAPY-PLAN,Insulin Therapy Planning,DIABETIC,Insulin Therapy,None,false,24,true
+90,DIAB-CGM-REVIEW,Continuous Glucose Monitoring Review,DIABETIC,CGM Review,None,false,24,true
+100,DIAB-GLUCOMETER-REVIEW,Glucometer Trend Analysis,DIABETIC,Glucometer Review,None,false,24,true
+
+110,DIAB-GESTATIONAL-DIABETES,Gestational Diabetes Assessment,DIABETIC,GDM Assessment,None,false,24,true
+120,DIAB-PREDIABETES-ASSESSMENT,Prediabetes Clinical Assessment,DIABETIC,Prediabetes,None,false,24,true
+130,DIAB-INSULIN-RESISTANCE-CLINICAL,Clinical Insulin Resistance Evaluation,DIABETIC,Insulin Resistance,None,false,24,true
+
+140,DIAB-DIABETIC-ULCER,Diabetic Ulcer Evaluation,DIABETIC,Diabetic Ulcer,None,false,24,true
+150,DIAB-DIABETIC-INFECTION,Diabetic Infection Assessment,DIABETIC,Diabetic Infection,None,false,24,true
+
+160,DIAB-DIABETIC-LIFESTYLE,Diabetes Lifestyle Risk Assessment,DIABETIC,Lifestyle Assessment,None,false,24,true
+170,DIAB-DIABETIC-DIET,Diabetic Nutrition Assessment,DIABETIC,Diet Assessment,None,false,24,true
+
+180,DIAB-HYPOGLYCEMIA-ASSESSMENT,Hypoglycemia Risk Assessment,DIABETIC,Hypoglycemia,None,false,24,true
+190,DIAB-HYPERGLYCEMIA-ASSESSMENT,Hyperglycemia Clinical Assessment,DIABETIC,Hyperglycemia,None,false,24,true
+
+200,DIAB-DIABETIC-EYE-CARE,Diabetic Eye Care Evaluation,DIABETIC,Eye Care,None,false,24,true
+210,DIAB-DIABETIC-KIDNEY-CARE,Diabetic Kidney Care Evaluation,DIABETIC,Kidney Care,None,false,24,true
+
+220,DIAB-CHILD-DIABETES,Pediatric Diabetes Evaluation,DIABETIC,Pediatric Diabetes,None,false,24,true
+230,DIAB-TYPE1-ASSESSMENT,Type 1 Diabetes Clinical Assessment,DIABETIC,Type 1 Diabetes,None,false,24,true
+240,DIAB-TYPE2-ASSESSMENT,Type 2 Diabetes Clinical Assessment,DIABETIC,Type 2 Diabetes,None,false,24,true
+
+250,DIAB-DIABETIC-VASCULAR,Diabetic Vascular Complication Assessment,DIABETIC,Vascular Assessment,None,false,24,true
+260,DIAB-DIABETIC-FOOT-RISK,Diabetic Foot Risk Stratification,DIABETIC,Foot Risk,None,false,24,true
+
+270,DIAB-POSTPRANDIAL-PATTERN,Post Meal Sugar Pattern Assessment,DIABETIC,PP Pattern,None,false,24,true
+280,DIAB-LONGTERM-SUGAR-REVIEW,Long Term Glycemic Control Review,DIABETIC,Glycemic Review,None,false,24,true
+
+290,DIAB-DIABETIC-FOLLOWUP,Comprehensive Diabetes Follow Up,DIABETIC,Diabetes Follow Up,None,false,24,true
+300,DIAB-DIABETIC-COMPLICATIONS,Diabetes Complication Screening,DIABETIC,Complication Screening,None,false,24,true
