@@ -31,8 +31,11 @@ class LabSessionView(APIView):
         )
         if lab_user is None:
             return Response(
-                {"detail": "No lab user profile is linked to this account."},
-                status=403,
+                {
+                    "code": "lab_profile_missing",
+                    "detail": "No lab user profile is linked to this account.",
+                },
+                status=404,
             )
 
         serializer = LabSessionSerializer(lab_user, context={"request": request})

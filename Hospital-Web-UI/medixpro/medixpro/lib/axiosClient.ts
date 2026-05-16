@@ -1,6 +1,7 @@
 "use client";
 
 import axios, { AxiosInstance, InternalAxiosRequestConfig, AxiosError } from "axios";
+import { forceLogoutAndRedirect } from "./authLogout";
 import { extractAuthTokens } from "./auth-token-utils";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
@@ -102,13 +103,7 @@ axiosClient.interceptors.response.use(
       if (!refreshToken) {
         processQueue(error, null);
         isRefreshing = false;
-        // Only redirect to login if we're not already on login page
-        if (typeof window !== "undefined" && !window.location.pathname.startsWith("/auth/login")) {
-          localStorage.removeItem(ACCESS_TOKEN_KEY);
-          localStorage.removeItem(REFRESH_TOKEN_KEY);
-          localStorage.removeItem(ROLE_KEY);
-          window.location.href = "/auth/login";
-        }
+        void forceLogoutAndRedirect();
         return Promise.reject(error);
       }
 
@@ -157,15 +152,7 @@ axiosClient.interceptors.response.use(
       } catch (refreshError) {
         processQueue(refreshError as AxiosError, null);
         isRefreshing = false;
-
-        // Clear tokens and redirect to login (only if not already on login page)
-        if (typeof window !== "undefined" && !window.location.pathname.startsWith("/auth/login")) {
-          localStorage.removeItem(ACCESS_TOKEN_KEY);
-          localStorage.removeItem(REFRESH_TOKEN_KEY);
-          localStorage.removeItem(ROLE_KEY);
-          window.location.href = "/auth/login";
-        }
-
+        void forceLogoutAndRedirect();
         return Promise.reject(refreshError);
       }
     }
@@ -226,8 +213,10 @@ backendAxiosClient.interceptors.response.use(
       const isInvestigationSuggestionsEndpoint = fullUrl.includes(
         "/diagnostics/investigations/suggestions/",
       );
-      /** Lab session: 403 means token/role is stale vs DB (no LabUser / not labadmin) — lab layout logs user out; avoid red herring logs. */
-      const isLabsMeForbidden = fullUrl.includes("labs/me") && error.response?.status === 403;
+      /** Lab session: expected 403/404 during permission or onboarding handling — avoid noisy logs. */
+      const isLabsMeExpected =
+        fullUrl.includes("labs/me") &&
+        (error.response?.status === 403 || error.response?.status === 404);
       /** Optional UI enrichment; investigations section uses static fallback — avoid red logs when Django/proxy is unreachable. */
       const isSuppressedSuggestionsNetwork =
         isInvestigationSuggestionsEndpoint && !error.response;
@@ -261,7 +250,7 @@ backendAxiosClient.interceptors.response.use(
         !isExpectedPreview400 &&
         !isAlreadyCompleted400 &&
         !isSuppressedSuggestionsNetwork &&
-        !isLabsMeForbidden
+        !isLabsMeExpected
       ) {
         console.error(
           `[backendAxiosClient] Error ${error.response?.status || "Network"} on ${error.config.method?.toUpperCase()} ${fullUrl}`,
@@ -303,15 +292,11 @@ backendAxiosClient.interceptors.response.use(
             originalRequest._retry = true;
             return backendAxiosClient(originalRequest);
           }
-        } catch (refreshError) {
-          // Refresh failed, redirect to login
-          if (typeof window !== "undefined" && !window.location.pathname.startsWith("/auth/login")) {
-            localStorage.removeItem(ACCESS_TOKEN_KEY);
-            localStorage.removeItem(REFRESH_TOKEN_KEY);
-            localStorage.removeItem(ROLE_KEY);
-            window.location.href = "/auth/login";
-          }
+        } catch {
+          void forceLogoutAndRedirect();
         }
+      } else {
+        void forceLogoutAndRedirect();
       }
     }
     

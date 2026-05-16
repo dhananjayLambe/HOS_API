@@ -1,12 +1,24 @@
 "use client";
 
+import { AUTH_LOGOUT_EVENT } from "@/lib/authLogout";
 import { useAuth } from "@/lib/authContext";
 import { isLabAdminRole } from "@/lib/jwtUtils";
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
-import axios from "axios";
+import { useRouter } from "next/navigation";
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  isLabPermissionDeniedError,
+  isLabProfileMissingError,
+  LAB_REGISTRATION_PATH,
+} from "./lab-session-errors";
 import { fetchLabSession } from "./lab-session";
 import type { LabSession } from "./lab-session-types";
+
+export const LAB_SESSION_QUERY_KEY = ["lab-session"] as const;
+
+export function clearLabSessionCache(queryClient: QueryClient): void {
+  void queryClient.removeQueries({ queryKey: LAB_SESSION_QUERY_KEY });
+}
 
 export type LabSessionContextValue = {
   data: LabSession | undefined;
@@ -23,19 +35,27 @@ const LabSessionContext = createContext<LabSessionContextValue | null>(null);
 function LabSessionQueryInner({ children }: { children: ReactNode }) {
   const { sessionChecked, isAuthenticated, role, user, logout } = useAuth();
   const queryClient = useQueryClient();
+  const router = useRouter();
   const enabled = sessionChecked && isAuthenticated && isLabAdminRole(role);
   const userId = user?.user_id ?? null;
   const prevUserId = useRef<string | null>(null);
+  const profileRedirectRef = useRef(false);
+
+  useEffect(() => {
+    const onAuthLogout = () => clearLabSessionCache(queryClient);
+    window.addEventListener(AUTH_LOGOUT_EVENT, onAuthLogout);
+    return () => window.removeEventListener(AUTH_LOGOUT_EVENT, onAuthLogout);
+  }, [queryClient]);
 
   useEffect(() => {
     if (prevUserId.current !== null && prevUserId.current !== userId) {
-      void queryClient.removeQueries({ queryKey: ["lab-session"] });
+      clearLabSessionCache(queryClient);
     }
     prevUserId.current = userId;
   }, [userId, queryClient]);
 
   const query = useQuery({
-    queryKey: ["lab-session"],
+    queryKey: LAB_SESSION_QUERY_KEY,
     queryFn: fetchLabSession,
     enabled,
     staleTime: 10 * 60 * 1000,
@@ -44,12 +64,21 @@ function LabSessionQueryInner({ children }: { children: ReactNode }) {
     refetchOnWindowFocus: false,
   });
 
-  // JWT + localStorage role survive DB deletes; backend rejects with 403 when lab profile or labadmin group is gone.
+  // 403: labadmin group revoked — sign out. 404: complete lab registration — do not sign out.
   useEffect(() => {
     if (!query.isError || !query.error) return;
-    if (!axios.isAxiosError(query.error) || query.error.response?.status !== 403) return;
-    void logout();
-  }, [query.isError, query.error, logout]);
+
+    if (isLabProfileMissingError(query.error)) {
+      if (profileRedirectRef.current) return;
+      profileRedirectRef.current = true;
+      router.replace(LAB_REGISTRATION_PATH);
+      return;
+    }
+
+    if (isLabPermissionDeniedError(query.error)) {
+      void logout();
+    }
+  }, [query.isError, query.error, logout, router]);
 
   useEffect(() => {
     if (process.env.NODE_ENV === "development" && query.isSuccess && query.data) {
@@ -68,7 +97,7 @@ function LabSessionQueryInner({ children }: { children: ReactNode }) {
         void query.refetch();
       },
       refreshLabSession: async () => {
-        await queryClient.invalidateQueries({ queryKey: ["lab-session"] });
+        await queryClient.invalidateQueries({ queryKey: LAB_SESSION_QUERY_KEY });
       },
     }),
     [query.data, query.status, query.isPending, query.isError, query.error, query.refetch, queryClient],

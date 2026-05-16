@@ -97,8 +97,11 @@ class LabSessionMeAPITests(TestCase):
         res = self.client.get(self.url)
         self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
 
-    def test_labadmin_without_lab_user_forbidden(self):
+    def test_labadmin_without_lab_user_returns_404_with_code(self):
         user = self._create_lab_fixtures(add_lab_user=False)
         self.client.force_authenticate(user=user)
         res = self.client.get(self.url)
-        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+        data = res.json()
+        self.assertEqual(data.get("code"), "lab_profile_missing")
+        self.assertIn("detail", data)

@@ -3,9 +3,9 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import axiosClient, { ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY, ROLE_KEY } from "./axiosClient";
-import { isTokenValid, getRoleRedirectPath } from "./jwtUtils";
+import { performClientLogout } from "./authLogout";
+import { isTokenValid } from "./jwtUtils";
 import { extractAuthTokens } from "./auth-token-utils";
-import { resetHelpdeskQueueStoreState } from "./helpdeskQueueStore";
 
 interface UserInfo {
   user_id: string | null;
@@ -170,37 +170,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = async () => {
-    const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
     try {
-      if (refreshToken) {
-        // Call Next.js API route /api/logout to blacklist token on backend (path relative to baseURL "/api")
-        try {
-          await axiosClient.post("logout", {
-            refresh_token: refreshToken,
-          });
-        } catch (err) {
-          // Ignore errors during logout - still clear local state
-          console.error("Logout API failed", err);
-        }
-      }
+      await performClientLogout({ blacklist: true });
     } catch (err) {
       console.error("Logout failed", err);
     } finally {
       setUser(null);
       setRole(null);
-      resetHelpdeskQueueStoreState();
-      // Clear tokens
-      localStorage.removeItem(ACCESS_TOKEN_KEY);
-      localStorage.removeItem(REFRESH_TOKEN_KEY);
-      localStorage.removeItem(ROLE_KEY);
-      // Clear user info
-      localStorage.removeItem(USER_INFO_KEYS.USER_ID);
-      localStorage.removeItem(USER_INFO_KEYS.USERNAME);
-      localStorage.removeItem(USER_INFO_KEYS.FIRST_NAME);
-      localStorage.removeItem(USER_INFO_KEYS.LAST_NAME);
-      localStorage.removeItem(USER_INFO_KEYS.EMAIL);
-      localStorage.removeItem("username");
-      localStorage.removeItem("user");
       router.replace("/auth/login");
     }
   };

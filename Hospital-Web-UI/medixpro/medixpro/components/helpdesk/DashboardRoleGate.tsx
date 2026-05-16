@@ -15,7 +15,7 @@ export function isLabDashboardPath(pathname: string) {
  * Labadmin may only use `/lab-dashboard/*` — not doctor `(dashboard)` routes (including `/profile`).
  */
 export function DashboardRoleGate({ children }: { children: React.ReactNode }) {
-  const { role, sessionChecked } = useAuth();
+  const { role, sessionChecked, isAuthenticated } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -48,6 +48,13 @@ export function DashboardRoleGate({ children }: { children: React.ReactNode }) {
     }
   }, [role, sessionChecked, router, onLabPath]);
 
+  useEffect(() => {
+    if (!sessionChecked) return;
+    if (onLabPath && !isAuthenticated) {
+      router.replace("/auth/login");
+    }
+  }, [sessionChecked, onLabPath, isAuthenticated, router]);
+
   if (!sessionChecked) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center text-sm text-muted-foreground">Loading…</div>
@@ -62,7 +69,11 @@ export function DashboardRoleGate({ children }: { children: React.ReactNode }) {
     return null;
   }
 
-  if (onLabPath && !isLabAdminRole(role)) {
+  if (onLabPath && !isAuthenticated) {
+    return null;
+  }
+
+  if (onLabPath && role && !isLabAdminRole(role)) {
     return null;
   }
 
