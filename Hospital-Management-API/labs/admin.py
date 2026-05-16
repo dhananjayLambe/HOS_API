@@ -106,7 +106,7 @@ class BranchServiceAreaAdmin(admin.ModelAdmin):
 
 @admin.register(BranchServicePricing)
 class BranchServicePricingAdmin(admin.ModelAdmin):
-    list_display = ("branch", "service", "selling_price", "is_active", "is_available", "valid_from", "valid_to", "created_at")
+    list_display = ("branch", "service", "selling_price","cost_price", "is_active", "is_available", "valid_from", "valid_to", "created_at")
     list_filter = ("is_active", "is_available", "home_collection_supported")
     search_fields = ("branch__branch_code", "service__code", "service__name")
     raw_id_fields = ("branch", "service")

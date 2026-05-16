@@ -1,0 +1,15 @@
+Lab registers
+    ↓
+Branch created
+    ↓
+DoctorPro generates workbook
+    ↓
+Metadata auto-filled + locked
+    ↓
+Lab fills pricing sheet
+    ↓
+DoctorPro reviews
+    ↓
+Import command syncs pricing
+
+DoctorPro_LabPricing_<branch_code>_v1.xlsx
