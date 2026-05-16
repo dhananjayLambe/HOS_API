@@ -14,7 +14,7 @@ import { useLabOrdersList } from "@/hooks/labs/useLabOrdersList";
 import { useLabSession } from "@/lib/labs/session/lab-session-context";
 import type { LabOrderRow } from "@/lib/labs/types";
 import { Loader2, RotateCcw } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 export function LabOrdersPage() {
   const { data: session } = useLabSession();
@@ -40,11 +40,16 @@ export function LabOrdersPage() {
     showInitialSkeleton,
   } = useLabOrdersList(branchLabel);
 
-  const [selected, setSelected] = useState<LabOrderRow | null>(null);
+  const [selectedAssignmentId, setSelectedAssignmentId] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
 
+  const selectedOrder = useMemo(() => {
+    if (!selectedAssignmentId) return null;
+    return rows.find((r) => r.assignmentId === selectedAssignmentId) ?? null;
+  }, [rows, selectedAssignmentId]);
+
   const openDetail = (order: LabOrderRow) => {
-    setSelected(order);
+    setSelectedAssignmentId(order.assignmentId);
     setSheetOpen(true);
   };
 
@@ -135,8 +140,7 @@ export function LabOrdersPage() {
         )}
       </SectionCard>
 
-      <OrderDetailSheet order={selected} open={sheetOpen} onOpenChange={setSheetOpen} />
+      <OrderDetailSheet order={selectedOrder} open={sheetOpen} onOpenChange={setSheetOpen} />
     </div>
   );
 }
-

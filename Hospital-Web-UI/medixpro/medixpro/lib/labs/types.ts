@@ -5,6 +5,7 @@ import type { DeliveryStatus } from "@/lib/labs/constants/status";
 import type { AppointmentStatus } from "@/lib/labs/constants/status";
 import type { SampleStatus } from "@/lib/labs/constants/status";
 import type { UrgencyLevel } from "@/lib/labs/constants/urgency";
+import type { LabOrderActionKey } from "@/lib/labs/orders/order-workflow-config";
 
 export type LabTimelineEvent = {
   at: string;
@@ -22,7 +23,10 @@ export type LabOrderTest = {
 };
 
 export type LabOrderRow = {
+  /** Display order number (e.g. DX260516…). */
   id: string;
+  assignmentId: string;
+  orderUuid: string;
   patient: string;
   patientPhone: string;
   patientAge: number;
@@ -36,10 +40,17 @@ export type LabOrderRow = {
   preferredSlot: string;
   branch: string;
   status: OrderStatus;
+  sampleStatus: string | null;
+  reportStatus: string | null;
+  homeCollection: boolean;
+  allowedActions: LabOrderActionKey[];
   createdAt: string;
   urgency: UrgencyLevel;
   timeline: LabTimelineEvent[];
   notes?: string;
+  acceptedAt?: string | null;
+  rejectedAt?: string | null;
+  rejectionReason?: string | null;
 };
 
 export type LabCollectionRow = {

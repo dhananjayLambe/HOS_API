@@ -1,3 +1,4 @@
+import { resolveAllowedActions } from "@/lib/labs/orders/order-workflow-config";
 import type { LabOrderRow } from "@/lib/labs/types";
 
 const baseTimeline = (orderId: string) => [
@@ -10,6 +11,8 @@ const baseTimeline = (orderId: string) => [
 export const MOCK_LAB_ORDERS: LabOrderRow[] = [
   {
     id: "ORD-10492",
+    assignmentId: "mock-assignment-10492",
+    orderUuid: "mock-order-10492",
     patient: "Anita Deshmukh",
     patientPhone: "+91 98765 43210",
     patientAge: 52,
@@ -26,6 +29,10 @@ export const MOCK_LAB_ORDERS: LabOrderRow[] = [
     preferredSlot: "Today 4–6 PM",
     branch: "Baner",
     status: "IN_PROGRESS",
+    sampleStatus: "PROCESSING",
+    reportStatus: null,
+    homeCollection: true,
+    allowedActions: resolveAllowedActions("IN_PROGRESS"),
     createdAt: "2026-05-10 10:02",
     urgency: "URGENT",
     timeline: [
@@ -53,6 +60,8 @@ export const MOCK_LAB_ORDERS: LabOrderRow[] = [
   },
   {
     id: "ORD-10491",
+    assignmentId: "mock-assignment-10491",
+    orderUuid: "mock-order-10491",
     patient: "Rahul K",
     patientPhone: "+91 91234 56789",
     patientAge: 34,
@@ -65,6 +74,10 @@ export const MOCK_LAB_ORDERS: LabOrderRow[] = [
     preferredSlot: "Tomorrow 9 AM",
     branch: "Hub",
     status: "PENDING",
+    sampleStatus: null,
+    reportStatus: null,
+    homeCollection: false,
+    allowedActions: resolveAllowedActions("PENDING"),
     createdAt: "2026-05-10 09:40",
     urgency: "STAT",
     timeline: [
@@ -80,6 +93,8 @@ export const MOCK_LAB_ORDERS: LabOrderRow[] = [
   },
   {
     id: "ORD-10488",
+    assignmentId: "mock-assignment-10488",
+    orderUuid: "mock-order-10488",
     patient: "Sunita Patil",
     patientPhone: "+91 99887 76655",
     patientAge: 61,
@@ -92,6 +107,10 @@ export const MOCK_LAB_ORDERS: LabOrderRow[] = [
     preferredSlot: "Collected",
     branch: "Hub",
     status: "COMPLETED",
+    sampleStatus: "COMPLETED",
+    reportStatus: "delivered",
+    homeCollection: true,
+    allowedActions: resolveAllowedActions("COMPLETED"),
     createdAt: "2026-05-09 14:00",
     urgency: "ROUTINE",
     timeline: [

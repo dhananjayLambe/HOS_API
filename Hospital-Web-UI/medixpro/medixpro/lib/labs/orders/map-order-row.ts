@@ -1,10 +1,14 @@
 import type { LabOrderListItem } from "@/lib/labs/api/orders-types";
+import { resolveAllowedActions } from "@/lib/labs/orders/order-workflow-config";
 import type { LabOrderRow } from "@/lib/labs/types";
 
-/** Maps list API DTO → UI/detail row; drawer-only fields use safe defaults until detail API exists. */
+/** Maps list API DTO → UI/detail row. */
 export function mapLabOrderListItem(dto: LabOrderListItem, branchLabel = ""): LabOrderRow {
+  const homeCollection = dto.home_collection ?? dto.collection_type === "HOME";
   return {
     id: dto.order_number || dto.id,
+    assignmentId: dto.assignment_id ?? dto.id,
+    orderUuid: dto.id,
     patient: dto.patient_name,
     patientPhone: dto.patient_phone,
     patientAge: dto.patient_age ?? 0,
@@ -16,12 +20,16 @@ export function mapLabOrderListItem(dto: LabOrderListItem, branchLabel = ""): La
       name,
       category: "",
       urgency: dto.urgency,
-      homeEligible: dto.collection_type === "HOME",
+      homeEligible: homeCollection,
     })),
     collectionType: dto.collection_type,
     preferredSlot: dto.preferred_slot_label,
     branch: branchLabel,
     status: dto.status,
+    sampleStatus: dto.sample_status ?? null,
+    reportStatus: dto.report_status ?? null,
+    homeCollection,
+    allowedActions: resolveAllowedActions(dto.status),
     createdAt: formatCreatedAt(dto.created_at),
     urgency: dto.urgency,
     timeline: [],

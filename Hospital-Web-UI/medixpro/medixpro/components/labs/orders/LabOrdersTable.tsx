@@ -41,7 +41,7 @@ export function LabOrdersTable({ rows, onRowOpen }: LabOrdersTableProps) {
         </TableHeader>
         <TableBody>
           {rows.map((o) => (
-            <TableRow key={o.id} className="cursor-pointer border-0" onClick={() => onRowOpen(o)}>
+            <TableRow key={o.assignmentId} className="cursor-pointer border-0" onClick={() => onRowOpen(o)}>
               <TableCell className="font-mono text-sm font-medium tabular-nums text-[#6B7280]">{o.id}</TableCell>
               <TableCell className="font-semibold text-[#111827]">{o.patient}</TableCell>
               <TableCell className="max-w-[100px] truncate text-sm text-[#6B7280]">{o.doctor}</TableCell>
