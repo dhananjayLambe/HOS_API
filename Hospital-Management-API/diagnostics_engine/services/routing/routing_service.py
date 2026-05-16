@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from collections import Counter
 from typing import Any
 
@@ -212,6 +213,41 @@ class RoutingService:
             all_evaluated = EligibilityEngine.evaluate_all(order, resolved)
             eligible = [c for c in all_evaluated if not c.ineligibility_reasons]
             ranked = RankingEngine.rank(eligible)
+
+            if not all_evaluated:
+                from diagnostics_engine.services.routing.routing_helpers import (
+                    routable_lab_branches_queryset,
+                )
+
+                routable_n = routable_lab_branches_queryset().count()
+                if routable_n == 0:
+                    logger.warning(
+                        "Routing order %s: zero marketplace branches (routable pool empty). "
+                        "Lab org must be registration_status=APPROVED, is_verified=True, "
+                        "onboarding_completed=True, is_active_for_orders=True — branch-only "
+                        "enablement is not enough.",
+                        order.order_number,
+                    )
+                else:
+                    logger.warning(
+                        "Routing order %s: routable pool has %s branch(es) but none were evaluated "
+                        "(check test lines on order).",
+                        order.order_number,
+                        routable_n,
+                    )
+
+            if os.environ.get("DIAGNOSTIC_ROUTING_REJECT_DEBUG", "").strip().lower() in (
+                "1",
+                "true",
+                "yes",
+                "on",
+            ):
+                logger.info(
+                    "Routing eligible | order=%s | count=%s | branches=%s",
+                    order.order_number,
+                    len(eligible),
+                    [(c.branch.pk, getattr(c.branch, "branch_code", "") or "") for c in eligible],
+                )
 
             reject_hist: Counter[str] = Counter()
             for cand in all_evaluated:

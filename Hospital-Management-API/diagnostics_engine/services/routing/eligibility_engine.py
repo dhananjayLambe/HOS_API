@@ -40,14 +40,25 @@ IR_WALK_IN_NOT_SUPPORTED = "walk_in_not_supported"
 IR_BEYOND_HOME_RADIUS = "beyond_home_collection_radius"
 
 
+def _env_flag_enabled(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in ("1", "true", "yes", "on")
+
+
 def _pricing_filter_ladder_debug_enabled() -> bool:
     """True when DIAGNOSTIC_ROUTING_PRICING_DEBUG=1 — per-branch filter counts + sample SQL."""
-    return os.environ.get("DIAGNOSTIC_ROUTING_PRICING_DEBUG", "").strip().lower() in (
-        "1",
-        "true",
-        "yes",
-        "on",
-    )
+    return _env_flag_enabled("DIAGNOSTIC_ROUTING_PRICING_DEBUG")
+
+
+def _reject_debug_enabled() -> bool:
+    """True when DIAGNOSTIC_ROUTING_REJECT_DEBUG=1 — candidate list + per-rejection reasons."""
+    return _env_flag_enabled("DIAGNOSTIC_ROUTING_REJECT_DEBUG")
+
+
+def _record_reject(ir: list[str], branch: LabBranch, code: str) -> None:
+    ir.append(code)
+    if _reject_debug_enabled():
+        branch_code = getattr(branch, "branch_code", "") or "—"
+        logger.info("Lab %s (%s) rejected: %s", branch.pk, branch_code, code)
 
 
 @dataclass
@@ -102,11 +113,23 @@ class EligibilityEngine:
             for line in test_lines
         ]
 
-        branches = routable_lab_branches_queryset()
+        branches_qs = routable_lab_branches_queryset()
+        if _reject_debug_enabled():
+            branch_list = list(branches_qs)
+            logger.info(
+                "Routing candidates | count=%s | branch_ids=%s | branch_codes=%s | required_tests=%s",
+                len(branch_list),
+                [str(b.pk) for b in branch_list],
+                [getattr(b, "branch_code", "") or "" for b in branch_list],
+                required_tests_debug,
+            )
+            branches_iter: Any = branch_list
+        else:
+            branches_iter = branches_qs
 
         mode = order.sample_collection_mode or "lab"
         out: list[EligibilityCandidate] = []
-        for branch in branches:
+        for branch in branches_iter:
             out.append(
                 cls._evaluate_branch(
                     branch=branch,
@@ -128,6 +151,57 @@ class EligibilityEngine:
         return [c for c in cls.evaluate_all(order, location) if not c.ineligibility_reasons]
 
     @classmethod
+    def evaluate_requirements(
+        cls,
+        *,
+        service_ids: list[Any],
+        location: ResolvedRoutingLocation,
+        mode: str,
+        branches: Any | None = None,
+        required_tests_debug: list[dict[str, Any]] | None = None,
+    ) -> list[EligibilityCandidate]:
+        """
+        Eligibility for a hypothetical order (no DiagnosticOrder / test lines).
+
+        Used by debug_lab_routing and future routing introspection APIs. Same rules as
+        evaluate_all → _evaluate_branch.
+        """
+        from diagnostics_engine.services.routing.routing_helpers import routable_lab_branches_queryset
+
+        if not service_ids:
+            return []
+
+        today = timezone.now().date()
+        if required_tests_debug is None:
+            from diagnostics_engine.models.catalog import DiagnosticServiceMaster
+
+            required_tests_debug = []
+            for sid in service_ids:
+                svc = DiagnosticServiceMaster.objects.filter(pk=sid).first()
+                required_tests_debug.append(
+                    {
+                        "id": str(sid),
+                        "code": getattr(svc, "code", "") or "",
+                        "name": getattr(svc, "name", "") or "",
+                    }
+                )
+
+        branches_iter = branches if branches is not None else routable_lab_branches_queryset()
+        out: list[EligibilityCandidate] = []
+        for branch in branches_iter:
+            out.append(
+                cls._evaluate_branch(
+                    branch=branch,
+                    service_ids=service_ids,
+                    location=location,
+                    today=today,
+                    mode=mode,
+                    required_tests_debug=required_tests_debug,
+                )
+            )
+        return out
+
+    @classmethod
     def _evaluate_branch(
         cls,
         *,
@@ -145,23 +219,23 @@ class EligibilityEngine:
         ir: list[str] = []
 
         if not branch.is_active or branch.is_deleted:
-            ir.append(IR_BRANCH_INACTIVE)
+            _record_reject(ir, branch, IR_BRANCH_INACTIVE)
         else:
             er.append(ER_BRANCH_ACTIVE)
 
         if not org.is_active_for_orders or org.is_deleted:
-            ir.append(IR_ORG_NOT_ORDERABLE)
+            _record_reject(ir, branch, IR_ORG_NOT_ORDERABLE)
         else:
             er.append(ER_ORG_ORDERABLE)
 
         if mode == "home":
             if not (branch.home_collection_available and org.home_collection_available):
-                ir.append(IR_HOME_COLLECTION_NOT_SUPPORTED)
+                _record_reject(ir, branch, IR_HOME_COLLECTION_NOT_SUPPORTED)
             else:
                 er.append(ER_HOME_COLLECTION_SUPPORTED)
         else:
             if not branch.walk_in_collection_available:
-                ir.append(IR_WALK_IN_NOT_SUPPORTED)
+                _record_reject(ir, branch, IR_WALK_IN_NOT_SUPPORTED)
             else:
                 er.append(ER_WALK_IN_SUPPORTED)
 
@@ -180,11 +254,11 @@ class EligibilityEngine:
             if matched is None and location.city:
                 matched = areas_qs.filter(city__iexact=location.city.strip()).first()
             if matched is None:
-                ir.append(IR_OUTSIDE_SERVICE_AREA)
+                _record_reject(ir, branch, IR_OUTSIDE_SERVICE_AREA)
             else:
                 er.append(ER_IN_SERVICE_AREA)
                 if mode == "home" and not matched.is_home_collection_available:
-                    ir.append(IR_HOME_COLLECTION_NOT_SUPPORTED)
+                    _record_reject(ir, branch, IR_HOME_COLLECTION_NOT_SUPPORTED)
         else:
             er.append("no_service_area_records_default_allow")
 
@@ -278,7 +352,7 @@ class EligibilityEngine:
             )
             if row is None:
                 missing.append({"service_id": str(sid), "code": IR_MISSING_TEST_PRICING})
-                ir.append(IR_MISSING_TEST_PRICING)
+                _record_reject(ir, branch, IR_MISSING_TEST_PRICING)
             else:
                 any_pricing = True
                 pricings_used.append(row)
@@ -372,7 +446,7 @@ class EligibilityEngine:
 
         if mode == "home" and dist_km is not None and branch.home_collection_radius_km:
             if dist_km > float(branch.home_collection_radius_km):
-                ir.append(IR_BEYOND_HOME_RADIUS)
+                _record_reject(ir, branch, IR_BEYOND_HOME_RADIUS)
 
         ir_set = set(ir)
         if mode == "home":
