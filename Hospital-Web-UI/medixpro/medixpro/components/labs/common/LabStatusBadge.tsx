@@ -3,15 +3,13 @@
 import { cn } from "@/lib/utils";
 import type { LabStatusDomain } from "@/lib/labs/constants/status";
 import { labelForStatus } from "@/lib/labs/constants/status";
+import { orderStatusTone, ORDER_STATUS_TONE_CLASS } from "@/lib/labs/orders/order-status-tone";
 
 type Tone = "pending" | "success" | "failed" | "progress" | "neutral";
 
 function toneFor(domain: LabStatusDomain, status: string): Tone {
   if (domain === "order") {
-    if (status === "COMPLETED") return "success";
-    if (status === "REJECTED" || status === "CANCELLED") return "failed";
-    if (status === "IN_PROGRESS" || status === "ACCEPTED") return "progress";
-    return "pending";
+    return orderStatusTone(status);
   }
   if (domain === "collection") {
     if (status === "COLLECTED") return "success";
@@ -68,5 +66,5 @@ export function LabStatusBadge({
 }) {
   const label = labelForStatus(domain, status);
   const tone = toneFor(domain, status);
-  return <span className={cn(basePill, toneClass[tone], className)}>{label}</span>;
+  return <span className={cn(basePill, domain === "order" ? ORDER_STATUS_TONE_CLASS[tone] : toneClass[tone], className)}>{label}</span>;
 }

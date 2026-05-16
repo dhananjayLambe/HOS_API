@@ -276,6 +276,14 @@ class AssignmentService:
             updated_at=timezone.now(),
         )
 
+        from labs.api.services.lab_assignment_provisioning import ensure_lab_order_assignment
+
+        ensure_lab_order_assignment(
+            diagnostic_order=order,
+            lab_branch=top_snap.branch,
+            assigned_by=triggered_by,
+        )
+
         run.routing_status = RoutingStatus.COMPLETED
         run.completed_at = timezone.now()
         run.resolved_location_source = resolved.source

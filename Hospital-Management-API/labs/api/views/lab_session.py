@@ -8,35 +8,18 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from labs.api.permissions import IsLabAdminUser
 from labs.api.serializers.lab_session_serializer import LabSessionSerializer
-from labs.models import LabUser
+from labs.api.services.lab_session_resolver import LabSessionDenied, resolve_lab_user
 
 
 class LabSessionView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsLabAdminUser]
 
     def get(self, request):
-        user = request.user
-        if not user.groups.filter(name="labadmin").exists():
-            return Response(
-                {"detail": "You do not have permission to access the lab session."},
-                status=403,
-            )
+        resolved = resolve_lab_user(request)
+        if isinstance(resolved, LabSessionDenied):
+            return resolved.response
 
-        lab_user = (
-            LabUser.objects.filter(user=user)
-            .select_related("user", "organization", "branch", "branch__address")
-            .order_by("-is_primary_admin", "created_at")
-            .first()
-        )
-        if lab_user is None:
-            return Response(
-                {
-                    "code": "lab_profile_missing",
-                    "detail": "No lab user profile is linked to this account.",
-                },
-                status=404,
-            )
-
-        serializer = LabSessionSerializer(lab_user, context={"request": request})
+        serializer = LabSessionSerializer(resolved.lab_user, context={"request": request})
         return Response(serializer.data)
