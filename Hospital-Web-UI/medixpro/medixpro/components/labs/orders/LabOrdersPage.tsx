@@ -14,7 +14,16 @@ import { useLabOrdersList } from "@/hooks/labs/useLabOrdersList";
 import { useLabSession } from "@/lib/labs/session/lab-session-context";
 import type { LabOrderRow } from "@/lib/labs/types";
 import { Loader2, RotateCcw } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+
+function rowsMatchPatch(serverRow: LabOrderRow, patch: LabOrderRow): boolean {
+  return (
+    serverRow.status === patch.status &&
+    serverRow.rejectionReason === patch.rejectionReason &&
+    serverRow.acceptedAt === patch.acceptedAt &&
+    serverRow.rejectedAt === patch.rejectedAt
+  );
+}
 
 export function LabOrdersPage() {
   const { data: session } = useLabSession();
@@ -42,11 +51,37 @@ export function LabOrdersPage() {
 
   const [selectedAssignmentId, setSelectedAssignmentId] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [rowPatches, setRowPatches] = useState<Record<string, LabOrderRow>>({});
+
+  useEffect(() => {
+    setRowPatches((prev) => {
+      if (Object.keys(prev).length === 0) return prev;
+      const next = { ...prev };
+      let changed = false;
+      for (const id of Object.keys(next)) {
+        const serverRow = rows.find((r) => r.assignmentId === id);
+        if (serverRow && rowsMatchPatch(serverRow, next[id]!)) {
+          delete next[id];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [rows]);
+
+  const displayRows = useMemo(
+    () => rows.map((r) => rowPatches[r.assignmentId] ?? r),
+    [rows, rowPatches],
+  );
 
   const selectedOrder = useMemo(() => {
     if (!selectedAssignmentId) return null;
-    return rows.find((r) => r.assignmentId === selectedAssignmentId) ?? null;
-  }, [rows, selectedAssignmentId]);
+    return displayRows.find((r) => r.assignmentId === selectedAssignmentId) ?? null;
+  }, [displayRows, selectedAssignmentId]);
+
+  const handleOrderPatched = useCallback((patched: LabOrderRow) => {
+    setRowPatches((prev) => ({ ...prev, [patched.assignmentId]: patched }));
+  }, []);
 
   const openDetail = (order: LabOrderRow) => {
     setSelectedAssignmentId(order.assignmentId);
@@ -57,8 +92,8 @@ export function LabOrdersPage() {
     ? `${branchLabel} branch — queue auto-refreshes every 30 seconds while this page is open.`
     : "Order queue auto-refreshes every 30 seconds while this page is open.";
 
-  const showTable = !error && !showInitialSkeleton && rows.length > 0;
-  const showEmpty = !error && !showInitialSkeleton && !loading && rows.length === 0;
+  const showTable = !error && !showInitialSkeleton && displayRows.length > 0;
+  const showEmpty = !error && !showInitialSkeleton && !loading && displayRows.length === 0;
 
   return (
     <div className="space-y-6 sm:space-y-8">
@@ -123,7 +158,7 @@ export function LabOrdersPage() {
                 Loading orders…
               </div>
             ) : null}
-            {showTable ? <LabOrdersTable rows={rows} onRowOpen={openDetail} /> : null}
+            {showTable ? <LabOrdersTable rows={displayRows} onRowOpen={openDetail} /> : null}
             {showTable ? (
               <LabOrdersPagination
                 page={page}
@@ -140,7 +175,13 @@ export function LabOrdersPage() {
         )}
       </SectionCard>
 
-      <OrderDetailSheet order={selectedOrder} open={sheetOpen} onOpenChange={setSheetOpen} />
+      <OrderDetailSheet
+        order={selectedOrder}
+        open={sheetOpen}
+        onOpenChange={setSheetOpen}
+        onOrderPatched={handleOrderPatched}
+        onQueueRefresh={refetch}
+      />
     </div>
   );
 }

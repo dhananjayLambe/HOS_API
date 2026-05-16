@@ -1,6 +1,7 @@
 "use client";
 
 import { LabDataTable } from "@/components/labs/common/LabDataTable";
+import { LabOrderSlaHelper } from "@/components/labs/orders/LabOrderSlaHelper";
 import { LabStatusBadge } from "@/components/labs/common/LabStatusBadge";
 import { LabUrgencyBadge } from "@/components/labs/common/LabUrgencyBadge";
 import { labTableCellBody } from "@/components/labs/labDesignTokens";
@@ -56,7 +57,10 @@ export function LabOrdersTable({ rows, onRowOpen }: LabOrdersTableProps) {
                 <LabUrgencyBadge level={o.urgency} />
               </TableCell>
               <TableCell onClick={(e) => e.stopPropagation()}>
-                <LabStatusBadge domain="order" status={o.status} />
+                <div className="flex flex-col items-start gap-0.5">
+                  <LabStatusBadge domain="order" status={o.status} />
+                  <LabOrderSlaHelper order={o} />
+                </div>
               </TableCell>
               <TableCell className="whitespace-nowrap text-xs text-[#6B7280]">{o.createdAt}</TableCell>
               <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>

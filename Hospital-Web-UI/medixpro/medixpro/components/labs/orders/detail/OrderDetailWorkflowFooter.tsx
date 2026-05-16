@@ -15,6 +15,7 @@ import {
   type LabOrderActionKey,
   WORKFLOW_ACTION_DISABLED_HINT,
 } from "@/lib/labs/orders/order-workflow-config";
+import { isAutoRejectedReason } from "@/lib/labs/orders/sla-countdown";
 import type { LabOrderRow } from "@/lib/labs/types";
 import { Loader2 } from "lucide-react";
 
@@ -92,6 +93,11 @@ export function OrderDetailWorkflowFooter({
     return (
       <div className="border-t border-[#ECEBFF] bg-white/95 p-3 backdrop-blur-sm sm:p-4">
         <p className="text-sm font-medium text-[#B42318]">Order rejected</p>
+        {isAutoRejectedReason(order.rejectionReason) ? (
+          <p className="mt-1 text-xs text-[#6B7280]">
+            Automatically rejected after SLA timeout
+          </p>
+        ) : null}
         {order.rejectionReason ? (
           <p className="mt-1 text-sm text-[#374151]">{order.rejectionReason}</p>
         ) : null}
@@ -176,8 +182,7 @@ export function OrderDetailWorkflowFooter({
           <DialogHeader>
             <DialogTitle>Reject order</DialogTitle>
             <DialogDescription>
-              Provide a reason for rejecting this assignment. This will be recorded when workflow
-              APIs are enabled.
+              Provide a reason for rejecting this assignment. This will be recorded on the order.
             </DialogDescription>
           </DialogHeader>
           <Textarea
@@ -194,8 +199,7 @@ export function OrderDetailWorkflowFooter({
             <Button
               type="button"
               variant="destructive"
-              disabled={!isActionEnabled("reject")}
-              title={WORKFLOW_ACTION_DISABLED_HINT}
+              disabled={!isActionEnabled("reject") || !rejectReason.trim() || actionLoading !== null}
               onClick={onConfirmReject}
             >
               Confirm reject

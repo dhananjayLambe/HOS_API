@@ -48,6 +48,8 @@ export type LabOrderRow = {
   urgency: UrgencyLevel;
   timeline: LabTimelineEvent[];
   notes?: string;
+  /** ISO timestamp for SLA countdown (from list API assigned_at). */
+  assignedAtIso?: string | null;
   acceptedAt?: string | null;
   rejectedAt?: string | null;
   rejectionReason?: string | null;

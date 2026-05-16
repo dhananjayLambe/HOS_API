@@ -20,6 +20,10 @@ class LabOrderListItemSerializer(serializers.Serializer):
     urgency = serializers.ChoiceField(choices=["STAT", "URGENT", "ROUTINE"])
     status = serializers.CharField()
     created_at = serializers.DateTimeField()
+    assigned_at = serializers.DateTimeField()
+    accepted_at = serializers.DateTimeField(allow_null=True, required=False)
+    rejected_at = serializers.DateTimeField(allow_null=True, required=False)
+    rejection_reason = serializers.CharField(allow_null=True, allow_blank=True, required=False)
     sample_status = serializers.CharField(allow_null=True, required=False)
     report_status = serializers.CharField(allow_null=True, required=False)
     home_collection = serializers.BooleanField()
@@ -43,6 +47,10 @@ def dto_to_representation(dto) -> dict:
         "urgency": dto.urgency,
         "status": dto.status,
         "created_at": dto.created_at,
+        "assigned_at": dto.assigned_at,
+        "accepted_at": dto.accepted_at,
+        "rejected_at": dto.rejected_at,
+        "rejection_reason": dto.rejection_reason,
         "sample_status": dto.sample_status,
         "report_status": dto.report_status,
         "home_collection": dto.home_collection,

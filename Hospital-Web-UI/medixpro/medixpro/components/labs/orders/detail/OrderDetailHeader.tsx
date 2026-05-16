@@ -1,5 +1,6 @@
 "use client";
 
+import { LabOrderSlaHelper } from "@/components/labs/orders/LabOrderSlaHelper";
 import { LabStatusBadge } from "@/components/labs/common/LabStatusBadge";
 import { LabUrgencyBadge } from "@/components/labs/common/LabUrgencyBadge";
 import { labTw } from "@/styles/lab-design-system";
@@ -23,6 +24,7 @@ export function OrderDetailHeader({ order }: { order: LabOrderRow }) {
         <span className="mx-1.5 text-[#ECEBFF]">|</span>
         Received {order.createdAt}
       </p>
+      <LabOrderSlaHelper order={order} className="mt-0.5" />
     </SheetHeader>
   );
 }

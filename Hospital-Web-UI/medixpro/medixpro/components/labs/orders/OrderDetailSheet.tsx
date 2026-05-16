@@ -19,10 +19,14 @@ export function OrderDetailSheet({
   order,
   open,
   onOpenChange,
+  onOrderPatched,
+  onQueueRefresh,
 }: {
   order: LabOrderRow | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onOrderPatched?: (row: LabOrderRow) => void;
+  onQueueRefresh?: () => void;
 }) {
   const {
     rejectDialogOpen,
@@ -33,7 +37,7 @@ export function OrderDetailSheet({
     runAction,
     confirmReject,
     isActionEnabled,
-  } = useLabOrderDetail(order);
+  } = useLabOrderDetail(order, { onOrderPatched, onQueueRefresh });
 
   if (!order) return null;
 

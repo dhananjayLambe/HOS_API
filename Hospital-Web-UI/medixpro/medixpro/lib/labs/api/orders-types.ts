@@ -23,6 +23,20 @@ export type LabOrderListItem = {
   sample_status?: string | null;
   report_status?: string | null;
   home_collection?: boolean;
+  assigned_at?: string | null;
+  accepted_at?: string | null;
+  rejected_at?: string | null;
+  rejection_reason?: string | null;
+};
+
+export type LabOrderWorkflowResponse = {
+  success: boolean;
+  status: OrderStatus;
+  message: string;
+  accepted_at?: string | null;
+  rejected_at?: string | null;
+  rejection_reason?: string | null;
+  assignment_id?: string;
 };
 
 export type LabOrdersListResponse = {

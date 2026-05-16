@@ -317,6 +317,17 @@ CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_BACKEND = 'django-db'
 
+LAB_ASSIGNMENT_AUTO_REJECT_MINUTES = int(
+    os.environ.get("LAB_ASSIGNMENT_AUTO_REJECT_MINUTES", "60"),
+)
+
+CELERY_BEAT_SCHEDULE = {
+    "labs-auto-reject-stale-assignments": {
+        "task": "labs.auto_reject_stale_lab_assignments",
+        "schedule": timedelta(minutes=2),
+    },
+}
+
 
 LOG_DIR = os.path.join(BASE_DIR, 'logs')
 os.makedirs(LOG_DIR, exist_ok=True)

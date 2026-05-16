@@ -181,6 +181,10 @@ class LabOrderListRowDTO:
     urgency: str
     status: str
     created_at: datetime
+    assigned_at: datetime
+    accepted_at: datetime | None
+    rejected_at: datetime | None
+    rejection_reason: str | None
     sample_status: str | None
     report_status: str | None
     home_collection: bool
@@ -221,6 +225,10 @@ def build_list_row_dto(assignment, investigations_by_item_id: dict[str, Investig
         urgency=compute_order_urgency(order, investigations_by_item_id),
         status=assignment.status,
         created_at=assignment.assigned_at,
+        assigned_at=assignment.assigned_at,
+        accepted_at=assignment.accepted_at,
+        rejected_at=assignment.rejected_at,
+        rejection_reason=assignment.rejection_reason,
         sample_status=aggregate_sample_status(order),
         report_status=aggregate_report_status(order),
         home_collection=collection_type == "HOME",
