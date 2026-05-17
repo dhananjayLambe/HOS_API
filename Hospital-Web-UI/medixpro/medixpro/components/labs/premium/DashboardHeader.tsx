@@ -1,32 +1,29 @@
 "use client";
 
+// Phase 2: restore global cross-module search + comms actions when APIs exist.
+
 import { LabProfileMenu } from "@/components/labs/LabProfileMenu";
 import {
   labIconButton,
   labMainOffsetSidebarClosed,
   labMainOffsetSidebarOpen,
-  labSearchInput,
+  labPageTitle,
+  labTextMuted,
 } from "@/components/labs/labDesignTokens";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useLabShellHeaderRead } from "@/lib/labs/layout/lab-shell-header-context";
 import { useLabSession } from "@/lib/labs/session/lab-session-context";
 import { labOperationalRoleLabel } from "@/lib/labs/session/lab-role-labels";
 import { cn } from "@/lib/utils";
-import { Bell, Menu, MessageCircle, Search, Upload } from "lucide-react";
-import { useState } from "react";
-import { toast } from "sonner";
+import { Bell, Menu } from "lucide-react";
 
 type DashboardHeaderProps = {
   onMenuClick: () => void;
   sidebarOpen: boolean;
 };
 
-function mockQuickAction(label: string) {
-  toast.message(label, { description: "Phase 1 UI — action not wired to API yet." });
-}
-
 export function DashboardHeader({ onMenuClick, sidebarOpen }: DashboardHeaderProps) {
-  const [query, setQuery] = useState("");
+  const pageHeader = useLabShellHeaderRead();
   const { data, isPending, isError } = useLabSession();
 
   const fullName = data
@@ -45,34 +42,39 @@ export function DashboardHeader({ onMenuClick, sidebarOpen }: DashboardHeaderPro
     >
       <div
         className={cn(
-          "grid h-20 min-h-20 w-full min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-2xl border border-[#ECEBFF] bg-white/88 px-2 shadow-[0_8px_32px_rgba(124,92,252,0.06)] backdrop-blur-xl sm:gap-3 sm:px-3",
+          "flex min-h-20 w-full min-w-0 items-center justify-between gap-2 rounded-2xl border border-[#ECEBFF] bg-white/88 px-2 py-2.5 shadow-[0_8px_32px_rgba(124,92,252,0.06)] backdrop-blur-xl sm:gap-3 sm:px-3",
           "supports-[backdrop-filter]:bg-white/82",
         )}
       >
         <button
           type="button"
           onClick={onMenuClick}
-          className={cn(labIconButton, "border-transparent bg-transparent shadow-none hover:bg-[#F4F1FF]")}
+          className={cn(labIconButton, "shrink-0 border-transparent bg-transparent shadow-none hover:bg-[#F4F1FF]")}
           aria-expanded={sidebarOpen}
           aria-label="Toggle sidebar"
         >
           <Menu className="h-5 w-5" strokeWidth={2} />
         </button>
-        <div className="relative min-w-0">
-          <Search
-            className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-[#7C5CFC]"
-            strokeWidth={2}
-            aria-hidden
-          />
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search orders, patients, barcode…"
-            className={labSearchInput}
-            aria-label="Lab search"
-          />
-        </div>
-        <div className="flex min-w-0 shrink-0 items-center justify-end gap-1.5 pl-1 sm:gap-2 sm:pl-2">
+
+        {pageHeader ? (
+          <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
+            <div className="min-w-0 flex-1">
+              <h1 className={cn(labPageTitle, "text-lg sm:text-xl")}>{pageHeader.title}</h1>
+              {pageHeader.description ? (
+                <p className={cn("mt-0.5 line-clamp-2 text-xs leading-snug sm:text-sm", labTextMuted)}>
+                  {pageHeader.description}
+                </p>
+              ) : null}
+            </div>
+            {pageHeader.actions ? (
+              <div className="hidden shrink-0 sm:flex">{pageHeader.actions}</div>
+            ) : null}
+          </div>
+        ) : (
+          <div className="min-w-0 flex-1" aria-hidden />
+        )}
+
+        <div className="flex shrink-0 items-center justify-end gap-1.5 sm:gap-2">
           <div className="mr-1 hidden min-w-0 max-w-[200px] flex-col items-end text-right sm:flex lg:max-w-[280px]">
             {isPending && !data ? (
               <>
@@ -94,22 +96,9 @@ export function DashboardHeader({ onMenuClick, sidebarOpen }: DashboardHeaderPro
               </>
             )}
           </div>
-          <button
-            type="button"
-            className={labIconButton}
-            aria-label="WhatsApp (mock)"
-            onClick={() => mockQuickAction("WhatsApp")}
-          >
-            <MessageCircle className="h-[18px] w-[18px]" strokeWidth={2} />
-          </button>
-          <button
-            type="button"
-            className={labIconButton}
-            aria-label="Upload (mock)"
-            onClick={() => mockQuickAction("Upload")}
-          >
-            <Upload className="h-[18px] w-[18px]" strokeWidth={2} />
-          </button>
+          {pageHeader?.actions ? (
+            <div className="flex shrink-0 sm:hidden">{pageHeader.actions}</div>
+          ) : null}
           <button type="button" className={labIconButton} aria-label="Notifications">
             <Bell className="h-[18px] w-[18px]" strokeWidth={2} />
             <span className="sr-only">Notifications</span>

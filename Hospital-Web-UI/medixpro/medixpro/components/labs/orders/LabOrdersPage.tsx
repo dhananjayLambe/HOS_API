@@ -1,7 +1,6 @@
 "use client";
 
 import { LabEmptyState } from "@/components/labs/common/LabEmptyState";
-import { LabPageHeader } from "@/components/labs/common/LabPageHeader";
 import { LabOrdersErrorState } from "@/components/labs/orders/LabOrdersErrorState";
 import { LabOrdersFilters } from "@/components/labs/orders/LabOrdersFilters";
 import { LabOrdersPagination } from "@/components/labs/orders/LabOrdersPagination";
@@ -11,6 +10,7 @@ import { OrderDetailSheet } from "@/components/labs/orders/OrderDetailSheet";
 import { SectionCard } from "@/components/labs/premium/SectionCard";
 import { Button } from "@/components/ui/button";
 import { useLabOrdersList } from "@/hooks/labs/useLabOrdersList";
+import { useLabShellHeader } from "@/lib/labs/layout/lab-shell-header-context";
 import { useLabSession } from "@/lib/labs/session/lab-session-context";
 import type { LabOrderRow } from "@/lib/labs/types";
 import { Loader2, RotateCcw } from "lucide-react";
@@ -92,29 +92,34 @@ export function LabOrdersPage() {
     ? `${branchLabel} branch — queue auto-refreshes every 30 seconds while this page is open.`
     : "Order queue auto-refreshes every 30 seconds while this page is open.";
 
+  const headerActions = useMemo(
+    () => (
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="h-9 gap-1.5"
+        onClick={() => refetch()}
+        disabled={loading}
+      >
+        <RotateCcw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} aria-hidden />
+        Refresh
+      </Button>
+    ),
+    [loading, refetch],
+  );
+
+  useLabShellHeader({
+    title: "Orders",
+    description,
+    actions: headerActions,
+  });
+
   const showTable = !error && !showInitialSkeleton && displayRows.length > 0;
   const showEmpty = !error && !showInitialSkeleton && !loading && displayRows.length === 0;
 
   return (
     <div className="space-y-6 sm:space-y-8">
-      <LabPageHeader
-        title="Orders"
-        description={description}
-        actions={
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-9 gap-1.5"
-            onClick={() => refetch()}
-            disabled={loading}
-          >
-            <RotateCcw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} aria-hidden />
-            Refresh
-          </Button>
-        }
-      />
-
       <LabOrdersFilters
         searchInput={searchInput}
         onSearchChange={setSearchInput}

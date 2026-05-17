@@ -7,6 +7,7 @@ import {
   labMainOffsetSidebarOpen,
   labWorkspaceBg,
 } from "@/components/labs/labDesignTokens";
+import { LabShellHeaderProvider } from "@/lib/labs/layout/lab-shell-header-context";
 import { useMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { useEffect, useRef, useState } from "react";
@@ -40,23 +41,25 @@ export function LabShellLayout({ children }: { children: React.ReactNode }) {
   const mainOffset = isSidebarOpen ? labMainOffsetSidebarOpen : labMainOffsetSidebarClosed;
 
   return (
-    <div className={cn("flex min-h-screen min-h-[100dvh] w-full max-w-[100vw] flex-col gap-0 overflow-x-hidden", labWorkspaceBg)}>
-      <DashboardHeader onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)} sidebarOpen={isSidebarOpen} />
-      <div className="flex min-h-0 w-full min-w-0 flex-1 items-start overflow-x-hidden">
-        <div ref={sidebarRef}>
-          <LabSidebar isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
+    <LabShellHeaderProvider>
+      <div className={cn("flex min-h-screen min-h-[100dvh] w-full max-w-[100vw] flex-col gap-0 overflow-x-hidden", labWorkspaceBg)}>
+        <DashboardHeader onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)} sidebarOpen={isSidebarOpen} />
+        <div className="flex min-h-0 w-full min-w-0 flex-1 items-start overflow-x-hidden">
+          <div ref={sidebarRef}>
+            <LabSidebar isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
+          </div>
+          <main
+            className={cn(
+              "relative min-h-0 w-full min-w-0 max-w-full flex-1 overflow-x-hidden overflow-y-auto px-3 pb-6 pt-2 sm:px-4 sm:pb-8 sm:pt-3 xl:pb-10",
+              mainOffset,
+              "xl:mr-4",
+              labWorkspaceBg,
+            )}
+          >
+            <div className="relative z-[1] space-y-6 sm:space-y-8">{children}</div>
+          </main>
         </div>
-        <main
-          className={cn(
-            "relative min-h-0 w-full min-w-0 max-w-full flex-1 overflow-x-hidden overflow-y-auto px-3 pb-6 pt-2 sm:px-4 sm:pb-8 sm:pt-3 xl:pb-10",
-            mainOffset,
-            "xl:mr-4",
-            labWorkspaceBg
-          )}
-        >
-          <div className="relative z-[1] space-y-6 sm:space-y-8">{children}</div>
-        </main>
       </div>
-    </div>
+    </LabShellHeaderProvider>
   );
 }
