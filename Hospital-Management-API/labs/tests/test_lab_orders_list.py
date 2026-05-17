@@ -71,7 +71,7 @@ def _create_assignment_on_branch(
     sample_collection_mode: str = "home",
     patient_first: str = "Anita",
     patient_last: str = "Deshmukh",
-    patient_phone: str = "9123456789",
+    patient_phone: str | None = None,
     urgency=None,
 ):
     from clinic.models import Clinic
@@ -79,19 +79,21 @@ def _create_assignment_on_branch(
 
     clinic = Clinic.objects.create(name=f"Clinic {uuid.uuid4().hex[:6]}")
     doc_user, doc_profile = _doctor_user_and_profile(clinic)
+    catalog_svc = _catalog_service_for_tests()
     consultation, encounter, profile, _, items, _ = _consultation_with_investigations(
         doc_user,
         doc_profile,
         with_catalog=True,
-        svc=_catalog_service_for_tests(),
+        svc=catalog_svc,
     )
     profile.first_name = patient_first
     profile.last_name = patient_last
     profile.save(update_fields=["first_name", "last_name"])
-    profile.account.user.username = patient_phone
-    profile.account.user.save(update_fields=["username"])
+    phone = patient_phone or f"9{uuid.uuid4().int % 10**9:09d}"
+    user = profile.account.user
+    user.username = phone
+    user.save(update_fields=["username"])
 
-    svc = _catalog_service_for_tests()
     order = DiagnosticOrder.objects.create(
         order_number=order_number or f"ORD-{uuid.uuid4().hex[:6].upper()}",
         encounter=encounter,
@@ -107,11 +109,13 @@ def _create_assignment_on_branch(
     from diagnostics_engine.models import DiagnosticOrderItem, DiagnosticOrderTestLine
 
     inv = items[0] if items else None
+    if inv and inv.catalog_item_id:
+        catalog_svc = inv.catalog_item
     oi = DiagnosticOrderItem.objects.create(
         order=order,
         line_type=OrderLineType.TEST,
-        service=svc,
-        name_snapshot=svc.name,
+        service=catalog_svc,
+        name_snapshot=catalog_svc.name,
         price_snapshot=Decimal("50.00"),
         metadata_snapshot={"investigation_item_id": str(inv.id)} if inv else {},
     )
@@ -123,7 +127,7 @@ def _create_assignment_on_branch(
     DiagnosticOrderTestLine.objects.create(
         order=order,
         order_item=oi,
-        service=svc,
+        service=catalog_svc,
     )
 
     if sample_collection_mode == "home":
@@ -140,24 +144,14 @@ def _create_assignment_on_branch(
         lab_branch=branch,
         status=assignment_status,
     )
-    return assignment, order, profile
-
-
-_catalog_service_cache = None
+    return assignment, order, profile, phone
 
 
 def _catalog_service_for_tests():
-    global _catalog_service_cache
-    if _catalog_service_cache is None:
-        from diagnostics_engine.models import DiagnosticCategory, DiagnosticServiceMaster
+    """Fresh catalog row per call — avoids stale FKs when the test DB is reused."""
+    from diagnostics_engine.tests.test_order_creation_service import _create_catalog_service
 
-        cat = DiagnosticCategory.objects.create(name="Cat List", code=f"CAT-L-{uuid.uuid4().hex[:6]}")
-        _catalog_service_cache = DiagnosticServiceMaster.objects.create(
-            code=f"svc_list_{uuid.uuid4().hex[:6]}",
-            name="CBC",
-            category=cat,
-        )
-    return _catalog_service_cache
+    return _create_catalog_service(name="CBC")
 
 
 class LabOrdersListAPITests(TestCase):
@@ -171,7 +165,11 @@ class LabOrdersListAPITests(TestCase):
         status PENDING, urgency ROUTINE, collection_type HOME, pagination envelope.
         """
         user, branch, _org = _lab_admin_with_branch()
-        assignment, order, _profile = _create_assignment_on_branch(branch, order_number="ORD-10492")
+        assignment, order, _profile, phone = _create_assignment_on_branch(
+            branch,
+            order_number="ORD-10492",
+            patient_phone="9123456789",
+        )
 
         self.client.force_authenticate(user=user)
         res = self.client.get(self.url)
@@ -191,7 +189,7 @@ class LabOrdersListAPITests(TestCase):
         self.assertEqual(row["id"], str(order.id))
         self.assertEqual(row["assignment_id"], str(assignment.id))
         self.assertEqual(row["patient_name"], "Anita Deshmukh")
-        self.assertEqual(row["patient_phone"], "9123456789")
+        self.assertEqual(row["patient_phone"], phone)
         self.assertEqual(row["status"], "PENDING")
         self.assertEqual(row["collection_type"], "HOME")
         self.assertTrue(row["home_collection"])
@@ -290,7 +288,7 @@ class LabOrdersListAPITests(TestCase):
 
     def test_date_filter_on_assigned_at(self):
         user, branch, _org = _lab_admin_with_branch()
-        assignment, _, _ = _create_assignment_on_branch(branch, order_number="ORD-DATE")
+        assignment, _, _, _ = _create_assignment_on_branch(branch, order_number="ORD-DATE")
         old = timezone.now() - timedelta(days=10)
         LabOrderAssignment.objects.filter(pk=assignment.pk).update(assigned_at=old)
 
@@ -334,8 +332,8 @@ class LabOrdersListAPITests(TestCase):
 
     def test_ordering_assigned_at_desc(self):
         user, branch, _org = _lab_admin_with_branch()
-        a1, _, _ = _create_assignment_on_branch(branch, order_number="ORD-OLD")
-        a2, _, _ = _create_assignment_on_branch(branch, order_number="ORD-NEW")
+        a1, _, _, _ = _create_assignment_on_branch(branch, order_number="ORD-OLD")
+        a2, _, _, _ = _create_assignment_on_branch(branch, order_number="ORD-NEW")
         now = timezone.now()
         LabOrderAssignment.objects.filter(pk=a1.pk).update(assigned_at=now - timedelta(hours=2))
         LabOrderAssignment.objects.filter(pk=a2.pk).update(assigned_at=now - timedelta(hours=1))

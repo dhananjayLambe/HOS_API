@@ -27,8 +27,8 @@ from diagnostics_engine.tests.test_order_creation_service import (
     _lab_org_and_branch,
 )
 from labs.choices.auth import LabUserRole
-from labs.choices.workflow import CollectionStatus
-from labs.models import LabBranch, LabCollectionRequest, LabUser
+from labs.choices.workflow import CollectionStatus, LabAssignmentStatus
+from labs.models import LabBranch, LabCollectionRequest, LabOrderAssignment, LabOrderTestExecution, LabUser
 from labs.services.collection_workflow import (
     ALLOWED_TRANSITIONS,
     CollectionNotFoundError,
@@ -101,6 +101,11 @@ def _collection_pending(branch: LabBranch) -> LabCollectionRequest:
         metadata_snapshot={},
     )
     DiagnosticOrderTestLine.objects.create(order=order, order_item=oi, service=svc)
+    LabOrderAssignment.objects.create(
+        diagnostic_order=order,
+        lab_branch=branch,
+        status=LabAssignmentStatus.ACCEPTED,
+    )
     collection = LabCollectionRequest.objects.create(
         diagnostic_order=order,
         lab_branch=branch,
@@ -419,7 +424,13 @@ class CollectionWorkflowConcurrencyTests(TransactionTestCase):
         collection.refresh_from_db()
         self.assertEqual(collection.collection_status, CollectionStatus.ASSIGNED)
 
-    def test_concurrent_start_and_fail_one_succeeds(self):
+    def test_concurrent_start_and_fail_serializes_under_lock(self):
+        """
+        From ASSIGNED, start and fail are both valid; under row lock they serialize.
+
+        If fail runs first: ASSIGNED -> FAILED, then start -> 409.
+        If start runs first: ASSIGNED -> IN_PROGRESS, then fail -> IN_PROGRESS -> FAILED.
+        """
         collection = _collection_pending(self.branch)
         assign_collection(collection_id=collection.id, lab_user=self.lab_user)
         barrier = threading.Barrier(2)
@@ -452,10 +463,80 @@ class CollectionWorkflowConcurrencyTests(TransactionTestCase):
 
         successes = [r for r in results if not isinstance(r, Exception)]
         errors = [r for r in results if isinstance(r, CollectionWorkflowError)]
-        self.assertEqual(len(successes), 1)
-        self.assertEqual(len(errors), 1)
+        self.assertEqual(len(successes) + len(errors), 2)
+        self.assertGreaterEqual(len(successes), 1)
         collection.refresh_from_db()
         self.assertIn(
             collection.collection_status,
             (CollectionStatus.IN_PROGRESS, CollectionStatus.FAILED),
+        )
+        if len(successes) == 2:
+            self.assertEqual(collection.collection_status, CollectionStatus.FAILED)
+
+    def test_concurrent_retry_one_succeeds(self):
+        collection = _collection_pending(self.branch)
+        c = assign_collection(collection_id=collection.id, lab_user=self.lab_user)
+        c = start_collection(collection_id=c.id, lab_user=self.lab_user)
+        c = mark_failed(collection_id=c.id, lab_user=self.lab_user, reason="No answer")
+        barrier = threading.Barrier(2)
+        results: list[Exception | LabCollectionRequest] = []
+
+        def retry_attempt():
+            barrier.wait()
+            try:
+                results.append(
+                    retry_collection(collection_id=c.id, lab_user=self.lab_user),
+                )
+            except CollectionWorkflowError as exc:
+                results.append(exc)
+
+        t1 = threading.Thread(target=retry_attempt)
+        t2 = threading.Thread(target=retry_attempt)
+        t1.start()
+        t2.start()
+        t1.join()
+        t2.join()
+
+        successes = [r for r in results if not isinstance(r, Exception)]
+        errors = [r for r in results if isinstance(r, CollectionWorkflowError)]
+        self.assertEqual(len(successes), 1)
+        self.assertEqual(len(errors), 1)
+        c.refresh_from_db()
+        self.assertEqual(c.collection_status, CollectionStatus.PENDING)
+        self.assertEqual(c.retry_count, 1)
+
+    def test_concurrent_collect_execution_count_stable(self):
+        collection = _collection_pending(self.branch)
+        c = assign_collection(collection_id=collection.id, lab_user=self.lab_user)
+        c = start_collection(collection_id=c.id, lab_user=self.lab_user)
+        assignment = LabOrderAssignment.objects.get(diagnostic_order=c.diagnostic_order)
+        expected_lines = c.diagnostic_order.test_lines.count()
+        barrier = threading.Barrier(2)
+        results: list[Exception | LabCollectionRequest] = []
+
+        def collect_attempt():
+            barrier.wait()
+            try:
+                results.append(
+                    mark_collected(collection_id=c.id, lab_user=self.lab_user),
+                )
+            except CollectionWorkflowError as exc:
+                results.append(exc)
+
+        t1 = threading.Thread(target=collect_attempt)
+        t2 = threading.Thread(target=collect_attempt)
+        t1.start()
+        t2.start()
+        t1.join()
+        t2.join()
+
+        successes = [r for r in results if not isinstance(r, Exception)]
+        errors = [r for r in results if isinstance(r, CollectionWorkflowError)]
+        self.assertEqual(len(successes), 1)
+        self.assertEqual(len(errors), 1)
+        c.refresh_from_db()
+        self.assertEqual(c.collection_status, CollectionStatus.COLLECTED)
+        self.assertEqual(
+            LabOrderTestExecution.objects.filter(assignment=assignment).count(),
+            expected_lines,
         )

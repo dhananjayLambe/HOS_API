@@ -180,6 +180,45 @@ class LabOrderWorkflowAPITests(TestCase):
         res = self.client.post(self._accept_url(assignment.id))
         self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
 
+    def test_wrong_branch_reject_returns_404(self):
+        other = _other_branch(self.org)
+        assignment, _ = _minimal_assignment(other)
+        res = self.client.post(
+            self._reject_url(assignment.id),
+            {"reason": "Not our branch"},
+            format="json",
+        )
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_double_reject_returns_409(self):
+        assignment, _ = _minimal_assignment(self.branch)
+        self.assertEqual(
+            self.client.post(
+                self._reject_url(assignment.id),
+                {"reason": "First reject"},
+                format="json",
+            ).status_code,
+            status.HTTP_200_OK,
+        )
+        res = self.client.post(
+            self._reject_url(assignment.id),
+            {"reason": "Second reject"},
+            format="json",
+        )
+        self.assertEqual(res.status_code, status.HTTP_409_CONFLICT)
+
+    def test_reject_already_rejected_returns_409(self):
+        assignment, _ = _minimal_assignment(
+            self.branch,
+            assignment_status=LabAssignmentStatus.REJECTED,
+        )
+        res = self.client.post(
+            self._reject_url(assignment.id),
+            {"reason": "Again"},
+            format="json",
+        )
+        self.assertEqual(res.status_code, status.HTTP_409_CONFLICT)
+
     def test_missing_assignment_returns_404(self):
         res = self.client.post(self._accept_url(uuid.uuid4()))
         self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import threading
 import uuid
-from datetime import timedelta
+from datetime import date, timedelta
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
@@ -120,6 +120,19 @@ def _doctor_user_and_profile(clinic: Clinic):
     return u, dp
 
 
+def _create_catalog_service(*, name: str = "Test Svc"):
+    """Create a real DiagnosticServiceMaster row for investigation FK integrity."""
+    cat = DiagnosticCategory.objects.create(
+        name=f"Cat {uuid.uuid4().hex[:6]}",
+        code=f"C-{uuid.uuid4().hex[:6]}",
+    )
+    return DiagnosticServiceMaster.objects.create(
+        code=f"svc_{uuid.uuid4().hex[:6]}",
+        name=name,
+        category=cat,
+    )
+
+
 def _consultation_with_investigations(doctor_user, doctor_profile, *, with_catalog=True, with_package=False, pkg=None, svc=None):
     clinic = Clinic.objects.create(name=f"Clinic {uuid.uuid4().hex[:6]}")
     pu = User.objects.create_user(
@@ -134,7 +147,7 @@ def _consultation_with_investigations(doctor_user, doctor_profile, *, with_catal
         last_name="Test",
         relation="self",
         gender="male",
-        age_years=30,
+        date_of_birth=date(1994, 6, 15),
     )
     encounter = EncounterService.create_encounter(
         clinic=clinic,
@@ -147,13 +160,14 @@ def _consultation_with_investigations(doctor_user, doctor_profile, *, with_catal
     consultation = Consultation.objects.create(encounter=encounter)
     ci, _ = ConsultationInvestigations.objects.get_or_create(consultation=consultation)
     items = []
-    if with_catalog and svc:
+    if with_catalog:
+        catalog_svc = svc if svc is not None else _create_catalog_service()
         items.append(
             InvestigationItem.objects.create(
                 investigations=ci,
                 source=InvestigationSource.CATALOG,
-                catalog_item=svc,
-                name=svc.name,
+                catalog_item=catalog_svc,
+                name=catalog_svc.name,
                 investigation_type="lab",
                 urgency=InvestigationUrgency.ROUTINE,
                 status=InvestigationStatus.SUGGESTED,
