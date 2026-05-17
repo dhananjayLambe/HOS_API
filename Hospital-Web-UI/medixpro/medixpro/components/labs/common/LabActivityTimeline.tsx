@@ -7,9 +7,13 @@ import { Activity } from "lucide-react";
 export function LabActivityTimeline({
   events,
   className,
+  emptyTitle = "No activity yet",
+  emptyDescription = "Events will appear here as the order moves through the lab.",
 }: {
   events: LabTimelineEvent[];
   className?: string;
+  emptyTitle?: string;
+  emptyDescription?: string;
 }) {
   if (!events.length) {
     return (
@@ -22,8 +26,8 @@ export function LabActivityTimeline({
         <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-[#F4F1FF] text-[#7C5CFC]">
           <Activity className="h-5 w-5" strokeWidth={2} aria-hidden />
         </div>
-        <p className="text-sm font-medium text-[#111827]">No activity yet</p>
-        <p className="mt-1 text-xs text-[#6B7280]">Events will appear here as the order moves through the lab.</p>
+        <p className="text-sm font-medium text-[#111827]">{emptyTitle}</p>
+        <p className="mt-1 text-xs text-[#6B7280]">{emptyDescription}</p>
       </div>
     );
   }

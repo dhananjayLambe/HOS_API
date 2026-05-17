@@ -2,7 +2,6 @@
 
 import { LabEmptyState } from "@/components/labs/common/LabEmptyState";
 import { LabPageHeader } from "@/components/labs/common/LabPageHeader";
-import { LabQuickActions } from "@/components/labs/common/LabQuickActions";
 import { LabStatusBadge } from "@/components/labs/common/LabStatusBadge";
 import { labBtnSecondary } from "@/components/labs/labDesignTokens";
 import { MOCK_LAB_COLLECTIONS } from "@/components/labs/mock/collections";
@@ -166,7 +165,6 @@ export function LabDashboardHome() {
                     <TableHead>Slot</TableHead>
                     <TableHead>Assignment note</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead className="w-[1%]"> </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -180,9 +178,6 @@ export function LabDashboardHome() {
                       <TableCell className="text-[#111827]">{c.assigneeName ?? "—"}</TableCell>
                       <TableCell>
                         <LabStatusBadge domain="collection" status={c.status} />
-                      </TableCell>
-                      <TableCell>
-                        <LabQuickActions keys={["assign", "call", "whatsapp"]} size="sm" />
                       </TableCell>
                     </TableRow>
                   ))}

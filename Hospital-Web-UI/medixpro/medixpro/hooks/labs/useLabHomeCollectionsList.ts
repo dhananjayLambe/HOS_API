@@ -46,6 +46,12 @@ export function useLabHomeCollectionsList() {
     setRefreshKey(refreshKeyRef.current);
   }, []);
 
+  const resetFilters = useCallback(() => {
+    setFilters(DEFAULT_HOME_COLLECTIONS_FILTERS);
+    setSearchInput("");
+    setPage(1);
+  }, []);
+
   const load = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     setError(null);
@@ -75,6 +81,7 @@ export function useLabHomeCollectionsList() {
       setRows([]);
       setTotal(0);
       setTotalPages(0);
+      setSummary(EMPTY_SUMMARY);
     } finally {
       if (!signal?.aborted) {
         setLoading(false);
@@ -117,6 +124,7 @@ export function useLabHomeCollectionsList() {
     loading,
     error,
     refetch,
+    resetFilters,
     showInitialSkeleton: !initialLoaded && loading,
   };
 }

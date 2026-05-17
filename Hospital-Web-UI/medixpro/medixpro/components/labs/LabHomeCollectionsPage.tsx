@@ -4,6 +4,7 @@ import { AssignCollectionDialog } from "@/components/labs/home-collections/Assig
 import { CollectionDetailSheet } from "@/components/labs/home-collections/CollectionDetailSheet";
 import { HomeCollectionsFilters } from "@/components/labs/home-collections/HomeCollectionsFilters";
 import { HomeCollectionsSummaryCards } from "@/components/labs/home-collections/HomeCollectionsSummaryCards";
+import { HomeCollectionsSummaryCardsSkeleton } from "@/components/labs/home-collections/HomeCollectionsSummaryCardsSkeleton";
 import { HomeCollectionsTable } from "@/components/labs/home-collections/HomeCollectionsTable";
 import { LabEmptyState } from "@/components/labs/common/LabEmptyState";
 import { LabOrdersErrorState } from "@/components/labs/orders/LabOrdersErrorState";
@@ -37,8 +38,8 @@ const EMPTY_MESSAGES: Record<string, { title: string; description: string }> = {
     description: "Assigned collections ready to start will show here.",
   },
   active: {
-    title: "No active collections",
-    description: "Collections currently in progress will show here.",
+    title: "No in-progress collections",
+    description: "Collections currently in the field will show here.",
   },
   collected: {
     title: "No collected requests today",
@@ -72,6 +73,7 @@ export function LabHomeCollectionsPage() {
     loading,
     error,
     refetch,
+    resetFilters,
     showInitialSkeleton,
   } = useLabHomeCollectionsList();
 
@@ -153,9 +155,24 @@ export function LabHomeCollectionsPage() {
   const showTable = !error && !showInitialSkeleton && displayRows.length > 0;
   const showEmpty = !error && !showInitialSkeleton && !loading && displayRows.length === 0;
 
+  const handleSummaryTabSelect = useCallback(
+    (tab: typeof filters.statusTab) => {
+      setFilters((prev) => ({ ...prev, statusTab: tab }));
+    },
+    [setFilters],
+  );
+
   return (
     <div className="space-y-6 sm:space-y-8">
-      <HomeCollectionsSummaryCards summary={summary} />
+      {showInitialSkeleton ? (
+        <HomeCollectionsSummaryCardsSkeleton />
+      ) : (
+        <HomeCollectionsSummaryCards
+          summary={summary}
+          activeTab={filters.statusTab}
+          onTabSelect={handleSummaryTabSelect}
+        />
+      )}
 
       <HomeCollectionsFilters
         searchInput={searchInput}
@@ -174,7 +191,20 @@ export function LabHomeCollectionsPage() {
           </div>
         ) : showEmpty ? (
           <div className="p-4">
-            <LabEmptyState title={emptyCopy.title} description={emptyCopy.description} />
+            <LabEmptyState
+              title={emptyCopy.title}
+              description={emptyCopy.description}
+              action={
+                <div className="flex flex-wrap justify-center gap-2">
+                  <Button type="button" variant="secondary" className="h-9" onClick={resetFilters}>
+                    Clear filters
+                  </Button>
+                  <Button type="button" variant="outline" className="h-9" onClick={() => refetch()}>
+                    Refresh
+                  </Button>
+                </div>
+              }
+            />
           </div>
         ) : (
           <>

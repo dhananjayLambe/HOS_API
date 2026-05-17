@@ -17,7 +17,7 @@ export const DEFAULT_HOME_COLLECTIONS_FILTERS: HomeCollectionsFilterState = {
 export const HOME_COLLECTIONS_TAB_OPTIONS: { id: HomeCollectionsStatusTab; label: string }[] = [
   { id: "pending", label: "Pending" },
   { id: "assigned", label: "Assigned" },
-  { id: "active", label: "Active" },
+  { id: "active", label: "In Progress" },
   { id: "collected", label: "Collected" },
   { id: "failed", label: "Failed" },
 ];
