@@ -4,7 +4,6 @@ import { HomeCollectionRowActions } from "@/components/labs/home-collections/Hom
 import { LabDataTable } from "@/components/labs/common/LabDataTable";
 import { LabStatusBadge } from "@/components/labs/common/LabStatusBadge";
 import { labTableCellBody } from "@/components/labs/labDesignTokens";
-import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -13,6 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { formatAssignmentNoteDisplay } from "@/lib/labs/home-collections/format-assignment-note";
 import type { LabCollectionRow } from "@/lib/labs/types";
 import { cn } from "@/lib/utils";
 
@@ -66,7 +66,7 @@ export function HomeCollectionsTable({
             <TableHead>Patient</TableHead>
             <TableHead>Tests</TableHead>
             <TableHead>Collection slot</TableHead>
-            <TableHead>Assigned to</TableHead>
+            <TableHead>Assignment note</TableHead>
             <TableHead>Collection status</TableHead>
             <TableHead>Workflow</TableHead>
             <TableHead className="text-right">Actions</TableHead>
@@ -85,13 +85,9 @@ export function HomeCollectionsTable({
                 <p className="text-xs text-[#6B7280]">{row.slotTimeLabel}</p>
               </TableCell>
               <TableCell>
-                {row.assigneeName ? (
-                  <span className="text-sm text-[#111827]">{row.assigneeName}</span>
-                ) : (
-                  <Badge variant="outline" className="text-xs font-normal">
-                    Unassigned
-                  </Badge>
-                )}
+                <span className="line-clamp-2 text-sm text-[#111827]">
+                  {formatAssignmentNoteDisplay(row.status, row.assignmentNote)}
+                </span>
               </TableCell>
               <TableCell onClick={(e) => e.stopPropagation()}>
                 <LabStatusBadge domain="collection" status={row.status} />

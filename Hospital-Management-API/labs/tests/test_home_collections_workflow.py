@@ -119,51 +119,45 @@ class HomeCollectionWorkflowTests(TestCase):
         collection = LabCollectionRequest.objects.get(diagnostic_order=order)
         return collection, assignment, order
 
-    def test_accept_visit_order_creates_executions_only(self):
+    def test_accept_visit_order_creates_visit_appointment_not_executions(self):
+        from labs.models import LabVisitAppointment
+
         assignment, order = _home_assignment(self.branch)
         order.sample_collection_mode = "lab"
         order.save(update_fields=["sample_collection_mode"])
         self.client.post(reverse("lab-order-accept", kwargs={"assignment_id": assignment.id}))
         self.assertFalse(LabCollectionRequest.objects.filter(diagnostic_order=order).exists())
+        self.assertTrue(LabVisitAppointment.objects.filter(diagnostic_order=order).exists())
         self.assertEqual(
             LabOrderTestExecution.objects.filter(assignment=assignment).count(),
-            order.test_lines.count(),
+            0,
         )
 
-    def test_accept_creates_collection_and_executions(self):
+    def test_accept_creates_collection_not_executions(self):
         collection, assignment, order = self._accept_and_get_collection()
         self.assertEqual(collection.collection_status, CollectionStatus.PENDING)
         self.assertEqual(collection.collection_type, "HOME")
-        exec_count = LabOrderTestExecution.objects.filter(assignment=assignment).count()
-        self.assertEqual(exec_count, order.test_lines.count())
-        self.assertTrue(
-            LabOrderTestExecution.objects.filter(
-                assignment=assignment,
-                collection_request=collection,
-            ).exists(),
+        self.assertEqual(
+            LabOrderTestExecution.objects.filter(assignment=assignment).count(),
+            0,
         )
 
-    def test_collect_does_not_create_extra_executions(self):
+    def test_collect_creates_executions_idempotently(self):
         collection, assignment, order = self._accept_and_get_collection()
-        before = LabOrderTestExecution.objects.filter(assignment=assignment).count()
-
-        phleb = LabUser.objects.create(
-            user=User.objects.create_user(
-                username=f"phleb_{uuid.uuid4().hex[:6]}",
-                password="x",
-                first_name="R",
-                last_name="Kulkarni",
-            ),
-            organization=self.branch.organization,
-            branch=self.branch,
-            role=LabUserRole.PHLEBOTOMIST,
-            employee_code=f"PH-{uuid.uuid4().hex[:4]}",
+        self.assertEqual(
+            LabOrderTestExecution.objects.filter(assignment=assignment).count(),
+            0,
         )
-        self.client.post(
+
+        assign_res = self.client.post(
             reverse("lab-home-collection-assign", kwargs={"collection_id": collection.id}),
-            {"phlebotomist_id": str(phleb.id)},
+            {"assignment_note": "Assigned to Ramesh"},
             format="json",
         )
+        self.assertEqual(assign_res.status_code, status.HTTP_200_OK)
+        collection.refresh_from_db()
+        self.assertEqual(collection.assignment_note, "Assigned to Ramesh")
+        self.assertEqual(collection.collection_status, CollectionStatus.ASSIGNED)
         self.client.post(
             reverse("lab-home-collection-start", kwargs={"collection_id": collection.id}),
         )
@@ -172,25 +166,37 @@ class HomeCollectionWorkflowTests(TestCase):
         )
 
         after = LabOrderTestExecution.objects.filter(assignment=assignment).count()
-        self.assertEqual(before, after)
+        self.assertEqual(after, order.test_lines.count())
+        self.assertTrue(
+            LabOrderTestExecution.objects.filter(
+                assignment=assignment,
+                collection_request=collection,
+            ).exists(),
+        )
+        exec_row = LabOrderTestExecution.objects.filter(assignment=assignment).first()
+        self.assertEqual(exec_row.metadata.get("execution_source"), "home_collection")
+        self.assertIn("provisioned_at", exec_row.metadata)
         collection.refresh_from_db()
         self.assertEqual(collection.collection_status, CollectionStatus.COLLECTED)
 
+    def test_assign_empty_body(self):
+        collection, _assignment, _order = self._accept_and_get_collection()
+        res = self.client.post(
+            reverse("lab-home-collection-assign", kwargs={"collection_id": collection.id}),
+            {},
+            format="json",
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        collection.refresh_from_db()
+        self.assertEqual(collection.collection_status, CollectionStatus.ASSIGNED)
+        self.assertEqual(collection.assignment_note, "")
+        self.assertEqual(collection.assigned_by_id, self.user.id)
+
     def test_retry_failed_to_pending(self):
         collection, _assignment, _order = self._accept_and_get_collection()
-        phleb = LabUser.objects.create(
-            user=User.objects.create_user(
-                username=f"phleb2_{uuid.uuid4().hex[:6]}",
-                password="x",
-            ),
-            organization=self.branch.organization,
-            branch=self.branch,
-            role=LabUserRole.PHLEBOTOMIST,
-            employee_code=f"PH2-{uuid.uuid4().hex[:4]}",
-        )
         self.client.post(
             reverse("lab-home-collection-assign", kwargs={"collection_id": collection.id}),
-            {"phlebotomist_id": str(phleb.id)},
+            {"assignment_note": "Owner pickup"},
             format="json",
         )
         self.client.post(reverse("lab-home-collection-start", kwargs={"collection_id": collection.id}))
@@ -207,6 +213,7 @@ class HomeCollectionWorkflowTests(TestCase):
         self.assertEqual(collection.collection_status, CollectionStatus.PENDING)
         self.assertEqual(collection.retry_count, 1)
         self.assertIsNone(collection.assigned_phlebotomist_id)
+        self.assertEqual(collection.assignment_note, "")
         events = collection.metadata.get("workflow_events") or []
         self.assertGreaterEqual(len(events), 1)
 
@@ -238,3 +245,17 @@ class HomeCollectionsListAPITests(TestCase):
         self.assertIn("workflow_hint", row)
         self.assertIn("allowed_actions", row)
         self.assertEqual(row["collection_status"], CollectionStatus.PENDING)
+        self.assertIn("assignment_note", row)
+
+    def test_list_includes_assignment_note_after_assign(self):
+        assignment, order = _home_assignment(self.branch)
+        self.client.post(reverse("lab-order-accept", kwargs={"assignment_id": assignment.id}))
+        collection = LabCollectionRequest.objects.get(diagnostic_order=order)
+        self.client.post(
+            reverse("lab-home-collection-assign", kwargs={"collection_id": collection.id}),
+            {"assignment_note": "Local technician informed"},
+            format="json",
+        )
+        res = self.client.get(self.list_url)
+        row = next(r for r in res.json()["results"] if r["id"] == str(collection.id))
+        self.assertEqual(row["assignment_note"], "Local technician informed")

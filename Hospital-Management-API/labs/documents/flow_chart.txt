@@ -1,0 +1,12 @@
+DiagnosticOrder
+      |
+      v
+LabOrderAssignment (lab accepted order)
+      |
+      +-------------------+
+      |                   |
+      v                   v
+LabCollectionRequest   LabVisitAppointment
+      |
+      v
+LabOrderTestExecution (one row per test)

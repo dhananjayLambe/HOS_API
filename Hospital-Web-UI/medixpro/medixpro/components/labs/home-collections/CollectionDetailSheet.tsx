@@ -3,6 +3,7 @@
 import { HomeCollectionRowActions } from "@/components/labs/home-collections/HomeCollectionRowActions";
 import { LabStatusBadge } from "@/components/labs/common/LabStatusBadge";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { formatAssignmentNoteDisplay } from "@/lib/labs/home-collections/format-assignment-note";
 import type { LabCollectionRow } from "@/lib/labs/types";
 
 function formatTs(iso: string | null) {
@@ -92,8 +93,10 @@ export function CollectionDetailSheet({
                 </div>
               ) : null}
               <div className="flex justify-between gap-2">
-                <dt className="text-[#6B7280]">Phlebotomist</dt>
-                <dd>{row.assigneeName ?? "Unassigned"}</dd>
+                <dt className="text-[#6B7280]">Assignment note</dt>
+                <dd className="text-right">
+                  {formatAssignmentNoteDisplay(row.status, row.assignmentNote)}
+                </dd>
               </div>
               {row.patientNotes ? (
                 <div>

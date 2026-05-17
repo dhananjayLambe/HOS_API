@@ -47,6 +47,7 @@ def _workflow_response(collection, *, message: str) -> dict:
         "message": message,
         "collection_id": str(collection.id),
         "allowed_actions": allowed_actions_for_status(collection.collection_status),
+        "assignment_note": (collection.assignment_note or "").strip(),
     }
 
 
@@ -124,11 +125,14 @@ class HomeCollectionAssignView(APIView):
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+        validated = serializer.validated_data
         try:
             collection = assign_collection_by_id(
                 collection_id=collection_id,
                 lab_user=resolved.lab_user,
-                phlebotomist_id=serializer.validated_data["phlebotomist_id"],
+                assigned_by_user=request.user,
+                assignment_note=validated.get("assignment_note") or "",
+                phlebotomist_id=validated.get("phlebotomist_id"),
             )
         except PhlebotomistNotFoundError:
             return Response({"detail": "Phlebotomist not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -138,7 +142,7 @@ class HomeCollectionAssignView(APIView):
             return Response({"detail": exc.message}, status=status.HTTP_409_CONFLICT)
 
         return Response(
-            _workflow_response(collection, message="Phlebotomist assigned."),
+            _workflow_response(collection, message="Collection assigned."),
             status=status.HTTP_200_OK,
         )
 

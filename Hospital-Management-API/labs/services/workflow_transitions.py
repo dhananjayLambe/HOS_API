@@ -1,4 +1,9 @@
-"""Lab order assignment workflow transitions (accept / reject / auto-reject)."""
+"""
+Lab order assignment workflow transitions (accept / reject / auto-reject).
+
+Accept provisions logistics only (home collection request or visit appointment).
+Per-test executions are provisioned later — see labs/documents/HOME_ORDER_ACCEPTANCE_WORKFLOW.md.
+"""
 
 from __future__ import annotations
 
@@ -10,8 +15,12 @@ from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
-from labs.choices.workflow import LabAssignmentStatus
-from labs.models import LabOrderAssignment, LabUser
+from labs.choices.workflow import AppointmentStatus, LabAssignmentStatus
+from labs.models import LabOrderAssignment, LabUser, LabVisitAppointment
+from labs.services.collection_request_provisioning import (
+    ensure_lab_collection_request,
+    preferred_slot_from_order,
+)
 
 if TYPE_CHECKING:
     pass
@@ -77,22 +86,27 @@ def accept_assignment(assignment_id: UUID | str, lab_user: LabUser) -> LabOrderA
         assignment.save(update_fields=["status", "accepted_at", "updated_at"])
 
         order = assignment.diagnostic_order
-        if (order.sample_collection_mode or "lab") == "home":
-            from labs.api.services.collection_request_provisioning import (
-                ensure_lab_collection_request,
-            )
-
-            ensure_lab_collection_request(
-                diagnostic_order=order,
-                lab_branch=assignment.lab_branch,
+        mode = order.sample_collection_mode or "lab"
+        if mode == "home":
+            _collection_request, _created = ensure_lab_collection_request(
+                assignment=assignment,
             )
             order.refresh_from_db()
-
-        from labs.services.test_execution_provisioning import (
-            ensure_test_executions_for_assignment,
-        )
-
-        ensure_test_executions_for_assignment(assignment)
+        elif mode == "lab":
+            appointment_date, appointment_slot = preferred_slot_from_order(order)
+            LabVisitAppointment.objects.get_or_create(
+                diagnostic_order=order,
+                defaults={
+                    "lab_branch": assignment.lab_branch,
+                    "appointment_date": appointment_date,
+                    "appointment_slot": appointment_slot,
+                    "status": AppointmentStatus.PENDING,
+                    "metadata": {
+                        "provisioned_from_assignment_id": str(assignment.id),
+                        "provisioned_by": "system",
+                    },
+                },
+            )
 
     assignment.refresh_from_db()
     return assignment

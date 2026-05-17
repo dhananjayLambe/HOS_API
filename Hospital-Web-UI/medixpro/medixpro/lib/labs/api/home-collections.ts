@@ -65,13 +65,25 @@ export async function fetchPhlebotomists(options?: { signal?: AbortSignal }): Pr
   return data;
 }
 
+export type AssignHomeCollectionPayload = {
+  assignment_note?: string;
+  phlebotomist_id?: string;
+};
+
 export async function assignHomeCollection(
   collectionId: string,
-  phlebotomistId: string,
+  payload?: AssignHomeCollectionPayload,
 ): Promise<HomeCollectionWorkflowResponse> {
+  const body: AssignHomeCollectionPayload = {};
+  if (payload?.assignment_note) {
+    body.assignment_note = payload.assignment_note;
+  }
+  if (payload?.phlebotomist_id) {
+    body.phlebotomist_id = payload.phlebotomist_id;
+  }
   const { data } = await backendAxiosClient.post<HomeCollectionWorkflowResponse>(
     `labs/home-collections/${collectionId}/assign/`,
-    { phlebotomist_id: phlebotomistId },
+    body,
   );
   return data;
 }

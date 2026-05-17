@@ -1,6 +1,6 @@
 "use client";
 
-import { AssignPhlebotomistDialog } from "@/components/labs/home-collections/AssignPhlebotomistDialog";
+import { AssignCollectionDialog } from "@/components/labs/home-collections/AssignCollectionDialog";
 import { CollectionDetailSheet } from "@/components/labs/home-collections/CollectionDetailSheet";
 import { HomeCollectionsFilters } from "@/components/labs/home-collections/HomeCollectionsFilters";
 import { HomeCollectionsSummaryCards } from "@/components/labs/home-collections/HomeCollectionsSummaryCards";
@@ -25,20 +25,20 @@ import { useLabShellHeader } from "@/lib/labs/layout/lab-shell-header-context";
 import { useLabSession } from "@/lib/labs/session/lab-session-context";
 import type { LabCollectionRow } from "@/lib/labs/types";
 import { Loader2, RotateCcw } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 const EMPTY_MESSAGES: Record<string, { title: string; description: string }> = {
   pending: {
     title: "No pending home collections",
-    description: "Accepted home orders awaiting phlebotomist assignment will appear here.",
+    description: "Accepted home orders awaiting assignment will appear here.",
   },
   assigned: {
     title: "No assigned collections",
-    description: "Collections with a phlebotomist assigned but not yet started.",
+    description: "Assigned collections ready to start will show here.",
   },
   active: {
     title: "No active collections",
-    description: "Phlebotomists currently in the field will show here.",
+    description: "Collections currently in progress will show here.",
   },
   collected: {
     title: "No collected requests today",
@@ -80,6 +80,11 @@ export function LabHomeCollectionsPage() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [assignTarget, setAssignTarget] = useState<LabCollectionRow | null>(null);
+
+  // Server list is source of truth after refetch; drop stale optimistic patches.
+  useEffect(() => {
+    setRowPatches({});
+  }, [rows]);
 
   const displayRows = useMemo(
     () => rows.map((r) => rowPatches[r.id] ?? r),
@@ -225,16 +230,17 @@ export function LabHomeCollectionsPage() {
         onRetry={(row) => void runAction(row, () => retryHomeCollection(row.id))}
       />
 
-      <AssignPhlebotomistDialog
+      <AssignCollectionDialog
         open={!!assignTarget}
         onOpenChange={(open) => {
           if (!open) setAssignTarget(null);
         }}
         loading={busyId === assignTarget?.id}
-        onConfirm={(phlebotomistId) => {
+        onConfirm={(assignmentNote) => {
           if (!assignTarget) return;
-          void runAction(assignTarget, () => assignHomeCollection(assignTarget.id, phlebotomistId)).then(
-            () => setAssignTarget(null),
+          const payload = assignmentNote ? { assignment_note: assignmentNote } : undefined;
+          void runAction(assignTarget, () => assignHomeCollection(assignTarget.id, payload)).then(() =>
+            setAssignTarget(null),
           );
         }}
       />

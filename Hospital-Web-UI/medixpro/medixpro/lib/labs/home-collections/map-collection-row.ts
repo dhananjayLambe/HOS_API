@@ -23,6 +23,7 @@ export function mapHomeCollectionListItem(dto: HomeCollectionListItem): HomeColl
     confirmedSlot: dto.confirmed_slot,
     assigneeName: dto.assigned_phlebotomist_name,
     assigneeId: dto.assigned_phlebotomist_id,
+    assignmentNote: dto.assignment_note ?? "",
     status: dto.collection_status as CollectionStatus,
     workflowHint: dto.workflow_hint,
     allowedActions: dto.allowed_actions,
@@ -41,11 +42,17 @@ export function mapHomeCollectionListItem(dto: HomeCollectionListItem): HomeColl
 
 export function patchRowFromWorkflow(
   row: HomeCollectionRow,
-  res: { collection_status: CollectionStatus; allowed_actions: HomeCollectionRow["allowedActions"] },
+  res: {
+    collection_status: CollectionStatus;
+    allowed_actions: HomeCollectionRow["allowedActions"];
+    assignment_note?: string;
+  },
 ): HomeCollectionRow {
+  const noteFromResponse = (res.assignment_note ?? "").trim();
   return {
     ...row,
     status: res.collection_status,
     allowedActions: res.allowed_actions,
+    assignmentNote: noteFromResponse || row.assignmentNote,
   };
 }

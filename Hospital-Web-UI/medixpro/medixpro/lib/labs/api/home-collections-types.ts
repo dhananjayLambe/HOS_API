@@ -28,6 +28,7 @@ export type HomeCollectionListItem = {
   slot_time_label: string;
   assigned_phlebotomist_id: string | null;
   assigned_phlebotomist_name: string | null;
+  assignment_note: string;
   collection_status: CollectionStatus;
   workflow_hint: string;
   allowed_actions: HomeCollectionActionKey[];
@@ -65,6 +66,7 @@ export type HomeCollectionWorkflowResponse = {
   message: string;
   collection_id: string;
   allowed_actions: HomeCollectionActionKey[];
+  assignment_note?: string;
 };
 
 export type PhlebotomistListItem = {

@@ -76,6 +76,7 @@ export type LabCollectionRow = {
   confirmedSlot: string | null;
   assigneeName: string | null;
   assigneeId: string | null;
+  assignmentNote: string;
   status: CollectionStatus;
   workflowHint: string;
   allowedActions: HomeCollectionActionKey[];

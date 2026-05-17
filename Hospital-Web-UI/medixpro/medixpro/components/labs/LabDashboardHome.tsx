@@ -154,7 +154,7 @@ export function LabDashboardHome() {
         >
           {MOCK_LAB_COLLECTIONS.length === 0 ? (
             <div className="p-5 sm:p-8">
-              <LabEmptyState title="No collections today" description="Assign phlebotomists from the collections screen." />
+              <LabEmptyState title="No collections today" description="Assign collections from the home collections screen." />
             </div>
           ) : (
             <PremiumTable maxHeightClass="max-h-[min(20rem,45vh)]" className="rounded-none border-0 bg-transparent shadow-none">
@@ -164,7 +164,7 @@ export function LabDashboardHome() {
                     <TableHead>Patient</TableHead>
                     <TableHead>Address</TableHead>
                     <TableHead>Slot</TableHead>
-                    <TableHead>Staff</TableHead>
+                    <TableHead>Assignment note</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="w-[1%]"> </TableHead>
                   </TableRow>

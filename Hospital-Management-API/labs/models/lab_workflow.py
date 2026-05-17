@@ -79,6 +79,16 @@ from labs.choices.workflow import (
     TestExecutionType,
 )
 
+# Non-terminal statuses: at most one in-flight row per (assignment, test_line).
+ACTIVE_TEST_EXECUTION_STATUSES = (
+    TestExecutionStatus.PENDING,
+    TestExecutionStatus.ACCEPTED,
+    TestExecutionStatus.SCHEDULED,
+    TestExecutionStatus.SAMPLE_COLLECTED,
+    TestExecutionStatus.IN_PROCESSING,
+    TestExecutionStatus.REPORT_READY,
+)
+
 #=========================================================
 # LAB ORDER ASSIGNMENT
 # =========================================================
@@ -267,6 +277,19 @@ class LabCollectionRequest(BaseModel):
         blank=True,
     )
 
+    assigned_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="lab_collection_requests_assigned",
+    )
+
+    assignment_note = models.TextField(
+        blank=True,
+        default="",
+    )
+
     in_progress_at = models.DateTimeField(
         null=True,
         blank=True,
@@ -323,6 +346,7 @@ class LabCollectionRequest(BaseModel):
             models.Index(fields=["preferred_date"]),
             models.Index(fields=["confirmed_date"]),
             models.Index(fields=["lab_branch"]),
+            models.Index(fields=["assigned_at"]),
         ]
 
     def __str__(self):
@@ -689,6 +713,36 @@ class LabOrderTestExecution(BaseModel):
             models.Index(fields=["execution_type"]),
             models.Index(fields=["accepted_at"]),
             models.Index(fields=["completed_at"]),
+            models.Index(fields=["lab_branch", "execution_status"]),
+            models.Index(fields=["assignment", "execution_status"]),
+            models.Index(fields=["test_line", "execution_status"]),
+        ]
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=["assignment", "test_line"],
+                condition=models.Q(
+                    execution_status__in=ACTIVE_TEST_EXECUTION_STATUSES,
+                ),
+                name="uniq_active_execution_per_test",
+            ),
+            models.CheckConstraint(
+                name="execution_only_one_workflow_link",
+                check=(
+                    (
+                        models.Q(collection_request__isnull=False)
+                        & models.Q(visit_appointment__isnull=True)
+                    )
+                    | (
+                        models.Q(collection_request__isnull=True)
+                        & models.Q(visit_appointment__isnull=False)
+                    )
+                    | (
+                        models.Q(collection_request__isnull=True)
+                        & models.Q(visit_appointment__isnull=True)
+                    )
+                ),
+            ),
         ]
 
     def clean(self):

@@ -33,6 +33,7 @@ class HomeCollectionListRowDTO:
     slot_time_label: str
     assigned_phlebotomist_id: str | None
     assigned_phlebotomist_name: str | None
+    assignment_note: str
     collection_status: str
     workflow_hint: str
     allowed_actions: list[str]
@@ -110,6 +111,7 @@ def build_home_collection_row_dto(collection) -> HomeCollectionListRowDTO:
             else None
         ),
         assigned_phlebotomist_name=_phlebotomist_display(collection.assigned_phlebotomist) or None,
+        assignment_note=(collection.assignment_note or "").strip(),
         collection_status=status,
         workflow_hint=workflow_hint_for_status(status),
         allowed_actions=allowed_actions_for_status(status),

@@ -36,10 +36,12 @@ Executions are **not** created on collect.
 | Action | Transition |
 |--------|------------|
 | assign | PENDING → ASSIGNED |
-| start | ASSIGNED → IN_PROGRESS (requires assigned phlebotomist) |
+| start | ASSIGNED → IN_PROGRESS (phlebotomist optional) |
 | collect | IN_PROGRESS → COLLECTED |
-| fail | IN_PROGRESS → FAILED |
+| fail | ASSIGNED or IN_PROGRESS → FAILED |
 | retry | FAILED → PENDING |
+
+`CANCELLED` is a reserved terminal state in Phase 1 (no cancel API/workflow yet).
 
 Invalid transitions → `CollectionWorkflowError` → HTTP 409.
 

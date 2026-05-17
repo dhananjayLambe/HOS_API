@@ -25,6 +25,7 @@ class HomeCollectionListItemSerializer(serializers.Serializer):
     slot_time_label = serializers.CharField()
     assigned_phlebotomist_id = serializers.UUIDField(allow_null=True)
     assigned_phlebotomist_name = serializers.CharField(allow_null=True)
+    assignment_note = serializers.CharField(allow_blank=True)
     collection_status = serializers.CharField()
     workflow_hint = serializers.CharField()
     allowed_actions = serializers.ListField(child=serializers.CharField())
@@ -61,6 +62,7 @@ def dto_to_representation(dto: HomeCollectionListRowDTO) -> dict:
         "slot_time_label": dto.slot_time_label,
         "assigned_phlebotomist_id": dto.assigned_phlebotomist_id,
         "assigned_phlebotomist_name": dto.assigned_phlebotomist_name,
+        "assignment_note": dto.assignment_note,
         "collection_status": dto.collection_status,
         "workflow_hint": dto.workflow_hint,
         "allowed_actions": dto.allowed_actions,
@@ -78,7 +80,12 @@ def dto_to_representation(dto: HomeCollectionListRowDTO) -> dict:
 
 
 class HomeCollectionAssignSerializer(serializers.Serializer):
-    phlebotomist_id = serializers.UUIDField()
+    phlebotomist_id = serializers.UUIDField(required=False, allow_null=True)
+    assignment_note = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        max_length=2000,
+    )
 
 
 class HomeCollectionFailSerializer(serializers.Serializer):
@@ -91,6 +98,7 @@ class HomeCollectionWorkflowResponseSerializer(serializers.Serializer):
     message = serializers.CharField()
     collection_id = serializers.UUIDField()
     allowed_actions = serializers.ListField(child=serializers.CharField())
+    assignment_note = serializers.CharField(allow_blank=True)
 
 
 class PhlebotomistListItemSerializer(serializers.Serializer):

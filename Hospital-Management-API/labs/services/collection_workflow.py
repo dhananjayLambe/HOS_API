@@ -27,6 +27,7 @@ from uuid import UUID
 from django.db import transaction
 from django.utils import timezone
 
+from account.models import User
 from labs.choices.workflow import CollectionStatus
 from labs.models import LabCollectionRequest, LabUser
 
@@ -39,12 +40,17 @@ TERMINAL_STATUSES = frozenset(
 
 ALLOWED_TRANSITIONS: dict[str, set[str]] = {
     CollectionStatus.PENDING: {CollectionStatus.ASSIGNED},
-    CollectionStatus.ASSIGNED: {CollectionStatus.IN_PROGRESS},
+    CollectionStatus.ASSIGNED: {
+        CollectionStatus.IN_PROGRESS,
+        CollectionStatus.FAILED,
+    },
     CollectionStatus.IN_PROGRESS: {
         CollectionStatus.COLLECTED,
         CollectionStatus.FAILED,
     },
     CollectionStatus.FAILED: {CollectionStatus.PENDING},
+    CollectionStatus.COLLECTED: set(),
+    CollectionStatus.CANCELLED: set(),
 }
 
 
@@ -69,20 +75,26 @@ def get_collection_for_lab_user(
     *,
     collection_id: UUID | str,
     lab_user: LabUser,
+    select_for_update: bool = False,
 ) -> LabCollectionRequest:
+    # Locked loads avoid nullable FK joins — PostgreSQL rejects FOR UPDATE on outer joins.
+    if select_for_update:
+        qs = LabCollectionRequest.objects.select_related(
+            "diagnostic_order",
+            "lab_branch",
+        ).select_for_update()
+    else:
+        qs = LabCollectionRequest.objects.select_related(
+            "diagnostic_order",
+            "assigned_phlebotomist",
+            "assigned_phlebotomist__user",
+            "lab_branch",
+        )
     try:
-        return (
-            LabCollectionRequest.objects.select_related(
-                "diagnostic_order",
-                "assigned_phlebotomist",
-                "assigned_phlebotomist__user",
-                "lab_branch",
-            )
-            .get(
-                pk=collection_id,
-                lab_branch_id=lab_user.branch_id,
-                is_deleted=False,
-            )
+        return qs.get(
+            pk=collection_id,
+            lab_branch_id=lab_user.branch_id,
+            is_deleted=False,
         )
     except LabCollectionRequest.DoesNotExist as exc:
         raise CollectionNotFoundError from exc
@@ -116,26 +128,12 @@ def _validate_phlebotomist_for_branch(
         raise PhlebotomistNotFoundError
 
 
-def _load_collection_for_update(
-    *,
-    collection_id: UUID | str,
-    lab_user: LabUser,
-) -> LabCollectionRequest:
-    try:
-        return (
-            LabCollectionRequest.objects.select_for_update()
-            .select_related(
-                "diagnostic_order",
-                "lab_branch",
-            )
-            .get(
-                pk=collection_id,
-                lab_branch_id=lab_user.branch_id,
-                is_deleted=False,
-            )
+def validate_transition(*, current_status: str, target_status: str) -> None:
+    allowed = ALLOWED_TRANSITIONS.get(current_status, set())
+    if target_status not in allowed:
+        raise CollectionWorkflowError(
+            f"Cannot transition from {current_status} to {target_status}.",
         )
-    except LabCollectionRequest.DoesNotExist as exc:
-        raise CollectionNotFoundError from exc
 
 
 def _ensure_not_terminal(collection: LabCollectionRequest) -> None:
@@ -146,11 +144,10 @@ def _ensure_not_terminal(collection: LabCollectionRequest) -> None:
 
 
 def _assert_transition(collection: LabCollectionRequest, target_status: str) -> None:
-    allowed = ALLOWED_TRANSITIONS.get(collection.collection_status, set())
-    if target_status not in allowed:
-        raise CollectionWorkflowError(
-            f"Cannot transition from {collection.collection_status} to {target_status}.",
-        )
+    validate_transition(
+        current_status=collection.collection_status,
+        target_status=target_status,
+    )
 
 
 def _append_workflow_event(
@@ -204,9 +201,10 @@ def _run_transition(
     apply: Callable[[LabCollectionRequest], list[str]],
 ) -> LabCollectionRequest:
     with transaction.atomic():
-        collection = _load_collection_for_update(
+        collection = get_collection_for_lab_user(
             collection_id=collection_id,
             lab_user=lab_user,
+            select_for_update=True,
         )
         update_fields = apply(collection)
         _transition(
@@ -223,7 +221,7 @@ def workflow_hint_for_status(status: str) -> str:
     return {
         CollectionStatus.PENDING: "Awaiting assignment",
         CollectionStatus.ASSIGNED: "Waiting for collection start",
-        CollectionStatus.IN_PROGRESS: "Phlebotomist in progress",
+        CollectionStatus.IN_PROGRESS: "Collection in progress",
         CollectionStatus.COLLECTED: "Sample handed to lab",
         CollectionStatus.FAILED: "Collection unsuccessful",
         CollectionStatus.CANCELLED: "Cancelled",
@@ -233,7 +231,7 @@ def workflow_hint_for_status(status: str) -> str:
 def allowed_actions_for_status(status: str) -> list[str]:
     mapping = {
         CollectionStatus.PENDING: ["assign"],
-        CollectionStatus.ASSIGNED: ["start"],
+        CollectionStatus.ASSIGNED: ["start", "fail"],
         CollectionStatus.IN_PROGRESS: ["collect", "fail"],
         CollectionStatus.FAILED: ["retry"],
         CollectionStatus.COLLECTED: ["view_execution"],
@@ -246,15 +244,24 @@ def assign_collection(
     *,
     collection_id: UUID | str,
     lab_user: LabUser,
-    phlebotomist: LabUser,
+    assigned_by_user: User | None = None,
+    assignment_note: str = "",
+    phlebotomist: LabUser | None = None,
 ) -> LabCollectionRequest:
-    _validate_phlebotomist_for_branch(phlebotomist, lab_user)
+    if phlebotomist is not None:
+        _validate_phlebotomist_for_branch(phlebotomist, lab_user)
     now = timezone.now()
+    note = (assignment_note or "").strip()
 
     def apply(collection: LabCollectionRequest) -> list[str]:
-        collection.assigned_phlebotomist = phlebotomist
         collection.assigned_at = now
-        return ["assigned_phlebotomist", "assigned_at"]
+        collection.assigned_by = assigned_by_user
+        collection.assignment_note = note
+        fields = ["assigned_at", "assigned_by", "assignment_note"]
+        if phlebotomist is not None:
+            collection.assigned_phlebotomist = phlebotomist
+            fields.append("assigned_phlebotomist")
+        return fields
 
     return _run_transition(
         collection_id=collection_id,
@@ -268,13 +275,19 @@ def assign_collection_by_id(
     *,
     collection_id: UUID | str,
     lab_user: LabUser,
-    phlebotomist_id: UUID | str,
+    assigned_by_user: User | None = None,
+    assignment_note: str = "",
+    phlebotomist_id: UUID | str | None = None,
 ) -> LabCollectionRequest:
-    """Convenience wrapper for views that receive phlebotomist_id from the API."""
-    phlebotomist = resolve_phlebotomist(phlebotomist_id=phlebotomist_id, lab_user=lab_user)
+    """Convenience wrapper for views; phlebotomist_id is optional (legacy compat)."""
+    phlebotomist = None
+    if phlebotomist_id is not None:
+        phlebotomist = resolve_phlebotomist(phlebotomist_id=phlebotomist_id, lab_user=lab_user)
     return assign_collection(
         collection_id=collection_id,
         lab_user=lab_user,
+        assigned_by_user=assigned_by_user,
+        assignment_note=assignment_note,
         phlebotomist=phlebotomist,
     )
 
@@ -287,10 +300,6 @@ def start_collection(
     now = timezone.now()
 
     def apply(collection: LabCollectionRequest) -> list[str]:
-        if not collection.assigned_phlebotomist_id:
-            raise CollectionWorkflowError(
-                "Cannot start collection without an assigned phlebotomist.",
-            )
         collection.in_progress_at = now
         return ["in_progress_at"]
 
@@ -307,33 +316,49 @@ def mark_collected(
     collection_id: UUID | str,
     lab_user: LabUser,
 ) -> LabCollectionRequest:
-    """Logistics only — does not create or mutate LabOrderTestExecution rows."""
+    """
+    Home collection logistics: transition to COLLECTED, then provision per-test executions.
+
+    Execution rows are created via test_execution_provisioning (not in this module's core logic).
+    """
     now = timezone.now()
 
     def apply(collection: LabCollectionRequest) -> list[str]:
         collection.collected_at = now
         return ["collected_at"]
 
-    return _run_transition(
+    collection = _run_transition(
         collection_id=collection_id,
         lab_user=lab_user,
         target_status=CollectionStatus.COLLECTED,
         apply=apply,
     )
 
+    assignment = getattr(collection.diagnostic_order, "lab_assignment", None)
+    if assignment is not None:
+        from labs.services.test_execution_provisioning import ensure_test_executions
+
+        ensure_test_executions(
+            assignment=assignment,
+            collection_request=collection,
+        )
+
+    return collection
+
 
 def mark_failed(
     *,
     collection_id: UUID | str,
     lab_user: LabUser,
+    failure_reason: str = "",
     reason: str | None = None,
 ) -> LabCollectionRequest:
     now = timezone.now()
+    note = (failure_reason or reason or "").strip()
 
     def apply(collection: LabCollectionRequest) -> list[str]:
         collection.failed_at = now
         fields = ["failed_at"]
-        note = (reason or "").strip()
         if note:
             collection.internal_notes = (
                 f"{(collection.internal_notes or '').strip()}\n{note}".strip()
@@ -380,11 +405,15 @@ def retry_collection(
         collection.retry_count = (collection.retry_count or 0) + 1
         collection.assigned_phlebotomist = None
         collection.assigned_at = None
+        collection.assigned_by = None
+        collection.assignment_note = ""
         collection.in_progress_at = None
         collection.failed_at = None
         return [
             "assigned_phlebotomist",
             "assigned_at",
+            "assigned_by",
+            "assignment_note",
             "in_progress_at",
             "failed_at",
             "retry_count",
