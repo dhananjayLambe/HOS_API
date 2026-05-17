@@ -14,8 +14,7 @@ function toneFor(domain: LabStatusDomain, status: string): Tone {
   if (domain === "collection") {
     if (status === "COLLECTED") return "success";
     if (status === "FAILED" || status === "CANCELLED") return "failed";
-    if (status === "ASSIGNED" || status === "COLLECTION_STARTED") return "progress";
-    if (status === "RESCHEDULED") return "progress";
+    if (status === "ASSIGNED" || status === "IN_PROGRESS") return "progress";
     return "pending";
   }
   if (domain === "appointment") {

@@ -1,87 +1,243 @@
 "use client";
 
-import { LabDataTable } from "@/components/labs/common/LabDataTable";
+import { AssignPhlebotomistDialog } from "@/components/labs/home-collections/AssignPhlebotomistDialog";
+import { CollectionDetailSheet } from "@/components/labs/home-collections/CollectionDetailSheet";
+import { HomeCollectionsFilters } from "@/components/labs/home-collections/HomeCollectionsFilters";
+import { HomeCollectionsSummaryCards } from "@/components/labs/home-collections/HomeCollectionsSummaryCards";
+import { HomeCollectionsTable } from "@/components/labs/home-collections/HomeCollectionsTable";
 import { LabEmptyState } from "@/components/labs/common/LabEmptyState";
-import { LabFilterBar } from "@/components/labs/common/LabFilterBar";
-import { LabPageHeader } from "@/components/labs/common/LabPageHeader";
-import { LabQuickActions } from "@/components/labs/common/LabQuickActions";
-import { LabStatusBadge } from "@/components/labs/common/LabStatusBadge";
-import { MOCK_LAB_COLLECTIONS } from "@/components/labs/mock/collections";
+import { LabOrdersErrorState } from "@/components/labs/orders/LabOrdersErrorState";
+import { LabOrdersPagination } from "@/components/labs/orders/LabOrdersPagination";
+import { LabOrdersTableSkeleton } from "@/components/labs/orders/LabOrdersTableSkeleton";
+import { SectionCard } from "@/components/labs/premium/SectionCard";
 import { Button } from "@/components/ui/button";
+import { useLabHomeCollectionsList } from "@/hooks/labs/useLabHomeCollectionsList";
+import { useToastNotification } from "@/hooks/use-toast-notification";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { toast } from "sonner";
+  assignHomeCollection,
+  collectHomeCollection,
+  failHomeCollection,
+  retryHomeCollection,
+  startHomeCollection,
+} from "@/lib/labs/api/home-collections";
+import { patchRowFromWorkflow } from "@/lib/labs/home-collections/map-collection-row";
+import { useLabShellHeader } from "@/lib/labs/layout/lab-shell-header-context";
+import { useLabSession } from "@/lib/labs/session/lab-session-context";
+import type { LabCollectionRow } from "@/lib/labs/types";
+import { Loader2, RotateCcw } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
+
+const EMPTY_MESSAGES: Record<string, { title: string; description: string }> = {
+  pending: {
+    title: "No pending home collections",
+    description: "Accepted home orders awaiting phlebotomist assignment will appear here.",
+  },
+  assigned: {
+    title: "No assigned collections",
+    description: "Collections with a phlebotomist assigned but not yet started.",
+  },
+  active: {
+    title: "No active collections",
+    description: "Phlebotomists currently in the field will show here.",
+  },
+  collected: {
+    title: "No collected requests today",
+    description: "Completed home collections for the selected date range.",
+  },
+  failed: {
+    title: "No failed collections",
+    description: "Unsuccessful collection attempts for the selected filters.",
+  },
+};
 
 export function LabHomeCollectionsPage() {
+  const { data: session } = useLabSession();
+  const toast = useToastNotification();
+  const branchLabel = session?.branch?.branch_name ?? "";
+
+  const {
+    filters,
+    setFilters,
+    searchInput,
+    setSearchInput,
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
+    pageSizeOptions,
+    rows,
+    total,
+    totalPages,
+    summary,
+    loading,
+    error,
+    refetch,
+    showInitialSkeleton,
+  } = useLabHomeCollectionsList();
+
+  const [rowPatches, setRowPatches] = useState<Record<string, LabCollectionRow>>({});
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [assignTarget, setAssignTarget] = useState<LabCollectionRow | null>(null);
+
+  const displayRows = useMemo(
+    () => rows.map((r) => rowPatches[r.id] ?? r),
+    [rows, rowPatches],
+  );
+
+  const selectedRow = useMemo(
+    () => displayRows.find((r) => r.id === selectedId) ?? null,
+    [displayRows, selectedId],
+  );
+
+  const applyWorkflowPatch = useCallback(
+    (row: LabCollectionRow, res: Awaited<ReturnType<typeof startHomeCollection>>) => {
+      const patched = patchRowFromWorkflow(row, res);
+      setRowPatches((prev) => ({ ...prev, [row.id]: patched }));
+      toast.success(res.message);
+      refetch();
+    },
+    [refetch, toast],
+  );
+
+  const runAction = useCallback(
+    async (row: LabCollectionRow, fn: () => Promise<Awaited<ReturnType<typeof startHomeCollection>>>) => {
+      setBusyId(row.id);
+      try {
+        const res = await fn();
+        applyWorkflowPatch(row, res);
+      } catch (err: unknown) {
+        const ax = err as { response?: { data?: { detail?: string } }; message?: string };
+        toast.error(ax?.response?.data?.detail || ax?.message || "Action failed.");
+      } finally {
+        setBusyId(null);
+      }
+    },
+    [applyWorkflowPatch, toast],
+  );
+
+  const openDetail = (row: LabCollectionRow) => {
+    setSelectedId(row.id);
+    setSheetOpen(true);
+  };
+
+  const headerActions = useMemo(
+    () => (
+      <Button type="button" variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => refetch()} disabled={loading}>
+        <RotateCcw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} aria-hidden />
+        Refresh
+      </Button>
+    ),
+    [loading, refetch],
+  );
+
+  useLabShellHeader({
+    title: "Home Collections",
+    description: branchLabel
+      ? `${branchLabel} — operational queue for home sample collection requests.`
+      : "Operational queue for home sample collection requests.",
+    actions: headerActions,
+  });
+
+  const emptyCopy = EMPTY_MESSAGES[filters.statusTab] ?? {
+    title: "No collections in this view",
+    description: "Adjust filters or refresh the queue.",
+  };
+
+  const showTable = !error && !showInitialSkeleton && displayRows.length > 0;
+  const showEmpty = !error && !showInitialSkeleton && !loading && displayRows.length === 0;
+
   return (
     <div className="space-y-6 sm:space-y-8">
-      <LabPageHeader
-        title="Home collections"
-        description="Field ops — assign, call, mark collected. Route optimization comes later."
+      <HomeCollectionsSummaryCards summary={summary} />
+
+      <HomeCollectionsFilters
+        searchInput={searchInput}
+        onSearchChange={setSearchInput}
+        filters={filters}
+        onFiltersChange={setFilters}
+        disabled={showInitialSkeleton}
       />
-      <LabFilterBar>
-        {(["Today", "Tomorrow", "Assigned", "Pending", "Collected", "Failed"] as const).map((label) => (
-          <Button key={label} type="button" variant="outline" size="sm" className="h-9" onClick={() => toast.message(label)}>
-            {label}
-          </Button>
-        ))}
-      </LabFilterBar>
-      {MOCK_LAB_COLLECTIONS.length === 0 ? (
-        <div className="rounded-2xl border border-[color:rgb(15_23_42/0.06)] bg-white/[0.92] p-6 shadow-sm">
-          <LabEmptyState title="No collections in this view" description="Switch filters or check tomorrow's roster." />
-        </div>
-      ) : (
-        <LabDataTable>
-          <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead>Patient</TableHead>
-                <TableHead>Address</TableHead>
-                <TableHead>Slot</TableHead>
-                <TableHead>Assigned</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Phone</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {MOCK_LAB_COLLECTIONS.map((c) => (
-                <TableRow key={c.id}>
-                  <TableCell className="font-medium">{c.patient}</TableCell>
-                  <TableCell className="max-w-[200px] text-muted-foreground">{c.address}</TableCell>
-                  <TableCell className="whitespace-nowrap">{c.slot}</TableCell>
-                  <TableCell>{c.assignee ?? "—"}</TableCell>
-                  <TableCell>
-                    <LabStatusBadge domain="collection" status={c.status} />
-                  </TableCell>
-                  <TableCell className="text-sm">{c.phone}</TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex flex-wrap justify-end gap-1">
-                      <Button size="sm" variant="secondary" onClick={() => toast.success("Started (mock)")}>
-                        Mark started
-                      </Button>
-                      <Button size="sm" onClick={() => toast.success("Collected (mock)")}>
-                        Collected
-                      </Button>
-                      <LabQuickActions keys={["call", "whatsapp", "map", "more"]} size="sm" />
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </LabDataTable>
-      )}
-      <div className="rounded-xl border border-border/70 bg-muted/25 p-4 text-sm text-muted-foreground shadow-sm">
-        <span className="font-medium text-foreground">Detail actions:</span> reschedule, cancel, open maps — use row
-        menu (mock) or expand sheet in a later phase.
-      </div>
+
+      <SectionCard title="Collections queue" subtitle="Row opens detail drawer — actions do not propagate.">
+        {showInitialSkeleton ? (
+          <LabOrdersTableSkeleton />
+        ) : error ? (
+          <div className="p-4">
+            <LabOrdersErrorState message={error} onRetry={refetch} retrying={loading} />
+          </div>
+        ) : showEmpty ? (
+          <div className="p-4">
+            <LabEmptyState title={emptyCopy.title} description={emptyCopy.description} />
+          </div>
+        ) : (
+          <>
+            {loading ? (
+              <div className="flex items-center gap-2 border-b border-[#ECEBFF] px-4 py-2 text-sm text-[#6B7280]">
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                Loading collections…
+              </div>
+            ) : null}
+            {showTable ? (
+              <HomeCollectionsTable
+                rows={displayRows}
+                busyId={busyId}
+                onRowOpen={openDetail}
+                onAssign={(row) => setAssignTarget(row)}
+                onStart={(row) => void runAction(row, () => startHomeCollection(row.id))}
+                onCollect={(row) => void runAction(row, () => collectHomeCollection(row.id))}
+                onFail={(row) => {
+                  const reason = window.prompt("Failure reason (optional):") ?? "";
+                  void runAction(row, () => failHomeCollection(row.id, reason));
+                }}
+                onRetry={(row) => void runAction(row, () => retryHomeCollection(row.id))}
+              />
+            ) : null}
+            {showTable ? (
+              <LabOrdersPagination
+                page={page}
+                pageSize={pageSize}
+                total={total}
+                totalPages={totalPages}
+                pageSizeOptions={pageSizeOptions}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+                disabled={loading}
+              />
+            ) : null}
+          </>
+        )}
+      </SectionCard>
+
+      <CollectionDetailSheet
+        row={selectedRow}
+        open={sheetOpen}
+        onOpenChange={setSheetOpen}
+        busy={busyId === selectedRow?.id}
+        onAssign={(row) => setAssignTarget(row)}
+        onStart={(row) => void runAction(row, () => startHomeCollection(row.id))}
+        onCollect={(row) => void runAction(row, () => collectHomeCollection(row.id))}
+        onFail={(row) => {
+          const reason = window.prompt("Failure reason (optional):") ?? "";
+          void runAction(row, () => failHomeCollection(row.id, reason));
+        }}
+        onRetry={(row) => void runAction(row, () => retryHomeCollection(row.id))}
+      />
+
+      <AssignPhlebotomistDialog
+        open={!!assignTarget}
+        onOpenChange={(open) => {
+          if (!open) setAssignTarget(null);
+        }}
+        loading={busyId === assignTarget?.id}
+        onConfirm={(phlebotomistId) => {
+          if (!assignTarget) return;
+          void runAction(assignTarget, () => assignHomeCollection(assignTarget.id, phlebotomistId)).then(
+            () => setAssignTarget(null),
+          );
+        }}
+      />
     </div>
   );
 }

@@ -1,22 +1,24 @@
 import type { LabCollectionRow } from "@/lib/labs/types";
 
-export const MOCK_LAB_COLLECTIONS: LabCollectionRow[] = [
+/** Legacy mock — Home Collections page uses live API. Kept for dashboard home snippet only. */
+export const MOCK_LAB_COLLECTIONS: Pick<
+  LabCollectionRow,
+  "id" | "patientName" | "status" | "assigneeName" | "slotDateLabel" | "slotTimeLabel"
+>[] = [
   {
     id: "COL-201",
-    patient: "Anita Deshmukh",
-    address: "Baner — Sunrise Apts 3B",
-    slot: "Today 4–6 PM",
-    assignee: "R. Kulkarni",
+    patientName: "Anita Deshmukh",
+    slotDateLabel: "Today",
+    slotTimeLabel: "4–6 PM",
+    assigneeName: "R. Kulkarni",
     status: "ASSIGNED",
-    phone: "+91 98765 43210",
   },
   {
     id: "COL-198",
-    patient: "Vikram Joshi",
-    address: "Hinjewadi Phase 2",
-    slot: "Today 2–4 PM",
-    assignee: "A. Shaikh",
-    status: "COLLECTION_STARTED",
-    phone: "+91 90111 22333",
+    patientName: "Vikram Joshi",
+    slotDateLabel: "Today",
+    slotTimeLabel: "2–4 PM",
+    assigneeName: "A. Shaikh",
+    status: "IN_PROGRESS",
   },
 ];

@@ -172,10 +172,12 @@ export function LabDashboardHome() {
                 <TableBody>
                   {MOCK_LAB_COLLECTIONS.map((c) => (
                     <TableRow key={c.id} className="border-0">
-                      <TableCell className="font-semibold text-[#111827]">{c.patient}</TableCell>
-                      <TableCell className="max-w-[160px] text-[#6B7280]">{c.address}</TableCell>
-                      <TableCell className="whitespace-nowrap text-[#111827]">{c.slot}</TableCell>
-                      <TableCell className="text-[#111827]">{c.assignee ?? "—"}</TableCell>
+                      <TableCell className="font-semibold text-[#111827]">{c.patientName}</TableCell>
+                      <TableCell className="max-w-[160px] text-[#6B7280]">—</TableCell>
+                      <TableCell className="whitespace-nowrap text-[#111827]">
+                        {c.slotDateLabel} {c.slotTimeLabel}
+                      </TableCell>
+                      <TableCell className="text-[#111827]">{c.assigneeName ?? "—"}</TableCell>
                       <TableCell>
                         <LabStatusBadge domain="collection" status={c.status} />
                       </TableCell>

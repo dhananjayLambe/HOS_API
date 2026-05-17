@@ -75,6 +75,25 @@ def accept_assignment(assignment_id: UUID | str, lab_user: LabUser) -> LabOrderA
         assignment.status = LabAssignmentStatus.ACCEPTED
         assignment.accepted_at = now
         assignment.save(update_fields=["status", "accepted_at", "updated_at"])
+
+        order = assignment.diagnostic_order
+        if (order.sample_collection_mode or "lab") == "home":
+            from labs.api.services.collection_request_provisioning import (
+                ensure_lab_collection_request,
+            )
+
+            ensure_lab_collection_request(
+                diagnostic_order=order,
+                lab_branch=assignment.lab_branch,
+            )
+            order.refresh_from_db()
+
+        from labs.services.test_execution_provisioning import (
+            ensure_test_executions_for_assignment,
+        )
+
+        ensure_test_executions_for_assignment(assignment)
+
     assignment.refresh_from_db()
     return assignment
 

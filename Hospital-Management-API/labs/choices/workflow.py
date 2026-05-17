@@ -14,13 +14,9 @@ class LabAssignmentStatus(models.TextChoices):
 class CollectionStatus(models.TextChoices):
     PENDING = "PENDING", _("Pending")
     ASSIGNED = "ASSIGNED", _("Assigned")
-    COLLECTION_STARTED = (
-        "COLLECTION_STARTED",
-        _("Collection Started"),
-    )
+    IN_PROGRESS = "IN_PROGRESS", _("In Progress")
     COLLECTED = "COLLECTED", _("Collected")
     FAILED = "FAILED", _("Failed")
-    RESCHEDULED = "RESCHEDULED", _("Rescheduled")
     CANCELLED = "CANCELLED", _("Cancelled")
 
 
@@ -32,3 +28,24 @@ class AppointmentStatus(models.TextChoices):
     NO_SHOW = "NO_SHOW", _("No Show")
     CANCELLED = "CANCELLED", _("Cancelled")
     RESCHEDULED = "RESCHEDULED", _("Rescheduled")
+
+# =========================================================
+# TEST EXECUTION ENUMS
+# =========================================================
+class TestExecutionStatus(models.TextChoices):
+    PENDING = "pending", "Pending"
+    ACCEPTED = "accepted", "Accepted"
+    SCHEDULED = "scheduled", "Scheduled"
+    SAMPLE_COLLECTED = "sample_collected", "Sample Collected"
+    IN_PROCESSING = "in_processing", "In Processing"
+    REPORT_READY = "report_ready", "Report Ready"
+    COMPLETED = "completed", "Completed"
+    CANCELLED = "cancelled", "Cancelled"
+    REJECTED = "rejected", "Rejected"
+    NO_SHOW = "no_show", "No Show"
+    UNSUPPORTED = "unsupported", "Unsupported"
+
+
+class TestExecutionType(models.TextChoices):
+    HOME_COLLECTION = "home_collection", "Home Collection"
+    BRANCH_VISIT = "branch_visit", "Branch Visit"

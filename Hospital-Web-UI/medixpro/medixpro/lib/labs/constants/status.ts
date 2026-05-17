@@ -18,10 +18,9 @@ export type OrderStatus = (typeof ORDER_STATUSES)[number];
 export const COLLECTION_STATUSES = [
   "PENDING",
   "ASSIGNED",
-  "COLLECTION_STARTED",
+  "IN_PROGRESS",
   "COLLECTED",
   "FAILED",
-  "RESCHEDULED",
   "CANCELLED",
 ] as const;
 export type CollectionStatus = (typeof COLLECTION_STATUSES)[number];
@@ -73,10 +72,9 @@ export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
 export const COLLECTION_STATUS_LABELS: Record<CollectionStatus, string> = {
   PENDING: "Pending",
   ASSIGNED: "Assigned",
-  COLLECTION_STARTED: "Started",
+  IN_PROGRESS: "In progress",
   COLLECTED: "Collected",
   FAILED: "Failed",
-  RESCHEDULED: "Rescheduled",
   CANCELLED: "Cancelled",
 };
 
