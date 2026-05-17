@@ -1,4 +1,3 @@
-import type { LabAppointmentRow } from "@/lib/labs/types";
 import type { LabPatientRow } from "@/lib/labs/types";
 import type { LabSampleRow } from "@/lib/labs/types";
 import type { LabServiceRow } from "@/lib/labs/types";
@@ -19,30 +18,6 @@ export const MOCK_LAB_PATIENTS: LabPatientRow[] = [
     orders: 1,
     pendingReports: 1,
     phone: "+91 91234 56789",
-  },
-];
-
-export const MOCK_LAB_APPOINTMENTS: LabAppointmentRow[] = [
-  {
-    id: "APT-77",
-    patient: "Rahul K",
-    tests: "MRI Lumbar",
-    date: "2026-05-11",
-    slot: "09:00",
-    status: "CONFIRMED",
-    instructions: "Remove metallic objects; arrive 15 min early",
-    fastingRequired: false,
-    radiologist: "Dr. Iyer",
-  },
-  {
-    id: "APT-76",
-    patient: "Neha S",
-    tests: "USG Abdomen",
-    date: "2026-05-10",
-    slot: "11:30",
-    status: "CHECKED_IN",
-    instructions: "6h fasting required",
-    fastingRequired: true,
   },
 ];
 

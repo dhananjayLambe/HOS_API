@@ -32,7 +32,9 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { fetchVisitAppointmentsSummary } from "@/lib/labs/api/visit-appointments";
 
 const KPI_ICONS: LucideIcon[] = [ClipboardList, Home, CalendarDays, FileWarning, CircleCheck, AlertTriangle];
 
@@ -54,10 +56,19 @@ export function LabDashboardHome() {
   const reportsPendingRows = MOCK_LAB_REPORT_QUEUE.filter((r) => r.status === "PENDING_UPLOAD");
   const deliveryFailures = MOCK_LAB_DELIVERIES.filter((d) => d.status === "FAILED");
 
-  const kpiItems: { title: string; value: number; hint?: string }[] = [
+  const [todayAppointments, setTodayAppointments] = useState(0);
+  useEffect(() => {
+    void fetchVisitAppointmentsSummary("today").then((s) => {
+      setTodayAppointments(
+        s.scheduled_today + s.confirmed_today + s.checked_in + s.completed_today + s.failed_no_show,
+      );
+    });
+  }, []);
+
+  const kpiItems: { title: string; value: number; hint?: string; href?: string }[] = [
     { title: "Pending orders", value: pendingOrders },
-    { title: "Today's collections", value: todayCollections },
-    { title: "Today's appointments", value: 2, hint: "Walk-in / visit" },
+    { title: "Today's collections", value: todayCollections, href: "/lab-dashboard/home-collections/" },
+    { title: "Today's appointments", value: todayAppointments, hint: "Walk-in / visit", href: "/lab-dashboard/visit-appointments/" },
     { title: "Reports pending upload", value: reportsPending },
     { title: "Completed today", value: 4 },
     { title: "Failed deliveries", value: failedDeliveries },
@@ -71,15 +82,25 @@ export function LabDashboardHome() {
       />
 
       <div className="grid gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3 xl:grid-cols-6">
-        {kpiItems.map((item, i) => (
-          <StatusCard
-            key={item.title}
-            title={item.title}
-            value={item.value}
-            hint={item.hint}
-            icon={KPI_ICONS[i % KPI_ICONS.length]}
-          />
-        ))}
+        {kpiItems.map((item, i) => {
+          const card = (
+            <StatusCard
+              title={item.title}
+              value={item.value}
+              hint={item.hint}
+              icon={KPI_ICONS[i % KPI_ICONS.length]}
+              className={item.href ? "transition-[box-shadow,transform] hover:-translate-y-0.5" : undefined}
+            />
+          );
+          if (item.href) {
+            return (
+              <Link key={item.title} href={item.href} className="block no-underline">
+                {card}
+              </Link>
+            );
+          }
+          return <div key={item.title}>{card}</div>;
+        })}
       </div>
 
       <SectionCard
