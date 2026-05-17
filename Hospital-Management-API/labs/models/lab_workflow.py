@@ -9,8 +9,7 @@ from labs.choices.workflow import (
     LabAssignmentStatus,
 )
 
-
-# =========================================================
+#=========================================================
 # LAB ORDER ASSIGNMENT
 # =========================================================
 class LabOrderAssignment(BaseModel):
@@ -96,6 +95,9 @@ class LabOrderAssignment(BaseModel):
             f"{self.diagnostic_order_id} - "
             f"{self.lab_branch.branch_name}"
         )
+
+
+
 
 
 # =========================================================
@@ -315,3 +317,4 @@ class LabVisitAppointment(BaseModel):
             f"{self.diagnostic_order_id} - "
             f"{self.appointment_date}"
         )
+
