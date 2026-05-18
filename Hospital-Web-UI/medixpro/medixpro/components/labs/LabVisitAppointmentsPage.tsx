@@ -18,13 +18,16 @@ import {
   completeVisitAppointment,
   confirmVisitAppointment,
   markNoShowVisitAppointment,
+  parseVisitWorkflowActionError,
+  rescheduleVisitAppointment,
 } from "@/lib/labs/api/visit-appointments";
 import type { VisitAppointmentWorkflowResponse } from "@/lib/labs/api/visit-appointments-types";
+import { appointmentMatchesTab } from "@/lib/labs/visit-appointments/build-visit-appointments-query";
 import { patchRowFromWorkflow } from "@/lib/labs/visit-appointments/map-appointment-row";
 import { useLabShellHeader } from "@/lib/labs/layout/lab-shell-header-context";
 import { useLabSession } from "@/lib/labs/session/lab-session-context";
 import type { LabAppointmentRow } from "@/lib/labs/types";
-import { Loader2, RotateCcw } from "lucide-react";
+import { RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 const EMPTY_MESSAGES: Record<string, { title: string; description: string }> = {
@@ -70,6 +73,7 @@ export function LabVisitAppointmentsPage() {
     totalPages,
     summary,
     loading,
+    isRefreshing,
     error,
     refetch,
     resetFilters,
@@ -77,32 +81,42 @@ export function LabVisitAppointmentsPage() {
   } = useLabVisitAppointmentsList();
 
   const [rowPatches, setRowPatches] = useState<Record<string, LabAppointmentRow>>({});
+  const [hiddenRowIds, setHiddenRowIds] = useState<Set<string>>(() => new Set());
   const [busyId, setBusyId] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   useEffect(() => {
     setRowPatches({});
+    setHiddenRowIds(new Set());
   }, [rows]);
 
-  const displayRows = useMemo(
+  const mergedRows = useMemo(
     () => rows.map((r) => rowPatches[r.id] ?? r),
     [rows, rowPatches],
   );
 
+  const displayRows = useMemo(
+    () => mergedRows.filter((r) => !hiddenRowIds.has(r.id)),
+    [mergedRows, hiddenRowIds],
+  );
+
   const selectedRow = useMemo(
-    () => displayRows.find((r) => r.id === selectedId) ?? null,
-    [displayRows, selectedId],
+    () => mergedRows.find((r) => r.id === selectedId) ?? null,
+    [mergedRows, selectedId],
   );
 
   const applyWorkflowPatch = useCallback(
     (row: LabAppointmentRow, res: VisitAppointmentWorkflowResponse) => {
       const patched = patchRowFromWorkflow(row, res);
       setRowPatches((prev) => ({ ...prev, [row.id]: patched }));
+      if (!appointmentMatchesTab(patched.status, filters.statusTab)) {
+        setHiddenRowIds((prev) => new Set(prev).add(row.id));
+      }
       toast.success(res.message);
       refetch();
     },
-    [refetch, toast],
+    [filters.statusTab, refetch, toast],
   );
 
   const runAction = useCallback(
@@ -112,13 +126,28 @@ export function LabVisitAppointmentsPage() {
         const res = await fn();
         applyWorkflowPatch(row, res);
       } catch (err: unknown) {
-        const ax = err as { response?: { data?: { detail?: string } }; message?: string };
-        toast.error(ax?.response?.data?.detail || ax?.message || "Action failed.");
+        toast.error(parseVisitWorkflowActionError(err));
       } finally {
         setBusyId(null);
       }
     },
     [applyWorkflowPatch, toast],
+  );
+
+  const handleReschedule = useCallback(
+    (row: LabAppointmentRow) => {
+      const date = window.prompt("New appointment date (YYYY-MM-DD), leave empty to skip:")?.trim();
+      const slot = window.prompt("New appointment slot, leave empty to skip:")?.trim();
+      const payload =
+        date || slot
+          ? {
+              ...(date ? { appointment_date: date } : {}),
+              ...(slot ? { appointment_slot: slot } : {}),
+            }
+          : undefined;
+      void runAction(row, () => rescheduleVisitAppointment(row.id, payload));
+    },
+    [runAction],
   );
 
   const openDetail = (row: LabAppointmentRow) => {
@@ -128,12 +157,19 @@ export function LabVisitAppointmentsPage() {
 
   const headerActions = useMemo(
     () => (
-      <Button type="button" variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => refetch()} disabled={loading}>
-        <RotateCcw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} aria-hidden />
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="h-9 gap-1.5"
+        onClick={() => refetch()}
+        disabled={loading || isRefreshing}
+      >
+        <RotateCcw className={`h-4 w-4 ${loading || isRefreshing ? "animate-spin" : ""}`} aria-hidden />
         Refresh
       </Button>
     ),
-    [loading, refetch],
+    [isRefreshing, loading, refetch],
   );
 
   useLabShellHeader({
@@ -150,7 +186,8 @@ export function LabVisitAppointmentsPage() {
   };
 
   const showTable = !error && !showInitialSkeleton && displayRows.length > 0;
-  const showEmpty = !error && !showInitialSkeleton && !loading && displayRows.length === 0;
+  const showEmpty =
+    !error && !showInitialSkeleton && !loading && !isRefreshing && displayRows.length === 0;
 
   const handleSummaryTabSelect = useCallback(
     (tab: typeof filters.statusTab) => {
@@ -205,12 +242,6 @@ export function LabVisitAppointmentsPage() {
           </div>
         ) : (
           <>
-            {loading ? (
-              <div className="flex items-center gap-2 border-b border-[#ECEBFF] px-4 py-2 text-sm text-[#6B7280]">
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                Loading appointments…
-              </div>
-            ) : null}
             {showTable ? (
               <VisitAppointmentsTable
                 rows={displayRows}
@@ -223,6 +254,7 @@ export function LabVisitAppointmentsPage() {
                   const reason = window.prompt("No-show reason (optional):") ?? "";
                   void runAction(row, () => markNoShowVisitAppointment(row.id, reason));
                 }}
+                onReschedule={handleReschedule}
               />
             ) : null}
             {showTable ? (
@@ -234,7 +266,7 @@ export function LabVisitAppointmentsPage() {
                 pageSizeOptions={pageSizeOptions}
                 onPageChange={setPage}
                 onPageSizeChange={setPageSize}
-                disabled={loading}
+                disabled={loading || isRefreshing}
               />
             ) : null}
           </>
@@ -253,6 +285,7 @@ export function LabVisitAppointmentsPage() {
           const reason = window.prompt("No-show reason (optional):") ?? "";
           void runAction(row, () => markNoShowVisitAppointment(row.id, reason));
         }}
+        onReschedule={handleReschedule}
       />
     </div>
   );

@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time
 
 from django.db.models import Prefetch, Q
 from django.utils import timezone
 
 from diagnostics_engine.models.orders import DiagnosticOrderTestLine
+from labs.api.services.shared_date_presets import date_range_from_preset, parse_date_param
 from labs.api.services.home_collections_presenter import (
     HomeCollectionListRowDTO,
     build_home_collection_row_dto,
@@ -87,9 +88,9 @@ def apply_list_filters(qs, params: HomeCollectionsListParams):
 
 
 def parse_list_params(query_params) -> HomeCollectionsListParams:
-    date_from, date_to = _date_range_from_preset(query_params.get("date_preset"))
-    explicit_from = _parse_date_param(query_params.get("date_from"))
-    explicit_to = _parse_date_param(query_params.get("date_to"))
+    date_from, date_to = date_range_from_preset(query_params.get("date_preset"))
+    explicit_from = parse_date_param(query_params.get("date_from"))
+    explicit_to = parse_date_param(query_params.get("date_to"))
     if explicit_from:
         date_from = explicit_from
     if explicit_to:
@@ -115,7 +116,7 @@ def build_row_dtos(collections) -> list[HomeCollectionListRowDTO]:
 
 def build_summary_counts(lab_user: LabUser, *, date_preset: str = "") -> dict[str, int]:
     today = timezone.localdate()
-    date_from, date_to = _date_range_from_preset(date_preset)
+    date_from, date_to = date_range_from_preset(date_preset)
     if not date_from:
         date_from = today
         date_to = today
@@ -153,31 +154,6 @@ def build_summary_counts(lab_user: LabUser, *, date_preset: str = "") -> dict[st
             collection_status=CollectionStatus.FAILED,
         ).count(),
     }
-
-
-def _date_range_from_preset(preset: str | None) -> tuple[date | None, date | None]:
-    if not preset:
-        return None, None
-    today = timezone.localdate()
-    preset = preset.strip().lower()
-    if preset == "today":
-        return today, today
-    if preset == "tomorrow":
-        t = today + timedelta(days=1)
-        return t, t
-    if preset in ("week", "this_week"):
-        start = today - timedelta(days=today.weekday())
-        return start, start + timedelta(days=6)
-    return None, None
-
-
-def _parse_date_param(value: str | None) -> date | None:
-    if not value:
-        return None
-    try:
-        return date.fromisoformat(value)
-    except ValueError:
-        return None
 
 
 def _start_of_day(day: date) -> datetime:

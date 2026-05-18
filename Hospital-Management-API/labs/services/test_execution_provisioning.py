@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from labs.choices.workflow import LabAssignmentStatus, TestExecutionStatus, TestExecutionType
@@ -48,29 +48,38 @@ def ensure_test_executions(
     provisioned_at = timezone.now().isoformat()
     created_rows: list[LabOrderTestExecution] = []
 
+    def _active_for_line(test_line):
+        return LabOrderTestExecution.objects.filter(
+            assignment=assignment,
+            test_line=test_line,
+            execution_status__in=ACTIVE_TEST_EXECUTION_STATUSES,
+        ).first()
+
     with transaction.atomic():
         for test_line in assignment.diagnostic_order.test_lines.all():
-            existing = LabOrderTestExecution.objects.filter(
-                assignment=assignment,
-                test_line=test_line,
-                execution_status__in=ACTIVE_TEST_EXECUTION_STATUSES,
-            ).first()
-            if existing:
+            if _active_for_line(test_line):
                 continue
 
-            row = LabOrderTestExecution.objects.create(
-                assignment=assignment,
-                test_line=test_line,
-                lab_branch=assignment.lab_branch,
-                execution_status=TestExecutionStatus.PENDING,
-                execution_type=execution_type,
-                collection_request=collection_request,
-                visit_appointment=visit_appointment,
-                metadata={
-                    "execution_source": execution_source,
-                    "provisioned_at": provisioned_at,
-                },
-            )
-            created_rows.append(row)
+            try:
+                with transaction.atomic():
+                    row = LabOrderTestExecution.objects.create(
+                        assignment=assignment,
+                        test_line=test_line,
+                        lab_branch=assignment.lab_branch,
+                        execution_status=TestExecutionStatus.PENDING,
+                        execution_type=execution_type,
+                        collection_request=collection_request,
+                        visit_appointment=visit_appointment,
+                        metadata={
+                            "execution_source": execution_source,
+                            "provisioned_at": provisioned_at,
+                        },
+                    )
+            except IntegrityError:
+                if _active_for_line(test_line):
+                    continue
+                raise
+            else:
+                created_rows.append(row)
 
     return created_rows

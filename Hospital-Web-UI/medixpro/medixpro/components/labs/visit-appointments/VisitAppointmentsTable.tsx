@@ -2,6 +2,7 @@
 
 import { VisitAppointmentRowActions } from "@/components/labs/visit-appointments/VisitAppointmentRowActions";
 import { LabDataTable } from "@/components/labs/common/LabDataTable";
+import { LabStatusBadge } from "@/components/labs/common/LabStatusBadge";
 import { labTableCellBody } from "@/components/labs/labDesignTokens";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -27,6 +28,7 @@ type Props = {
   onCheckIn: (row: LabAppointmentRow) => void;
   onComplete: (row: LabAppointmentRow) => void;
   onMarkNoShow: (row: LabAppointmentRow) => void;
+  onReschedule: (row: LabAppointmentRow) => void;
 };
 
 function patientSubline(row: LabAppointmentRow) {
@@ -47,23 +49,6 @@ function testsCell(row: LabAppointmentRow) {
         {more}
       </p>
     </div>
-  );
-}
-
-function appointmentStatusPill(row: LabAppointmentRow) {
-  const label = appointmentStatusDisplayLabel(row.status);
-  const tone =
-    row.status === "COMPLETED"
-      ? "bg-[#ECFDF3] text-[#027A48]"
-      : row.status === "NO_SHOW" || row.status === "CANCELLED"
-        ? "bg-[#FEF3F2] text-[#B42318]"
-        : row.status === "CHECKED_IN" || row.status === "CONFIRMED"
-          ? "bg-[#FFF7E8] text-[#B7791F]"
-          : "bg-[#F3F0FF] text-[#6D4FF5]";
-  return (
-    <span className={cn("inline-flex shrink-0 items-center rounded-full px-3 py-1 text-xs font-medium leading-none", tone)}>
-      {label}
-    </span>
   );
 }
 
@@ -98,6 +83,7 @@ export function VisitAppointmentsTable({
   onCheckIn,
   onComplete,
   onMarkNoShow,
+  onReschedule,
 }: Props) {
   return (
     <LabDataTable className="rounded-none border-0 border-t border-[#ECEBFF] shadow-none">
@@ -126,7 +112,13 @@ export function VisitAppointmentsTable({
                 <p className="text-xs text-[#6B7280]">{row.slotTimeLabel}</p>
               </TableCell>
               <TableCell>{prepCell(row)}</TableCell>
-              <TableCell onClick={(e) => e.stopPropagation()}>{appointmentStatusPill(row)}</TableCell>
+              <TableCell onClick={(e) => e.stopPropagation()}>
+                <LabStatusBadge
+                  domain="appointment"
+                  status={row.status}
+                  label={appointmentStatusDisplayLabel(row.status)}
+                />
+              </TableCell>
               <TableCell className="max-w-[160px] text-xs text-[#6B7280]">{row.workflowHint}</TableCell>
               <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                 <VisitAppointmentRowActions
@@ -136,6 +128,7 @@ export function VisitAppointmentsTable({
                   onCheckIn={onCheckIn}
                   onComplete={onComplete}
                   onMarkNoShow={onMarkNoShow}
+                  onReschedule={onReschedule}
                 />
               </TableCell>
             </TableRow>

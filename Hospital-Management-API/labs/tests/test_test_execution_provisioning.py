@@ -139,3 +139,20 @@ class TestExecutionProvisioningTests(TestCase):
             collection_request=collection,
         )
         self.assertEqual(len(created), order.test_lines.count())
+
+    def test_branch_visit_idempotent_active_row(self):
+        assignment, order, branch = _accepted_assignment(mode="lab")
+        visit = LabVisitAppointment.objects.create(
+            diagnostic_order=order,
+            lab_branch=branch,
+            appointment_date=order.created_at.date(),
+            appointment_slot="10:00",
+        )
+        first = ensure_test_executions(assignment=assignment, visit_appointment=visit)
+        second = ensure_test_executions(assignment=assignment, visit_appointment=visit)
+        self.assertEqual(len(first), order.test_lines.count())
+        self.assertEqual(len(second), 0)
+        row = first[0]
+        self.assertEqual(row.execution_type, TestExecutionType.BRANCH_VISIT)
+        self.assertEqual(row.metadata.get("execution_source"), "branch_visit")
+        self.assertEqual(row.visit_appointment_id, visit.id)

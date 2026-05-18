@@ -1,14 +1,8 @@
 "use client";
 
-import {
-  mockCheckInVisitAppointment,
-  mockCompleteVisitAppointment,
-  mockConfirmVisitAppointment,
-  mockFetchVisitAppointmentsList,
-  mockFetchVisitAppointmentsSummary,
-  mockMarkNoShowVisitAppointment,
-} from "@/lib/labs/api/visit-appointments-mock";
+import { backendAxiosClient } from "@/lib/axiosClient";
 import type {
+  RescheduleVisitAppointmentPayload,
   VisitAppointmentWorkflowResponse,
   VisitAppointmentsListResponse,
   VisitAppointmentsSummary,
@@ -20,6 +14,13 @@ export type {
   VisitAppointmentsListResponse,
   VisitAppointmentsSummary,
 } from "@/lib/labs/api/visit-appointments-types";
+
+export const VISIT_APPOINTMENTS_BASE = "labs/visit-appointments";
+
+export function parseVisitWorkflowActionError(err: unknown): string {
+  const ax = err as { response?: { data?: { detail?: string } }; message?: string };
+  return ax?.response?.data?.detail || ax?.message || "Action failed.";
+}
 
 export type VisitAppointmentsQueryInput = {
   q?: string;
@@ -45,33 +46,98 @@ export function buildVisitAppointmentsQueryParams(
 
 export async function fetchVisitAppointmentsList(
   input: VisitAppointmentsQueryInput,
-  _options?: { signal?: AbortSignal },
+  options?: { signal?: AbortSignal },
 ): Promise<VisitAppointmentsListResponse> {
-  return mockFetchVisitAppointmentsList(input);
+  const { data } = await backendAxiosClient.get<VisitAppointmentsListResponse>(
+    `${VISIT_APPOINTMENTS_BASE}/`,
+    {
+      params: buildVisitAppointmentsQueryParams(input),
+      signal: options?.signal,
+    },
+  );
+  return data;
 }
 
 export async function fetchVisitAppointmentsSummary(
   datePreset: string,
-  _options?: { signal?: AbortSignal },
+  options?: { signal?: AbortSignal },
 ): Promise<VisitAppointmentsSummary> {
-  return mockFetchVisitAppointmentsSummary(datePreset);
+  const { data } = await backendAxiosClient.get<VisitAppointmentsSummary>(
+    `${VISIT_APPOINTMENTS_BASE}/summary/`,
+    {
+      params: { date_preset: datePreset || "today" },
+      signal: options?.signal,
+    },
+  );
+  return data;
 }
 
-export async function confirmVisitAppointment(id: string): Promise<VisitAppointmentWorkflowResponse> {
-  return mockConfirmVisitAppointment(id);
+function normalizeWorkflowResponse(
+  data: VisitAppointmentWorkflowResponse,
+): VisitAppointmentWorkflowResponse {
+  return {
+    ...data,
+    status_updated_at:
+      data.status_updated_at ??
+      data.checked_in_at ??
+      data.completed_at ??
+      data.confirmed_at ??
+      new Date().toISOString(),
+  };
 }
 
-export async function checkInVisitAppointment(id: string): Promise<VisitAppointmentWorkflowResponse> {
-  return mockCheckInVisitAppointment(id);
+function visitWorkflowUrl(visitId: string, action: string): string {
+  return `${VISIT_APPOINTMENTS_BASE}/${visitId}/${action}/`;
 }
 
-export async function completeVisitAppointment(id: string): Promise<VisitAppointmentWorkflowResponse> {
-  return mockCompleteVisitAppointment(id);
+export async function confirmVisitAppointment(
+  id: string,
+): Promise<VisitAppointmentWorkflowResponse> {
+  const { data } = await backendAxiosClient.post<VisitAppointmentWorkflowResponse>(
+    visitWorkflowUrl(id, "confirm"),
+  );
+  return normalizeWorkflowResponse(data);
+}
+
+export async function checkInVisitAppointment(
+  id: string,
+): Promise<VisitAppointmentWorkflowResponse> {
+  const { data } = await backendAxiosClient.post<VisitAppointmentWorkflowResponse>(
+    visitWorkflowUrl(id, "check-in"),
+  );
+  return normalizeWorkflowResponse(data);
+}
+
+export async function completeVisitAppointment(
+  id: string,
+): Promise<VisitAppointmentWorkflowResponse> {
+  const { data } = await backendAxiosClient.post<VisitAppointmentWorkflowResponse>(
+    visitWorkflowUrl(id, "complete"),
+  );
+  return normalizeWorkflowResponse(data);
 }
 
 export async function markNoShowVisitAppointment(
   id: string,
   reason?: string,
 ): Promise<VisitAppointmentWorkflowResponse> {
-  return mockMarkNoShowVisitAppointment(id, reason);
+  const { data } = await backendAxiosClient.post<VisitAppointmentWorkflowResponse>(
+    visitWorkflowUrl(id, "no-show"),
+    { reason: reason ?? "" },
+  );
+  return normalizeWorkflowResponse(data);
+}
+
+export async function rescheduleVisitAppointment(
+  id: string,
+  payload?: RescheduleVisitAppointmentPayload,
+): Promise<VisitAppointmentWorkflowResponse> {
+  const body: RescheduleVisitAppointmentPayload = {};
+  if (payload?.appointment_date) body.appointment_date = payload.appointment_date;
+  if (payload?.appointment_slot?.trim()) body.appointment_slot = payload.appointment_slot.trim();
+  const { data } = await backendAxiosClient.post<VisitAppointmentWorkflowResponse>(
+    visitWorkflowUrl(id, "reschedule"),
+    body,
+  );
+  return normalizeWorkflowResponse(data);
 }

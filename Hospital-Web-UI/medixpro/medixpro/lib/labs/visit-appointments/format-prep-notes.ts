@@ -8,8 +8,10 @@ export function formatPrepNotesDisplay(row: LabAppointmentRow): {
   if (row.fastingRequired && !tags.some((t) => t.toLowerCase() === "fasting")) {
     tags.unshift("Fasting");
   }
+  const summary = row.prepSummary?.trim();
+  const instructions = row.instructions.trim();
   return {
     tags,
-    instructionLine: row.instructions.trim(),
+    instructionLine: summary || instructions,
   };
 }

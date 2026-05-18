@@ -430,6 +430,11 @@ class LabVisitAppointment(BaseModel):
         null=True,
     )
 
+    confirmed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
     checked_in_at = models.DateTimeField(
         null=True,
         blank=True,
@@ -438,6 +443,17 @@ class LabVisitAppointment(BaseModel):
     completed_at = models.DateTimeField(
         null=True,
         blank=True,
+    )
+
+    no_show_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    status_changed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
     )
 
     cancelled_at = models.DateTimeField(

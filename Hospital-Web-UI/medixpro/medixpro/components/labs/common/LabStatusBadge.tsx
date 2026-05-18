@@ -57,13 +57,16 @@ const basePill = "inline-flex shrink-0 items-center rounded-full px-3 py-1 text-
 export function LabStatusBadge({
   domain,
   status,
+  label: labelOverride,
   className,
 }: {
   domain: LabStatusDomain;
   status: string;
+  /** Operational display label (e.g. PENDING → Scheduled for appointments). */
+  label?: string;
   className?: string;
 }) {
-  const label = labelForStatus(domain, status);
+  const label = labelOverride ?? labelForStatus(domain, status);
   const tone = toneFor(domain, status);
   return <span className={cn(basePill, domain === "order" ? ORDER_STATUS_TONE_CLASS[tone] : toneClass[tone], className)}>{label}</span>;
 }

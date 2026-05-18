@@ -15,6 +15,15 @@ from labs.api.views.home_collections import (
 from labs.api.views.lab_order_workflow import LabOrderAcceptView, LabOrderRejectView
 from labs.api.views.lab_orders import LabOrdersListView
 from labs.api.views.lab_session import LabSessionView
+from labs.api.views.visit_appointments import (
+    VisitAppointmentCheckInView,
+    VisitAppointmentCompleteView,
+    VisitAppointmentConfirmView,
+    VisitAppointmentNoShowView,
+    VisitAppointmentRescheduleView,
+    VisitAppointmentsListView,
+    VisitAppointmentsSummaryView,
+)
 
 router = DefaultRouter()
 
@@ -73,5 +82,40 @@ urlpatterns = [
         "home-collections/<uuid:collection_id>/retry/",
         HomeCollectionRetryView.as_view(),
         name="lab-home-collection-retry",
+    ),
+    path(
+        "visit-appointments/summary/",
+        VisitAppointmentsSummaryView.as_view(),
+        name="lab-visit-appointments-summary",
+    ),
+    path(
+        "visit-appointments/",
+        VisitAppointmentsListView.as_view(),
+        name="lab-visit-appointments-list",
+    ),
+    path(
+        "visit-appointments/<uuid:visit_id>/confirm/",
+        VisitAppointmentConfirmView.as_view(),
+        name="lab-visit-appointment-confirm",
+    ),
+    path(
+        "visit-appointments/<uuid:visit_id>/check-in/",
+        VisitAppointmentCheckInView.as_view(),
+        name="lab-visit-appointment-check-in",
+    ),
+    path(
+        "visit-appointments/<uuid:visit_id>/complete/",
+        VisitAppointmentCompleteView.as_view(),
+        name="lab-visit-appointment-complete",
+    ),
+    path(
+        "visit-appointments/<uuid:visit_id>/no-show/",
+        VisitAppointmentNoShowView.as_view(),
+        name="lab-visit-appointment-no-show",
+    ),
+    path(
+        "visit-appointments/<uuid:visit_id>/reschedule/",
+        VisitAppointmentRescheduleView.as_view(),
+        name="lab-visit-appointment-reschedule",
     ),
 ]

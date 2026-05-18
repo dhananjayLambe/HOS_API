@@ -36,8 +36,10 @@ export function useLabVisitAppointmentsList() {
   const [totalPages, setTotalPages] = useState(0);
   const [summary, setSummary] = useState<VisitAppointmentsSummary>(EMPTY_SUMMARY);
   const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [initialLoaded, setInitialLoaded] = useState(false);
+  const initialLoadedRef = useRef(false);
   const debouncedQ = useDebouncedValue(searchInput, SEARCH_DEBOUNCE_MS);
   const refreshKeyRef = useRef(0);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -54,7 +56,12 @@ export function useLabVisitAppointmentsList() {
   }, []);
 
   const load = useCallback(async (signal?: AbortSignal) => {
-    setLoading(true);
+    const isInitial = !initialLoadedRef.current;
+    if (isInitial) {
+      setLoading(true);
+    } else {
+      setIsRefreshing(true);
+    }
     setError(null);
     try {
       const status = statusParamForTab(filters.statusTab);
@@ -86,7 +93,12 @@ export function useLabVisitAppointmentsList() {
       setSummary(EMPTY_SUMMARY);
     } finally {
       if (!signal?.aborted) {
-        setLoading(false);
+        if (isInitial) {
+          setLoading(false);
+        } else {
+          setIsRefreshing(false);
+        }
+        initialLoadedRef.current = true;
         setInitialLoaded(true);
       }
     }
@@ -124,6 +136,7 @@ export function useLabVisitAppointmentsList() {
     totalPages,
     summary,
     loading,
+    isRefreshing,
     error,
     refetch,
     resetFilters,

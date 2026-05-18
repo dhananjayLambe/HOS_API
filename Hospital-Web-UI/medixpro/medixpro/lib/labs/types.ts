@@ -1,6 +1,9 @@
 import type { CollectionStatus } from "@/lib/labs/constants/status";
 import type { HomeCollectionActionKey } from "@/lib/labs/api/home-collections-types";
-import type { VisitAppointmentActionKey } from "@/lib/labs/api/visit-appointments-types";
+import type {
+  VisitAppointmentActionKey,
+  VisitTimelineEventItem,
+} from "@/lib/labs/api/visit-appointments-types";
 import type { OrderStatus } from "@/lib/labs/constants/status";
 import type { ReportStatus } from "@/lib/labs/constants/status";
 import type { DeliveryStatus } from "@/lib/labs/constants/status";
@@ -111,6 +114,7 @@ export type LabAppointmentRow = {
   slotTimeLabel: string;
   fastingRequired: boolean;
   prepTags: string[];
+  prepSummary?: string;
   instructions: string;
   status: AppointmentStatus;
   workflowHint: string;
@@ -118,9 +122,12 @@ export type LabAppointmentRow = {
   isOverdue: boolean;
   patientNotes: string | null;
   statusUpdatedAt: string;
+  confirmedAt?: string | null;
   checkedInAt: string | null;
   completedAt: string | null;
+  noShowAt?: string | null;
   cancelledAt: string | null;
+  timelineEvents?: VisitTimelineEventItem[];
 };
 
 export type LabSampleRow = {

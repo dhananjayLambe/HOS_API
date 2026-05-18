@@ -1,5 +1,7 @@
-import type { VisitAppointmentListItem } from "@/lib/labs/api/visit-appointments-types";
-import type { AppointmentStatus } from "@/lib/labs/constants/status";
+import type {
+  VisitAppointmentListItem,
+  VisitAppointmentWorkflowResponse,
+} from "@/lib/labs/api/visit-appointments-types";
 import { enrichAppointmentRow } from "@/lib/labs/visit-appointments/visit-appointment-workflow-config";
 import type { LabAppointmentRow } from "@/lib/labs/types";
 
@@ -22,6 +24,7 @@ export function mapVisitAppointmentListItem(dto: VisitAppointmentListItem): LabA
     slotTimeLabel: dto.slot_time_label,
     fastingRequired: dto.fasting_required,
     prepTags: dto.prep_tags,
+    prepSummary: dto.prep_summary,
     instructions: dto.instructions,
     status: dto.appointment_status,
     workflowHint: dto.workflow_hint,
@@ -29,34 +32,38 @@ export function mapVisitAppointmentListItem(dto: VisitAppointmentListItem): LabA
     isOverdue: false,
     patientNotes: dto.patient_notes,
     statusUpdatedAt: dto.status_updated_at,
+    confirmedAt: dto.confirmed_at ?? null,
     checkedInAt: dto.checked_in_at,
     completedAt: dto.completed_at,
+    noShowAt: dto.no_show_at ?? null,
     cancelledAt: dto.cancelled_at,
+    timelineEvents: dto.timeline_events,
   };
-  return enrichAppointmentRow(base);
+  return enrichAppointmentRow(base, { preserveWorkflowFromApi: true });
+}
+
+function patchOptionalTimestamp(
+  next: string | null | undefined,
+  previous: string | null,
+): string | null {
+  return next !== undefined ? next : previous;
 }
 
 export function patchRowFromWorkflow(
   row: LabAppointmentRow,
-  res: {
-    appointment_status: AppointmentStatus;
-    allowed_actions: LabAppointmentRow["allowedActions"];
-    workflow_hint: string;
-    status_updated_at: string;
-    checked_in_at?: string | null;
-    completed_at?: string | null;
-    cancelled_at?: string | null;
-  },
+  res: VisitAppointmentWorkflowResponse,
 ): LabAppointmentRow {
   const patched: LabAppointmentRow = {
     ...row,
     status: res.appointment_status,
     allowedActions: res.allowed_actions,
     workflowHint: res.workflow_hint,
-    statusUpdatedAt: res.status_updated_at,
-    checkedInAt: res.checked_in_at !== undefined ? res.checked_in_at : row.checkedInAt,
-    completedAt: res.completed_at !== undefined ? res.completed_at : row.completedAt,
-    cancelledAt: res.cancelled_at !== undefined ? res.cancelled_at : row.cancelledAt,
+    statusUpdatedAt: res.status_updated_at ?? row.statusUpdatedAt,
+    confirmedAt: patchOptionalTimestamp(res.confirmed_at, row.confirmedAt),
+    checkedInAt: patchOptionalTimestamp(res.checked_in_at, row.checkedInAt),
+    completedAt: patchOptionalTimestamp(res.completed_at, row.completedAt),
+    noShowAt: patchOptionalTimestamp(res.no_show_at, row.noShowAt),
+    cancelledAt: patchOptionalTimestamp(res.cancelled_at, row.cancelledAt),
   };
-  return enrichAppointmentRow(patched);
+  return enrichAppointmentRow(patched, { preserveWorkflowFromApi: true });
 }

@@ -9,9 +9,9 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
+import { LabStatusBadge } from "@/components/labs/common/LabStatusBadge";
 import { appointmentStatusDisplayLabel } from "@/lib/labs/visit-appointments/visit-appointment-workflow-config";
 import type { LabAppointmentRow } from "@/lib/labs/types";
-import { cn } from "@/lib/utils";
 
 type Props = {
   row: LabAppointmentRow | null;
@@ -22,14 +22,8 @@ type Props = {
   onCheckIn: (row: LabAppointmentRow) => void;
   onComplete: (row: LabAppointmentRow) => void;
   onMarkNoShow: (row: LabAppointmentRow) => void;
+  onReschedule: (row: LabAppointmentRow) => void;
 };
-
-function statusPillClass(status: LabAppointmentRow["status"]): string {
-  if (status === "COMPLETED") return "bg-[#ECFDF3] text-[#027A48]";
-  if (status === "NO_SHOW" || status === "CANCELLED") return "bg-[#FEF3F2] text-[#B42318]";
-  if (status === "CHECKED_IN" || status === "CONFIRMED") return "bg-[#FFF7E8] text-[#B7791F]";
-  return "bg-[#F3F0FF] text-[#6D4FF5]";
-}
 
 export function AppointmentDetailSheet({
   row,
@@ -40,6 +34,7 @@ export function AppointmentDetailSheet({
   onCheckIn,
   onComplete,
   onMarkNoShow,
+  onReschedule,
 }: Props) {
   if (!row) return null;
 
@@ -52,14 +47,11 @@ export function AppointmentDetailSheet({
         <SheetHeader className="space-y-2 border-b border-[#ECEBFF] px-4 py-4 text-left">
           <SheetTitle className="text-lg font-semibold">{row.patientName}</SheetTitle>
           <div className="flex flex-wrap items-center gap-2">
-            <span
-              className={cn(
-                "inline-flex shrink-0 items-center rounded-full px-3 py-1 text-xs font-medium leading-none",
-                statusPillClass(row.status),
-              )}
-            >
-              {statusLabel}
-            </span>
+            <LabStatusBadge
+              domain="appointment"
+              status={row.status}
+              label={statusLabel}
+            />
             <span className="text-sm text-[#6B7280]">
               {row.slotDateLabel} · {row.slotTimeLabel}
             </span>
@@ -150,6 +142,7 @@ export function AppointmentDetailSheet({
             onCheckIn={onCheckIn}
             onComplete={onComplete}
             onMarkNoShow={onMarkNoShow}
+            onReschedule={onReschedule}
           />
         </footer>
       </SheetContent>

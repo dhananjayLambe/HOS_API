@@ -1,3 +1,8 @@
+/**
+ * Visit appointment UI helpers: status labels, action button copy, overdue detection.
+ * Workflow hints and allowed_actions are authoritative from the backend API at runtime.
+ */
+
 import type { VisitAppointmentActionKey } from "@/lib/labs/api/visit-appointments-types";
 import type { AppointmentStatus } from "@/lib/labs/constants/status";
 import { APPOINTMENT_STATUS_LABELS } from "@/lib/labs/constants/status";
@@ -5,9 +10,10 @@ import type { LabAppointmentRow } from "@/lib/labs/types";
 
 const TERMINAL_STATUSES: AppointmentStatus[] = ["COMPLETED", "CANCELLED", "NO_SHOW"];
 
+/** @deprecated Backend `allowed_actions` is authoritative. Kept for parity unit tests only. */
 const ACTIONS_BY_STATUS: Record<AppointmentStatus, VisitAppointmentActionKey[]> = {
-  PENDING: ["confirm", "mark_no_show"],
-  CONFIRMED: ["check_in", "mark_no_show"],
+  PENDING: ["confirm", "mark_no_show", "reschedule"],
+  CONFIRMED: ["check_in", "mark_no_show", "reschedule"],
   CHECKED_IN: ["complete", "mark_no_show"],
   COMPLETED: [],
   NO_SHOW: [],
@@ -15,6 +21,7 @@ const ACTIONS_BY_STATUS: Record<AppointmentStatus, VisitAppointmentActionKey[]> 
   RESCHEDULED: ["confirm", "mark_no_show"],
 };
 
+/** @deprecated Fallback copy only when API hint is missing. */
 const BASE_HINTS: Record<AppointmentStatus, string> = {
   PENDING: "Confirm appointment",
   CONFIRMED: "Check patient in at facility",
@@ -30,6 +37,7 @@ export function appointmentStatusDisplayLabel(status: AppointmentStatus): string
   return APPOINTMENT_STATUS_LABELS[status] ?? status;
 }
 
+/** @deprecated Use API `allowed_actions`. Tests only. */
 export function resolveAllowedActions(status: AppointmentStatus): VisitAppointmentActionKey[] {
   return ACTIONS_BY_STATUS[status] ?? [];
 }
@@ -56,6 +64,7 @@ function startOfLocalDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
+/** @deprecated Fallback when API `workflow_hint` is empty. */
 export function workflowHintForStatus(
   status: AppointmentStatus,
   opts?: { overdue?: boolean },
@@ -67,8 +76,22 @@ export function workflowHintForStatus(
   return base;
 }
 
-export function enrichAppointmentRow(row: LabAppointmentRow): LabAppointmentRow {
+export function enrichAppointmentRow(
+  row: LabAppointmentRow,
+  opts?: { preserveWorkflowFromApi?: boolean },
+): LabAppointmentRow {
   const overdue = isAppointmentOverdue(row.appointmentDate, row.status);
+  if (opts?.preserveWorkflowFromApi) {
+    const hintBase = row.workflowHint || workflowHintForStatus(row.status);
+    const workflowHint = overdue
+      ? `Overdue — ${hintBase.charAt(0).toLowerCase()}${hintBase.slice(1)}`
+      : hintBase;
+    return {
+      ...row,
+      isOverdue: overdue,
+      workflowHint,
+    };
+  }
   const allowedActions = resolveAllowedActions(row.status);
   const workflowHint = workflowHintForStatus(row.status, { overdue });
   return {
@@ -79,6 +102,7 @@ export function enrichAppointmentRow(row: LabAppointmentRow): LabAppointmentRow 
   };
 }
 
+/** @deprecated Backend owns transitions. Tests only. */
 export function nextStatusForAction(
   action: VisitAppointmentActionKey,
   current: AppointmentStatus,
@@ -87,6 +111,9 @@ export function nextStatusForAction(
   if (action === "check_in" && current === "CONFIRMED") return "CHECKED_IN";
   if (action === "complete" && current === "CHECKED_IN") return "COMPLETED";
   if (action === "mark_no_show" && !TERMINAL_STATUSES.includes(current)) return "NO_SHOW";
+  if (action === "reschedule" && (current === "PENDING" || current === "CONFIRMED")) {
+    return "RESCHEDULED";
+  }
   return null;
 }
 
@@ -95,4 +122,5 @@ export const VISIT_ACTION_LABELS: Record<VisitAppointmentActionKey, string> = {
   check_in: "Check in",
   complete: "Complete",
   mark_no_show: "Mark no show",
+  reschedule: "Reschedule",
 };

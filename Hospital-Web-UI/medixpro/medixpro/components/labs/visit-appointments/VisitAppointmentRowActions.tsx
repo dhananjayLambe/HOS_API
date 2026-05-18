@@ -12,6 +12,7 @@ type Props = {
   onCheckIn: (row: LabAppointmentRow) => void;
   onComplete: (row: LabAppointmentRow) => void;
   onMarkNoShow: (row: LabAppointmentRow) => void;
+  onReschedule: (row: LabAppointmentRow) => void;
 };
 
 export function VisitAppointmentRowActions({
@@ -21,6 +22,7 @@ export function VisitAppointmentRowActions({
   onCheckIn,
   onComplete,
   onMarkNoShow,
+  onReschedule,
 }: Props) {
   const stop = (e: React.MouseEvent) => e.stopPropagation();
   const actions = row.allowedActions;
@@ -30,10 +32,12 @@ export function VisitAppointmentRowActions({
     check_in: onCheckIn,
     complete: onComplete,
     mark_no_show: onMarkNoShow,
+    reschedule: onReschedule,
   };
 
   const variants: Partial<Record<VisitAppointmentActionKey, "default" | "secondary">> = {
     mark_no_show: "secondary",
+    reschedule: "secondary",
   };
 
   return (

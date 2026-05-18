@@ -1,3 +1,5 @@
+import type { AppointmentStatus } from "@/lib/labs/constants/status";
+
 export type VisitAppointmentsStatusTab =
   | "scheduled"
   | "confirmed"
@@ -5,6 +7,18 @@ export type VisitAppointmentsStatusTab =
   | "completed"
   | "failed"
   | "";
+
+/** Mirrors backend labs visit_appointments_list_service._STATUS_TAB_MAP */
+export const APPOINTMENT_STATUSES_BY_TAB: Record<
+  Exclude<VisitAppointmentsStatusTab, "">,
+  readonly AppointmentStatus[]
+> = {
+  scheduled: ["PENDING", "RESCHEDULED"],
+  confirmed: ["CONFIRMED"],
+  checked_in: ["CHECKED_IN"],
+  completed: ["COMPLETED"],
+  failed: ["NO_SHOW", "CANCELLED"],
+};
 
 export type VisitAppointmentsDatePreset = "today" | "tomorrow" | "week" | "";
 
@@ -37,10 +51,21 @@ export const VISIT_APPOINTMENTS_DATE_OPTIONS: { id: VisitAppointmentsDatePreset;
 /** Maps UI tab to API/list filter status param. */
 export function statusParamForTab(tab: VisitAppointmentsStatusTab): string | undefined {
   if (!tab) return undefined;
-  if (tab === "scheduled") return "PENDING";
+  /** Virtual filter: PENDING + RESCHEDULED (awaiting (re)confirmation). */
+  if (tab === "scheduled") return "scheduled";
   if (tab === "confirmed") return "CONFIRMED";
   if (tab === "checked_in") return "CHECKED_IN";
   if (tab === "completed") return "COMPLETED";
   if (tab === "failed") return "failed";
   return undefined;
+}
+
+/** Client-side tab membership (same semantics as list API filters). */
+export function appointmentMatchesTab(
+  status: AppointmentStatus,
+  tab: VisitAppointmentsStatusTab,
+): boolean {
+  if (!tab) return true;
+  const allowed = APPOINTMENT_STATUSES_BY_TAB[tab];
+  return allowed ? allowed.includes(status) : false;
 }

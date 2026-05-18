@@ -28,7 +28,7 @@ from diagnostics_engine.tests.test_order_creation_service import (
 )
 from labs.choices.auth import LabUserRole
 from labs.choices.workflow import CollectionStatus, LabAssignmentStatus
-from labs.models import LabBranch, LabCollectionRequest, LabOrderAssignment, LabUser
+from labs.models import LabBranch, LabCollectionRequest, LabOrderAssignment, LabUser, LabVisitAppointment
 
 if TYPE_CHECKING:
     from labs.models import LabOrganization
@@ -130,6 +130,7 @@ def lab_mode_assignment(
     branch: LabBranch,
     *,
     assignment_status: str = LabAssignmentStatus.PENDING,
+    with_test_lines: bool = True,
 ):
     """Create a lab-visit (non-home) assignment."""
     from clinic.models import Clinic
@@ -151,12 +152,39 @@ def lab_mode_assignment(
         sample_collection_mode="lab",
         status=OrderStatus.CREATED,
     )
+    if with_test_lines:
+        cat = DiagnosticCategory.objects.create(
+            name=f"Cat {uuid.uuid4().hex[:6]}",
+            code=f"C-{uuid.uuid4().hex[:6]}",
+        )
+        svc = DiagnosticServiceMaster.objects.create(
+            code=f"svc_{uuid.uuid4().hex[:6]}",
+            name="CBC",
+            category=cat,
+        )
+        oi = DiagnosticOrderItem.objects.create(
+            order=order,
+            line_type=OrderLineType.TEST,
+            service=svc,
+            name_snapshot=svc.name,
+            price_snapshot=Decimal("50.00"),
+            metadata_snapshot={},
+        )
+        DiagnosticOrderTestLine.objects.create(order=order, order_item=oi, service=svc)
     assignment = LabOrderAssignment.objects.create(
         diagnostic_order=order,
         lab_branch=branch,
         status=assignment_status,
     )
     return assignment, order
+
+
+def accept_lab_visit(client: APIClient, assignment: LabOrderAssignment) -> LabVisitAppointment:
+    """Accept lab-mode assignment via API and return provisioned visit."""
+    url = reverse("lab-order-accept", kwargs={"assignment_id": assignment.id})
+    res = client.post(url)
+    assert res.status_code == 200, res.content
+    return LabVisitAppointment.objects.get(diagnostic_order=assignment.diagnostic_order)
 
 
 def accept_home_collection(client: APIClient, assignment: LabOrderAssignment) -> LabCollectionRequest:

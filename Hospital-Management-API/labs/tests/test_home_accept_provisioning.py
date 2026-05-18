@@ -64,7 +64,9 @@ class HomeAcceptProvisioningTests(TestCase):
         from django.utils import timezone
 
         assignment, order = home_assignment(self.branch)
-        order.scheduled_at = timezone.now().replace(hour=9, minute=30, second=0, microsecond=0)
+        order.scheduled_at = timezone.localtime().replace(
+            hour=9, minute=30, second=0, microsecond=0
+        )
         order.save(update_fields=["scheduled_at"])
         self.client.post(self._accept_url(assignment.id))
         collection = LabCollectionRequest.objects.get(diagnostic_order=order)
