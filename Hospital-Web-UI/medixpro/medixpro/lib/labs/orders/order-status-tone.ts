@@ -21,9 +21,9 @@ export function orderStatusTone(status: string): OrderStatusTone {
 }
 
 export const ORDER_STATUS_TONE_CLASS: Record<OrderStatusTone, string> = {
-  pending: "bg-[#F3F0FF] text-[#6D4FF5]",
-  success: "bg-[#ECFDF3] text-[#027A48]",
-  failed: "bg-[#FEF3F2] text-[#B42318]",
-  progress: "bg-[#FFF7E8] text-[#B7791F]",
-  neutral: "bg-[#F4F1FF] text-[#6B7280]",
+  pending: "bg-amber-50 text-amber-800 ring-1 ring-amber-200/80",
+  success: "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200/80",
+  failed: "bg-red-50 text-red-800 ring-1 ring-red-200/80",
+  progress: "bg-blue-50 text-blue-800 ring-1 ring-blue-200/80",
+  neutral: "bg-slate-50 text-slate-600 ring-1 ring-slate-200/80",
 };

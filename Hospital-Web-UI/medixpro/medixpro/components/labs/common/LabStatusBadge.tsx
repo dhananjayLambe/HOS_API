@@ -32,7 +32,7 @@ function toneFor(domain: LabStatusDomain, status: string): Tone {
   if (domain === "report") {
     if (status === "APPROVED" || status === "DELIVERED") return "success";
     if (status === "FAILED") return "failed";
-    if (status === "UNDER_REVIEW") return "progress";
+    if (status === "UNDER_REVIEW" || status === "PENDING_UPLOAD") return "pending";
     return "pending";
   }
   if (domain === "delivery") {
@@ -45,11 +45,11 @@ function toneFor(domain: LabStatusDomain, status: string): Tone {
 }
 
 const toneClass: Record<Tone, string> = {
-  pending: "bg-[#F3F0FF] text-[#6D4FF5]",
-  success: "bg-[#ECFDF3] text-[#027A48]",
-  failed: "bg-[#FEF3F2] text-[#B42318]",
-  progress: "bg-[#FFF7E8] text-[#B7791F]",
-  neutral: "bg-[#F4F1FF] text-[#6B7280]",
+  pending: "bg-amber-50 text-amber-800 ring-1 ring-amber-200/80",
+  success: "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200/80",
+  failed: "bg-red-50 text-red-800 ring-1 ring-red-200/80",
+  progress: "bg-blue-50 text-blue-800 ring-1 ring-blue-200/80",
+  neutral: "bg-slate-50 text-slate-600 ring-1 ring-slate-200/80",
 };
 
 const basePill = "inline-flex shrink-0 items-center rounded-full px-3 py-1 text-xs font-medium leading-none";

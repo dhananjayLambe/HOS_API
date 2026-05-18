@@ -20,9 +20,11 @@ import { Bell, Menu } from "lucide-react";
 type DashboardHeaderProps = {
   onMenuClick: () => void;
   sidebarOpen: boolean;
+  /** Tighter bar on lab dashboard home — more vertical room for operations grid. */
+  compact?: boolean;
 };
 
-export function DashboardHeader({ onMenuClick, sidebarOpen }: DashboardHeaderProps) {
+export function DashboardHeader({ onMenuClick, sidebarOpen, compact }: DashboardHeaderProps) {
   const pageHeader = useLabShellHeaderRead();
   const { data, isPending, isError } = useLabSession();
 
@@ -35,14 +37,16 @@ export function DashboardHeader({ onMenuClick, sidebarOpen }: DashboardHeaderPro
   return (
     <header
       className={cn(
-        "sticky top-0 z-40 shrink-0 px-3 pt-3 sm:px-4 sm:pt-4",
+        "sticky top-0 z-40 shrink-0 px-3 sm:px-4",
+        compact ? "pt-2 sm:pt-2" : "pt-3 sm:pt-4",
         sidebarOpen ? labMainOffsetSidebarOpen : labMainOffsetSidebarClosed,
         "xl:mr-4 xl:pr-0",
       )}
     >
       <div
         className={cn(
-          "flex min-h-20 w-full min-w-0 items-center justify-between gap-2 rounded-2xl border border-[#ECEBFF] bg-white/88 px-2 py-2.5 shadow-[0_8px_32px_rgba(124,92,252,0.06)] backdrop-blur-xl sm:gap-3 sm:px-3",
+          "flex w-full min-w-0 items-center justify-between gap-2 rounded-2xl border border-[#ECEBFF] bg-white/88 px-2 shadow-[0_8px_32px_rgba(124,92,252,0.06)] backdrop-blur-xl sm:gap-3 sm:px-3",
+          compact ? "min-h-14 py-1.5" : "min-h-20 py-2.5",
           "supports-[backdrop-filter]:bg-white/82",
         )}
       >
