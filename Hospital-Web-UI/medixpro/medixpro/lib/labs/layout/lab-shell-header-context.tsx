@@ -4,17 +4,37 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
+  useLayoutEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
 
+export type LabShellHeaderBack = {
+  href: string;
+  label?: string;
+};
+
 export type LabShellHeaderState = {
   title: string;
   description?: string;
+  /** Left-side back control (after menu) — use for sub-pages e.g. upload wizard */
+  back?: LabShellHeaderBack;
   actions?: ReactNode;
 };
+
+function headerEquals(a: LabShellHeaderState | null, b: LabShellHeaderState | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return (
+    a.title === b.title &&
+    a.description === b.description &&
+    a.actions === b.actions &&
+    a.back?.href === b.back?.href &&
+    a.back?.label === b.back?.label
+  );
+}
 
 type LabShellHeaderContextValue = {
   header: LabShellHeaderState | null;
@@ -26,7 +46,7 @@ const LabShellHeaderContext = createContext<LabShellHeaderContextValue | null>(n
 export function LabShellHeaderProvider({ children }: { children: ReactNode }) {
   const [header, setHeaderState] = useState<LabShellHeaderState | null>(null);
   const setHeader = useCallback((next: LabShellHeaderState | null) => {
-    setHeaderState(next);
+    setHeaderState((prev) => (headerEquals(prev, next) ? prev : next));
   }, []);
 
   const value = useMemo(() => ({ header, setHeader }), [header, setHeader]);
@@ -51,16 +71,24 @@ export function useLabShellHeaderRead() {
 /** Register page title/description/actions in the lab shell header; cleared on unmount. */
 export function useLabShellHeader(meta: LabShellHeaderState | null) {
   const { setHeader } = useLabShellHeaderContext();
-  const title = meta?.title;
-  const description = meta?.description;
-  const actions = meta?.actions;
+  const metaRef = useRef(meta);
+  metaRef.current = meta;
 
-  useEffect(() => {
-    if (!title) {
+  useLayoutEffect(() => {
+    const m = metaRef.current;
+    if (!m?.title) {
       setHeader(null);
-      return () => setHeader(null);
+      return;
     }
-    setHeader({ title, description, actions });
+    setHeader({
+      title: m.title,
+      description: m.description,
+      actions: m.actions,
+      back: m.back?.href ? { href: m.back.href, label: m.back.label } : undefined,
+    });
+  });
+
+  useLayoutEffect(() => {
     return () => setHeader(null);
-  }, [title, description, actions, setHeader]);
+  }, [setHeader]);
 }

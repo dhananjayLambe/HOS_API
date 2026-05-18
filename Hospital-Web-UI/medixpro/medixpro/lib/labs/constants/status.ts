@@ -48,10 +48,10 @@ export type SampleStatus = (typeof SAMPLE_STATUSES)[number];
 
 export const REPORT_STATUSES = [
   "PENDING_UPLOAD",
-  "UNDER_REVIEW",
-  "APPROVED",
+  "UPLOADED",
+  "READY_DELIVERY",
   "DELIVERED",
-  "FAILED",
+  "FAILED_DELIVERY",
 ] as const;
 export type ReportStatus = (typeof REPORT_STATUSES)[number];
 
@@ -99,10 +99,10 @@ export const SAMPLE_STATUS_LABELS: Record<SampleStatus, string> = {
 
 export const REPORT_STATUS_LABELS: Record<ReportStatus, string> = {
   PENDING_UPLOAD: "Pending upload",
-  UNDER_REVIEW: "Under review",
-  APPROVED: "Approved",
+  UPLOADED: "Uploaded",
+  READY_DELIVERY: "Ready delivery",
   DELIVERED: "Delivered",
-  FAILED: "Failed",
+  FAILED_DELIVERY: "Failed delivery",
 };
 
 export const DELIVERY_STATUS_LABELS: Record<DeliveryStatus, string> = {

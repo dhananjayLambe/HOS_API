@@ -1,7 +1,15 @@
 "use client";
 
-import { LabReportDeliveryPage } from "@/components/labs/LabReportDeliveryPage";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 
-export default function LabReportDeliveryRoutePage() {
-  return <LabReportDeliveryPage />;
+/** Legacy route — merged into Reports list (failed tab). */
+export default function LabReportDeliveryRedirectPage() {
+  const router = useRouter();
+
+  useEffect(() => {
+    router.replace("/lab-dashboard/reports/?tab=failed");
+  }, [router]);
+
+  return null;
 }

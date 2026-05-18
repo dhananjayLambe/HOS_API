@@ -10,12 +10,14 @@ import {
   labPageTitle,
   labTextMuted,
 } from "@/components/labs/labDesignTokens";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useLabShellHeaderRead } from "@/lib/labs/layout/lab-shell-header-context";
 import { useLabSession } from "@/lib/labs/session/lab-session-context";
 import { labOperationalRoleLabel } from "@/lib/labs/session/lab-role-labels";
 import { cn } from "@/lib/utils";
-import { Bell, Menu } from "lucide-react";
+import { ArrowLeft, Bell, Menu } from "lucide-react";
+import Link from "next/link";
 
 type DashboardHeaderProps = {
   onMenuClick: () => void;
@@ -61,7 +63,24 @@ export function DashboardHeader({ onMenuClick, sidebarOpen, compact }: Dashboard
         </button>
 
         {pageHeader ? (
-          <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
+          <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2">
+            {pageHeader.back ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-9 shrink-0 gap-1 px-2 text-[#374151] hover:bg-[#F4F1FF]"
+                asChild
+              >
+                <Link href={pageHeader.back.href}>
+                  <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden />
+                  <span className="hidden text-sm font-medium sm:inline">
+                    {pageHeader.back.label ?? "Back"}
+                  </span>
+                  <span className="sr-only sm:hidden">{pageHeader.back.label ?? "Back"}</span>
+                </Link>
+              </Button>
+            ) : null}
             <div className="min-w-0 flex-1">
               <h1 className={cn(labPageTitle, "text-lg sm:text-xl")}>{pageHeader.title}</h1>
               {pageHeader.description ? (

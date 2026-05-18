@@ -60,7 +60,7 @@ export function DashboardViewportGrid({
 
         <OperationalPipelineCard
           title="Reports pending upload"
-          viewAllHref="/lab-dashboard/reports/"
+          viewAllHref="/lab-dashboard/reports/?tab=pending"
           total={reportsPendingTotal}
           isEmpty={reportsPendingRows.length === 0}
           emptyMessage="No reports waiting for upload."
@@ -71,14 +71,14 @@ export function DashboardViewportGrid({
             <ReportPipelineBody
               rows={reportsPendingRows}
               actionLabel="Upload"
-              actionHref="/lab-dashboard/reports/"
+              actionHref="/lab-dashboard/reports/upload"
             />
           )}
         </OperationalPipelineCard>
 
         <OperationalPipelineCard
           title="Ready for delivery"
-          viewAllHref="/lab-dashboard/report-delivery/"
+          viewAllHref="/lab-dashboard/reports/?tab=ready"
           total={readyDeliveryTotal}
           isEmpty={readyDeliveryRows.length === 0}
           emptyMessage="No reports ready to send."
@@ -89,7 +89,7 @@ export function DashboardViewportGrid({
             <ReportPipelineBody
               rows={readyDeliveryRows}
               actionLabel="Deliver"
-              actionHref="/lab-dashboard/report-delivery/"
+              actionHref="/lab-dashboard/reports/?tab=ready"
             />
           )}
         </OperationalPipelineCard>

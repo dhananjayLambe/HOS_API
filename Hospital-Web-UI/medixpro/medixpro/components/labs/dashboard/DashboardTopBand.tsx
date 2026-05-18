@@ -96,14 +96,14 @@ export function DashboardTopBand({ metrics, loading }: DashboardTopBandProps) {
     {
       label: "Reports",
       value: metrics.reportsPendingUpload,
-      href: "/lab-dashboard/reports/",
+      href: "/lab-dashboard/reports/?tab=pending",
       priority: true,
       icon: FileText,
     },
     {
       label: "Ready",
       value: metrics.readyForDelivery,
-      href: "/lab-dashboard/report-delivery/",
+      href: "/lab-dashboard/reports/?tab=ready",
       priority: true,
       icon: Send,
     },

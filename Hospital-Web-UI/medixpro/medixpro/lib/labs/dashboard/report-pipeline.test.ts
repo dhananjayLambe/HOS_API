@@ -43,13 +43,13 @@ describe("report-pipeline", () => {
   it("classifies pending upload statuses", () => {
     expect(isReportPendingUpload(null)).toBe(true);
     expect(isReportPendingUpload("pending")).toBe(true);
-    expect(isReportPendingUpload("in_progress")).toBe(true);
+    expect(isReportPendingUpload("in_progress")).toBe(false);
     expect(isReportReadyForDelivery("ready")).toBe(true);
     expect(isReportReadyForDelivery("delivered")).toBe(false);
   });
 
   it("filters order rows", () => {
-    const rows = [order(null), order("ready"), order("pending")];
+    const rows = [order(null), order("ready"), order("pending"), order("in_progress")];
     expect(filterReportPendingUploadOrders(rows)).toHaveLength(2);
     expect(filterReportReadyOrders(rows)).toHaveLength(1);
   });

@@ -15,7 +15,7 @@ function normalizeReportStatus(status: string | null | undefined): string {
 
 export function isReportPendingUpload(status: string | null | undefined): boolean {
   const s = normalizeReportStatus(status);
-  return s === "" || s === "pending" || s === "in_progress";
+  return s === "" || s === "pending";
 }
 
 export function isReportReadyForDelivery(status: string | null | undefined): boolean {

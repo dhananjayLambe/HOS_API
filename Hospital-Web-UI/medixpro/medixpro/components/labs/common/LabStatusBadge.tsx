@@ -30,10 +30,12 @@ function toneFor(domain: LabStatusDomain, status: string): Tone {
     return "pending";
   }
   if (domain === "report") {
-    if (status === "APPROVED" || status === "DELIVERED") return "success";
-    if (status === "FAILED") return "failed";
-    if (status === "UNDER_REVIEW" || status === "PENDING_UPLOAD") return "pending";
-    return "pending";
+    if (status === "READY_DELIVERY") return "success";
+    if (status === "DELIVERED") return "progress";
+    if (status === "FAILED_DELIVERY") return "failed";
+    if (status === "UPLOADED") return "progress";
+    if (status === "PENDING_UPLOAD") return "pending";
+    return "neutral";
   }
   if (domain === "delivery") {
     if (status === "DELIVERED" || status === "VIEWED") return "success";

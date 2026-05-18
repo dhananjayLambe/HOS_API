@@ -1,7 +1,7 @@
 "use client";
 
-import { LabReportsPage } from "@/components/labs/LabReportsPage";
+import { ReportsListPage } from "@/components/labs/reports/ReportsListPage";
 
 export default function LabReportsRoutePage() {
-  return <LabReportsPage />;
+  return <ReportsListPage />;
 }

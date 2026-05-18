@@ -2,15 +2,15 @@ import { labelForStatus } from "@/lib/labs/constants/status";
 
 const REPORT_API_TO_DOMAIN: Record<string, string> = {
   pending: "PENDING_UPLOAD",
-  in_progress: "UNDER_REVIEW",
-  ready: "APPROVED",
+  in_progress: "UPLOADED",
+  ready: "READY_DELIVERY",
   delivered: "DELIVERED",
-  rejected: "FAILED",
+  rejected: "FAILED_DELIVERY",
   PENDING: "PENDING_UPLOAD",
-  IN_PROGRESS: "UNDER_REVIEW",
-  READY: "APPROVED",
+  IN_PROGRESS: "UPLOADED",
+  READY: "READY_DELIVERY",
   DELIVERED: "DELIVERED",
-  REJECTED: "FAILED",
+  REJECTED: "FAILED_DELIVERY",
 };
 
 /** Operator-facing label for assignment status (order domain). */
