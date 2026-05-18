@@ -1,7 +1,7 @@
 "use client";
 
-import { LabPricingPage } from "@/components/labs/LabPricingPage";
+import { LabPricingServicesPage } from "@/components/labs/LabPricingServicesPage";
 
 export default function LabPricingRoutePage() {
-  return <LabPricingPage />;
+  return <LabPricingServicesPage />;
 }

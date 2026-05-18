@@ -15,6 +15,11 @@ from labs.api.views.home_collections import (
 from labs.api.views.lab_order_workflow import LabOrderAcceptView, LabOrderRejectView
 from labs.api.views.lab_orders import LabOrdersListView
 from labs.api.views.lab_session import LabSessionView
+from labs.api.views.pricing_catalog import (
+    PricingCatalogSummaryView,
+    PricingPackagesListView,
+    PricingServicesListView,
+)
 from labs.api.views.visit_appointments import (
     VisitAppointmentCheckInView,
     VisitAppointmentCompleteView,
@@ -82,6 +87,21 @@ urlpatterns = [
         "home-collections/<uuid:collection_id>/retry/",
         HomeCollectionRetryView.as_view(),
         name="lab-home-collection-retry",
+    ),
+    path(
+        "pricing/summary/",
+        PricingCatalogSummaryView.as_view(),
+        name="lab-pricing-summary",
+    ),
+    path(
+        "pricing/services/",
+        PricingServicesListView.as_view(),
+        name="lab-pricing-services-list",
+    ),
+    path(
+        "pricing/packages/",
+        PricingPackagesListView.as_view(),
+        name="lab-pricing-packages-list",
     ),
     path(
         "visit-appointments/summary/",

@@ -125,3 +125,11 @@ export const labStatusCardShell =
   labShadows.card +
   " " +
   labCardLift;
+
+/** Compact KPI strip — no min-height; for dense operational catalog headers. */
+export const labStatusCardShellCompact =
+  labRadii.card +
+  " flex min-h-0 items-center overflow-hidden border bg-white " +
+  labLavenderBorder +
+  " " +
+  labShadowSoft;

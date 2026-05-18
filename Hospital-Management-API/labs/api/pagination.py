@@ -5,6 +5,8 @@ from math import ceil
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 
+from labs.api.services.pricing_catalog_presenter import API_VERSION
+
 
 class LabOrdersPageNumberPagination(PageNumberPagination):
     page_size = 20
@@ -24,3 +26,13 @@ class LabOrdersPageNumberPagination(PageNumberPagination):
                 "total_pages": total_pages,
             }
         )
+
+
+class PricingCatalogPageNumberPagination(LabOrdersPageNumberPagination):
+    """List responses include contract version for catalog APIs."""
+
+    def get_paginated_response(self, data):
+        base = super().get_paginated_response(data)
+        payload = base.data
+        payload["version"] = API_VERSION
+        return Response(payload)
