@@ -22,6 +22,6 @@ export const labSidebarNavItems: SidebarNavItem[] = [
   { title: "Report Delivery", href: "/lab-dashboard/report-delivery/", icon: Send },
   // { title: "Patients", href: "/lab-dashboard/patients/", icon: Users },
   { title: "Pricing & Services", href: "/lab-dashboard/pricing/", icon: DollarSign },
-  { title: "Settings", href: "/lab-dashboard/settings/", icon: Settings },
+  //{ title: "Settings", href: "/lab-dashboard/settings/", icon: Settings },
   //{ title: "Sample Tracking", href: "/lab-dashboard/sample-tracking/", icon: ScanLine }
 ];
