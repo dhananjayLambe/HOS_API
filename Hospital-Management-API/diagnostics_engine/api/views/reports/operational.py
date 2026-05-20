@@ -1,0 +1,236 @@
+"""Operational report views (v1 contract) — thin views, service-driven."""
+
+from __future__ import annotations
+
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.shortcuts import get_object_or_404
+from labs.models.lab_workflow import LabOrderAssignment
+from rest_framework import status
+from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.permissions import IsAuthenticated
+
+from diagnostics_engine.api import error_codes
+from diagnostics_engine.api.pagination import ReportTaskCursorPagination
+from diagnostics_engine.api.responses import (
+    error_response,
+    success_response,
+    validation_error_response,
+)
+from diagnostics_engine.api.views.reports.mixins import LabReportOperationalMixin
+from diagnostics_engine.api.serializers.reports.report_artifact import ReportArtifactSerializer
+from diagnostics_engine.api.serializers.reports.report_detail import ReportDetailSerializer
+from diagnostics_engine.api.serializers.reports.report_task import (
+    ReportTaskContextSerializer,
+    ReportTaskSerializer,
+)
+from diagnostics_engine.api.serializers.reports.upload_request import UploadArtifactRequestSerializer
+from diagnostics_engine.models.choices import ReportLifecycleStatus
+from diagnostics_engine.models.reports import DiagnosticTestReport
+from diagnostics_engine.permissions.reports import CanUploadReports, CanViewReportDetail
+from diagnostics_engine.services.reports import (
+    ArtifactUploadService,
+    ReportQueryService,
+    ReportWorkflowService,
+)
+from diagnostics_engine.services.reports.report_detail_presenter import build_report_detail_dto
+from diagnostics_engine.services.reports.report_task_presenter import (
+    build_report_task_context,
+    build_report_task_dtos,
+)
+from labs.api.services.lab_orders_list_service import (
+    apply_list_filters,
+    base_assignments_queryset,
+    parse_list_params,
+)
+class ReportTaskQueueView(LabReportOperationalMixin):
+    """GET paginated operational report task queue (assignment-centric)."""
+
+    pagination_class = ReportTaskCursorPagination
+
+    def get(self, request):
+        lab_user, err = self.resolve_lab(request)
+        if err:
+            return err
+
+        params = parse_list_params(request.query_params)
+        qs = apply_list_filters(base_assignments_queryset(lab_user), params)
+        paginator = ReportTaskCursorPagination()
+        page = paginator.paginate_queryset(qs, request, view=self)
+        assignments = list(page) if page is not None else []
+        tasks = [
+            ReportTaskSerializer.from_dto(dto).data
+            for dto in build_report_task_dtos(assignments)
+        ]
+        return success_response(
+            {
+                "results": tasks,
+                "next": paginator.get_next_link(),
+                "previous": paginator.get_previous_link(),
+            },
+            request=request,
+        )
+
+
+class ReportTaskContextView(LabReportOperationalMixin):
+    """GET assignment context + active report heads (upload targets)."""
+
+    def get(self, request, task_id):
+        lab_user, err = self.resolve_lab(request)
+        if err:
+            return err
+        try:
+            assignment = ReportQueryService.get_lab_assignment_for_branch(
+                assignment_id=task_id,
+                branch_id=lab_user.branch_id,
+            )
+        except LabOrderAssignment.DoesNotExist:
+            return error_response(
+                "Assignment not found.",
+                code=error_codes.ASSIGNMENT_NOT_FOUND,
+                status=status.HTTP_404_NOT_FOUND,
+                request=request,
+            )
+        dto = build_report_task_context(assignment)
+        payload = ReportTaskContextSerializer.from_dto(dto).data
+        return success_response(payload, request=request)
+
+
+class ReportOperationalArtifactUploadView(LabReportOperationalMixin):
+    """POST multipart upload — report_id is the only upload entry (v1)."""
+
+    permission_classes = [IsAuthenticated, CanUploadReports]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request, report_id):
+        lab_user, err = self.resolve_lab(request)
+        if err:
+            return err
+
+        report = get_object_or_404(DiagnosticTestReport, pk=report_id)
+        if not ReportQueryService.report_belongs_to_branch(
+            report=report,
+            branch_id=lab_user.branch_id,
+        ):
+            return error_response(
+                "Report not accessible for this branch.",
+                code=error_codes.BRANCH_ACCESS_DENIED,
+                status=status.HTTP_403_FORBIDDEN,
+                request=request,
+            )
+
+        files = request.FILES.getlist("files") or []
+        if not files and request.FILES.get("file"):
+            files = [request.FILES["file"]]
+        data = {"files": files, "notes": request.data.get("notes", "")}
+        raw_index = request.data.get("primary_file_index")
+        if raw_index is not None and str(raw_index).strip() != "":
+            data["primary_file_index"] = int(raw_index)
+        raw_version = request.data.get("version")
+        if raw_version is not None and str(raw_version).strip() != "":
+            data["version"] = int(raw_version)
+
+        ser = UploadArtifactRequestSerializer(data=data)
+        if not ser.is_valid():
+            return error_response(
+                str(ser.errors),
+                code=error_codes.VALIDATION_FAILED,
+                status=status.HTTP_400_BAD_REQUEST,
+                request=request,
+            )
+
+        validated = ser.validated_data
+        version = validated.get("version")
+        try:
+            artifacts = ArtifactUploadService.upload_report_artifacts(
+                report=report,
+                uploaded_files=validated["files"],
+                uploaded_by=request.user,
+                primary_file_index=validated.get("primary_file_index"),
+                version=version,
+            )
+            if report.status == ReportLifecycleStatus.PENDING:
+                ReportWorkflowService.mark_in_progress(report, user=request.user)
+        except DjangoValidationError as exc:
+            return validation_error_response(exc, request=request)
+
+        report.refresh_from_db()
+        return success_response(
+            {
+                "report_id": str(report.id),
+                "status": report.status,
+                "artifacts": ReportArtifactSerializer(artifacts, many=True).data,
+            },
+            status=status.HTTP_201_CREATED,
+            request=request,
+        )
+
+
+class ReportOperationalDetailView(LabReportOperationalMixin):
+    """GET operational report detail (active head only, v1)."""
+
+    permission_classes = [IsAuthenticated, CanViewReportDetail]
+
+    def get(self, request, report_id):
+        lab_user, err = self.resolve_lab(request)
+        if err:
+            return err
+
+        report = get_object_or_404(DiagnosticTestReport, pk=report_id)
+        if not ReportQueryService.report_belongs_to_branch(
+            report=report,
+            branch_id=lab_user.branch_id,
+        ):
+            return error_response(
+                "Report not accessible for this branch.",
+                code=error_codes.BRANCH_ACCESS_DENIED,
+                status=status.HTTP_403_FORBIDDEN,
+                request=request,
+            )
+
+        try:
+            dto = build_report_detail_dto(report_id)
+        except DjangoValidationError as exc:
+            message = str(exc)
+            if "superseded" in message.lower():
+                return error_response(
+                    message,
+                    code=error_codes.REPORT_SUPERSEDED,
+                    status=status.HTTP_404_NOT_FOUND,
+                    request=request,
+                )
+            if "deleted" in message.lower():
+                return error_response(
+                    message,
+                    code=error_codes.REPORT_NOT_FOUND,
+                    status=status.HTTP_404_NOT_FOUND,
+                    request=request,
+                )
+            return validation_error_response(exc, request=request)
+
+        payload = ReportDetailSerializer.from_dto(dto).data
+        return success_response(payload, request=request)
+
+
+class ReportOperationalDownloadView(LabReportOperationalMixin):
+    """GET download contract placeholder (v1)."""
+
+    permission_classes = [IsAuthenticated, CanViewReportDetail]
+
+    def get(self, request, report_id):
+        lab_user, err = self.resolve_lab(request)
+        if err:
+            return err
+
+        report = get_object_or_404(DiagnosticTestReport, pk=report_id)
+        if not ReportQueryService.report_belongs_to_branch(
+            report=report,
+            branch_id=lab_user.branch_id,
+        ):
+            return error_response(
+                "Report not accessible for this branch.",
+                code=error_codes.BRANCH_ACCESS_DENIED,
+                status=status.HTTP_403_FORBIDDEN,
+                request=request,
+            )
+
+        return success_response({"download_url": None}, request=request)

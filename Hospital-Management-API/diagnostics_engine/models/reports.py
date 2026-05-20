@@ -1,11 +1,153 @@
 import uuid
+from pathlib import Path
 
 from django.core.exceptions import ValidationError
 from django.db import models, transaction
 from django.utils import timezone
+from django.utils.text import slugify
+
+from labs.choices.tracking import DeliveryStatus
 
 from .choices import OrderStatus, ReportLifecycleStatus, ReportStorageMode
 from .orders import DiagnosticOrder, DiagnosticOrderTestLine
+
+
+# --------------------------------------------------------------------
+# REPORT FILE STORAGE HELPERS
+# --------------------------------------------------------------------
+def build_report_artifact_upload_path(instance, filename):
+    """
+    Production-ready diagnostic report artifact path.
+
+    Storage path is infrastructure-oriented,
+    not business-query oriented.
+
+    Example:
+    diagnostic-reports/
+        year=2026/
+            month=05/
+                day=19/
+                    encounter=<uuid>/
+                        report=<uuid>/
+                            artifact_<artifact_uuid>_v1.pdf
+
+    Example real storage path:
+
+    diagnostic-reports/
+        year=2026/
+            month=05/
+                day=19/
+                    encounter=ec12ab34/
+                        report=rp45xy89/
+                            artifact_7f21ab3c_v2.pdf
+
+    IMPORTANT:
+    - storage path is infrastructure-oriented
+    - patient names/mobile numbers are NEVER used
+    - filenames are immutable and version-safe
+    - report retrieval happens from database relations
+    - S3 path is NOT a business query layer
+    """
+
+    uploaded_at = timezone.now()
+
+    extension = Path(filename).suffix.lower() or ".bin"
+
+    encounter_id = "unknown-encounter"
+
+    try:
+        encounter = instance.report.order_test_line.order.encounter
+        if encounter:
+            encounter_id = str(encounter.id)
+    except AttributeError:
+        pass
+
+    # upload_to may execute before initial DB save.
+    # Ensure stable UUID generation before path creation.
+    if not instance.id:
+        instance.id = uuid.uuid4()
+    report_id = str(instance.report_id)
+    artifact_id = str(instance.id)
+    version = instance.version or 1
+
+    stored_filename = f"artifact_{artifact_id}_v{version}{extension}"
+
+    instance.stored_filename = stored_filename
+
+    return (
+        f"diagnostic-reports/"
+        f"year={uploaded_at:%Y}/"
+        f"month={uploaded_at:%m}/"
+        f"day={uploaded_at:%d}/"
+        f"encounter={encounter_id}/"
+        f"report={report_id}/"
+        f"{stored_filename}"
+    )
+
+
+
+def build_report_download_filename(report, extension="pdf"):
+    """
+    Builds a human-readable report download filename.
+
+    Storage filenames remain infrastructure-safe.
+
+    Human-readable download examples:
+
+    Rahul_K_CBC_Report_19_May_2026.pdf
+    Priya_Sharma_MRI_Brain_Report_19_May_2026.pdf
+    Amit_Kumar_Thyroid_Profile_Report_19_May_2026.pdf
+
+    Download filenames are used for:
+    - WhatsApp delivery
+    - patient downloads
+    - doctor downloads
+    - browser download UX
+
+    Storage filenames remain opaque/internal.
+    """
+
+    patient_name = "Patient"
+    test_name = "Diagnostic_Report"
+
+    try:
+        profile = report.order_test_line.order.patient_profile
+        if profile:
+            patient_name = slugify(profile.get_full_name()).replace("-", "_")
+    except AttributeError:
+        pass
+
+    try:
+        service = report.order_test_line.service
+        if service and service.name:
+            test_name = slugify(service.name).replace("-", "_")
+    except AttributeError:
+        pass
+
+    report_date = (
+        report.delivered_at or report.ready_at or timezone.now()
+    ).strftime("%d_%b_%Y")
+
+    return (
+        f"{patient_name}_{test_name}_Report_{report_date}.{extension}"
+    )
+
+
+class ReportArtifactType(models.TextChoices):
+    """
+    Supported diagnostic report attachment formats.
+
+    Files are treated as report artifacts,
+    not workflow entities.
+    """
+
+    PDF = "PDF", "PDF"
+    IMAGE = "IMAGE", "Image"
+    CSV = "CSV", "CSV"
+    XLSX = "XLSX", "Excel"
+    TXT = "TXT", "Text"
+    ZIP = "ZIP", "ZIP"
+    DICOM = "DICOM", "DICOM"
 
 # =========================================================
 # DIAGNOSTIC REPORT DOMAIN
@@ -34,9 +176,105 @@ from .orders import DiagnosticOrder, DiagnosticOrderTestLine
 #    -> DiagnosticOrderTestLine
 #           -> DiagnosticTestReport
 #
+
 # Future direction:
 # DiagnosticTestReport becomes the primary reporting model.
 # =========================================================
+# =========================================================
+# REPORTING ARCHITECTURE SUMMARY
+# =========================================================
+# Production reporting architecture is task-centric.
+#
+# Workflow lifecycle belongs to:
+#     DiagnosticTestReport
+#
+# Uploaded files/artifacts belong to:
+#     DiagnosticReportArtifact
+#
+# This separation is important because:
+# - one test line may generate many files
+# - reports may be corrected/re-uploaded
+# - machine exports may accompany PDFs
+# - radiology workflows may include DICOM/images
+# - WhatsApp delivery should target a primary artifact
+#
+# ---------------------------------------------------------
+# CURRENT PHASE-1 ARCHITECTURE
+# ---------------------------------------------------------
+# DiagnosticOrder
+#     -> DiagnosticOrderTestLine
+#            -> DiagnosticTestReport
+#                   -> DiagnosticReportArtifact[]
+#
+# Example:
+#
+# MRI Brain Test Line
+#     -> DiagnosticTestReport
+#           status = READY
+#
+#           artifacts:
+#               - signed-report.pdf (PRIMARY)
+#               - dicom.zip
+#               - preview-image.jpg
+#
+# ---------------------------------------------------------
+# FRONTEND ALIGNMENT
+# ---------------------------------------------------------
+# Frontend workflow is task-first.
+#
+# Patient
+#     -> many report tasks
+#           -> many uploaded artifacts/files
+#
+# Upload flow:
+#     Select Task
+#         -> Upload Files
+#         -> Preview
+#         -> Confirm
+#         -> Deliver
+#
+# NOT:
+#     upload random files first.
+#
+# ---------------------------------------------------------
+# FUTURE EXPANSION READY
+# ---------------------------------------------------------
+# This architecture supports:
+# - per-test-line reporting
+# - corrected reports
+# - report revisions
+# - multi-file uploads
+# - radiology attachments
+# - WhatsApp delivery
+# - audit-safe workflows
+# - future AI-generated reports
+# - DICOM integrations
+# =========================================================
+#
+# File naming strategy:
+# - storage filename -> infrastructure safe
+# - download filename -> human readable
+# - original filename -> preserved for audit/debugging
+#
+# Example:
+#
+# original filename:
+#     CBC final signed.pdf
+#
+# stored filename:
+#     artifact_7f21ab3c_v2.pdf
+#
+# download filename:
+#     Rahul_K_CBC_Report_19_May_2026.pdf
+#
+# storage path:
+# diagnostic-reports/
+#     year=2026/
+#         month=05/
+#             day=19/
+#                 encounter=ec12ab34/
+#                     report=rp45xy89/
+#                         artifact_7f21ab3c_v2.pdf
 
 
 class DiagnosticReport(models.Model):
@@ -141,7 +379,7 @@ class DiagnosticReport(models.Model):
     def save(self, *args, **kwargs):
         with transaction.atomic():
             old_status = None
-            if self.pk:
+            if not self._state.adding:
                 old = type(self).objects.only("is_editable", "status").get(pk=self.pk)
                 if not old.is_editable:
                     raise ValidationError("Report locked.")
@@ -220,10 +458,10 @@ class DiagnosticTestReport(models.Model):
     # - package expansion tracking
     # - technician workflows
     # - granular operational monitoring
-    order_test_line = models.OneToOneField(
+    order_test_line = models.ForeignKey(
         DiagnosticOrderTestLine,
         on_delete=models.CASCADE,
-        related_name="test_report",
+        related_name="test_reports",
     )
 
     # Same storage abstraction as DiagnosticReport.
@@ -241,7 +479,15 @@ class DiagnosticTestReport(models.Model):
     # - abnormality detection
     # - longitudinal patient history
     structured_result = models.JSONField(blank=True, null=True)
-    file = models.FileField(upload_to="diagnostic_test_reports/", null=True, blank=True)
+
+    # Human-readable report identifier.
+    # Future-safe for external sharing,
+    # audit workflows, and revisions.
+    report_number = models.CharField(max_length=50, blank=True, null=True)
+
+    # Revision/version tracking.
+    # Useful for corrected or regenerated reports.
+    revision_number = models.PositiveIntegerField(default=1)
 
     # Execution-level report lifecycle state.
     #
@@ -255,6 +501,15 @@ class DiagnosticTestReport(models.Model):
         choices=ReportLifecycleStatus.choices,
         default=ReportLifecycleStatus.PENDING,
     )
+
+    # Channel delivery state (separate from report generation lifecycle).
+    delivery_status = models.CharField(
+        max_length=30,
+        choices=DeliveryStatus.choices,
+        default=DeliveryStatus.PENDING,
+    )
+
+    ready_at = models.DateTimeField(null=True, blank=True)
 
     # Prevents post-delivery modification.
     # Important for audit + compliance safety.
@@ -277,6 +532,16 @@ class DiagnosticTestReport(models.Model):
         related_name="diagnostic_test_reports_delivered",
     )
 
+    reviewed_by = models.ForeignKey(
+        "account.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="diagnostic_test_reports_reviewed",
+    )
+
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
@@ -288,9 +553,24 @@ class DiagnosticTestReport(models.Model):
         related_name="diagnostic_test_reports_deleted",
     )
 
+    # Report correction lineage.
+    # Supports corrected/revised reports.
+    supersedes = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="superseded_by_reports",
+    )
+
+    source_system = models.CharField(max_length=100, blank=True, null=True)
+
     class Meta:
         indexes = [
             models.Index(fields=["status"]),
+            models.Index(fields=["delivery_status"]),
+            models.Index(fields=["uploaded_at"]),
+            models.Index(fields=["order_test_line"]),
         ]
 
     # Handles:
@@ -301,11 +581,25 @@ class DiagnosticTestReport(models.Model):
     def save(self, *args, **kwargs):
         with transaction.atomic():
             old_status = None
-            if self.pk:
+            if not self._state.adding:
                 old = type(self).objects.only("is_editable", "status").get(pk=self.pk)
                 if not old.is_editable:
-                    raise ValidationError("Report locked.")
+                    update_fields = kwargs.get("update_fields")
+                    delivery_only = update_fields is not None and set(update_fields) <= {
+                        "delivery_status",
+                        "updated_at",
+                    }
+                    if not delivery_only:
+                        raise ValidationError("Report locked.")
                 old_status = old.status
+
+            if self.status == ReportLifecycleStatus.READY and not self.ready_at:
+                self.ready_at = timezone.now()
+
+            if self.status == ReportLifecycleStatus.DELIVERED:
+                if not self.delivered_at:
+                    self.delivered_at = timezone.now()
+                self.is_editable = False
 
             super().save(*args, **kwargs)
 
@@ -332,9 +626,201 @@ class DiagnosticTestReport(models.Model):
         return f"TestReport - {self.order_test_line_id}"
 
 
+ # =========================================================
+# REPORT ARTIFACT FLOW
+# =========================================================
+# DiagnosticOrder
+#     -> DiagnosticOrderTestLine
+#            -> DiagnosticTestReport
+#                   -> DiagnosticReportArtifact
+#                   -> DiagnosticReportArtifact
+#                   -> DiagnosticReportArtifact
+#
+# Example:
+#
+# CBC + Thyroid Test Line
+#     -> TestReport (READY)
+#           -> report.pdf
+#           -> machine.csv
+#           -> scan.jpg
+#
+# Workflow status belongs to TestReport.
+# Files belong to ReportArtifact.
+# =========================================================
+
+class DiagnosticReportArtifact(models.Model):
+    """
+    File/artifact layer for diagnostic reporting.
+
+    A single DiagnosticTestReport workflow can contain
+    multiple uploaded artifacts.
+
+    Examples:
+    - signed PDF
+    - machine CSV
+    - radiology image
+    - DICOM zip
+    - corrected report attachment
+
+    Workflow lifecycle belongs to DiagnosticTestReport.
+    Files belong here.
+
+    File naming architecture:
+
+    original_filename:
+        Original uploaded filename from user/device.
+
+    stored_filename:
+        Infrastructure-safe immutable filename.
+        Example:
+        artifact_7f21ab3c_v2.pdf
+
+    download_filename:
+        Human-readable filename used during:
+        - WhatsApp sharing
+        - patient downloads
+        - doctor downloads
+
+    storage_path:
+        Full S3/object storage path.
+
+    Important:
+    - business queries should NEVER depend on S3 paths
+    - reports are retrieved through DB relations
+    - S3 acts only as artifact/blob storage
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    report = models.ForeignKey(
+        DiagnosticTestReport,
+        on_delete=models.CASCADE,
+        related_name="artifacts",
+    )
+
+    # Infrastructure-safe immutable filename.
+    # Example:
+    # artifact_7f21ab3c_v2.pdf
+    stored_filename = models.CharField(max_length=255, blank=True, null=True)
+
+    # Original filename uploaded by operator/device.
+    original_filename = models.CharField(max_length=255, blank=True, null=True)
+
+    # Human-readable filename used for:
+    # - WhatsApp downloads
+    # - patient downloads
+    # - doctor downloads
+    download_filename = models.CharField(max_length=255, blank=True, null=True)
+
+    file_extension = models.CharField(max_length=20, blank=True, null=True)
+
+    file = models.FileField(upload_to=build_report_artifact_upload_path, max_length=512)
+
+    artifact_type = models.CharField(
+        max_length=20,
+        choices=ReportArtifactType.choices,
+        default=ReportArtifactType.PDF,
+    )
+
+    # Primary downloadable/shareable report.
+    is_primary = models.BooleanField(default=False)
+
+    uploaded_by = models.ForeignKey(
+        "account.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="diagnostic_report_artifacts_uploaded",
+    )
+
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    file_size = models.BigIntegerField(null=True, blank=True)
+
+    content_type = models.CharField(max_length=255, blank=True, null=True)
+
+    checksum = models.CharField(max_length=255, blank=True, null=True)
+
+    # Full object storage path.
+    # Example:
+    # diagnostic-reports/year=2026/...
+    storage_path = models.TextField(blank=True, null=True)
+
+    version = models.PositiveIntegerField(default=1)
+
+    is_active = models.BooleanField(default=True)
+
+    def save(self, *args, **kwargs):
+        """
+        Handles:
+        - filename normalization
+        - extension extraction
+        - download filename generation
+        - storage path persistence
+        """
+
+        if self.file and not self.original_filename:
+            uploaded_name = getattr(self.file, "name", None)
+
+            if uploaded_name:
+                self.original_filename = uploaded_name.split("/")[-1]
+
+        if self.file:
+            extension = Path(self.file.name).suffix.lower().replace(".", "")
+            self.file_extension = extension
+
+        if not self.download_filename:
+            self.download_filename = build_report_download_filename(
+                self.report,
+                extension=self.file_extension or "pdf",
+            )
+
+        super().save(*args, **kwargs)
+
+        if self.file and not self.storage_path:
+            self.storage_path = self.file.name
+            super().save(update_fields=["storage_path"])
+
+    def clean(self):
+        """
+        Prevents multiple primary artifacts
+        for the same report workflow.
+        """
+
+        if self.is_primary:
+            existing_primary = DiagnosticReportArtifact.objects.filter(
+                report=self.report,
+                is_primary=True,
+                is_active=True,
+            )
+
+            if self.pk:
+                existing_primary = existing_primary.exclude(pk=self.pk)
+
+            if existing_primary.exists():
+                raise ValidationError(
+                    "Only one primary artifact is allowed per report."
+                )
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["report"]),
+            models.Index(fields=["artifact_type"]),
+            models.Index(fields=["uploaded_at"]),
+            models.Index(fields=["is_primary"]),
+            models.Index(fields=["version"]),
+            models.Index(fields=["is_active"]),
+        ]
+
+    def __str__(self):
+        return f"Artifact - {self.report_id}"
+
+
 # Public exports for diagnostics reporting domain.
 # Keeps imports standardized across services.
 __all__ = [
     "DiagnosticReport",
     "DiagnosticTestReport",
+    "DiagnosticReportArtifact",
 ]
+

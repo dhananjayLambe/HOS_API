@@ -9,6 +9,7 @@ from typing import Any
 from django.utils import timezone
 
 from consultations_core.models.investigation import InvestigationItem, InvestigationUrgency
+from diagnostics_engine.domain.reports import get_active_report_for_line
 from diagnostics_engine.models.choices import ReportLifecycleStatus
 from labs.choices.tracking import SampleStatus
 
@@ -139,8 +140,8 @@ def aggregate_sample_status(order) -> str | None:
 def aggregate_report_status(order) -> str | None:
     statuses: list[str] = []
     for line in order.test_lines.all():
-        report = getattr(line, "test_report", None)
-        if report is not None and report.status:
+        report = get_active_report_for_line(line)
+        if report and report.status:
             statuses.append(report.status)
     if not statuses:
         return None

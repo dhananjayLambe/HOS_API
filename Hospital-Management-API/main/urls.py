@@ -61,6 +61,7 @@ urlpatterns = [
     path('api/calendar/', include('caleder_events.api.urls')),
     path('api/medicines/', include('medicines.api.urls')),
     path('api/diagnostics/', include('diagnostics_engine.api.urls')),
+    path('api/v1/diagnostics/', include('diagnostics_engine.api.report_urls')),
     #Swagger API
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
     path('redoc/', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),

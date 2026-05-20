@@ -65,6 +65,17 @@ INV_SUGGEST_MAX_PER_CATEGORY = int(os.getenv("INV_SUGGEST_MAX_PER_CATEGORY", "3"
 INV_SUGGEST_MAX_PACKAGE_SIZE = int(os.getenv("INV_SUGGEST_MAX_PACKAGE_SIZE", "25"))
 INV_SUGGEST_CACHE_TTL_SECONDS = int(os.getenv("INV_SUGGEST_CACHE_TTL_SECONDS", "120"))
 
+# Diagnostic report artifact uploads (per-file and batch limits)
+MAX_REPORT_UPLOAD_SIZE_MB = int(os.getenv("MAX_REPORT_UPLOAD_SIZE_MB", "25"))
+MAX_REPORT_BATCH_UPLOAD_SIZE_MB = int(os.getenv("MAX_REPORT_BATCH_UPLOAD_SIZE_MB", "100"))
+MAX_REPORT_UPLOAD_FILES = int(os.getenv("MAX_REPORT_UPLOAD_FILES", "10"))
+
+# Placeholder public report download base (never expose raw S3 URLs in delivery metadata)
+REPORT_PUBLIC_DOWNLOAD_BASE_URL = os.getenv(
+    "REPORT_PUBLIC_DOWNLOAD_BASE_URL",
+    "https://doctorprocare.com/report-download",
+)
+
 # Consultation summary caching (feature-flagged)
 ENABLE_CONSULTATION_SUMMARY_CACHE = os.getenv("ENABLE_CONSULTATION_SUMMARY_CACHE", "false").lower() in (
     "1",

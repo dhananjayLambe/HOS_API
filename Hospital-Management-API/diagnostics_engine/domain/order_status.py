@@ -1,5 +1,6 @@
 """Aggregate diagnostic order status from test lines and per-line reports."""
 
+from diagnostics_engine.domain.reports import get_active_report_for_line
 from diagnostics_engine.models.orders import DiagnosticOrder
 from diagnostics_engine.models.choices import OrderStatus, OrderTestLineStatus, ReportLifecycleStatus
 
@@ -14,8 +15,6 @@ class OrderStatusAggregationService:
         if not lines:
             return
 
-        from diagnostics_engine.models.reports import DiagnosticTestReport
-
         n = len(lines)
         cancelled_lines = sum(1 for ln in lines if ln.status == OrderTestLineStatus.CANCELLED)
 
@@ -26,14 +25,13 @@ class OrderStatusAggregationService:
         for line in lines:
             if line.status == OrderTestLineStatus.CANCELLED:
                 continue
-            try:
-                tr = line.test_report
-            except DiagnosticTestReport.DoesNotExist:
+            report = get_active_report_for_line(line)
+            if report is None:
                 no_report += 1
                 continue
-            if tr.status == ReportLifecycleStatus.DELIVERED:
+            if report.status == ReportLifecycleStatus.DELIVERED:
                 delivered_reports += 1
-            elif tr.status == ReportLifecycleStatus.READY:
+            elif report.status == ReportLifecycleStatus.READY:
                 ready_only += 1
 
         active_lines = n - cancelled_lines

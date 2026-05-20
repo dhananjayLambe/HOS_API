@@ -59,7 +59,7 @@ def base_assignments_queryset(lab_user: LabUser):
                 "diagnostic_order__test_lines",
                 queryset=DiagnosticOrderTestLine.objects.select_related("service").prefetch_related(
                     "sample_tracking",
-                    "test_report",
+                    "test_reports",
                 ),
             ),
             Prefetch(
