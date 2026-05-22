@@ -24,7 +24,11 @@ from diagnostics_engine.services.reports import (
 )
 from labs.choices.tracking import DeliveryStatus
 from labs.models.lab_tracking import LabReportDeliveryLog
-from labs.tests.support.workflow_factories import lab_admin_client, lab_mode_assignment
+from labs.tests.support.workflow_factories import (
+    lab_admin_client,
+    lab_mode_assignment,
+    other_branch,
+)
 
 User = get_user_model()
 
@@ -51,6 +55,104 @@ class ReportAPITestCase(TestCase):
         self.assertTrue(res.data["success"])
         self.assertIn("results", res.data["data"])
         self.assertGreaterEqual(len(res.data["data"]["results"]), 1)
+
+    def test_task_queue_includes_action_targets(self):
+        url = reverse("v1-report-task-queue")
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        card = next(
+            r
+            for r in res.data["data"]["results"]
+            if str(r["task_id"]) == str(self.assignment.id)
+        )
+        targets = card["available_action_targets"]
+        self.assertIn("upload_report_id", targets)
+        self.assertIn("mark_ready_report_id", targets)
+        self.assertIn("send_whatsapp_report_id", targets)
+        self.assertIn("retry_delivery_log_id", targets)
+        self.assertEqual(str(targets["upload_report_id"]), str(self.report.id))
+        self.assertIsNone(targets["mark_ready_report_id"])
+        self.assertIsNone(targets["send_whatsapp_report_id"])
+        self.assertIsNone(targets["retry_delivery_log_id"])
+
+    def test_task_queue_search_by_order_number(self):
+        other_assignment, other_order = lab_mode_assignment(self.branch)
+        other_order.order_number = "ORD-QUEUE-FINDME"
+        other_order.save(update_fields=["order_number"])
+        self.order.order_number = "ORD-QUEUE-OTHER99"
+        self.order.save(update_fields=["order_number"])
+
+        url = reverse("v1-report-task-queue")
+        res = self.client.get(url, {"q": "FINDME"})
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        task_ids = {str(r["task_id"]) for r in res.data["data"]["results"]}
+        self.assertEqual(task_ids, {str(other_assignment.id)})
+
+    def test_task_queue_search_by_patient_name(self):
+        profile = self.order.patient_profile
+        profile.first_name = "QueueUnique"
+        profile.last_name = "Patient"
+        profile.save(update_fields=["first_name", "last_name"])
+        other_assignment, other_order = lab_mode_assignment(self.branch)
+        other_profile = other_order.patient_profile
+        other_profile.first_name = "Other"
+        other_profile.last_name = "Person"
+        other_profile.save(update_fields=["first_name", "last_name"])
+
+        url = reverse("v1-report-task-queue")
+        res = self.client.get(url, {"q": "QueueUnique"})
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        task_ids = {str(r["task_id"]) for r in res.data["data"]["results"]}
+        self.assertEqual(task_ids, {str(self.assignment.id)})
+
+    def test_task_queue_search_by_service_name(self):
+        line = self.order.test_lines.select_related("service").first()
+        line.service.name = "QueueUniqueSerumPanel"
+        line.service.save(update_fields=["name"])
+        other_assignment, other_order = lab_mode_assignment(self.branch)
+        other_line = other_order.test_lines.select_related("service").first()
+        other_line.service.name = "OtherPanelOnly"
+        other_line.service.save(update_fields=["name"])
+
+        url = reverse("v1-report-task-queue")
+        res = self.client.get(url, {"q": "UniqueSerum"})
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        task_ids = {str(r["task_id"]) for r in res.data["data"]["results"]}
+        self.assertEqual(task_ids, {str(self.assignment.id)})
+
+    def test_task_queue_search_branch_isolation(self):
+        branch_b = other_branch(self.org, branch_name="Report Queue Search Branch B")
+        assignment_b, order_b = lab_mode_assignment(branch_b)
+        line_b = order_b.test_lines.select_related("service").first()
+        line_b.service.name = "CBC"
+        line_b.service.save(update_fields=["name"])
+        line_a = self.order.test_lines.select_related("service").first()
+        line_a.service.name = "CBC"
+        line_a.service.save(update_fields=["name"])
+
+        url = reverse("v1-report-task-queue")
+        res = self.client.get(url, {"q": "cbc"})
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        task_ids = {str(r["task_id"]) for r in res.data["data"]["results"]}
+        self.assertIn(str(self.assignment.id), task_ids)
+        self.assertNotIn(str(assignment_b.id), task_ids)
+
+    def test_task_queue_action_targets_after_upload(self):
+        ArtifactUploadService.upload_report_artifacts(
+            report=self.report,
+            uploaded_files=[_pdf(b"queue-targets")],
+            primary_file_index=0,
+        )
+        url = reverse("v1-report-task-queue")
+        res = self.client.get(url)
+        card = next(
+            r
+            for r in res.data["data"]["results"]
+            if str(r["task_id"]) == str(self.assignment.id)
+        )
+        targets = card["available_action_targets"]
+        self.assertEqual(str(targets["mark_ready_report_id"]), str(self.report.id))
+        self.assertIsNone(targets["upload_report_id"])
 
     def test_task_context_returns_active_reports(self):
         url = reverse("v1-report-task-context", kwargs={"task_id": self.assignment.id})

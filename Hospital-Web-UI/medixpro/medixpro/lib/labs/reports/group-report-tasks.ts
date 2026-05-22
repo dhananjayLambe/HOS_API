@@ -3,6 +3,7 @@ import {
   isPendingUploadStatus,
   type ReportOperationalStatus,
 } from "@/lib/labs/reports/report-operational-status";
+import { formatGroupProgressLabel } from "@/lib/labs/reports/workflow-progress-labels";
 
 export type PatientReportGroup = {
   patientKey: string;
@@ -55,10 +56,12 @@ function buildGroup(
     completedCount,
     totalCount,
     uploadedCount,
-    progressLabel:
-      totalCount > 0
-        ? `${uploadedCount} of ${totalCount} report${totalCount === 1 ? "" : "s"} uploaded`
-        : "",
+    progressLabel: formatGroupProgressLabel({
+      uploadedCount,
+      totalCount,
+      pendingCount,
+      completedCount,
+    }),
     severityScore: groupSeverityScore(tasks),
   };
 }

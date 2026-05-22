@@ -217,6 +217,9 @@ backendAxiosClient.interceptors.response.use(
       const isLabsMeExpected =
         fullUrl.includes("labs/me") &&
         (error.response?.status === 403 || error.response?.status === 404);
+      /** v1 report queue: optional until NEXT_PUBLIC_LAB_REPORTS_USE_V1_API=true — 404 is expected on many dev setups. */
+      const isReportTasksV1Expected =
+        fullUrl.includes("v1/diagnostics/report-tasks") && is404;
       /** Optional UI enrichment; investigations section uses static fallback — avoid red logs when Django/proxy is unreachable. */
       const isSuppressedSuggestionsNetwork =
         isInvestigationSuggestionsEndpoint && !error.response;
@@ -250,7 +253,8 @@ backendAxiosClient.interceptors.response.use(
         !isExpectedPreview400 &&
         !isAlreadyCompleted400 &&
         !isSuppressedSuggestionsNetwork &&
-        !isLabsMeExpected
+        !isLabsMeExpected &&
+        !isReportTasksV1Expected
       ) {
         console.error(
           `[backendAxiosClient] Error ${error.response?.status || "Network"} on ${error.config.method?.toUpperCase()} ${fullUrl}`,

@@ -7,7 +7,7 @@ from datetime import datetime
 from uuid import UUID
 
 from diagnostics_engine.domain.reports import get_active_report_for_line
-from diagnostics_engine.domain.reports.report_actions import allowed_actions_for_report
+from diagnostics_engine.domain.reports.report_actions import ReportAction, allowed_actions_for_report
 from diagnostics_engine.models.choices import ReportLifecycleStatus
 from diagnostics_engine.models.reports import DiagnosticTestReport
 from labs.api.services.lab_orders_presenter import (
@@ -70,6 +70,16 @@ class ReportTaskContextDTO:
 
 
 @dataclass(frozen=True)
+class ReportActionTargetsDTO:
+    """Card-level mutation targets (first eligible active report per action)."""
+
+    upload_report_id: UUID | None = None
+    mark_ready_report_id: UUID | None = None
+    send_whatsapp_report_id: UUID | None = None
+    retry_delivery_log_id: UUID | None = None
+
+
+@dataclass(frozen=True)
 class ReportTaskDTO:
     """Queue card DTO (list endpoint / future pagination)."""
 
@@ -87,6 +97,7 @@ class ReportTaskDTO:
     uploaded_at: datetime | None
     ready_at: datetime | None
     delivered_at: datetime | None
+    available_action_targets: ReportActionTargetsDTO
 
 
 def _patient_phone(profile) -> str:
@@ -94,6 +105,49 @@ def _patient_phone(profile) -> str:
         return ""
     user = getattr(profile.account, "user", None)
     return getattr(user, "username", "") or ""
+
+
+def _latest_failed_delivery_log_id(report: DiagnosticTestReport) -> UUID | None:
+    log = (
+        report.delivery_logs.filter(
+            is_deleted=False,
+            delivery_status=DeliveryStatus.FAILED,
+        )
+        .order_by("-created_at")
+        .first()
+    )
+    return log.id if log else None
+
+
+def build_available_action_targets(assignment: LabOrderAssignment) -> ReportActionTargetsDTO:
+    """Aggregate mutation targets from active report lines (first match per action)."""
+    order = assignment.diagnostic_order
+    upload_id: UUID | None = None
+    mark_ready_id: UUID | None = None
+    send_whatsapp_id: UUID | None = None
+    retry_log_id: UUID | None = None
+
+    for line in order.test_lines.all():
+        report = get_active_report_for_line(line)
+        if report is None:
+            continue
+        actions = allowed_actions_for_report(report)
+        rid = report.id
+        if upload_id is None and ReportAction.UPLOAD_REPORT in actions:
+            upload_id = rid
+        if mark_ready_id is None and ReportAction.MARK_READY in actions:
+            mark_ready_id = rid
+        if send_whatsapp_id is None and ReportAction.SEND_WHATSAPP in actions:
+            send_whatsapp_id = rid
+        if retry_log_id is None and ReportAction.RETRY_DELIVERY in actions:
+            retry_log_id = _latest_failed_delivery_log_id(report)
+
+    return ReportActionTargetsDTO(
+        upload_report_id=upload_id,
+        mark_ready_report_id=mark_ready_id,
+        send_whatsapp_report_id=send_whatsapp_id,
+        retry_delivery_log_id=retry_log_id,
+    )
 
 
 def _active_reports_for_order(order) -> list[ReportLineReportDTO]:
@@ -204,4 +258,5 @@ def build_report_task_dto(
         uploaded_at=uploaded_at,
         ready_at=ready_at,
         delivered_at=delivered_at,
+        available_action_targets=build_available_action_targets(assignment),
     )

@@ -23,6 +23,15 @@ const API_TO_OPERATIONAL: Record<string, ReportOperationalStatus> = {
   rejected: "FAILED_DELIVERY",
 };
 
+/** Backend operational_status buckets from report-tasks API (choke point — UI never uses raw strings). */
+const OPERATIONAL_BUCKET_TO_STATUS: Record<string, ReportOperationalStatus> = {
+  PENDING_UPLOAD: "PENDING_UPLOAD",
+  UPLOADED: "UPLOADED",
+  READY_DELIVERY: "READY_DELIVERY",
+  DELIVERED: "DELIVERED",
+  FAILED_DELIVERY: "FAILED_DELIVERY",
+};
+
 const TAB_TO_STATUS: Record<Exclude<ReportTabKey, "all">, ReportOperationalStatus> = {
   pending: "PENDING_UPLOAD",
   uploaded: "UPLOADED",
@@ -41,6 +50,20 @@ export function mapReportOperationalStatus(
   const key = normalizeApiReportStatus(apiStatus);
   return API_TO_OPERATIONAL[key] ?? "PENDING_UPLOAD";
 }
+
+/** Maps v1 `operational_status` or lifecycle strings to domain status. */
+export function mapApiOperationalStatus(apiStatus: string | null | undefined): ReportOperationalStatus {
+  const raw = (apiStatus ?? "").trim();
+  if (!raw) return "PENDING_UPLOAD";
+  const upper = raw.toUpperCase();
+  if (OPERATIONAL_BUCKET_TO_STATUS[upper]) {
+    return OPERATIONAL_BUCKET_TO_STATUS[upper]!;
+  }
+  return mapReportOperationalStatus(raw);
+}
+
+/** Alias for spec / external docs. */
+export const mapReportStatus = mapApiOperationalStatus;
 
 export function operationalStatusLabel(status: ReportOperationalStatus): string {
   return labelForStatus("report", status);
@@ -73,22 +96,31 @@ export type ReportKpiCounts = {
   readyDelivery: number;
   deliveredToday: number;
   failedDelivery: number;
+  urgentCount: number;
+  tatBreachedCount: number;
 };
 
-export function countReportKpis(
-  statuses: ReportOperationalStatus[],
-  isDeliveredToday: (index: number) => boolean,
-): ReportKpiCounts {
+export type ReportTaskKpiInput = {
+  operationalStatus: ReportOperationalStatus;
+  deliveredToday?: boolean;
+  urgency?: string;
+  tatBreached?: boolean;
+};
+
+/** Pure KPI aggregation — no React, no input mutation. */
+export function calculateQueueKPIs(tasks: readonly ReportTaskKpiInput[]): ReportKpiCounts {
   const counts: ReportKpiCounts = {
     pendingUpload: 0,
     uploaded: 0,
     readyDelivery: 0,
     deliveredToday: 0,
     failedDelivery: 0,
+    urgentCount: 0,
+    tatBreachedCount: 0,
   };
 
-  statuses.forEach((status, index) => {
-    switch (status) {
+  for (const task of tasks) {
+    switch (task.operationalStatus) {
       case "PENDING_UPLOAD":
         counts.pendingUpload += 1;
         break;
@@ -99,7 +131,7 @@ export function countReportKpis(
         counts.readyDelivery += 1;
         break;
       case "DELIVERED":
-        if (isDeliveredToday(index)) counts.deliveredToday += 1;
+        if (task.deliveredToday) counts.deliveredToday += 1;
         break;
       case "FAILED_DELIVERY":
         counts.failedDelivery += 1;
@@ -107,9 +139,25 @@ export function countReportKpis(
       default:
         break;
     }
-  });
+    const urgency = (task.urgency ?? "ROUTINE").toUpperCase();
+    if (urgency === "URGENT" || urgency === "STAT") counts.urgentCount += 1;
+    if (task.tatBreached) counts.tatBreachedCount += 1;
+  }
 
   return counts;
+}
+
+/** @deprecated Prefer calculateQueueKPIs with task inputs. */
+export function countReportKpis(
+  statuses: ReportOperationalStatus[],
+  isDeliveredToday: (index: number) => boolean,
+): ReportKpiCounts {
+  return calculateQueueKPIs(
+    statuses.map((operationalStatus, index) => ({
+      operationalStatus,
+      deliveredToday: isDeliveredToday(index),
+    })),
+  );
 }
 
 export function parseReportTabFromSearchParams(

@@ -1,0 +1,147 @@
+"use client";
+
+import { backendAxiosClient } from "@/lib/axiosClient";
+import type { DiagnosticsApiEnvelope } from "@/lib/labs/reports/api/report-api-response";
+import {
+  newReportRequestId,
+  unwrapApiResponse,
+} from "@/lib/labs/reports/api/report-api-response";
+import type {
+  MarkReadyApiData,
+  ReportDetailApiData,
+  ReportSummaryListData,
+  ReportTaskContextApiData,
+  ReportTaskListData,
+  ReportTasksListQueryParams,
+  RetryDeliveryApiData,
+  SendWhatsAppApiData,
+  UploadArtifactsApiData,
+} from "@/lib/labs/reports/api/report-api-types";
+
+const V1_PREFIX = "v1/diagnostics";
+
+function requestHeaders(requestId?: string): Record<string, string> {
+  const id = requestId ?? newReportRequestId();
+  return { "X-Request-ID": id };
+}
+
+export async function getReportsQueue(
+  params: ReportTasksListQueryParams,
+  options?: { signal?: AbortSignal; requestId?: string },
+): Promise<ReportTaskListData> {
+  const { data } = await backendAxiosClient.get<DiagnosticsApiEnvelope<ReportTaskListData>>(
+    `${V1_PREFIX}/report-tasks/`,
+    {
+      params,
+      signal: options?.signal,
+      headers: requestHeaders(options?.requestId),
+    },
+  );
+  return unwrapApiResponse(data);
+}
+
+export async function getReportTaskContext(
+  taskId: string,
+  options?: { signal?: AbortSignal; requestId?: string },
+): Promise<ReportTaskContextApiData> {
+  const { data } = await backendAxiosClient.get<DiagnosticsApiEnvelope<ReportTaskContextApiData>>(
+    `${V1_PREFIX}/report-tasks/${encodeURIComponent(taskId)}/`,
+    { signal: options?.signal, headers: requestHeaders(options?.requestId) },
+  );
+  return unwrapApiResponse(data);
+}
+
+export async function getReportDetail(
+  reportId: string,
+  options?: { signal?: AbortSignal; requestId?: string },
+): Promise<ReportDetailApiData> {
+  const { data } = await backendAxiosClient.get<DiagnosticsApiEnvelope<ReportDetailApiData>>(
+    `${V1_PREFIX}/reports/${encodeURIComponent(reportId)}/`,
+    { signal: options?.signal, headers: requestHeaders(options?.requestId) },
+  );
+  return unwrapApiResponse(data);
+}
+
+export async function getPatientReports(
+  patientId: string,
+  params?: Record<string, string | number>,
+  options?: { signal?: AbortSignal },
+): Promise<ReportSummaryListData> {
+  const { data } = await backendAxiosClient.get<DiagnosticsApiEnvelope<ReportSummaryListData>>(
+    `${V1_PREFIX}/patients/${encodeURIComponent(patientId)}/reports/`,
+    { params, signal: options?.signal, headers: requestHeaders() },
+  );
+  return unwrapApiResponse(data);
+}
+
+export async function getEncounterReports(
+  encounterId: string,
+  params?: Record<string, string | number>,
+  options?: { signal?: AbortSignal },
+): Promise<ReportSummaryListData> {
+  const { data } = await backendAxiosClient.get<DiagnosticsApiEnvelope<ReportSummaryListData>>(
+    `${V1_PREFIX}/encounters/${encodeURIComponent(encounterId)}/reports/`,
+    { params, signal: options?.signal, headers: requestHeaders() },
+  );
+  return unwrapApiResponse(data);
+}
+
+export async function uploadReportArtifacts(
+  reportId: string,
+  formData: FormData,
+  options?: { requestId?: string },
+): Promise<UploadArtifactsApiData> {
+  const { data } = await backendAxiosClient.post<DiagnosticsApiEnvelope<UploadArtifactsApiData>>(
+    `${V1_PREFIX}/reports/${encodeURIComponent(reportId)}/artifacts/upload/`,
+    formData,
+    {
+      headers: {
+        ...requestHeaders(options?.requestId),
+        "Content-Type": "multipart/form-data",
+      },
+    },
+  );
+  return unwrapApiResponse(data);
+}
+
+export async function markReportReady(
+  reportId: string,
+  body?: { notes?: string },
+  options?: { requestId?: string },
+): Promise<MarkReadyApiData> {
+  const { data } = await backendAxiosClient.post<DiagnosticsApiEnvelope<MarkReadyApiData>>(
+    `${V1_PREFIX}/reports/${encodeURIComponent(reportId)}/mark-ready/`,
+    body ?? {},
+    { headers: requestHeaders(options?.requestId) },
+  );
+  return unwrapApiResponse(data);
+}
+
+export async function sendWhatsApp(
+  reportId: string,
+  payload: { recipient_phone: string; channel?: string },
+  options?: { requestId?: string },
+): Promise<SendWhatsAppApiData> {
+  const { data } = await backendAxiosClient.post<DiagnosticsApiEnvelope<SendWhatsAppApiData>>(
+    `${V1_PREFIX}/reports/${encodeURIComponent(reportId)}/send-whatsapp/`,
+    { channel: "WHATSAPP", ...payload },
+    { headers: requestHeaders(options?.requestId) },
+  );
+  return unwrapApiResponse(data);
+}
+
+export async function retryDelivery(
+  logId: string,
+  options?: { requestId?: string },
+): Promise<RetryDeliveryApiData> {
+  const { data } = await backendAxiosClient.post<DiagnosticsApiEnvelope<RetryDeliveryApiData>>(
+    `${V1_PREFIX}/delivery-logs/${encodeURIComponent(logId)}/retry/`,
+    {},
+    { headers: requestHeaders(options?.requestId) },
+  );
+  return unwrapApiResponse(data);
+}
+
+/** @deprecated Use getReportsQueue — re-export compatibility */
+export const fetchReportTasksList = getReportsQueue;
+export const fetchReportTaskContext = getReportTaskContext;

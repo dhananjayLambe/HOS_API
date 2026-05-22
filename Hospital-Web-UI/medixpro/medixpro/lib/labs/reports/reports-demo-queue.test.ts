@@ -37,15 +37,12 @@ describe("reports-demo-queue", () => {
     expect(isReportsDemoForced(new URLSearchParams("tab=pending"))).toBe(false);
   });
 
-  it("uses demo when forced or API empty", () => {
+  it("uses demo only when explicitly forced", () => {
     expect(
       shouldUseReportsDemoData({ apiTaskCount: 5, loading: false, error: null, forceDemo: true }),
     ).toBe(true);
     expect(
       shouldUseReportsDemoData({ apiTaskCount: 0, loading: false, error: null, forceDemo: false }),
-    ).toBe(true);
-    expect(
-      shouldUseReportsDemoData({ apiTaskCount: 3, loading: false, error: null, forceDemo: false }),
     ).toBe(false);
     expect(
       shouldUseReportsDemoData({ apiTaskCount: 0, loading: true, error: null, forceDemo: false }),

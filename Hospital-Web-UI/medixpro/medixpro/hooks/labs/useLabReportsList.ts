@@ -1,54 +1,50 @@
 "use client";
 
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
-import { fetchLabOrdersList } from "@/lib/labs/api/orders";
-import { LAB_DASHBOARD_POLL_INTERVAL_MS } from "@/lib/labs/dashboard/constants";
 import {
-  DEFAULT_LAB_ORDERS_FILTERS,
-  type LabOrdersFilterState,
-} from "@/lib/labs/orders/build-lab-orders-query";
-import { mapLabOrderListItems } from "@/lib/labs/orders/map-order-row";
+  DEFAULT_REPORT_TASKS_FILTERS,
+  type ReportTasksQueryFilters,
+} from "@/lib/labs/reports/build-report-tasks-query";
+import { filterReportTasks } from "@/lib/labs/reports/filter-report-tasks";
 import {
   groupTasksByPatient,
   sortWorkflowGroups,
   type PatientReportGroup,
 } from "@/lib/labs/reports/group-report-tasks";
+import { loadReportTasks } from "@/lib/labs/reports/load-report-tasks";
+import {
+  reportTasksQueryKey,
+  REPORT_TASKS_POLL_MS,
+  REPORT_TASKS_STALE_MS,
+} from "@/lib/labs/reports/query-keys";
+import {
+  buildReportQueueSearchParams,
+  parseReportQueueSearchParams,
+  reportQueuePathFromParams,
+  type ReportQueueUrlPatch,
+} from "@/lib/labs/reports/report-queue-url";
 import {
   getDemoReportTasks,
   isReportsDemoForced,
-  shouldUseReportsDemoData,
 } from "@/lib/labs/reports/reports-demo-queue";
 import {
-  countReportKpis,
-  parseReportTabFromSearchParams,
+  calculateQueueKPIs,
   taskMatchesTab,
   type ReportKpiCounts,
   type ReportTabKey,
 } from "@/lib/labs/reports/report-operational-status";
-import { searchReportTasks } from "@/lib/labs/reports/search-report-tasks";
 import {
-  buildReportTasksFromOrders,
   isDeliveredToday,
   type ReportTask,
 } from "@/lib/labs/reports/report-task";
 import type { LabOrderRow } from "@/lib/labs/types";
-import axios from "axios";
+import { useLabSession } from "@/lib/labs/session/lab-session-context";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRouter, useSearchParams } from "next/navigation";
+import { trackReportEvent } from "@/lib/labs/reports/report-monitoring";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
 
 const SEARCH_DEBOUNCE_MS = 400;
-const REPORTS_PAGE_SIZE = 100;
-
-function ordersQueryFilters(): LabOrdersFilterState {
-  return {
-    ...DEFAULT_LAB_ORDERS_FILTERS,
-    search: "",
-    status: "IN_PROGRESS",
-    collectionType: "all",
-    urgency: "all",
-    datePreset: "month",
-  };
-}
 
 export type UseLabReportsListResult = {
   isDemoFallback: boolean;
@@ -61,176 +57,181 @@ export type UseLabReportsListResult = {
   setTab: (tab: ReportTabKey) => void;
   searchInput: string;
   setSearchInput: (v: string) => void;
-  filters: LabOrdersFilterState;
-  setFilters: (f: LabOrdersFilterState) => void;
+  filters: ReportTasksQueryFilters;
+  setFilters: (f: ReportTasksQueryFilters) => void;
   loading: boolean;
+  refreshing: boolean;
   error: string | null;
   refetch: () => void;
-  patchTaskStatus: (taskId: string, status: ReportTask["operationalStatus"]) => void;
+  syncQueueToUrl: (patch: ReportQueueUrlPatch) => void;
   getOrderForTask: (taskId: string) => LabOrderRow | null;
+  totalTaskCount: number;
+  isQueryError: boolean;
+  isStaleQueue: boolean;
 };
 
 export function useLabReportsList(branchLabel = ""): UseLabReportsListResult {
+  const router = useRouter();
   const searchParams = useSearchParams();
-  const tabFromUrl = parseReportTabFromSearchParams(searchParams.get("tab"));
+  const { data: session } = useLabSession();
+  const branchId = session?.branch?.id ?? null;
 
-  const [tab, setTab] = useState<ReportTabKey>(tabFromUrl);
-  const [searchInput, setSearchInput] = useState("");
-  const [filters, setFilters] = useState<LabOrdersFilterState>(ordersQueryFilters);
-  const [apiTasks, setApiTasks] = useState<ReportTask[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [statusOverrides, setStatusOverrides] = useState<Record<string, ReportTask["operationalStatus"]>>({});
+  const initialUrl = useMemo(
+    () => parseReportQueueSearchParams(searchParams),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount snapshot only
+    [],
+  );
+
+  const [tab, setTab] = useState<ReportTabKey>(initialUrl.tab);
+  const [searchInput, setSearchInput] = useState(initialUrl.searchInput);
+  const [filters, setFilters] = useState<ReportTasksQueryFilters>(initialUrl.filters);
+  const [pollFailureCount, setPollFailureCount] = useState(0);
 
   const debouncedSearch = useDebouncedValue(searchInput, SEARCH_DEBOUNCE_MS);
-  const refreshKeyRef = useRef(0);
-  const [refreshKey, setRefreshKey] = useState(0);
+  const skipSearchUrlSyncRef = useRef(true);
 
   useEffect(() => {
-    setTab(tabFromUrl);
-  }, [tabFromUrl]);
-
-  const refetch = useCallback(() => {
-    refreshKeyRef.current += 1;
-    setRefreshKey(refreshKeyRef.current);
-  }, []);
+    const parsed = parseReportQueueSearchParams(searchParams);
+    setTab(parsed.tab);
+    setSearchInput(parsed.searchInput);
+    setFilters(parsed.filters);
+    skipSearchUrlSyncRef.current = true;
+  }, [searchParams]);
 
   useEffect(() => {
-    const controller = new AbortController();
-    let cancelled = false;
-
-    async function load() {
-      setLoading(true);
-      setError(null);
-      try {
-        const [inProgressRes, completedRes] = await Promise.all([
-          fetchLabOrdersList(
-            {
-              filters: { ...ordersQueryFilters(), collectionType: filters.collectionType, datePreset: filters.datePreset },
-              page: 1,
-              pageSize: REPORTS_PAGE_SIZE,
-              q: "",
-            },
-            { signal: controller.signal },
-          ),
-          fetchLabOrdersList(
-            {
-              filters: { ...ordersQueryFilters(), status: "COMPLETED", collectionType: filters.collectionType, datePreset: filters.datePreset },
-              page: 1,
-              pageSize: 50,
-              q: "",
-            },
-            { signal: controller.signal },
-          ),
-        ]);
-
-        if (cancelled) return;
-
-        const orders = [
-          ...mapLabOrderListItems(inProgressRes.results, branchLabel),
-          ...mapLabOrderListItems(completedRes.results, branchLabel),
-        ];
-        const unique = new Map<string, LabOrderRow>();
-        for (const row of orders) {
-          unique.set(row.assignmentId, row);
-        }
-        setApiTasks(buildReportTasksFromOrders(Array.from(unique.values())));
-        setStatusOverrides({});
-      } catch (err) {
-        if (cancelled || axios.isCancel(err)) return;
-        setError(err instanceof Error ? err.message : "Could not load reports.");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+    if (skipSearchUrlSyncRef.current) {
+      skipSearchUrlSyncRef.current = false;
+      return;
     }
+    const params = buildReportQueueSearchParams(new URLSearchParams(searchParams.toString()), {
+      searchInput: debouncedSearch,
+    });
+    router.replace(reportQueuePathFromParams(params), { scroll: false });
+  }, [debouncedSearch, router, searchParams]);
+  const queryClient = useQueryClient();
 
-    void load();
-    return () => {
-      cancelled = true;
-      controller.abort();
-    };
-  }, [branchLabel, filters.collectionType, filters.datePreset, refreshKey]);
+  const syncQueueToUrl = useCallback(
+    (patch: ReportQueueUrlPatch) => {
+      const params = buildReportQueueSearchParams(
+        new URLSearchParams(searchParams.toString()),
+        {
+          tab: patch.tab ?? tab,
+          searchInput: patch.searchInput ?? searchInput,
+          filters: patch.filters ?? filters,
+        },
+      );
+      router.replace(reportQueuePathFromParams(params), { scroll: false });
+    },
+    [router, searchParams, tab, searchInput, filters],
+  );
 
-  useEffect(() => {
-    const id = window.setInterval(() => {
-      if (document.visibilityState === "visible") refetch();
-    }, LAB_DASHBOARD_POLL_INTERVAL_MS);
-    return () => window.clearInterval(id);
-  }, [refetch]);
+  const queryFilters = useMemo(
+    () => ({
+      ...filters,
+      search: debouncedSearch,
+    }),
+    [filters, debouncedSearch],
+  );
 
-  const forceDemo = isReportsDemoForced(searchParams);
-
-  const useDemoData = shouldUseReportsDemoData({
-    apiTaskCount: apiTasks.length,
-    loading,
-    error,
-    forceDemo,
+  const listQuery = useQuery({
+    queryKey: reportTasksQueryKey(branchId, queryFilters, tab),
+    queryFn: async ({ signal }) => {
+      const result = await loadReportTasks({
+        branchId,
+        branchLabel,
+        filters: queryFilters,
+        signal,
+      });
+      return result;
+    },
+    placeholderData: (previousData) => previousData,
+    refetchInterval: REPORT_TASKS_POLL_MS,
+    refetchIntervalInBackground: false,
+    staleTime: REPORT_TASKS_STALE_MS,
   });
 
-  const isDemoFallback = useDemoData;
-  const isDemoForced = useDemoData && forceDemo && apiTasks.length > 0;
+  useEffect(() => {
+    if (listQuery.isSuccess) {
+      setPollFailureCount(0);
+      return;
+    }
+    if (listQuery.isError) {
+      setPollFailureCount((c) => {
+        const next = c + 1;
+        if (next >= 3) trackReportEvent("poll_degraded");
+        return next;
+      });
+    }
+  }, [listQuery.isError, listQuery.isSuccess, listQuery.dataUpdatedAt]);
 
-  const baseTasks = useMemo(
-    () => (useDemoData ? getDemoReportTasks() : apiTasks),
-    [apiTasks, useDemoData],
-  );
-
-  const tasksWithOverrides = useMemo(
-    () =>
-      baseTasks.map((t) => ({
-        ...t,
-        operationalStatus: statusOverrides[t.taskId] ?? t.operationalStatus,
-        orderRow: {
-          ...t.orderRow,
-          reportStatus: statusOverrides[t.taskId]
-            ? overrideToApiStatus(statusOverrides[t.taskId]!)
-            : t.orderRow.reportStatus,
-        },
-      })),
-    [baseTasks, statusOverrides],
-  );
-
-  const searched = useMemo(
-    () => searchReportTasks(tasksWithOverrides, debouncedSearch),
-    [tasksWithOverrides, debouncedSearch],
-  );
-
-  const filteredTasks = useMemo(() => {
-    return searched.filter((task) => {
-      if (!taskMatchesTab(task.operationalStatus, tab)) return false;
-      if (filters.collectionType !== "all" && task.collectionType !== filters.collectionType) {
-        return false;
-      }
-      return true;
+  const refetch = useCallback(() => {
+    void queryClient.invalidateQueries({
+      queryKey: ["lab", branchId ?? "unknown", "report-tasks"],
     });
-  }, [searched, tab, filters.collectionType]);
+  }, [queryClient, branchId]);
+
+  const forceDemo = isReportsDemoForced(searchParams);
+  const apiTasks = listQuery.data?.tasks ?? [];
+  const isQueryError = listQuery.isError;
+  const error =
+    listQuery.error instanceof Error ? listQuery.error.message : isQueryError ? "Could not load reports." : null;
+
+  const isDemoForced = forceDemo;
+  const isDemoFallback = forceDemo;
+
+  const baseTasks = useMemo(() => {
+    if (forceDemo) return getDemoReportTasks();
+    return apiTasks;
+  }, [apiTasks, forceDemo]);
+
+  const afterUrgencyTat = useMemo(
+    () =>
+      filterReportTasks(baseTasks, {
+        urgentOnly: filters.urgentOnly,
+        tatBreached: filters.tatOnly,
+        collectionType: filters.collectionType,
+      }),
+    [baseTasks, filters.urgentOnly, filters.tatOnly, filters.collectionType],
+  );
+
+  const filteredTasks = useMemo(
+    () => afterUrgencyTat.filter((task) => taskMatchesTab(task.operationalStatus, tab)),
+    [afterUrgencyTat, tab],
+  );
 
   const groups = useMemo(
     () => sortWorkflowGroups(groupTasksByPatient(filteredTasks)),
     [filteredTasks],
   );
 
-  const kpis = useMemo(() => {
-    const statuses = tasksWithOverrides.map((t) => t.operationalStatus);
-    return countReportKpis(statuses, (i) => isDeliveredToday(tasksWithOverrides[i]!));
-  }, [tasksWithOverrides]);
-
-  const patchTaskStatus = useCallback((taskId: string, status: ReportTask["operationalStatus"]) => {
-    setStatusOverrides((prev) => ({ ...prev, [taskId]: status }));
-  }, []);
+  const kpis = useMemo(
+    () =>
+      calculateQueueKPIs(
+        baseTasks.map((t) => ({
+          operationalStatus: t.operationalStatus,
+          deliveredToday: isDeliveredToday(t),
+          urgency: t.urgency,
+          tatBreached: t.tatBreached,
+        })),
+      ),
+    [baseTasks],
+  );
 
   const getOrderForTask = useCallback(
     (taskId: string) => {
-      const task = tasksWithOverrides.find((t) => t.taskId === taskId);
+      const task = baseTasks.find((t) => t.taskId === taskId);
       return task?.orderRow ?? null;
     },
-    [tasksWithOverrides],
+    [baseTasks],
   );
+
+  const isStaleQueue =
+    (listQuery.isError && listQuery.data !== undefined) || pollFailureCount >= 3;
 
   return {
     isDemoFallback,
     isDemoForced,
-    tasks: tasksWithOverrides,
+    tasks: baseTasks,
     filteredTasks,
     groups,
     kpis,
@@ -240,27 +241,14 @@ export function useLabReportsList(branchLabel = ""): UseLabReportsListResult {
     setSearchInput,
     filters,
     setFilters,
-    loading,
-    error,
+    loading: listQuery.isPending && listQuery.data === undefined,
+    refreshing: listQuery.isFetching && !listQuery.isPending,
+    error: isQueryError && !forceDemo ? error : null,
     refetch,
-    patchTaskStatus,
+    syncQueueToUrl,
     getOrderForTask,
+    totalTaskCount: baseTasks.length,
+    isQueryError: isQueryError && !forceDemo,
+    isStaleQueue,
   };
-}
-
-function overrideToApiStatus(status: ReportTask["operationalStatus"]): string {
-  switch (status) {
-    case "PENDING_UPLOAD":
-      return "pending";
-    case "UPLOADED":
-      return "in_progress";
-    case "READY_DELIVERY":
-      return "ready";
-    case "DELIVERED":
-      return "delivered";
-    case "FAILED_DELIVERY":
-      return "rejected";
-    default:
-      return "pending";
-  }
 }

@@ -1,6 +1,9 @@
+import type { UrgencyLevel } from "@/lib/labs/constants/urgency";
 import { mapReportOperationalStatus, type ReportOperationalStatus } from "@/lib/labs/reports/report-operational-status";
+import { isTatBreached } from "@/lib/labs/reports/tat-sla";
 import type { LabOrderRow } from "@/lib/labs/types";
 
+/** Slim operational queue card — no upload/artifact/detail payload. */
 export type ReportTask = {
   taskId: string;
   assignmentId: string;
@@ -16,16 +19,40 @@ export type ReportTask = {
   collectedAtLabel: string;
   updatedAtLabel: string;
   assignedAtIso: string | null;
+  createdAtIso: string | null;
   operationalStatus: ReportOperationalStatus;
   pendingSiblingCount: number;
-  /** Underlying order row for detail sheet / actions */
-  orderRow: LabOrderRow;
+  urgency: UrgencyLevel;
+  tatBreached: boolean;
+  labName: string;
+  reportCount: number;
+  /** Mutation targets from queue DTO — no per-CTA context fetch. */
+  actionTargets: ReportActionTargets;
+  /** Legacy: present only when loaded via labs/orders fallback. */
+  orderRow?: LabOrderRow;
 };
 
-export function patientKeyFromOrder(order: LabOrderRow): string {
-  const phone = order.patientPhone.replace(/\D/g, "");
+export type ReportActionTargets = {
+  uploadReportId?: string;
+  markReadyReportId?: string;
+  sendWhatsappReportId?: string;
+  retryDeliveryLogId?: string;
+};
+
+const EMPTY_ACTION_TARGETS: ReportActionTargets = {};
+
+export function emptyActionTargets(): ReportActionTargets {
+  return EMPTY_ACTION_TARGETS;
+}
+
+export function patientKeyFromParts(patientName: string, patientPhone: string): string {
+  const phone = patientPhone.replace(/\D/g, "");
   if (phone.length >= 6) return `phone:${phone}`;
-  return `name:${order.patient.trim().toLowerCase()}`;
+  return `name:${patientName.trim().toLowerCase()}`;
+}
+
+export function patientKeyFromOrder(order: LabOrderRow): string {
+  return patientKeyFromParts(order.patient, order.patientPhone);
 }
 
 export function formatTestLabel(testNames: string[]): string {
@@ -70,6 +97,8 @@ export function mapOrderToReportTask(order: LabOrderRow): ReportTask {
   const collectedLabel = formatRelativeCollected(assignedIso);
   const updatedLabel = formatUpdatedAt(assignedIso, collectedLabel);
 
+  const urgency = order.urgency ?? "ROUTINE";
+
   return {
     taskId: order.assignmentId,
     assignmentId: order.assignmentId,
@@ -85,8 +114,14 @@ export function mapOrderToReportTask(order: LabOrderRow): ReportTask {
     collectedAtLabel: collectedLabel,
     updatedAtLabel: updatedLabel,
     assignedAtIso: assignedIso,
+    createdAtIso: assignedIso,
     operationalStatus: mapReportOperationalStatus(order.reportStatus),
     pendingSiblingCount: 0,
+    urgency,
+    tatBreached: isTatBreached(assignedIso, urgency),
+    labName: order.branch || "",
+    reportCount: testNames.length,
+    actionTargets: emptyActionTargets(),
     orderRow: order,
   };
 }

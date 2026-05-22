@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime, time
 
-from django.db.models import Prefetch, Q
+from django.db.models import Exists, OuterRef, Prefetch, Q
 from django.utils import timezone
 
 from consultations_core.models.investigation import InvestigationItem
@@ -86,13 +86,18 @@ def apply_list_filters(qs, params: LabOrdersListParams):
     if params.date_to:
         qs = qs.filter(assigned_at__lte=_end_of_day(params.date_to))
 
-    q = (params.q or "").strip()
-    if q:
+    term = (params.q or "").strip()
+    if term:
+        matching_test_lines = DiagnosticOrderTestLine.objects.filter(
+            order_id=OuterRef("diagnostic_order_id"),
+            service__name__icontains=term,
+        )
         qs = qs.filter(
-            Q(diagnostic_order__order_number__icontains=q)
-            | Q(diagnostic_order__patient_profile__first_name__icontains=q)
-            | Q(diagnostic_order__patient_profile__last_name__icontains=q)
-            | Q(diagnostic_order__patient_profile__account__user__username__icontains=q)
+            Q(diagnostic_order__order_number__icontains=term)
+            | Q(diagnostic_order__patient_profile__first_name__icontains=term)
+            | Q(diagnostic_order__patient_profile__last_name__icontains=term)
+            | Q(diagnostic_order__patient_profile__account__user__username__icontains=term)
+            | Exists(matching_test_lines),
         )
 
     inv_urgency = investigation_urgency_for_filter(params.urgency)

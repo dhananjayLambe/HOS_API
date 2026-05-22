@@ -17,15 +17,17 @@ import {
 } from "@/components/ui/select";
 import { COLLECTION_TYPE_LABELS, COLLECTION_TYPES } from "@/lib/labs/constants/collection-type";
 import { LAB_ORDERS_DATE_PRESET_OPTIONS } from "@/lib/labs/orders/date-presets";
-import type { LabOrdersFilterState } from "@/lib/labs/orders/build-lab-orders-query";
+import type { ReportTasksQueryFilters } from "@/lib/labs/reports/build-report-tasks-query";
+import { URGENCY_LEVELS, URGENCY_LABELS } from "@/lib/labs/constants/urgency";
 import { ChevronDown, Search } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { useState } from "react";
 
 type ReportsFiltersRowProps = {
   searchInput: string;
   onSearchChange: (v: string) => void;
-  filters: LabOrdersFilterState;
-  onFiltersChange: (f: LabOrdersFilterState) => void;
+  filters: ReportTasksQueryFilters;
+  onFiltersChange: (f: ReportTasksQueryFilters) => void;
   disabled?: boolean;
 };
 
@@ -38,13 +40,16 @@ export function ReportsFiltersRow({
 }: ReportsFiltersRowProps) {
   const [moreOpen, setMoreOpen] = useState(false);
 
-  const patch = (partial: Partial<LabOrdersFilterState>) => {
+  const patch = (partial: Partial<ReportTasksQueryFilters>) => {
     onFiltersChange({ ...filters, ...partial });
   };
 
+  const toggleUrgentOnly = () => patch({ urgentOnly: !filters.urgentOnly });
+  const toggleTatOnly = () => patch({ tatOnly: !filters.tatOnly });
+
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
+    <div className="flex min-h-[72px] flex-col gap-2">
+      <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
         <div className="min-w-0 flex-1 sm:min-w-[200px]">
           <Label className="sr-only">Search</Label>
           <div className="relative">
@@ -66,7 +71,7 @@ export function ReportsFiltersRow({
           <Label className="text-xs text-[#6B7280]">Collection</Label>
           <Select
             value={filters.collectionType}
-            onValueChange={(v) => patch({ collectionType: v as LabOrdersFilterState["collectionType"] })}
+            onValueChange={(v) => patch({ collectionType: v as ReportTasksQueryFilters["collectionType"] })}
             disabled={disabled}
           >
             <SelectTrigger className="h-9">
@@ -81,6 +86,30 @@ export function ReportsFiltersRow({
               ))}
             </SelectContent>
           </Select>
+        </div>
+        <div className="flex flex-wrap gap-1.5 self-end">
+          <Button
+            type="button"
+            variant={filters.urgentOnly ? "default" : "outline"}
+            size="sm"
+            className={cn("h-9 min-h-9 text-xs", filters.urgentOnly && "bg-[#4A2DB8] hover:bg-[#3D2499]")}
+            disabled={disabled}
+            onClick={toggleUrgentOnly}
+            aria-pressed={filters.urgentOnly}
+          >
+            Urgent only
+          </Button>
+          <Button
+            type="button"
+            variant={filters.tatOnly ? "default" : "outline"}
+            size="sm"
+            className={cn("h-9 min-h-9 text-xs", filters.tatOnly && "bg-red-600 hover:bg-red-700")}
+            disabled={disabled}
+            onClick={toggleTatOnly}
+            aria-pressed={filters.tatOnly}
+          >
+            TAT breached
+          </Button>
         </div>
         <Collapsible open={moreOpen} onOpenChange={setMoreOpen}>
           <CollapsibleTrigger asChild>
@@ -100,7 +129,7 @@ export function ReportsFiltersRow({
               <Label className="text-xs text-[#6B7280]">Date</Label>
               <Select
                 value={filters.datePreset}
-                onValueChange={(v) => patch({ datePreset: v as LabOrdersFilterState["datePreset"] })}
+                onValueChange={(v) => patch({ datePreset: v as ReportTasksQueryFilters["datePreset"] })}
                 disabled={disabled}
               >
                 <SelectTrigger className="h-9">
@@ -110,6 +139,26 @@ export function ReportsFiltersRow({
                   {LAB_ORDERS_DATE_PRESET_OPTIONS.map((opt) => (
                     <SelectItem key={opt.id} value={opt.id}>
                       {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="mt-2 flex max-w-xs flex-col gap-1">
+              <Label className="text-xs text-[#6B7280]">Urgency</Label>
+              <Select
+                value={filters.urgency}
+                onValueChange={(v) => patch({ urgency: v as ReportTasksQueryFilters["urgency"] })}
+                disabled={disabled}
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  {URGENCY_LEVELS.map((level) => (
+                    <SelectItem key={level} value={level}>
+                      {URGENCY_LABELS[level]}
                     </SelectItem>
                   ))}
                 </SelectContent>

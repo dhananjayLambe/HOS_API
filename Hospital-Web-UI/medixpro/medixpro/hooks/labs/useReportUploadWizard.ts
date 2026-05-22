@@ -1,35 +1,56 @@
 "use client";
 
-import { fetchLabOrdersList } from "@/lib/labs/api/orders";
-import { mapLabOrderListItems } from "@/lib/labs/orders/map-order-row";
-import { DEFAULT_LAB_ORDERS_FILTERS } from "@/lib/labs/orders/build-lab-orders-query";
-import { existingReportsForPatient } from "@/lib/labs/reports/existing-reports";
+import { useReportMutations } from "@/hooks/labs/useReportMutations";
+import { useReportTaskContext } from "@/hooks/labs/useReportTaskContext";
+import { newReportRequestId } from "@/lib/labs/reports/api/report-api-response";
+import { mapReportApiErrorToMessage } from "@/lib/labs/reports/api/report-api-errors";
+import { resolveUploadReportId } from "@/lib/labs/reports/api/v1/reports-api-mappers";
+import { loadReportTasks } from "@/lib/labs/reports/load-report-tasks";
+import { DEFAULT_REPORT_TASKS_FILTERS } from "@/lib/labs/reports/build-report-tasks-query";
 import { groupTasksByPatient, type PatientReportGroup } from "@/lib/labs/reports/group-report-tasks";
 import { isPendingUploadStatus } from "@/lib/labs/reports/report-operational-status";
 import { searchReportTasks } from "@/lib/labs/reports/search-report-tasks";
 import {
-  clearTaskDraft,
-  loadTaskDraft,
-  saveTaskDraft,
-  submitReportTask,
+  clearUploadDraft,
+  draftNeedsFileReselect,
+  loadUploadDraft,
+  saveUploadDraft,
   type UploadDraftFileMeta,
-} from "@/lib/labs/reports/reports-mock-service";
+} from "@/lib/labs/reports/upload/upload-draft-storage";
 import {
-  getDemoReportTasks,
-  isReportsDemoForced,
-  shouldUseReportsDemoData,
-} from "@/lib/labs/reports/reports-demo-queue";
-import { buildReportTasksFromOrders, type ReportTask } from "@/lib/labs/reports/report-task";
-import axios from "axios";
+  pickPrimaryFileId,
+  primaryAfterRemove,
+} from "@/lib/labs/reports/upload/upload-primary-selection";
+import {
+  adaptReportTaskContext,
+  type UploadTaskContext,
+} from "@/lib/labs/reports/upload/upload-task-context-adapter";
+import {
+  getNextStep,
+  getPreviousStep,
+  type UploadWorkflowStep,
+} from "@/lib/labs/reports/upload/upload-workflow-machine";
+import {
+  parseUploadWorkflowSearchParams,
+  type UploadRouteState,
+} from "@/lib/labs/reports/upload/upload-route";
+import { isReportTasksV1ApiEnabled } from "@/lib/labs/reports/report-tasks-config";
+import type { ReportTask } from "@/lib/labs/reports/report-task";
+import type { ReportOperationalStatus } from "@/lib/labs/reports/report-operational-status";
+import { useLabSession } from "@/lib/labs/session/lab-session-context";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-export type UploadWizardStep = "select_task" | "files" | "preview" | "confirm" | "success";
+export type { UploadWorkflowStep };
 
 export type UploadFileItem = UploadDraftFileMeta & {
   file?: File;
   objectUrl?: string;
 };
+
+export type TaskLoadState = "none" | "loading" | "ready" | "invalid" | "malformed";
+
+export type SubmissionState = "idle" | "uploading" | "success" | "failed";
 
 const ACCEPT =
   ".pdf,.jpg,.jpeg,.png,.csv,.xlsx,.txt,.zip,application/pdf,image/jpeg,image/png,text/csv,text/plain,application/zip,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -63,118 +84,141 @@ function fileMeta(file: File): UploadFileItem {
   };
 }
 
-export function useReportUploadWizard(branchLabel = "", initialTaskId?: string | null) {
-  const searchParams = useSearchParams();
-  const forceDemo = isReportsDemoForced(searchParams);
+function metaFromDraft(meta: UploadDraftFileMeta): UploadFileItem {
+  return { ...meta, objectUrl: undefined };
+}
 
-  const [step, setStep] = useState<UploadWizardStep>("select_task");
-  const [tasks, setTasks] = useState<ReportTask[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+export function useReportUploadWizard(routeState?: UploadRouteState) {
+  const searchParams = useSearchParams();
+  const parsedRoute = routeState ?? parseUploadWorkflowSearchParams(searchParams);
+  const { data: session } = useLabSession();
+  const branchId = session?.branch?.id ?? null;
+  const branchLabel = session?.branch?.branch_name ?? "";
+  const hasTaskIdInUrl = !!parsedRoute.taskId;
+
+  const [selectedTaskIdOverride, setSelectedTaskIdOverride] = useState<string | null>(null);
+  const resolvedTaskId = parsedRoute.taskId ?? selectedTaskIdOverride;
+
+  const contextQuery = useReportTaskContext(
+    branchId,
+    resolvedTaskId,
+    !!resolvedTaskId && !parsedRoute.taskIdMalformed,
+  );
+
+  const [step, setStep] = useState<UploadWorkflowStep>(
+    hasTaskIdInUrl ? "files" : "select_task",
+  );
+  const [pendingTasks, setPendingTasks] = useState<ReportTask[]>([]);
+  const [pendingLoading, setPendingLoading] = useState(!hasTaskIdInUrl);
+  const [pendingError, setPendingError] = useState<string | null>(null);
   const [searchInput, setSearchInput] = useState("");
-  const [selectedTask, setSelectedTask] = useState<ReportTask | null>(null);
   const [files, setFiles] = useState<UploadFileItem[]>([]);
   const [primaryFileId, setPrimaryFileId] = useState<string | null>(null);
   const [verified, setVerified] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [submittedStatus, setSubmittedStatus] = useState<ReportTask["operationalStatus"] | null>(null);
+  const [submissionState, setSubmissionState] = useState<SubmissionState>("idle");
+  const [submissionRequestId, setSubmissionRequestId] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
+  const [submittedStatus, setSubmittedStatus] = useState<ReportOperationalStatus | null>(null);
+  const mutations = useReportMutations(branchId);
+  const [draftBannerDismissed, setDraftBannerDismissed] = useState(false);
+
+  const uploadContext: UploadTaskContext | null = useMemo(() => {
+    if (!contextQuery.data) return null;
+    return adaptReportTaskContext(contextQuery.data, { pendingSiblingCount: 0 });
+  }, [contextQuery.data]);
+
+  const taskLoadState: TaskLoadState = useMemo(() => {
+    if (parsedRoute.taskIdMalformed) return "malformed";
+    if (!resolvedTaskId) return "none";
+    if (contextQuery.isPending) return "loading";
+    if (contextQuery.isError) return "invalid";
+    if (uploadContext) return "ready";
+    return "loading";
+  }, [
+    parsedRoute.taskIdMalformed,
+    resolvedTaskId,
+    contextQuery.isPending,
+    contextQuery.isError,
+    uploadContext,
+  ]);
 
   useEffect(() => {
+    if (hasTaskIdInUrl && taskLoadState === "ready") {
+      setStep("files");
+    }
+  }, [hasTaskIdInUrl, taskLoadState]);
+
+  useEffect(() => {
+    if (!resolvedTaskId || taskLoadState !== "ready") return;
+    const draft = loadUploadDraft(resolvedTaskId);
+    if (!draft) return;
+    if (draft.filesMeta.length > 0 && files.length === 0) {
+      setFiles(draft.filesMeta.map(metaFromDraft));
+      setPrimaryFileId(
+        pickPrimaryFileId(draft.filesMeta, draft.primaryFileId),
+      );
+      setVerified(draft.verified);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resolvedTaskId, taskLoadState]);
+
+  useEffect(() => {
+    if (hasTaskIdInUrl) return;
     const controller = new AbortController();
     let cancelled = false;
 
-    async function load() {
-      setLoading(true);
-      setError(null);
+    async function loadPending() {
+      setPendingLoading(true);
+      setPendingError(null);
       try {
-        const res = await fetchLabOrdersList(
-          {
-            filters: { ...DEFAULT_LAB_ORDERS_FILTERS, status: "IN_PROGRESS" },
-            page: 1,
-            pageSize: 100,
-            q: "",
-          },
-          { signal: controller.signal },
-        );
-        if (cancelled) return;
-        const apiBuilt = buildReportTasksFromOrders(mapLabOrderListItems(res.results, branchLabel));
-        const useDemo = shouldUseReportsDemoData({
-          apiTaskCount: apiBuilt.length,
-          loading: false,
-          error: null,
-          forceDemo,
+        const result = await loadReportTasks({
+          branchLabel,
+          filters: { ...DEFAULT_REPORT_TASKS_FILTERS },
+          signal: controller.signal,
         });
-        const built = useDemo ? getDemoReportTasks() : apiBuilt;
-        setTasks(built);
-
-        if (initialTaskId) {
-          const match = built.find((t) => t.taskId === initialTaskId);
-          if (match) {
-            setSelectedTask(match);
-            const draft = loadTaskDraft(match.taskId);
-            if (draft?.files?.length) {
-              setFiles(draft.files.map((f) => ({ ...f, objectUrl: undefined })));
-              setPrimaryFileId(draft.primaryFileId);
-              setVerified(draft.verified);
-            }
-            setStep("files");
-          }
-        }
+        if (cancelled) return;
+        setPendingTasks(
+          result.tasks.filter((t) => isPendingUploadStatus(t.operationalStatus)),
+        );
       } catch (err) {
-        if (cancelled || axios.isCancel(err)) return;
-        setError(err instanceof Error ? err.message : "Could not load pending tasks.");
+        if (cancelled) return;
+        setPendingError(err instanceof Error ? err.message : "Could not load pending tasks.");
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setPendingLoading(false);
       }
     }
 
-    void load();
+    void loadPending();
     return () => {
       cancelled = true;
       controller.abort();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [branchLabel, initialTaskId, forceDemo]);
-
-  const pendingTasks = useMemo(
-    () => tasks.filter((t) => isPendingUploadStatus(t.operationalStatus)),
-    [tasks],
-  );
+  }, [branchLabel, hasTaskIdInUrl]);
 
   const searchedPending = useMemo(
     () => searchReportTasks(pendingTasks, searchInput),
     [pendingTasks, searchInput],
   );
 
-  const pendingGroups = useMemo(() => groupTasksByPatient(searchedPending), [searchedPending]);
-
-  const existingReports = useMemo(() => {
-    if (!selectedTask) return [];
-    return existingReportsForPatient(tasks, selectedTask.patientKey, selectedTask.taskId);
-  }, [tasks, selectedTask]);
-
-  function selectTaskInternal(task: ReportTask) {
-    setSelectedTask(task);
-    const draft = loadTaskDraft(task.taskId);
-    if (draft?.files?.length) {
-      setFiles(
-        draft.files.map((f) => ({
-          ...f,
-          objectUrl: undefined,
-        })),
-      );
-      setPrimaryFileId(draft.primaryFileId);
-      setVerified(draft.verified);
-    } else {
-      setFiles([]);
-      setPrimaryFileId(null);
-      setVerified(false);
-    }
-  }
+  const pendingGroups = useMemo(
+    () => groupTasksByPatient(searchedPending),
+    [searchedPending],
+  );
 
   const selectTask = useCallback((task: ReportTask) => {
-    selectTaskInternal(task);
+    setSelectedTaskIdOverride(task.taskId);
     setStep("files");
+    setFiles([]);
+    setPrimaryFileId(null);
+    setVerified(false);
+    setDraftBannerDismissed(false);
+    const draft = loadUploadDraft(task.taskId);
+    if (draft?.filesMeta.length) {
+      setFiles(draft.filesMeta.map(metaFromDraft));
+      setPrimaryFileId(pickPrimaryFileId(draft.filesMeta, draft.primaryFileId));
+      setVerified(draft.verified);
+    }
   }, []);
 
   const addFiles = useCallback((incoming: FileList | File[]) => {
@@ -185,19 +229,18 @@ export function useReportUploadWizard(branchLabel = "", initialTaskId?: string |
         const meta = fileMeta(f);
         if (!next.some((x) => x.id === meta.id)) next.push(meta);
       }
-      if (!primaryFileId && next.length > 0) {
-        setPrimaryFileId(next[0]!.id);
-      }
+      setPrimaryFileId((pid) => pickPrimaryFileId(next, pid));
       return next;
     });
-  }, [primaryFileId]);
+    setDraftBannerDismissed(true);
+  }, []);
 
   const removeFile = useCallback((id: string) => {
     setFiles((prev) => {
       const removed = prev.find((f) => f.id === id);
       if (removed?.objectUrl) URL.revokeObjectURL(removed.objectUrl);
       const next = prev.filter((f) => f.id !== id);
-      setPrimaryFileId((pid) => (pid === id ? (next[0]?.id ?? null) : pid));
+      setPrimaryFileId((pid) => primaryAfterRemove(next, id, pid));
       return next;
     });
   }, []);
@@ -207,59 +250,180 @@ export function useReportUploadWizard(branchLabel = "", initialTaskId?: string |
   }, []);
 
   const saveDraft = useCallback(() => {
-    if (!selectedTask) return;
-    saveTaskDraft(selectedTask.taskId, {
-      taskId: selectedTask.taskId,
-      files: files.map(({ id, name, size, type }) => ({ id, name, size, type })),
+    if (!resolvedTaskId) return;
+    saveUploadDraft({
+      version: 1,
+      savedAt: new Date().toISOString(),
+      taskId: resolvedTaskId,
+      filesMeta: files.map(({ id, name, size, type }) => ({ id, name, size, type })),
       primaryFileId,
       verified,
-      savedAt: new Date().toISOString(),
     });
-  }, [selectedTask, files, primaryFileId, verified]);
+  }, [resolvedTaskId, files, primaryFileId, verified]);
 
   const submit = useCallback(
-    async (markReadyOnSubmit = false) => {
-      if (!selectedTask || files.length === 0 || !verified) return;
-      setSubmitting(true);
+    async (onSuccess?: () => void) => {
+      if (!resolvedTaskId || files.length === 0 || !verified) return;
+      if (submissionState === "uploading") return;
+
+      const requestId = newReportRequestId();
+      if (submissionRequestId === requestId) return;
+      setSubmissionRequestId(requestId);
+      setSubmissionState("uploading");
+      setSubmitError(null);
+
+      if (!isReportTasksV1ApiEnabled()) {
+        setSubmissionState("failed");
+        setSubmitError("Live report upload is not enabled. Set NEXT_PUBLIC_LAB_REPORTS_USE_V1_API=true.");
+        return;
+      }
+
+      const ctx = contextQuery.data;
+      if (!ctx) {
+        setSubmissionState("failed");
+        setSubmitError("Task context is not loaded yet.");
+        return;
+      }
+
+      const reportId = resolveUploadReportId(ctx);
+      if (!reportId) {
+        setSubmissionState("failed");
+        setSubmitError("No upload target for this task. Refresh the queue and try again.");
+        return;
+      }
+
+      const fileObjects = files.map((f) => f.file).filter((f): f is File => !!f);
+      if (fileObjects.length === 0) {
+        setSubmissionState("failed");
+        setSubmitError("Re-select files to upload — draft metadata cannot be submitted.");
+        return;
+      }
+
+      const primaryIndex = Math.max(
+        0,
+        files.findIndex((f) => f.id === primaryFileId),
+      );
+
       try {
-        const result = await submitReportTask(selectedTask.taskId, {
-          files: files.map(({ id, name, size, type }) => ({ id, name, size, type })),
-          primaryFileId,
-          markReadyOnSubmit,
+        let result = await mutations.uploadReport({
+          reportId,
+          files: fileObjects,
+          primaryFileIndex: primaryIndex,
+          requestId,
         });
-        clearTaskDraft(selectedTask.taskId);
+
+        try {
+          await mutations.markReady(reportId, { taskId: resolvedTaskId, reportId });
+          result = { ...result, status: "READY_DELIVERY" as ReportOperationalStatus };
+        } catch (readyErr) {
+          await mutations.handleOperationalConflict(readyErr, {
+            taskId: resolvedTaskId,
+            reportId,
+          });
+          setSubmitError(mapReportApiErrorToMessage(readyErr));
+        }
+
+        clearUploadDraft(resolvedTaskId);
         setSubmittedStatus(result.status);
+        setSubmissionState("success");
         setStep("success");
-      } finally {
-        setSubmitting(false);
+        onSuccess?.();
+      } catch (err) {
+        const conflict = await mutations.handleOperationalConflict(err, {
+          taskId: resolvedTaskId,
+          reportId,
+        });
+        setSubmitError(mapReportApiErrorToMessage(err));
+        setSubmissionState("failed");
+        if (conflict) return;
       }
     },
-    [selectedTask, files, primaryFileId, verified],
+    [
+      resolvedTaskId,
+      files,
+      primaryFileId,
+      verified,
+      submissionState,
+      submissionRequestId,
+      contextQuery.data,
+      mutations,
+    ],
   );
 
   const resetForAnother = useCallback(() => {
-    setSelectedTask(null);
+    setSelectedTaskIdOverride(null);
     setFiles([]);
     setPrimaryFileId(null);
     setVerified(false);
     setSubmittedStatus(null);
-    setStep("select_task");
-  }, []);
+    setSubmissionState("idle");
+    setSubmissionRequestId(null);
+    setSubmitError(null);
+    setSubmitAttempted(false);
+    setDraftBannerDismissed(false);
+    setStep(hasTaskIdInUrl ? "files" : "select_task");
+  }, [hasTaskIdInUrl]);
+
+  const goNext = useCallback(() => {
+    const next = getNextStep(step, hasTaskIdInUrl || !!resolvedTaskId);
+    if (next) setStep(next);
+  }, [step, hasTaskIdInUrl, resolvedTaskId]);
+
+  const goBack = useCallback(() => {
+    const prev = getPreviousStep(step, hasTaskIdInUrl || !!resolvedTaskId);
+    if (prev) setStep(prev);
+    else if (step === "files" && !hasTaskIdInUrl) setStep("select_task");
+  }, [step, hasTaskIdInUrl, resolvedTaskId]);
+
+  const tryAdvance = useCallback(() => {
+    setSubmitAttempted(true);
+    goNext();
+  }, [goNext]);
+
+  const trySubmit = useCallback(
+    (onSuccess?: () => void) => {
+      setSubmitAttempted(true);
+      if (!verified || files.length === 0) return;
+      void submit(onSuccess);
+    },
+    [submit, verified, files.length],
+  );
 
   const primaryFile = files.find((f) => f.id === primaryFileId) ?? files[0] ?? null;
+  const loadedDraft = resolvedTaskId ? loadUploadDraft(resolvedTaskId) : null;
+  const showDraftReselectBanner =
+    !draftBannerDismissed &&
+    draftNeedsFileReselect(
+      loadedDraft,
+      files.filter((f) => !!f.file).length,
+    );
+
+  const contextLoading = !!resolvedTaskId && contextQuery.isPending;
+  const loading = hasTaskIdInUrl
+    ? taskLoadState === "loading"
+    : pendingLoading || (step !== "select_task" && contextLoading);
+  const error = useMemo(() => {
+    if (taskLoadState === "malformed") return "Invalid task link.";
+    if (resolvedTaskId && taskLoadState === "invalid") {
+      return "Task not found or no longer available.";
+    }
+    if (!hasTaskIdInUrl) return pendingError;
+    return null;
+  }, [taskLoadState, resolvedTaskId, hasTaskIdInUrl, pendingError]);
 
   return {
+    route: parsedRoute,
     step,
     setStep,
     loading,
     error,
+    taskLoadState,
     searchInput,
     setSearchInput,
     pendingGroups,
-    pendingTasks,
-    selectedTask,
+    pendingTasks: searchedPending,
+    uploadContext,
     selectTask,
-    existingReports,
     files,
     addFiles,
     removeFile,
@@ -270,10 +434,28 @@ export function useReportUploadWizard(branchLabel = "", initialTaskId?: string |
     setVerified,
     saveDraft,
     submit,
-    submitting,
+    trySubmit,
+    tryAdvance,
+    goBack,
+    submitting: submissionState === "uploading",
+    submissionState,
+    submitError,
+    submitAttempted,
     submittedStatus,
     resetForAnother,
     accept: ACCEPT,
+    hasTaskIdInUrl,
+    resolvedTaskId,
+    showDraftReselectBanner,
+    dismissDraftBanner: () => setDraftBannerDismissed(true),
+    workflowContext: {
+      hasTaskIdInUrl: hasTaskIdInUrl || !!resolvedTaskId,
+      fileCount: files.filter((f) => !!f.file).length,
+      metadataOnlyCount: files.filter((f) => !f.file).length,
+      verified,
+      canUpload: session?.permissions.can_upload_reports ?? true,
+      submitAttempted,
+    },
   };
 }
 

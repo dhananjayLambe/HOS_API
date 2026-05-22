@@ -1,0 +1,151 @@
+/** v1 diagnostics report API DTO types (transport layer only). */
+
+export type ReportActionTargetsApi = {
+  upload_report_id: string | null;
+  mark_ready_report_id: string | null;
+  send_whatsapp_report_id: string | null;
+  retry_delivery_log_id: string | null;
+};
+
+export type ReportTaskApiItem = {
+  task_id: string;
+  assignment_id: string;
+  order_uuid: string;
+  order_number: string;
+  patient_name: string;
+  patient_phone: string;
+  collection_type: string;
+  test_label: string;
+  operational_status: string;
+  visit_or_slot_label: string;
+  pending_sibling_count: number;
+  uploaded_at: string | null;
+  ready_at: string | null;
+  delivered_at: string | null;
+  available_action_targets: ReportActionTargetsApi;
+};
+
+export type ReportTaskListData = {
+  results: ReportTaskApiItem[];
+  next: string | null;
+  previous: string | null;
+};
+
+export type ReportLineReportApiItem = {
+  report_id: string;
+  line_id: string;
+  test_label: string;
+  status: string;
+  delivery_status: string;
+  available_actions: string[];
+};
+
+export type ReportTaskContextApiData = {
+  task_id: string;
+  assignment_id: string;
+  order_uuid: string;
+  order_number: string;
+  patient: {
+    name: string;
+    phone: string;
+    encounter_id: string | null;
+  };
+  collection_type: string;
+  visit_or_slot_label: string;
+  operational_status: string;
+  active_reports: ReportLineReportApiItem[];
+  upload_target?: {
+    report_id: string;
+    line_id: string;
+    operational_status: string;
+  } | null;
+};
+
+export type ReportArtifactApiItem = {
+  id: string;
+  artifact_type: string;
+  original_filename: string;
+  download_filename: string;
+  file_size: number;
+  content_type: string;
+  is_primary: boolean;
+  version: number;
+  uploaded_at: string;
+  download_url: string | null;
+};
+
+export type DeliveryLogApiItem = {
+  id: string;
+  status: string;
+  sent_at: string | null;
+  delivered_at: string | null;
+  failure_reason: string | null;
+  retry_count: number;
+};
+
+export type ReportDetailApiData = {
+  report: {
+    id: string;
+    status: string;
+    delivery_status: string;
+    revision_number: number;
+    ready_at: string | null;
+    delivered_at: string | null;
+  };
+  patient: {
+    name: string;
+    phone: string;
+    encounter_id: string | null;
+  };
+  artifacts: ReportArtifactApiItem[];
+  delivery: DeliveryLogApiItem | null;
+  history: {
+    supersedes_id: string | null;
+    superseded_by_id: string | null;
+  };
+  available_actions: string[];
+};
+
+export type ReportSummaryApiItem = {
+  report_id: string;
+  patient_name: string;
+  test_label: string;
+  status: string;
+  delivery_status: string;
+  primary_artifact_filename: string | null;
+  updated_at: string;
+};
+
+export type ReportSummaryListData = {
+  results: ReportSummaryApiItem[];
+  next: string | null;
+  previous: string | null;
+};
+
+export type UploadArtifactsApiData = {
+  report_id: string;
+  status: string;
+  artifacts: ReportArtifactApiItem[];
+};
+
+export type MarkReadyApiData = {
+  report_id: string;
+  status: string;
+  available_actions: string[];
+};
+
+export type SendWhatsAppApiData = {
+  report_id: string;
+  delivery_status: string;
+  delivery_log_id: string;
+  channel: string;
+  available_actions: string[];
+};
+
+export type RetryDeliveryApiData = {
+  new_delivery_log_id: string;
+  parent_delivery_log_id: string;
+  status: string;
+};
+
+export type ReportTasksListQueryParams = Record<string, string | number>;

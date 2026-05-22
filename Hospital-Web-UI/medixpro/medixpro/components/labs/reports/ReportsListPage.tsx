@@ -4,36 +4,32 @@ import { OrderDetailSheet } from "@/components/labs/orders/OrderDetailSheet";
 import { ReportsFiltersRow } from "@/components/labs/reports/ReportsFiltersRow";
 import { ReportsDemoChip } from "@/components/labs/reports/ReportsDemoBanner";
 import { ReportsKpiStrip } from "@/components/labs/reports/ReportsKpiStrip";
+import { ReportsKpiStripSkeleton } from "@/components/labs/reports/ReportsKpiStripSkeleton";
 import { ReportsWorkflowQueue } from "@/components/labs/reports/ReportsWorkflowQueue";
 import { Button } from "@/components/ui/button";
 import { useLabReportsList } from "@/hooks/labs/useLabReportsList";
+import { useReportMutations } from "@/hooks/labs/useReportMutations";
 import { useToastNotification } from "@/hooks/use-toast-notification";
 import { useLabShellHeader } from "@/lib/labs/layout/lab-shell-header-context";
+import { mapReportApiErrorToMessage } from "@/lib/labs/reports/api/report-api-errors";
+import { isReportTasksV1ApiEnabled } from "@/lib/labs/reports/report-tasks-config";
 import type { ReportTabKey } from "@/lib/labs/reports/report-operational-status";
-import {
-  markTaskReady,
-  mockReportPreviewUrl,
-  retryTaskDelivery,
-  sendTaskWhatsApp,
-} from "@/lib/labs/reports/reports-mock-service";
-import type { ReportOperationalStatus } from "@/lib/labs/reports/report-operational-status";
 import type { ReportTask } from "@/lib/labs/reports/report-task";
+import { ReportsStaleQueueBanner } from "@/components/labs/reports/ReportsStaleQueueBanner";
+import type { ReportTasksQueryFilters } from "@/lib/labs/reports/build-report-tasks-query";
 import { useLabSession } from "@/lib/labs/session/lab-session-context";
 import type { LabOrderRow } from "@/lib/labs/types";
 import { RotateCcw } from "lucide-react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { parseReportTabFromSearchParams } from "@/lib/labs/reports/report-operational-status";
+import { useCallback, useMemo, useState } from "react";
 
 export function ReportsListPage() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
   const { data: session } = useLabSession();
   const branchLabel = session?.branch?.branch_name ?? "";
   const toast = useToastNotification();
 
   const {
     isDemoFallback,
+    isDemoForced,
     tasks,
     filteredTasks,
     groups,
@@ -45,28 +41,53 @@ export function ReportsListPage() {
     filters,
     setFilters,
     loading,
+    refreshing,
     error,
     refetch,
-    patchTaskStatus,
+    syncQueueToUrl,
     getOrderForTask,
+    totalTaskCount,
+    isQueryError,
+    isStaleQueue,
   } = useLabReportsList(branchLabel);
 
-  const tabParam = searchParams.get("tab");
-  useEffect(() => {
-    setTab(parseReportTabFromSearchParams(tabParam));
-  }, [tabParam, setTab]);
+  const mutations = useReportMutations(session?.branch?.id);
+  const v1Enabled = isReportTasksV1ApiEnabled();
 
   const handleTabSelect = useCallback(
     (next: ReportTabKey) => {
       setTab(next);
-      const params = new URLSearchParams(searchParams.toString());
-      if (next === "all") params.delete("tab");
-      else params.set("tab", next);
-      const qs = params.toString();
-      router.replace(qs ? `/lab-dashboard/reports?${qs}` : "/lab-dashboard/reports", { scroll: false });
+      syncQueueToUrl({ tab: next });
     },
-    [router, searchParams, setTab],
+    [setTab, syncQueueToUrl],
   );
+
+  const handleSearchChange = useCallback(
+    (value: string) => {
+      setSearchInput(value);
+    },
+    [setSearchInput],
+  );
+
+  const handleFiltersChange = useCallback(
+    (next: ReportTasksQueryFilters) => {
+      setFilters(next);
+      syncQueueToUrl({ filters: next });
+    },
+    [setFilters, syncQueueToUrl],
+  );
+
+  const handleToggleUrgent = useCallback(() => {
+    const next = { ...filters, urgentOnly: !filters.urgentOnly };
+    setFilters(next);
+    syncQueueToUrl({ filters: next });
+  }, [filters, setFilters, syncQueueToUrl]);
+
+  const handleToggleTat = useCallback(() => {
+    const next = { ...filters, tatOnly: !filters.tatOnly };
+    setFilters(next);
+    syncQueueToUrl({ filters: next });
+  }, [filters, setFilters, syncQueueToUrl]);
 
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<LabOrderRow | null>(null);
@@ -80,13 +101,14 @@ export function ReportsListPage() {
         size="sm"
         className="h-9 gap-1.5"
         onClick={() => refetch()}
-        disabled={loading}
+        disabled={loading || refreshing}
+        aria-label="Refresh report queue"
       >
-        <RotateCcw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} aria-hidden />
+        <RotateCcw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} aria-hidden />
         Refresh
       </Button>
     ),
-    [loading, refetch],
+    [loading, refreshing, refetch],
   );
 
   useLabShellHeader({
@@ -101,46 +123,84 @@ export function ReportsListPage() {
       key: string,
       fn: () => Promise<void>,
       successMsg: string,
-      nextStatus?: ReportOperationalStatus,
     ) => {
       setActionLoading(`${task.taskId}:${key}`);
       try {
         await fn();
-        if (nextStatus) patchTaskStatus(task.taskId, nextStatus);
         toast.success(successMsg);
-      } catch {
-        toast.error("Action failed. Try again.");
+      } catch (err) {
+        const conflict = await mutations.handleOperationalConflict(err, { taskId: task.taskId });
+        toast.error(mapReportApiErrorToMessage(err));
       } finally {
         setActionLoading(null);
       }
     },
-    [patchTaskStatus, toast],
+    [mutations, toast],
   );
 
   const handlePrimaryAction = useCallback(
     (task: ReportTask, actionKey: string) => {
+      const targets = task.actionTargets;
       switch (actionKey) {
-        case "ready":
-          void runAction(task, "ready", () => markTaskReady(task.taskId), "Marked ready for delivery", "READY_DELIVERY");
+        case "ready": {
+          const reportId = targets.markReadyReportId;
+          if (!reportId) {
+            toast.error("Action no longer available — refresh the queue.");
+            return;
+          }
+          void runAction(task, "ready", () => mutations.markReady(reportId, { taskId: task.taskId, reportId }), "Marked ready for delivery");
           break;
+        }
         case "wa":
-          void runAction(task, "wa", () => sendTaskWhatsApp(task.taskId), "WhatsApp delivery queued", "DELIVERED");
+        case "resend": {
+          const reportId = targets.sendWhatsappReportId;
+          if (!reportId) {
+            toast.error("Action no longer available — refresh the queue.");
+            return;
+          }
+          void runAction(
+            task,
+            actionKey,
+            () => mutations.sendWhatsAppMock(task.taskId, reportId),
+            actionKey === "wa" ? "WhatsApp delivery queued" : "Report resent",
+          );
           break;
-        case "resend":
-          void runAction(task, "resend", () => sendTaskWhatsApp(task.taskId), "Report resent", "DELIVERED");
+        }
+        case "retry": {
+          const logId = targets.retryDeliveryLogId;
+          if (!logId) {
+            toast.error("Action no longer available — refresh the queue.");
+            return;
+          }
+          void runAction(
+            task,
+            "retry",
+            () =>
+              mutations.retryDelivery(logId, {
+                taskId: task.taskId,
+                reportId: targets.sendWhatsappReportId ?? targets.markReadyReportId,
+              }),
+            "Delivery retry queued",
+          );
           break;
-        case "retry":
-          void runAction(task, "retry", () => retryTaskDelivery(task.taskId), "Delivery retry queued", "READY_DELIVERY");
-          break;
+        }
         default:
           break;
       }
     },
-    [runAction],
+    [runAction, mutations, toast],
   );
 
   const handlePreview = (task: ReportTask) => {
-    window.open(mockReportPreviewUrl(task.taskId), "_blank", "noopener,noreferrer");
+    const reportId =
+      task.actionTargets.markReadyReportId ??
+      task.actionTargets.uploadReportId ??
+      task.actionTargets.sendWhatsappReportId;
+    if (reportId && v1Enabled) {
+      window.open(`/lab-dashboard/reports/upload?taskId=${encodeURIComponent(task.taskId)}`, "_blank", "noopener,noreferrer");
+      return;
+    }
+    window.open(`/lab-dashboard/reports?preview=${encodeURIComponent(task.taskId)}`, "_blank", "noopener,noreferrer");
   };
 
   const handleViewOrder = (task: ReportTask) => {
@@ -151,31 +211,52 @@ export function ReportsListPage() {
     }
   };
 
-  const filteredEmpty = !loading && !error && filteredTasks.length === 0;
+  const showKpiSkeleton = loading && tasks.length === 0;
 
   return (
-    <div className="flex min-h-0 flex-col gap-3">
-      <ReportsKpiStrip kpis={kpis} activeTab={tab} onTabSelect={handleTabSelect} loading={loading} />
+    <div className="flex min-h-0 min-w-0 flex-col gap-3 overflow-x-hidden">
+      {showKpiSkeleton ? (
+        <ReportsKpiStripSkeleton />
+      ) : (
+        <ReportsKpiStrip
+          kpis={kpis}
+          activeTab={tab}
+          onTabSelect={handleTabSelect}
+          loading={loading}
+          urgentOnly={filters.urgentOnly}
+          tatOnly={filters.tatOnly}
+          onToggleUrgent={handleToggleUrgent}
+          onToggleTat={handleToggleTat}
+        />
+      )}
+
+      <ReportsStaleQueueBanner visible={isStaleQueue} />
 
       <div className="flex min-h-0 flex-col gap-2">
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-sm font-semibold text-[#111827]">Pending report workflow</h2>
-          {isDemoFallback ? <ReportsDemoChip /> : null}
+          {isDemoFallback || isDemoForced ? <ReportsDemoChip /> : null}
         </div>
         <ReportsFiltersRow
           searchInput={searchInput}
-          onSearchChange={setSearchInput}
+          onSearchChange={handleSearchChange}
           filters={filters}
-          onFiltersChange={setFilters}
+          onFiltersChange={handleFiltersChange}
           disabled={loading}
         />
       </div>
 
       <ReportsWorkflowQueue
         groups={groups}
-        loading={loading && tasks.length === 0}
+        loading={loading}
+        refreshing={refreshing}
         error={error}
-        filteredEmpty={filteredEmpty}
+        isQueryError={isQueryError}
+        totalTaskCount={totalTaskCount}
+        filteredTaskCount={filteredTasks.length}
+        tab={tab}
+        searchQuery={searchInput}
+        onClearSearch={() => handleSearchChange("")}
         actionLoading={actionLoading}
         onRetry={refetch}
         onPrimaryAction={handlePrimaryAction}

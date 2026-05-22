@@ -4,23 +4,34 @@ import {
   sortWorkflowGroups,
   type PatientReportGroup,
 } from "@/lib/labs/reports/group-report-tasks";
-import type { ReportTask } from "@/lib/labs/reports/report-task";
+import { emptyActionTargets, type ReportTask } from "@/lib/labs/reports/report-task";
 
 function task(partial: Partial<ReportTask> & { taskId: string; patientName: string; operationalStatus: ReportTask["operationalStatus"] }): ReportTask {
   return {
     taskId: partial.taskId,
-    orderId: partial.orderId ?? partial.taskId,
+    assignmentId: partial.assignmentId ?? partial.taskId,
+    orderUuid: partial.orderUuid ?? "uuid-1",
     orderNumber: partial.orderNumber ?? "ORD-1",
     patientKey: partial.patientKey ?? partial.patientName,
     patientName: partial.patientName,
     patientPhone: partial.patientPhone ?? "",
     testLabel: partial.testLabel ?? "CBC",
+    testNames: partial.testNames ?? ["CBC"],
     collectionType: partial.collectionType ?? "HOME",
+    visitOrSlotLabel: partial.visitOrSlotLabel ?? "—",
     operationalStatus: partial.operationalStatus,
-    collectedAtLabel: "2h ago",
-    updatedAtLabel: "1h ago",
-    orderRow: partial.orderRow as ReportTask["orderRow"],
-  } as ReportTask;
+    collectedAtLabel: partial.collectedAtLabel ?? "2h ago",
+    updatedAtLabel: partial.updatedAtLabel ?? "1h ago",
+    assignedAtIso: partial.assignedAtIso ?? null,
+    createdAtIso: partial.createdAtIso ?? null,
+    pendingSiblingCount: partial.pendingSiblingCount ?? 0,
+    urgency: partial.urgency ?? "ROUTINE",
+    tatBreached: partial.tatBreached ?? false,
+    labName: partial.labName ?? "",
+    reportCount: partial.reportCount ?? 1,
+    actionTargets: partial.actionTargets ?? emptyActionTargets(),
+    orderRow: partial.orderRow,
+  };
 }
 
 describe("group-report-tasks", () => {
@@ -30,7 +41,7 @@ describe("group-report-tasks", () => {
       task({ taskId: "2", patientName: "Rahul K", operationalStatus: "UPLOADED" }),
       task({ taskId: "3", patientName: "Rahul K", operationalStatus: "DELIVERED" }),
     ]);
-    expect(groups[0]?.progressLabel).toBe("2 of 3 reports uploaded");
+    expect(groups[0]?.progressLabel).toBe("2 of 3 reports uploaded · 1 pending");
     expect(groups[0]?.uploadedCount).toBe(2);
     expect(groups[0]?.completedCount).toBe(1);
   });

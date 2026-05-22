@@ -3,6 +3,7 @@
 from rest_framework import serializers
 
 from diagnostics_engine.services.reports.report_task_presenter import (
+    ReportActionTargetsDTO,
     ReportLineReportDTO,
     ReportTaskContextDTO,
     ReportTaskDTO,
@@ -66,6 +67,24 @@ class ReportTaskContextSerializer(serializers.Serializer):
         )
 
 
+class ReportActionTargetsSerializer(serializers.Serializer):
+    upload_report_id = serializers.UUIDField(allow_null=True)
+    mark_ready_report_id = serializers.UUIDField(allow_null=True)
+    send_whatsapp_report_id = serializers.UUIDField(allow_null=True)
+    retry_delivery_log_id = serializers.UUIDField(allow_null=True)
+
+    @classmethod
+    def from_dto(cls, dto: ReportActionTargetsDTO):
+        return cls(
+            {
+                "upload_report_id": dto.upload_report_id,
+                "mark_ready_report_id": dto.mark_ready_report_id,
+                "send_whatsapp_report_id": dto.send_whatsapp_report_id,
+                "retry_delivery_log_id": dto.retry_delivery_log_id,
+            }
+        )
+
+
 class ReportTaskSerializer(serializers.Serializer):
     task_id = serializers.CharField()
     assignment_id = serializers.CharField()
@@ -81,7 +100,12 @@ class ReportTaskSerializer(serializers.Serializer):
     uploaded_at = serializers.DateTimeField(allow_null=True)
     ready_at = serializers.DateTimeField(allow_null=True)
     delivered_at = serializers.DateTimeField(allow_null=True)
+    available_action_targets = ReportActionTargetsSerializer()
 
     @classmethod
     def from_dto(cls, dto: ReportTaskDTO):
-        return cls(dto.__dict__)
+        payload = {**dto.__dict__}
+        payload["available_action_targets"] = ReportActionTargetsSerializer.from_dto(
+            dto.available_action_targets
+        ).data
+        return cls(payload)

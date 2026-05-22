@@ -8,6 +8,13 @@ export function getPrimaryTaskAction(
   taskId: string,
   status: ReportOperationalStatus,
 ): PrimaryTaskAction {
+  return resolvePrimaryCTA(taskId, status);
+}
+
+export function resolvePrimaryCTA(
+  taskId: string,
+  status: ReportOperationalStatus,
+): PrimaryTaskAction {
   switch (status) {
     case "PENDING_UPLOAD":
       return {

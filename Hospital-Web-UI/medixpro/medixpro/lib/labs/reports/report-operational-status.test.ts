@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  calculateQueueKPIs,
   countReportKpis,
+  mapApiOperationalStatus,
   mapReportOperationalStatus,
   parseReportTabFromSearchParams,
   taskMatchesTab,
@@ -20,6 +22,23 @@ describe("report-operational-status", () => {
     expect(taskMatchesTab("UPLOADED", "uploaded")).toBe(true);
     expect(taskMatchesTab("UPLOADED", "pending")).toBe(false);
     expect(taskMatchesTab("READY_DELIVERY", "all")).toBe(true);
+  });
+
+  it("maps v1 operational_status buckets", () => {
+    expect(mapApiOperationalStatus("PENDING_UPLOAD")).toBe("PENDING_UPLOAD");
+    expect(mapApiOperationalStatus("READY_DELIVERY")).toBe("READY_DELIVERY");
+    expect(mapApiOperationalStatus("FAILED_DELIVERY")).toBe("FAILED_DELIVERY");
+  });
+
+  it("calculateQueueKPIs is pure and includes urgent/tat", () => {
+    const kpis = calculateQueueKPIs([
+      { operationalStatus: "PENDING_UPLOAD", urgency: "URGENT", tatBreached: true },
+      { operationalStatus: "DELIVERED", deliveredToday: true, urgency: "ROUTINE" },
+    ]);
+    expect(kpis.pendingUpload).toBe(1);
+    expect(kpis.deliveredToday).toBe(1);
+    expect(kpis.urgentCount).toBe(1);
+    expect(kpis.tatBreachedCount).toBe(1);
   });
 
   it("counts KPI buckets", () => {

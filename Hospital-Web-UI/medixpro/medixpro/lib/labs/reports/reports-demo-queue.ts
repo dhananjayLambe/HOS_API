@@ -1,6 +1,6 @@
 /**
- * Operational demo queue when labs/orders/ returns no report tasks, or when forced via ?demo=1.
- * Remove automatic fallback when branch consistently has API data.
+ * Optional demo queue for layout review — only when ?demo=1 or NEXT_PUBLIC_LAB_REPORTS_DEMO=true.
+ * Production queue uses v1 report-tasks API only.
  */
 import { buildReportTasksFromOrders, type ReportTask } from "@/lib/labs/reports/report-task";
 import type { LabOrderRow } from "@/lib/labs/types";
@@ -245,5 +245,5 @@ export function shouldUseReportsDemoData(options: {
   forceDemo: boolean;
 }): boolean {
   if (options.loading || options.error) return false;
-  return options.forceDemo || options.apiTaskCount === 0;
+  return options.forceDemo;
 }

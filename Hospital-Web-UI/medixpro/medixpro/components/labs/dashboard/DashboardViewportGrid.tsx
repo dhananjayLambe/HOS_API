@@ -71,7 +71,7 @@ export function DashboardViewportGrid({
             <ReportPipelineBody
               rows={reportsPendingRows}
               actionLabel="Upload"
-              actionHref="/lab-dashboard/reports/upload"
+              actionHref="/lab-dashboard/reports/?tab=pending"
             />
           )}
         </OperationalPipelineCard>
