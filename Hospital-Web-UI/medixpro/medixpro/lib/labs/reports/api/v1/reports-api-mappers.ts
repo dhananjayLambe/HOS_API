@@ -4,6 +4,7 @@ import type {
   ReportActionTargetsApi,
   ReportArtifactApiItem,
   ReportDetailApiData,
+  ReportHistoryApiData,
   ReportLineReportApiItem,
   ReportSummaryApiItem,
   ReportTaskApiItem,
@@ -54,6 +55,14 @@ export type ReportDelivery = {
   deliveredAt: string | null;
   failureReason: string | null;
   retryCount: number;
+};
+
+export type ReportHistory = {
+  reportId: string;
+  supersedesId: string | null;
+  supersededById: string | null;
+  artifacts: ReportArtifact[];
+  deliveryLogs: ReportDelivery[];
 };
 
 export type ReportDetail = {
@@ -203,6 +212,16 @@ export function mapReportDetailDto(dto: ReportDetailApiData): ReportDetail {
       supersededById: dto.history.superseded_by_id,
     },
     availableActions: dto.available_actions ?? [],
+  };
+}
+
+export function mapReportHistoryDto(dto: ReportHistoryApiData): ReportHistory {
+  return {
+    reportId: String(dto.report_id),
+    supersedesId: dto.supersedes_id ? String(dto.supersedes_id) : null,
+    supersededById: dto.superseded_by_id ? String(dto.superseded_by_id) : null,
+    artifacts: dto.artifacts.map(mapReportArtifactDto),
+    deliveryLogs: dto.delivery_logs.map(mapDeliveryDto),
   };
 }
 

@@ -4,7 +4,9 @@ Lab dashboard order register — branch-scoped list for Phase 1.
 GET /api/labs/orders/
 """
 
+from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from labs.api.pagination import LabOrdersPageNumberPagination
@@ -40,3 +42,31 @@ class LabOrdersListView(APIView):
             many=True,
         ).data
         return paginator.get_paginated_response(data)
+
+
+class LabOrderAssignmentDetailView(APIView):
+    """
+    GET /api/labs/orders/assignments/<assignment_id>/
+
+    Deterministic assignment row for operational drawers (reports queue View order).
+    Branch-scoped; 404 when assignment is outside the lab user's branch.
+    """
+
+    permission_classes = [IsAuthenticated, IsLabAdminUser]
+
+    def get(self, request, assignment_id):
+        resolved = resolve_lab_user(request)
+        if isinstance(resolved, LabSessionDenied):
+            return resolved.response
+
+        assignment = (
+            base_assignments_queryset(resolved.lab_user)
+            .filter(pk=assignment_id)
+            .first()
+        )
+        if assignment is None:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        row = build_row_dtos([assignment])[0]
+        data = LabOrderListItemSerializer(dto_to_representation(row)).data
+        return Response(data, status=status.HTTP_200_OK)

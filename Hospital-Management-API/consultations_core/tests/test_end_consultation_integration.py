@@ -285,6 +285,52 @@ class EndConsultationIntegrationTests(TestCase):
         self.assertIsNotNone(order)
         self.assertGreaterEqual(DiagnosticOrderTestLine.objects.filter(order_id=order.pk).count(), 1)
 
+    def test_06b_investigations_unknown_catalog_uuid_falls_back_to_custom(self):
+        """Stale search/suggestion UUIDs should not block end consultation when name is present."""
+        missing_id = uuid.uuid4()
+        payload = _base_payload(
+            investigations=[
+                {
+                    "source": "catalog",
+                    "catalog_item_id": str(missing_id),
+                    "service_id": str(missing_id),
+                    "name": "Stale Catalog Pick",
+                    "is_custom": False,
+                    "label": "Stale Catalog Pick",
+                }
+            ],
+        )
+        r = self._post_complete(payload)
+        self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
+        self.assertTrue(r.data.get("diagnostic_order_skipped"), r.data)
+        items = InvestigationItem.objects.filter(
+            investigations__consultation=self.consultation,
+            is_deleted=False,
+        )
+        self.assertEqual(items.count(), 1)
+        self.assertEqual(items.first().source, InvestigationSource.CUSTOM)
+
+    def test_06c_investigations_static_slug_persists_as_custom(self):
+        payload = _base_payload(
+            investigations=[
+                {
+                    "source": "custom",
+                    "service_id": "ecg",
+                    "name": "ECG",
+                    "is_custom": True,
+                    "label": "ECG",
+                }
+            ],
+        )
+        r = self._post_complete(payload)
+        self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
+        items = InvestigationItem.objects.filter(
+            investigations__consultation=self.consultation,
+            is_deleted=False,
+        )
+        self.assertEqual(items.count(), 1)
+        self.assertEqual(items.first().source, InvestigationSource.CUSTOM)
+
     def test_07_investigations_custom_creates_master_row(self):
         payload = _base_payload(
             investigations=[

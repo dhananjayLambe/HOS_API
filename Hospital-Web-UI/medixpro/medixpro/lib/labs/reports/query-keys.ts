@@ -30,6 +30,15 @@ export const reportTaskContextQueryKey = (branchId: string | null, taskId: strin
 export const REPORT_TASKS_POLL_MS = 15_000;
 export const REPORT_TASKS_STALE_MS = 10_000;
 
+/** Drawer/detail queries — longer than queue to avoid poll jitter. */
+export const REPORT_DRAWER_STALE_MS = 60_000;
+
+export const labOrderAssignmentQueryKey = (branchId: string | null, assignmentId: string | null) =>
+  ["lab", branchId ?? "unknown", "order-assignment", assignmentId ?? "none"] as const;
+
+export const reportHistoryQueryKey = (branchId: string | null, reportId: string | null) =>
+  ["lab", branchId ?? "unknown", "report-history", reportId ?? "none"] as const;
+
 /** Prefix for invalidating all report-task list queries for a branch. */
 export const reportsQueueKeyPrefix = (branchId: string | null) =>
   ["lab", branchId ?? "unknown", "report-tasks"] as const;

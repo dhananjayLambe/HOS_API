@@ -79,6 +79,31 @@ hooks/labs/
   useReportDetail.ts
 ```
 
+## View order drawer (reports queue)
+
+**Problem:** `View order` on the live v1 queue was a no-op because `orderRow` is only set for orders-fallback/demo tasks.
+
+**Solution:** Reuse [`OrderDetailSheet`](Hospital-Web-UI/medixpro/medixpro/components/labs/orders/OrderDetailSheet.tsx) with instant open + lazy hydration.
+
+| Piece | Behavior |
+|-------|----------|
+| Open | `setSelectedTask` + `setSheetOpen(true)` immediately (preview row from queue card) |
+| Order | `GET /api/labs/orders/assignments/<assignment_id>/` via `fetchLabOrderAssignment` — **no** `labs/orders/?q=` |
+| Reports | `report-tasks/<task_id>/`, `reports/<report_id>/`, `reports/<report_id>/history/` |
+| Primary report | Temporary `resolvePrimaryReportId` — `upload_target` first (documented shim) |
+| Cache | Drawer keys (`order-assignment`, `report-task-context`, `report-detail`, `report-history`) use `REPORT_DRAWER_STALE_MS` (60s) + `placeholderData`; queue poll invalidates **only** `report-tasks` prefix |
+| Timeline | Hidden when report panel is active |
+| Conflicts | `REPORT_SUPERSEDED` / operational conflict → stale banner + `refreshDrawerReports` |
+| Mutations | Owned by `ReportsListPage` (`useReportMutations`); sheet receives callbacks only |
+
+**Manual QA (drawer):**
+
+- [ ] View order opens shell before network completes
+- [ ] Drawer open during 15s queue poll — no section flicker
+- [ ] Upload correction elsewhere → stale banner → refresh shows new head
+- [ ] Mark ready / retry from drawer
+- [ ] Demo mode (`?demo=1`) still opens sheet from fallback `orderRow`
+
 ## Manual QA
 
 - [ ] Queue collapse persists across 15s poll

@@ -8,12 +8,22 @@ import { OrderDetailPatientSection } from "@/components/labs/orders/detail/Order
 import { OrderDetailTimelineSection } from "@/components/labs/orders/detail/OrderDetailTimelineSection";
 import { OrderDetailWorkflowFooter } from "@/components/labs/orders/detail/OrderDetailWorkflowFooter";
 import { OrderDetailWorkflowSection } from "@/components/labs/orders/detail/OrderDetailWorkflowSection";
+import { ReportDrawerSections } from "@/components/labs/reports/detail/ReportDrawerSections";
 import { sectionTitle } from "@/components/labs/orders/detail/detail-styles";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useLabOrderDetail } from "@/hooks/labs/useLabOrderDetail";
+import type { ReportOrderDrawerPanel } from "@/hooks/labs/useReportOrderDrawer";
 import type { LabOrderRow } from "@/lib/labs/types";
+
+export type ReportDrawerActions = {
+  onMarkReady?: (reportId: string) => void;
+  onRetryDelivery?: (logId: string, reportId?: string) => void;
+  onUpload?: (taskId: string) => void;
+  actionLoading?: string | null;
+};
 
 export function OrderDetailSheet({
   order,
@@ -21,12 +31,20 @@ export function OrderDetailSheet({
   onOpenChange,
   onOrderPatched,
   onQueueRefresh,
+  reportPanel,
+  onRefreshLineage,
+  refreshingLineage,
+  reportActions,
 }: {
   order: LabOrderRow | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onOrderPatched?: (row: LabOrderRow) => void;
   onQueueRefresh?: () => void;
+  reportPanel?: ReportOrderDrawerPanel | null;
+  onRefreshLineage?: () => void;
+  refreshingLineage?: boolean;
+  reportActions?: ReportDrawerActions;
 }) {
   const {
     rejectDialogOpen,
@@ -41,6 +59,10 @@ export function OrderDetailSheet({
 
   if (!order) return null;
 
+  const showReportPanel = !!reportPanel;
+  const orderLoading = reportPanel?.loading.order ?? false;
+  const hideTimeline = showReportPanel || order.timeline.length === 0;
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
@@ -51,16 +73,44 @@ export function OrderDetailSheet({
 
         <ScrollArea className="min-h-0 flex-1">
           <div className="space-y-4 px-4 py-5 sm:px-6">
-            <OrderDetailPatientSection order={order} />
-            <Separator className="bg-[#ECEBFF]" />
-            <OrderDetailDoctorSection order={order} />
-            <Separator className="bg-[#ECEBFF]" />
-            <OrderDetailInvestigationsSection order={order} />
-            <Separator className="bg-[#ECEBFF]" />
-            <OrderDetailCollectionSection order={order} />
-            <Separator className="bg-[#ECEBFF]" />
-            <OrderDetailWorkflowSection order={order} />
-            <OrderDetailTimelineSection events={order.timeline} />
+            {orderLoading ? (
+              <div className="space-y-3" aria-busy="true" aria-label="Loading order details">
+                <Skeleton className="h-16 w-full rounded-lg" />
+                <Skeleton className="h-24 w-full rounded-lg" />
+                <Skeleton className="h-20 w-full rounded-lg" />
+              </div>
+            ) : (
+              <>
+                <OrderDetailPatientSection order={order} />
+                <Separator className="bg-[#ECEBFF]" />
+                <OrderDetailDoctorSection order={order} />
+                <Separator className="bg-[#ECEBFF]" />
+                <OrderDetailInvestigationsSection order={order} />
+                <Separator className="bg-[#ECEBFF]" />
+                <OrderDetailCollectionSection order={order} />
+                <Separator className="bg-[#ECEBFF]" />
+                <OrderDetailWorkflowSection order={order} />
+              </>
+            )}
+
+            {showReportPanel && reportPanel ? (
+              <>
+                <Separator className="bg-[#ECEBFF]" />
+                <ReportDrawerSections
+                  panel={reportPanel}
+                  onRefreshLineage={onRefreshLineage}
+                  refreshingLineage={refreshingLineage}
+                  reportActions={reportActions}
+                />
+              </>
+            ) : null}
+
+            {!hideTimeline ? (
+              <>
+                <Separator className="bg-[#ECEBFF]" />
+                <OrderDetailTimelineSection events={order.timeline} />
+              </>
+            ) : null}
             {order.notes ? (
               <>
                 <Separator className="bg-[#ECEBFF]" />

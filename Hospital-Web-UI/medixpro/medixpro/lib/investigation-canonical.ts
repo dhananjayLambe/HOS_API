@@ -1,5 +1,13 @@
 import { INVESTIGATION_MASTER_ITEMS } from "@/data/consultation-section-data";
 
+const INVESTIGATION_SERVICE_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** True when `serviceId` is a DiagnosticServiceMaster UUID (not a static slug like `cbc`). */
+export function isInvestigationServiceUuid(serviceId: string): boolean {
+  return INVESTIGATION_SERVICE_UUID_RE.test(serviceId.trim());
+}
+
 /** Alphanumeric-only key for fuzzy name/id matching (aligned with package lookup). */
 export function stripInvestigationKey(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "");

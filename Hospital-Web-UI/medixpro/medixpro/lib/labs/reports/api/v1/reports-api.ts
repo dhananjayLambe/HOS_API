@@ -9,6 +9,7 @@ import {
 import type {
   MarkReadyApiData,
   ReportDetailApiData,
+  ReportHistoryApiData,
   ReportSummaryListData,
   ReportTaskContextApiData,
   ReportTaskListData,
@@ -57,6 +58,17 @@ export async function getReportDetail(
 ): Promise<ReportDetailApiData> {
   const { data } = await backendAxiosClient.get<DiagnosticsApiEnvelope<ReportDetailApiData>>(
     `${V1_PREFIX}/reports/${encodeURIComponent(reportId)}/`,
+    { signal: options?.signal, headers: requestHeaders(options?.requestId) },
+  );
+  return unwrapApiResponse(data);
+}
+
+export async function getReportHistory(
+  reportId: string,
+  options?: { signal?: AbortSignal; requestId?: string },
+): Promise<ReportHistoryApiData> {
+  const { data } = await backendAxiosClient.get<DiagnosticsApiEnvelope<ReportHistoryApiData>>(
+    `${V1_PREFIX}/reports/${encodeURIComponent(reportId)}/history/`,
     { signal: options?.signal, headers: requestHeaders(options?.requestId) },
   );
   return unwrapApiResponse(data);

@@ -63,6 +63,7 @@ import {
 import {
   canonicalInvestigationKey,
   dedupeInvestigationSearchTests,
+  isInvestigationServiceUuid,
   dedupeInvestigationSuggestionsByCanonical,
 } from "@/lib/investigation-canonical";
 import {
@@ -1607,7 +1608,7 @@ export function InvestigationsSection() {
                           recommendationReason: test.reason,
                           recommendationScore: test.score,
                           confidenceLabel: test.confidence_label,
-                          fromCatalogUi: true,
+                          fromCatalogUi: isInvestigationServiceUuid(test.id),
                         });
                       })
                     }

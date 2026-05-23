@@ -11,6 +11,7 @@ import {
 } from "@/lib/consultation-completion";
 import { buildInstructionsPayload } from "@/lib/consultation-instructions-helpers";
 import type { FollowUpUnit } from "@/lib/consultation-types";
+import { isInvestigationServiceUuid } from "@/lib/investigation-canonical";
 import { useConsultationStore } from "@/store/consultationStore";
 
 /** Map legacy UI values to API contract (days | weeks). */
@@ -70,6 +71,102 @@ function normalizeMedicineRowForApi(row: Record<string, unknown>): Record<string
   };
 }
 
+/**
+ * Maps a Zustand investigation row to AddInvestigationItemSerializer input.
+ * Slugs and free-text ids use `source: custom`; catalog UUIDs set `catalog_item_id`.
+ */
+export function mapInvestigationRowForEndConsultation(
+  inv: Record<string, unknown>,
+  encounterId: string | null
+): Record<string, unknown> {
+  const normalized = normalizeItem(inv);
+  const detail =
+    inv?.detail && typeof inv.detail === "object"
+      ? (inv.detail as Record<string, unknown>)
+      : {};
+  const serviceId = String(detail.service_id ?? "").trim();
+  const name = String(inv.label ?? inv.name ?? "").trim();
+  const rawUrgency = detail.urgency ?? "routine";
+  const urgency =
+    rawUrgency === "urgent" || rawUrgency === "stat" ? rawUrgency : "routine";
+  const recommendationSource =
+    detail.recommendation_source === "diagnosis_map" ||
+    detail.recommendation_source === "bundle"
+      ? detail.recommendation_source
+      : "manual";
+
+  const base: Record<string, unknown> = {
+    name,
+    is_complete: evaluateSectionItemComplete("investigations", normalized),
+    price_snapshot: detail.price_snapshot ?? null,
+    recommendation_source: recommendationSource,
+    urgency,
+    priority: urgency,
+    instructions: Array.isArray(detail.instructions) ? detail.instructions : [],
+    notes: String(detail.notes ?? ""),
+    ...(recommendationSource === "diagnosis_map" && detail.diagnosis_id
+      ? { diagnosis_id: String(detail.diagnosis_id) }
+      : {}),
+    ...(encounterId ? { encounter_id: encounterId } : {}),
+  };
+
+  const invType = detail.custom_investigation_type ?? detail.type;
+  if (invType) {
+    base.investigation_type = invType;
+    base.type = invType;
+  }
+
+  const customPrefix = serviceId.toLowerCase().match(/^custom-(.+)$/);
+  if (customPrefix) {
+    const rest = customPrefix[1].trim();
+    return {
+      ...base,
+      source: "custom",
+      is_custom: true,
+      service_id: serviceId,
+      ...(isInvestigationServiceUuid(rest) ? { custom_investigation_id: rest } : {}),
+    };
+  }
+
+  const bundleId = detail.bundle_id ? String(detail.bundle_id).trim() : "";
+  if (bundleId && isInvestigationServiceUuid(bundleId) && !isInvestigationServiceUuid(serviceId)) {
+    return {
+      ...base,
+      source: "package",
+      bundle_id: bundleId,
+      diagnostic_package_id: bundleId,
+      is_custom: false,
+    };
+  }
+
+  if (!isInvestigationServiceUuid(serviceId)) {
+    return {
+      ...base,
+      source: "custom",
+      is_custom: true,
+      service_id: serviceId || name,
+    };
+  }
+
+  if (shouldShowInvestigationCustomTag(normalized)) {
+    return {
+      ...base,
+      source: "custom",
+      is_custom: true,
+      service_id: serviceId,
+    };
+  }
+
+  return {
+    ...base,
+    source: "catalog",
+    is_custom: false,
+    service_id: serviceId,
+    catalog_item_id: serviceId,
+    ...(bundleId ? { bundle_id: bundleId } : {}),
+  };
+}
+
 export function buildEndConsultationPayload(
   store: ReturnType<typeof useConsultationStore.getState>
 ) {
@@ -124,41 +221,9 @@ export function buildEndConsultationPayload(
     Array.isArray(investigationsFromSection) && investigationsFromSection.length > 0
       ? investigationsFromSection
       : [];
-  const investigations = investigationsRaw.map((inv: any) => {
-    const normalized = normalizeItem(inv);
-    const detail = inv?.detail ?? {};
-    const source =
-      detail.recommendation_source === "diagnosis_map" ||
-      detail.recommendation_source === "bundle"
-        ? detail.recommendation_source
-        : "manual";
-    const rawUrgency = detail.urgency ?? "routine";
-    const urgency =
-      rawUrgency === "urgent" || rawUrgency === "stat" ? rawUrgency : "routine";
-    const row: Record<string, unknown> = {
-      service_id: String(detail.service_id ?? inv.id ?? ""),
-      name: String(inv.label ?? inv.name ?? ""),
-      is_custom: shouldShowInvestigationCustomTag(normalized),
-      is_complete: evaluateSectionItemComplete("investigations", normalized),
-      price_snapshot: detail.price_snapshot ?? null,
-      recommendation_source: source,
-      ...(detail.bundle_id ? { bundle_id: String(detail.bundle_id) } : {}),
-      urgency,
-      priority: urgency,
-      instructions: Array.isArray(detail.instructions) ? detail.instructions : [],
-      notes: String(detail.notes ?? ""),
-      ...(source === "diagnosis_map" && detail.diagnosis_id
-        ? { diagnosis_id: String(detail.diagnosis_id) }
-        : {}),
-    };
-    if (detail.custom_investigation_type) {
-      row.type = detail.custom_investigation_type;
-    }
-    if (store.encounterId) {
-      row.encounter_id = store.encounterId;
-    }
-    return row;
-  });
+  const investigations = investigationsRaw.map((inv: Record<string, unknown>) =>
+    mapInvestigationRowForEndConsultation(inv, store.encounterId)
+  );
 
   /** Draft rows from Zustand only; backend persists on POST .../consultation/complete/ only. */
   const instructions = buildInstructionsPayload(store.instructionsList ?? []);

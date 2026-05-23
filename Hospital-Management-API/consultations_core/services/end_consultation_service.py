@@ -752,19 +752,52 @@ def _persist_investigations(consultation, user, raw_investigations):
                     .first()
                 )
                 if not catalog_item:
-                    _investigations_validation_error(
-                        f"Item {idx}: catalog_item_id not found or inactive."
+                    adhoc_name = (data.get("name") or "").strip() or None
+                    if adhoc_name:
+                        logger.warning(
+                            "EndConsultation: catalog_item_id %s not found or inactive; "
+                            "persisting as custom investigation name=%r consultation=%s",
+                            data["catalog_item_id"],
+                            adhoc_name,
+                            consultation.id,
+                        )
+                        adhoc_type = data.get("investigation_type") or "other"
+                        try:
+                            custom_inv, _ = get_or_create_custom_investigation_master(
+                                name=adhoc_name,
+                                investigation_type=str(adhoc_type),
+                                user=user,
+                                clinic=consultation.encounter.clinic,
+                            )
+                        except ValueError as e:
+                            _investigations_validation_error(f"Item {idx}: {e}")
+                        add_investigation_item(
+                            container=container,
+                            source=InvestigationSource.CUSTOM,
+                            user=user,
+                            custom_investigation=custom_inv,
+                            adhoc_name=None,
+                            adhoc_type=None,
+                            position=data.get("position"),
+                            instructions=data.get("instructions"),
+                            notes=data.get("notes"),
+                            urgency=urgency,
+                        )
+                    else:
+                        _investigations_validation_error(
+                            f"Item {idx}: catalog_item_id not found or inactive."
+                        )
+                else:
+                    add_investigation_item(
+                        container=container,
+                        source=InvestigationSource.CATALOG,
+                        user=user,
+                        catalog_item=catalog_item,
+                        position=data.get("position"),
+                        instructions=data.get("instructions"),
+                        notes=data.get("notes"),
+                        urgency=urgency,
                     )
-                add_investigation_item(
-                    container=container,
-                    source=InvestigationSource.CATALOG,
-                    user=user,
-                    catalog_item=catalog_item,
-                    position=data.get("position"),
-                    instructions=data.get("instructions"),
-                    notes=data.get("notes"),
-                    urgency=urgency,
-                )
 
             elif data["source"] == InvestigationSource.CUSTOM:
                 custom_inv = None

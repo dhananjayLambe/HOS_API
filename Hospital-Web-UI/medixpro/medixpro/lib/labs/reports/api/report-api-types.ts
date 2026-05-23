@@ -148,4 +148,12 @@ export type RetryDeliveryApiData = {
   status: string;
 };
 
+export type ReportHistoryApiData = {
+  report_id: string;
+  supersedes_id: string | null;
+  superseded_by_id: string | null;
+  artifacts: ReportArtifactApiItem[];
+  delivery_logs: DeliveryLogApiItem[];
+};
+
 export type ReportTasksListQueryParams = Record<string, string | number>;

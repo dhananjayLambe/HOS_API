@@ -9,6 +9,7 @@ import { ReportsWorkflowQueue } from "@/components/labs/reports/ReportsWorkflowQ
 import { Button } from "@/components/ui/button";
 import { useLabReportsList } from "@/hooks/labs/useLabReportsList";
 import { useReportMutations } from "@/hooks/labs/useReportMutations";
+import { useReportOrderDrawer } from "@/hooks/labs/useReportOrderDrawer";
 import { useToastNotification } from "@/hooks/use-toast-notification";
 import { useLabShellHeader } from "@/lib/labs/layout/lab-shell-header-context";
 import { mapReportApiErrorToMessage } from "@/lib/labs/reports/api/report-api-errors";
@@ -18,7 +19,6 @@ import type { ReportTask } from "@/lib/labs/reports/report-task";
 import { ReportsStaleQueueBanner } from "@/components/labs/reports/ReportsStaleQueueBanner";
 import type { ReportTasksQueryFilters } from "@/lib/labs/reports/build-report-tasks-query";
 import { useLabSession } from "@/lib/labs/session/lab-session-context";
-import type { LabOrderRow } from "@/lib/labs/types";
 import { RotateCcw } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
@@ -90,8 +90,18 @@ export function ReportsListPage() {
   }, [filters, setFilters, syncQueueToUrl]);
 
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [selectedOrder, setSelectedOrder] = useState<LabOrderRow | null>(null);
+  const [selectedTask, setSelectedTask] = useState<ReportTask | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [refreshingLineage, setRefreshingLineage] = useState(false);
+
+  const drawerPanel = useReportOrderDrawer({
+    branchId: session?.branch?.id,
+    branchLabel,
+    task: selectedTask,
+    open: sheetOpen && !!selectedTask,
+  });
+
+  const drawerOrder = drawerPanel?.order ?? null;
 
   const headerActions = useMemo(
     () => (
@@ -129,13 +139,22 @@ export function ReportsListPage() {
         await fn();
         toast.success(successMsg);
       } catch (err) {
-        const conflict = await mutations.handleOperationalConflict(err, { taskId: task.taskId });
+        const conflict = await mutations.handleOperationalConflict(err, {
+          taskId: task.taskId,
+          assignmentId: task.assignmentId,
+          reportId:
+            task.actionTargets.markReadyReportId ??
+            task.actionTargets.uploadReportId ??
+            task.actionTargets.sendWhatsappReportId,
+          onConflict: () => drawerPanel?.setLineageStale(true),
+        });
+        if (conflict) drawerPanel?.setLineageStale(true);
         toast.error(mapReportApiErrorToMessage(err));
       } finally {
         setActionLoading(null);
       }
     },
-    [mutations, toast],
+    [mutations, toast, drawerPanel],
   );
 
   const handlePrimaryAction = useCallback(
@@ -148,7 +167,17 @@ export function ReportsListPage() {
             toast.error("Action no longer available — refresh the queue.");
             return;
           }
-          void runAction(task, "ready", () => mutations.markReady(reportId, { taskId: task.taskId, reportId }), "Marked ready for delivery");
+          void runAction(
+            task,
+            "ready",
+            () =>
+              mutations.markReady(reportId, {
+                taskId: task.taskId,
+                reportId,
+                assignmentId: task.assignmentId,
+              }),
+            "Marked ready for delivery",
+          );
           break;
         }
         case "wa":
@@ -178,6 +207,7 @@ export function ReportsListPage() {
             () =>
               mutations.retryDelivery(logId, {
                 taskId: task.taskId,
+                assignmentId: task.assignmentId,
                 reportId: targets.sendWhatsappReportId ?? targets.markReadyReportId,
               }),
             "Delivery retry queued",
@@ -204,12 +234,79 @@ export function ReportsListPage() {
   };
 
   const handleViewOrder = (task: ReportTask) => {
-    const order = getOrderForTask(task.taskId);
-    if (order) {
-      setSelectedOrder(order);
-      setSheetOpen(true);
-    }
+    const orderRow = getOrderForTask(task.taskId);
+    setSelectedTask(orderRow ? { ...task, orderRow } : task);
+    setSheetOpen(true);
   };
+
+  const handleRefreshLineage = useCallback(async () => {
+    if (!drawerPanel) return;
+    setRefreshingLineage(true);
+    drawerPanel.setLineageStale(false);
+    try {
+      await mutations.refreshDrawerReports({
+        taskId: drawerPanel.task.taskId,
+        reportId: drawerPanel.primaryReportId ?? undefined,
+        assignmentId: drawerPanel.task.assignmentId,
+      });
+    } finally {
+      setRefreshingLineage(false);
+    }
+  }, [drawerPanel, mutations]);
+
+  const handleDrawerMarkReady = useCallback(
+    (reportId: string) => {
+      if (!selectedTask) return;
+      void runAction(
+        selectedTask,
+        "ready",
+        () =>
+          mutations.markReady(reportId, {
+            taskId: selectedTask.taskId,
+            reportId,
+            assignmentId: selectedTask.assignmentId,
+          }),
+        "Marked ready for delivery",
+      );
+    },
+    [mutations, runAction, selectedTask],
+  );
+
+  const handleDrawerRetry = useCallback(
+    (logId: string, reportId?: string) => {
+      if (!selectedTask) return;
+      void runAction(
+        selectedTask,
+        "retry",
+        () =>
+          mutations.retryDelivery(logId, {
+            taskId: selectedTask.taskId,
+            reportId,
+            assignmentId: selectedTask.assignmentId,
+          }),
+        "Delivery retry queued",
+      );
+    },
+    [mutations, runAction, selectedTask],
+  );
+
+  const handleDrawerUpload = useCallback(
+    (taskId: string) => {
+      window.open(
+        `/lab-dashboard/reports/upload?taskId=${encodeURIComponent(taskId)}`,
+        "_blank",
+        "noopener,noreferrer",
+      );
+    },
+    [],
+  );
+
+  const handleSheetOpenChange = useCallback((open: boolean) => {
+    setSheetOpen(open);
+    if (!open) {
+      setSelectedTask(null);
+    }
+  }, []);
 
   const showKpiSkeleton = loading && tasks.length === 0;
 
@@ -265,10 +362,23 @@ export function ReportsListPage() {
       />
 
       <OrderDetailSheet
-        order={selectedOrder}
+        order={drawerOrder}
         open={sheetOpen}
-        onOpenChange={setSheetOpen}
-        onOrderPatched={() => refetch()}
+        onOpenChange={handleSheetOpenChange}
+        onOrderPatched={(patched) => {
+          void mutations.invalidateLabOrderAssignment(patched.assignmentId);
+          refetch();
+        }}
+        onQueueRefresh={() => refetch()}
+        reportPanel={drawerPanel}
+        onRefreshLineage={handleRefreshLineage}
+        refreshingLineage={refreshingLineage}
+        reportActions={{
+          onMarkReady: handleDrawerMarkReady,
+          onRetryDelivery: handleDrawerRetry,
+          onUpload: handleDrawerUpload,
+          actionLoading,
+        }}
       />
     </div>
   );

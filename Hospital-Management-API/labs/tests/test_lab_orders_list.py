@@ -342,3 +342,36 @@ class LabOrdersListAPITests(TestCase):
         res = self.client.get(self.url, {"ordering": "-assigned_at"})
         numbers = [r["order_number"] for r in res.json()["results"]]
         self.assertEqual(numbers[0], "ORD-NEW")
+
+
+class LabOrderAssignmentDetailTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+
+    def test_assignment_detail_same_branch(self):
+        user, branch, _org = _lab_admin_with_branch()
+        assignment, order, _, _ = _create_assignment_on_branch(
+            branch,
+            order_number="ORD-DRAWER-1",
+        )
+
+        self.client.force_authenticate(user=user)
+        url = reverse("lab-order-assignment-detail", kwargs={"assignment_id": assignment.id})
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.json()["order_number"], "ORD-DRAWER-1")
+        self.assertEqual(str(res.json()["assignment_id"]), str(assignment.id))
+        self.assertEqual(str(res.json()["id"]), str(order.id))
+
+    def test_assignment_detail_branch_isolation(self):
+        user, branch, org = _lab_admin_with_branch(branch_name="Drawer Branch A")
+        other = _other_branch(org)
+        other_assignment, _, _, _ = _create_assignment_on_branch(
+            other,
+            order_number="ORD-OTHER-BRANCH",
+        )
+
+        self.client.force_authenticate(user=user)
+        url = reverse("lab-order-assignment-detail", kwargs={"assignment_id": other_assignment.id})
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)

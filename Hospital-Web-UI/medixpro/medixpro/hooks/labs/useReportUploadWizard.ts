@@ -310,15 +310,22 @@ export function useReportUploadWizard(routeState?: UploadRouteState) {
           files: fileObjects,
           primaryFileIndex: primaryIndex,
           requestId,
+          taskId: resolvedTaskId,
+          assignmentId: ctx.assignmentId,
         });
 
         try {
-          await mutations.markReady(reportId, { taskId: resolvedTaskId, reportId });
+          await mutations.markReady(reportId, {
+            taskId: resolvedTaskId,
+            reportId,
+            assignmentId: ctx.assignmentId,
+          });
           result = { ...result, status: "READY_DELIVERY" as ReportOperationalStatus };
         } catch (readyErr) {
           await mutations.handleOperationalConflict(readyErr, {
             taskId: resolvedTaskId,
             reportId,
+            assignmentId: ctx.assignmentId,
           });
           setSubmitError(mapReportApiErrorToMessage(readyErr));
         }
@@ -332,6 +339,7 @@ export function useReportUploadWizard(routeState?: UploadRouteState) {
         const conflict = await mutations.handleOperationalConflict(err, {
           taskId: resolvedTaskId,
           reportId,
+          assignmentId: ctx.assignmentId,
         });
         setSubmitError(mapReportApiErrorToMessage(err));
         setSubmissionState("failed");

@@ -13,7 +13,7 @@ from labs.api.views.home_collections import (
     PhlebotomistsListView,
 )
 from labs.api.views.lab_order_workflow import LabOrderAcceptView, LabOrderRejectView
-from labs.api.views.lab_orders import LabOrdersListView
+from labs.api.views.lab_orders import LabOrderAssignmentDetailView, LabOrdersListView
 from labs.api.views.lab_session import LabSessionView
 from labs.api.views.pricing_catalog import (
     PricingCatalogSummaryView,
@@ -38,6 +38,11 @@ urlpatterns = [
     path("onboarding/", LabOnboardingView.as_view(), name="lab-onboarding"),
     path("me/", LabSessionView.as_view(), name="lab-session-me"),
     path("orders/", LabOrdersListView.as_view(), name="lab-orders-list"),
+    path(
+        "orders/assignments/<uuid:assignment_id>/",
+        LabOrderAssignmentDetailView.as_view(),
+        name="lab-order-assignment-detail",
+    ),
     path(
         "orders/<uuid:assignment_id>/accept/",
         LabOrderAcceptView.as_view(),

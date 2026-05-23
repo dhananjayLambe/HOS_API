@@ -4,7 +4,7 @@ import { getReportTaskContext } from "@/lib/labs/reports/api/v1/reports-api";
 import { mapReportTaskContextDto } from "@/lib/labs/reports/report-task-context";
 import {
   reportTaskContextQueryKey,
-  REPORT_TASKS_STALE_MS,
+  REPORT_DRAWER_STALE_MS,
 } from "@/lib/labs/reports/query-keys";
 import type { ReportTaskContext } from "@/lib/labs/reports/report-task-context";
 import { useQuery } from "@tanstack/react-query";
@@ -22,7 +22,9 @@ export function useReportTaskContext(
       return mapReportTaskContextDto(data);
     },
     enabled: enabled && !!taskId,
-    staleTime: REPORT_TASKS_STALE_MS,
+    staleTime: REPORT_DRAWER_STALE_MS,
+    placeholderData: (previous) => previous,
+    retry: 1,
   });
 }
 

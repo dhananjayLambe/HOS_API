@@ -4,7 +4,7 @@ import { getReportDetail } from "@/lib/labs/reports/api/v1/reports-api";
 import { mapReportDetailDto, type ReportDetail } from "@/lib/labs/reports/api/v1/reports-api-mappers";
 import {
   reportDetailQueryKey,
-  REPORT_TASKS_STALE_MS,
+  REPORT_DRAWER_STALE_MS,
 } from "@/lib/labs/reports/query-keys";
 import { trackReportEvent } from "@/lib/labs/reports/report-monitoring";
 import { useQuery } from "@tanstack/react-query";
@@ -22,7 +22,8 @@ export function useReportDetail(
       return mapReportDetailDto(data);
     },
     enabled: enabled && !!reportId,
-    staleTime: REPORT_TASKS_STALE_MS,
+    staleTime: REPORT_DRAWER_STALE_MS,
+    placeholderData: (previous) => previous,
     retry: 1,
     meta: {
       onError: () => trackReportEvent("queue_fetch_fail", { reportId: reportId ?? undefined }),
