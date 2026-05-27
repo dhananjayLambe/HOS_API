@@ -26,12 +26,15 @@ from diagnostics_engine.api.serializers.reports.report_task import (
 from diagnostics_engine.api.serializers.reports.upload_request import UploadArtifactRequestSerializer
 from diagnostics_engine.models.choices import ReportLifecycleStatus
 from diagnostics_engine.models.reports import DiagnosticTestReport
-from diagnostics_engine.permissions.reports import CanUploadReports, CanViewReportDetail
+from diagnostics_engine.permissions.reports import CanDownloadReports, CanUploadReports, CanViewReportDetail
 from diagnostics_engine.services.reports import (
     ArtifactUploadService,
     ReportQueryService,
     ReportWorkflowService,
 )
+from diagnostics_engine.monitoring.report_events import safe_emit
+from diagnostics_engine.services.reports.report_audit import emit_report_audit_event
+from diagnostics_engine.services.reports.report_download_service import ReportDownloadService
 from diagnostics_engine.services.reports.report_detail_presenter import build_report_detail_dto
 from diagnostics_engine.services.reports.report_task_presenter import (
     build_report_task_context,
@@ -89,6 +92,12 @@ class ReportTaskContextView(LabReportOperationalMixin):
                 code=error_codes.ASSIGNMENT_NOT_FOUND,
                 status=status.HTTP_404_NOT_FOUND,
                 request=request,
+            )
+        order = assignment.diagnostic_order
+        for line in order.test_lines.all():
+            ArtifactUploadService.create_or_get_report_for_line(
+                order_test_line=line,
+                uploaded_by=request.user,
             )
         dto = build_report_task_context(assignment)
         payload = ReportTaskContextSerializer.from_dto(dto).data
@@ -208,29 +217,52 @@ class ReportOperationalDetailView(LabReportOperationalMixin):
             return validation_error_response(exc, request=request)
 
         payload = ReportDetailSerializer.from_dto(dto).data
+        safe_emit(
+            emit_report_audit_event,
+            action="report_viewed",
+            report=report,
+            user=request.user,
+            metadata={"report_id": str(report.id)},
+        )
         return success_response(payload, request=request)
 
 
 class ReportOperationalDownloadView(LabReportOperationalMixin):
-    """GET download contract placeholder (v1)."""
+    """GET presigned download URL for primary artifact (v1)."""
 
-    permission_classes = [IsAuthenticated, CanViewReportDetail]
+    permission_classes = [IsAuthenticated, CanDownloadReports]
 
     def get(self, request, report_id):
         lab_user, err = self.resolve_lab(request)
         if err:
             return err
 
-        report = get_object_or_404(DiagnosticTestReport, pk=report_id)
-        if not ReportQueryService.report_belongs_to_branch(
-            report=report,
-            branch_id=lab_user.branch_id,
-        ):
-            return error_response(
-                "Report not accessible for this branch.",
-                code=error_codes.BRANCH_ACCESS_DENIED,
-                status=status.HTTP_403_FORBIDDEN,
-                request=request,
-            )
+        report, err = self.get_report_for_branch(request, report_id, lab_user=lab_user)
+        if err:
+            return err
 
-        return success_response({"download_url": None}, request=request)
+        try:
+            payload = ReportDownloadService.build_download_response(
+                report=report,
+                user=request.user,
+            )
+        except DjangoValidationError as exc:
+            return validation_error_response(exc, request=request)
+
+        if not payload.get("download_url") and request.query_params.get("stream") == "1":
+            from django.http import FileResponse
+
+            from diagnostics_engine.domain.reports import get_primary_artifact
+            from diagnostics_engine.storage.report_storage import ReportStorageService
+
+            artifact = get_primary_artifact(report)
+            if artifact is None:
+                return validation_error_response(
+                    DjangoValidationError("No downloadable artifact."),
+                    request=request,
+                )
+            content = ReportStorageService.open_for_read(artifact)
+            filename = ReportStorageService.download_filename(artifact)
+            return FileResponse(content, as_attachment=True, filename=filename)
+
+        return success_response(payload, request=request)

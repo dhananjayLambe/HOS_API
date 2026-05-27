@@ -15,3 +15,10 @@ export function isReportTasksV1ApiEnabled(): boolean {
 export function shouldIncludeDemoReportTasks(): boolean {
   return process.env.NEXT_PUBLIC_LAB_REPORTS_INCLUDE_DEMO === "true";
 }
+
+/** Phase 1 order-completion UX on /lab-dashboard/reports/ (mock-driven). */
+export function isOrderCompletionUxEnabled(): boolean {
+  // Default ON for Phase 1 — set NEXT_PUBLIC_LAB_ORDER_COMPLETION_UX=false to restore legacy queue.
+  if (process.env.NEXT_PUBLIC_LAB_ORDER_COMPLETION_UX === "false") return false;
+  return true;
+}

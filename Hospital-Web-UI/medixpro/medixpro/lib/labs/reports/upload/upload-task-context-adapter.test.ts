@@ -30,8 +30,42 @@ describe("upload-task-context-adapter", () => {
     const adapted = adaptReportTaskContext(sample, { pendingSiblingCount: 2 });
     expect(adapted.patientName).toBe("Jane Doe");
     expect(adapted.testLabelSummary).toBe("CBC");
+    expect(adapted.uploadTestLabel).toBe("CBC");
+    expect(adapted.reportLines).toHaveLength(1);
+    expect(adapted.uploadProgress.total).toBe(1);
     expect(adapted.pendingSiblingCount).toBe(2);
     expect(adapted.historicalReports).toHaveLength(1);
     expect(adapted.historicalReports[0]?.reportId).toBe("r1");
+  });
+
+  it("resolves uploadTestLabel from upload_target line", () => {
+    const adapted = adaptReportTaskContext({
+      ...sample,
+      activeReports: [
+        {
+          reportId: "r1",
+          lineId: "l1",
+          testLabel: "CBC",
+          status: "pending",
+          deliveryStatus: "PENDING",
+          availableActions: ["UPLOAD_REPORT"],
+        },
+        {
+          reportId: "r2",
+          lineId: "l2",
+          testLabel: "LFT",
+          status: "pending",
+          deliveryStatus: "PENDING",
+          availableActions: ["UPLOAD_REPORT"],
+        },
+      ],
+      uploadTarget: {
+        reportId: "r2",
+        lineId: "l2",
+        operationalStatus: "PENDING_UPLOAD",
+      },
+    });
+    expect(adapted.uploadTestLabel).toBe("LFT");
+    expect(adapted.testLabelSummary).toBe("CBC, LFT");
   });
 });

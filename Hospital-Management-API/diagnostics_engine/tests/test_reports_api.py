@@ -6,7 +6,7 @@ import uuid
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
@@ -105,6 +105,23 @@ class ReportAPITestCase(TestCase):
         task_ids = {str(r["task_id"]) for r in res.data["data"]["results"]}
         self.assertEqual(task_ids, {str(self.assignment.id)})
 
+    def test_task_queue_search_by_patient_full_name(self):
+        profile = self.order.patient_profile
+        profile.first_name = "QueueUnique"
+        profile.last_name = "Patient"
+        profile.save(update_fields=["first_name", "last_name"])
+        other_assignment, other_order = lab_mode_assignment(self.branch)
+        other_profile = other_order.patient_profile
+        other_profile.first_name = "Other"
+        other_profile.last_name = "Person"
+        other_profile.save(update_fields=["first_name", "last_name"])
+
+        url = reverse("v1-report-task-queue")
+        res = self.client.get(url, {"q": "QueueUnique Patient"})
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        task_ids = {str(r["task_id"]) for r in res.data["data"]["results"]}
+        self.assertEqual(task_ids, {str(self.assignment.id)})
+
     def test_task_queue_search_by_service_name(self):
         line = self.order.test_lines.select_related("service").first()
         line.service.name = "QueueUniqueSerumPanel"
@@ -154,6 +171,30 @@ class ReportAPITestCase(TestCase):
         self.assertEqual(str(targets["mark_ready_report_id"]), str(self.report.id))
         self.assertIsNone(targets["upload_report_id"])
 
+    def test_task_queue_operational_status_after_upload(self):
+        url = reverse("v1-report-task-queue")
+        before = self.client.get(url)
+        card = next(
+            r
+            for r in before.data["data"]["results"]
+            if str(r["task_id"]) == str(self.assignment.id)
+        )
+        self.assertEqual(card["operational_status"], "PENDING_UPLOAD")
+
+        ArtifactUploadService.upload_report_artifacts(
+            report=self.report,
+            uploaded_files=[_pdf(b"queue-status")],
+            primary_file_index=0,
+        )
+
+        after = self.client.get(url)
+        card = next(
+            r
+            for r in after.data["data"]["results"]
+            if str(r["task_id"]) == str(self.assignment.id)
+        )
+        self.assertEqual(card["operational_status"], "UPLOADED")
+
     def test_task_context_returns_active_reports(self):
         url = reverse("v1-report-task-context", kwargs={"task_id": self.assignment.id})
         res = self.client.get(url)
@@ -164,6 +205,28 @@ class ReportAPITestCase(TestCase):
         self.assertEqual(str(data["task_id"]), str(self.assignment.id))
         self.assertEqual(len(data["active_reports"]), 1)
         self.assertEqual(str(data["active_reports"][0]["report_id"]), str(self.report.id))
+        self.assertIsNotNone(data["upload_target"])
+        self.assertEqual(
+            str(data["upload_target"]["report_id"]),
+            str(self.report.id),
+        )
+
+    def test_task_context_provisions_reports_when_missing(self):
+        self.report.delete()
+        url = reverse("v1-report-task-context", kwargs={"task_id": self.assignment.id})
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        data = res.data["data"]
+        self.assertEqual(len(data["active_reports"]), 1)
+        self.assertIsNotNone(data["upload_target"])
+        report_id = data["upload_target"]["report_id"]
+        self.assertEqual(
+            str(data["active_reports"][0]["report_id"]),
+            str(report_id),
+        )
+        self.assertTrue(
+            DiagnosticTestReport.objects.filter(pk=report_id).exists(),
+        )
 
     def test_upload_success_envelope(self):
         url = reverse("v1-report-artifact-upload", kwargs={"report_id": self.report.id})
@@ -262,11 +325,19 @@ class ReportAPITestCase(TestCase):
         self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
         self.assertEqual(res.data["error"]["code"], "REPORT_SUPERSEDED")
 
-    def test_download_placeholder(self):
-        url = reverse("v1-report-download", kwargs={"report_id": self.report.id})
-        res = self.client.get(url)
+    def test_download_returns_artifact_metadata(self):
+        url = reverse("v1-report-artifact-upload", kwargs={"report_id": self.report.id})
+        self.client.post(url, {"files": [_pdf()]}, format="multipart")
+        self.report.refresh_from_db()
+        ReportWorkflowService.mark_ready(self.report, user=self.lab_user.user)
+
+        dl = reverse("v1-report-download", kwargs={"report_id": self.report.id})
+        res = self.client.get(dl)
         self.assertEqual(res.status_code, status.HTTP_200_OK)
-        self.assertIsNone(res.data["data"]["download_url"])
+        data = res.data["data"]
+        self.assertIn("artifact_id", data)
+        self.assertIn("filename", data)
+        self.assertIn("expires_in", data)
 
     def test_branch_access_denied(self):
         _other_client, _other_lu, other_br, _ = lab_admin_client(branch_name="Other Lab Branch 2")
@@ -392,6 +463,7 @@ class ReportAPITestCase(TestCase):
         res = self.client.post(url, {}, format="json")
         self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
 
+    @override_settings(REPORT_DELIVERY_ASYNC=False)
     def test_send_whatsapp_success(self):
         self._upload_primary()
         ReportWorkflowService.mark_ready(self.report)
@@ -403,7 +475,7 @@ class ReportAPITestCase(TestCase):
         )
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         data = res.data["data"]
-        self.assertEqual(data["delivery_status"], DeliveryStatus.SENT)
+        self.assertEqual(data["delivery_status"], DeliveryStatus.DELIVERED)
         self.assertIn("delivery_log_id", data)
         self.assertIn("available_actions", data)
         body = str(res.data)

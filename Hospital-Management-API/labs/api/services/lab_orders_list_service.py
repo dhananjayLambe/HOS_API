@@ -10,6 +10,7 @@ from django.utils import timezone
 
 from consultations_core.models.investigation import InvestigationItem
 from diagnostics_engine.models.orders import DiagnosticOrderItem, DiagnosticOrderTestLine
+from labs.api.services.patient_search import patient_profile_name_search_q
 from labs.api.services.lab_orders_presenter import (
     LabOrderListRowDTO,
     build_list_row_dto,
@@ -94,9 +95,7 @@ def apply_list_filters(qs, params: LabOrdersListParams):
         )
         qs = qs.filter(
             Q(diagnostic_order__order_number__icontains=term)
-            | Q(diagnostic_order__patient_profile__first_name__icontains=term)
-            | Q(diagnostic_order__patient_profile__last_name__icontains=term)
-            | Q(diagnostic_order__patient_profile__account__user__username__icontains=term)
+            | patient_profile_name_search_q(term, "diagnostic_order__patient_profile")
             | Exists(matching_test_lines),
         )
 

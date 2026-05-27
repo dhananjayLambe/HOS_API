@@ -22,7 +22,8 @@ from diagnostics_engine.services.reports import (
     ReportQueryService,
     ReportWorkflowService,
 )
-from diagnostics_engine.storage import ReportStorageService
+from diagnostics_engine.storage.report_storage import ReportStorageService
+from diagnostics_engine.permissions.reports import CanUploadReports
 from labs.api.permissions import IsLabAdminUser
 
 
@@ -30,7 +31,7 @@ class TestLineReportView(APIView):
     """GET/POST report task for an execution test line."""
 
     authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAuthenticated, IsLabAdminUser]
+    permission_classes = [IsAuthenticated, CanUploadReports]
 
     def get(self, request, line_id):
         report = ReportQueryService.active_report_for_line(line_id)
@@ -60,7 +61,7 @@ class ReportArtifactUploadView(APIView):
     """POST multipart artifact upload for a test report (legacy single-file)."""
 
     authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAuthenticated, IsLabAdminUser]
+    permission_classes = [IsAuthenticated, CanUploadReports]
 
     def post(self, request, report_id):
         report = get_object_or_404(DiagnosticTestReport, pk=report_id)
@@ -87,7 +88,7 @@ class ReportArtifactUploadView(APIView):
 
 class ReportReadyView(APIView):
     authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAuthenticated, IsLabAdminUser]
+    permission_classes = [IsAuthenticated, CanUploadReports]
 
     def post(self, request, report_id):
         report = get_object_or_404(DiagnosticTestReport, pk=report_id)

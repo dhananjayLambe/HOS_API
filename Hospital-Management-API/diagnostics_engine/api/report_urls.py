@@ -9,6 +9,7 @@ from django.urls import path
 
 from diagnostics_engine.api.views.reports.encounter_reports import EncounterReportsView
 from diagnostics_engine.api.views.reports.mark_ready import MarkReadyView
+from diagnostics_engine.api.views.reports.operational_metrics import ReportOperationalMetricsView
 from diagnostics_engine.api.views.reports.operational import (
     ReportOperationalArtifactUploadView,
     ReportOperationalDetailView,
@@ -22,6 +23,11 @@ from diagnostics_engine.api.views.reports.retry_delivery import RetryDeliveryVie
 from diagnostics_engine.api.views.reports.send_whatsapp import SendWhatsAppView
 
 urlpatterns = [
+    path(
+        "reports/operational-metrics/",
+        ReportOperationalMetricsView.as_view(),
+        name="v1-report-operational-metrics",
+    ),
     path(
         "report-tasks/",
         ReportTaskQueueView.as_view(),

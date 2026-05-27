@@ -15,75 +15,7 @@ from .orders import DiagnosticOrder, DiagnosticOrderTestLine
 # --------------------------------------------------------------------
 # REPORT FILE STORAGE HELPERS
 # --------------------------------------------------------------------
-def build_report_artifact_upload_path(instance, filename):
-    """
-    Production-ready diagnostic report artifact path.
-
-    Storage path is infrastructure-oriented,
-    not business-query oriented.
-
-    Example:
-    diagnostic-reports/
-        year=2026/
-            month=05/
-                day=19/
-                    encounter=<uuid>/
-                        report=<uuid>/
-                            artifact_<artifact_uuid>_v1.pdf
-
-    Example real storage path:
-
-    diagnostic-reports/
-        year=2026/
-            month=05/
-                day=19/
-                    encounter=ec12ab34/
-                        report=rp45xy89/
-                            artifact_7f21ab3c_v2.pdf
-
-    IMPORTANT:
-    - storage path is infrastructure-oriented
-    - patient names/mobile numbers are NEVER used
-    - filenames are immutable and version-safe
-    - report retrieval happens from database relations
-    - S3 path is NOT a business query layer
-    """
-
-    uploaded_at = timezone.now()
-
-    extension = Path(filename).suffix.lower() or ".bin"
-
-    encounter_id = "unknown-encounter"
-
-    try:
-        encounter = instance.report.order_test_line.order.encounter
-        if encounter:
-            encounter_id = str(encounter.id)
-    except AttributeError:
-        pass
-
-    # upload_to may execute before initial DB save.
-    # Ensure stable UUID generation before path creation.
-    if not instance.id:
-        instance.id = uuid.uuid4()
-    report_id = str(instance.report_id)
-    artifact_id = str(instance.id)
-    version = instance.version or 1
-
-    stored_filename = f"artifact_{artifact_id}_v{version}{extension}"
-
-    instance.stored_filename = stored_filename
-
-    return (
-        f"diagnostic-reports/"
-        f"year={uploaded_at:%Y}/"
-        f"month={uploaded_at:%m}/"
-        f"day={uploaded_at:%d}/"
-        f"encounter={encounter_id}/"
-        f"report={report_id}/"
-        f"{stored_filename}"
-    )
-
+from diagnostics_engine.storage.report_upload_paths import build_report_artifact_upload_path
 
 
 def build_report_download_filename(report, extension="pdf"):
@@ -267,14 +199,8 @@ class ReportArtifactType(models.TextChoices):
 # download filename:
 #     Rahul_K_CBC_Report_19_May_2026.pdf
 #
-# storage path:
-# diagnostic-reports/
-#     year=2026/
-#         month=05/
-#             day=19/
-#                 encounter=ec12ab34/
-#                     report=rp45xy89/
-#                         artifact_7f21ab3c_v2.pdf
+# storage path (S3/local key only — never patient name):
+# diagnostic-reports/year=2026/month=05/day=19/encounter=<uuid>/report=<uuid>/artifact_<id>_v2.pdf
 
 
 class DiagnosticReport(models.Model):
@@ -743,7 +669,7 @@ class DiagnosticReportArtifact(models.Model):
 
     # Full object storage path.
     # Example:
-    # diagnostic-reports/year=2026/...
+# diagnostic-reports/year=2026/.../encounter=<uuid>/report=<uuid>/artifact_<id>_v<n>.pdf
     storage_path = models.TextField(blank=True, null=True)
 
     version = models.PositiveIntegerField(default=1)

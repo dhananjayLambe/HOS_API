@@ -138,3 +138,41 @@ class BaseModel(models.Model):
 
     def __str__(self):
         return str(self.id)
+
+
+class IdempotencyKey(models.Model):
+    """
+    Stores successful responses for idempotent POST operations.
+
+    Composite lookup: scope + user + client key; request_hash must match on replay.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    key = models.CharField(max_length=128, db_index=True)
+    scope = models.CharField(max_length=64, db_index=True)
+    user = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="idempotency_keys",
+    )
+    request_hash = models.CharField(max_length=64)
+    response_status = models.PositiveSmallIntegerField()
+    response_snapshot = models.JSONField()
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    expires_at = models.DateTimeField(db_index=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["scope", "user", "key"],
+                name="uniq_idempotency_scope_user_key",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["scope", "key"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.scope}:{self.key}"

@@ -147,6 +147,8 @@ export function useLabReportsList(branchLabel = ""): UseLabReportsListResult {
     placeholderData: (previousData) => previousData,
     refetchInterval: REPORT_TASKS_POLL_MS,
     refetchIntervalInBackground: false,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
     staleTime: REPORT_TASKS_STALE_MS,
   });
 
@@ -165,9 +167,9 @@ export function useLabReportsList(branchLabel = ""): UseLabReportsListResult {
   }, [listQuery.isError, listQuery.isSuccess, listQuery.dataUpdatedAt]);
 
   const refetch = useCallback(() => {
-    void queryClient.invalidateQueries({
-      queryKey: ["lab", branchId ?? "unknown", "report-tasks"],
-    });
+    const prefix = ["lab", branchId ?? "unknown", "report-tasks"] as const;
+    void queryClient.invalidateQueries({ queryKey: prefix });
+    void queryClient.refetchQueries({ queryKey: prefix, type: "all" });
   }, [queryClient, branchId]);
 
   const forceDemo = isReportsDemoForced(searchParams);

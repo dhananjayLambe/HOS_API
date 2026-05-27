@@ -91,6 +91,13 @@ export const labSidebarIconActive = "mr-2.5 h-5 w-5 shrink-0 text-white [stroke-
 export const labMainOffsetSidebarOpen = "xl:ml-[calc(0.75rem+260px+0.75rem)]";
 export const labMainOffsetSidebarClosed = "xl:ml-4";
 
+/** Set on DashboardHeader; consumed by sticky sidebars and toolbars. */
+export const labShellHeaderHeightDefault = "5rem";
+export const labShellHeaderHeightDense = "2.75rem";
+
+export const labStickyBelowHeader =
+  "top-[calc(var(--lab-shell-header-height,4rem)+0.75rem)]";
+
 export const labHeaderAccentLine = "bg-gradient-to-r from-transparent via-[#7C5CFC]/25 to-transparent";
 
 export const labHeaderBar =

@@ -91,6 +91,11 @@ export function ReportDrawerSections({
                   {a.isPrimary ? (
                     <span className="ml-1 text-[10px] font-semibold text-[#7C5CFC]">PRIMARY</span>
                   ) : null}
+                  {a.version > 1 ? (
+                    <span className="ml-1 text-[10px] font-semibold text-violet-700">
+                      v{a.version}
+                    </span>
+                  ) : null}
                 </span>
                 <span className="shrink-0 text-xs text-[#6B7280]">
                   {formatReportTimestamp(a.uploadedAt, "")}
@@ -108,24 +113,13 @@ export function ReportDrawerSections({
           <h4 className="text-xs font-medium text-[#6B7280]">Latest delivery</h4>
           <p className="mt-1 text-sm text-[#374151]">
             Status: <span className="font-medium">{detail.delivery.status}</span>
+            <span className="block text-xs text-[#6B7280]">
+              Method: WhatsApp
+            </span>
             {detail.delivery.failureReason ? (
               <span className="block text-xs text-red-600">{detail.delivery.failureReason}</span>
             ) : null}
           </p>
-        </div>
-      ) : null}
-
-      {history && history.deliveryLogs.length > 1 ? (
-        <div className={reportSectionBox}>
-          <h4 className="text-xs font-medium text-[#6B7280]">Delivery history</h4>
-          <ul className="mt-2 space-y-1 text-xs text-[#6B7280]">
-            {history.deliveryLogs.map((log) => (
-              <li key={log.id}>
-                {log.status}
-                {log.sentAt ? ` · ${formatReportTimestamp(log.sentAt, "")}` : ""}
-              </li>
-            ))}
-          </ul>
         </div>
       ) : null}
 
@@ -134,19 +128,31 @@ export function ReportDrawerSections({
         history?.supersedesId ||
         history?.supersededById) && (
         <div className={reportSectionBox}>
-          <h4 className="text-xs font-medium text-[#6B7280]">Revision lineage</h4>
-          <p className="mt-1 text-xs text-[#6B7280]">
-            {(detail?.history.supersedesId ?? history?.supersedesId)
-              ? `Supersedes ${detail?.history.supersedesId ?? history?.supersedesId}`
-              : null}
-            {(detail?.history.supersedesId ?? history?.supersedesId) &&
-            (detail?.history.supersededById ?? history?.supersededById)
-              ? " · "
-              : null}
-            {(detail?.history.supersededById ?? history?.supersededById)
-              ? `Superseded by ${detail?.history.supersededById ?? history?.supersededById}`
-              : null}
-          </p>
+          <h4 className="text-xs font-medium text-[#6B7280]">Version history</h4>
+          <div className="mt-1 space-y-1 text-xs text-[#6B7280]">
+            {history?.artifacts.length ? (
+              <ul className="space-y-1">
+                {history.artifacts.map((artifact) => (
+                  <li key={artifact.id}>
+                    Version {artifact.version}
+                    {artifact.version === detail?.revisionNumber ? " - Latest" : ""}
+                    {" - "}
+                    {artifact.originalFilename}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {detail?.revisionNumber && detail.revisionNumber > 1 ? (
+              <p>
+                <span className="font-semibold text-violet-700">Updated Version</span>
+                {" · "}
+                v{detail.revisionNumber} latest
+              </p>
+            ) : null}
+            {(detail?.history.supersededById ?? history?.supersededById) ? (
+              <p>A newer updated version is available.</p>
+            ) : null}
+          </div>
         </div>
       )}
 

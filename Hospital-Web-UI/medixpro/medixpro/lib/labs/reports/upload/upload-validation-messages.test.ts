@@ -27,8 +27,8 @@ describe("upload-validation-messages", () => {
     expect(isUploadPrimaryEnabled(ctx)).toBe(false);
   });
 
-  it("action bar includes safe-area supports class", () => {
-    expect(UPLOAD_ACTION_BAR_CLASSNAME).toContain("safe-area-inset-bottom");
-    expect(UPLOAD_ACTION_BAR_CLASSNAME).toContain("supports-[padding:max(0px)]");
+  it("action bar is in-flow (not fixed viewport footer)", () => {
+    expect(UPLOAD_ACTION_BAR_CLASSNAME).toContain("rounded-xl");
+    expect(UPLOAD_ACTION_BAR_CLASSNAME).not.toContain("fixed bottom-0");
   });
 });

@@ -261,6 +261,16 @@ class LabOrdersListAPITests(TestCase):
         self.assertEqual(res.json()["total"], 1)
         self.assertIn("Unique", res.json()["results"][0]["patient_name"])
 
+    def test_search_by_patient_full_name(self):
+        user, branch, _org = _lab_admin_with_branch()
+        _create_assignment_on_branch(branch, patient_first="Unique", patient_last="Patient")
+        _create_assignment_on_branch(branch, patient_first="Other", patient_last="Person")
+
+        self.client.force_authenticate(user=user)
+        res = self.client.get(self.url, {"q": "Unique Patient"})
+        self.assertEqual(res.json()["total"], 1)
+        self.assertIn("Unique", res.json()["results"][0]["patient_name"])
+
     def test_status_filter(self):
         user, branch, _org = _lab_admin_with_branch()
         _create_assignment_on_branch(branch, order_number="ORD-PEN", assignment_status=LabAssignmentStatus.PENDING)

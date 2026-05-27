@@ -42,9 +42,17 @@ class ReportTaskContextSerializer(serializers.Serializer):
     visit_or_slot_label = serializers.CharField()
     operational_status = serializers.CharField()
     active_reports = ReportLineReportSerializer(many=True)
+    upload_target = serializers.DictField(allow_null=True)
 
     @classmethod
     def from_dto(cls, dto: ReportTaskContextDTO):
+        upload_target = None
+        if dto.upload_target is not None:
+            upload_target = {
+                "report_id": dto.upload_target.report_id,
+                "line_id": dto.upload_target.line_id,
+                "operational_status": dto.upload_target.operational_status,
+            }
         return cls(
             {
                 "task_id": dto.task_id,
@@ -63,6 +71,7 @@ class ReportTaskContextSerializer(serializers.Serializer):
                     ReportLineReportSerializer.from_dto(row).data
                     for row in dto.active_reports
                 ],
+                "upload_target": upload_target,
             }
         )
 

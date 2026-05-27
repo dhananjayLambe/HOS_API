@@ -56,9 +56,10 @@
 | GET | `api/v1/diagnostics/report-tasks/<task_id>/` | Assignment context + active reports (upload targets) |
 | POST | `api/v1/diagnostics/reports/<report_id>/artifacts/upload/` | **Only upload entry** |
 | GET | `api/v1/diagnostics/reports/<report_id>/` | Operational detail (active head only) |
-| GET | `api/v1/diagnostics/reports/<report_id>/download/` | Placeholder `{ download_url: null }` |
-| POST | `api/v1/diagnostics/reports/<report_id>/mark-ready/` | IN_PROGRESS → READY |
-| POST | `api/v1/diagnostics/reports/<report_id>/send-whatsapp/` | Prepare delivery + mark sent (Phase 1 simulate) |
+| GET | `api/v1/diagnostics/reports/<report_id>/download/` | Presigned URL `{ download_url, expires_in, filename, artifact_id }`; local dev `?stream=1` |
+| POST | `api/v1/diagnostics/reports/<report_id>/mark-ready/` | IN_PROGRESS → READY; supports `Idempotency-Key` |
+| POST | `api/v1/diagnostics/reports/<report_id>/send-whatsapp/` | Async delivery (WhatsApp/SMS/EMAIL); `Idempotency-Key` |
+| GET | `api/v1/diagnostics/reports/operational-metrics/` | Branch TAT, SLA breach rate, delivery stats |
 | POST | `api/v1/diagnostics/delivery-logs/<log_id>/retry/` | Append-only retry (FAILED parent only) |
 | GET | `api/v1/diagnostics/reports/<report_id>/history/` | Operational active lineage (not audit) |
 | GET | `api/v1/diagnostics/patients/<patient_id>/reports/` | Patient-wide summaries (DESC `updated_at`) |

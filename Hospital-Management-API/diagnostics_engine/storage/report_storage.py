@@ -5,6 +5,11 @@ from __future__ import annotations
 from django.core.files.storage import default_storage
 
 from diagnostics_engine.models.reports import DiagnosticReportArtifact
+from diagnostics_engine.storage.s3_report_storage import (
+    delete_object,
+    generate_presigned_download_url,
+    reports_s3_enabled,
+)
 
 
 class ReportStorageService:
@@ -15,10 +20,22 @@ class ReportStorageService:
         return artifact.storage_path or (artifact.file.name if artifact.file else None)
 
     @staticmethod
-    def download_url(artifact: DiagnosticReportArtifact) -> str | None:
-        if not artifact.file:
+    def download_url(artifact: DiagnosticReportArtifact, *, expires_in: int | None = None) -> str | None:
+        """Presigned URL only — never return ``artifact.file.url``."""
+        key = ReportStorageService.storage_path(artifact)
+        if not key:
             return None
-        return artifact.file.url
+        filename = ReportStorageService.download_filename(artifact)
+        url = generate_presigned_download_url(
+            key,
+            expires_in=expires_in,
+            download_filename=filename,
+        )
+        if url:
+            return url
+        if not reports_s3_enabled() and artifact.file:
+            return None
+        return None
 
     @staticmethod
     def exists(artifact: DiagnosticReportArtifact) -> bool:
@@ -36,3 +53,7 @@ class ReportStorageService:
     @staticmethod
     def download_filename(artifact: DiagnosticReportArtifact) -> str:
         return artifact.download_filename or artifact.stored_filename or "report.pdf"
+
+    @staticmethod
+    def delete_storage_object(storage_key: str) -> bool:
+        return delete_object(storage_key)

@@ -25,6 +25,7 @@ from diagnostics_engine.services.reports.access_control import (
     filter_reports_queryset_for_branch,
     report_belongs_to_branch as access_report_belongs_to_branch,
 )
+from labs.api.services.patient_search import patient_profile_name_search_q
 from diagnostics_engine.models.choices import ReportLifecycleStatus
 from diagnostics_engine.models.orders import DiagnosticOrder, DiagnosticOrderTestLine
 from diagnostics_engine.models.reports import DiagnosticReportArtifact, DiagnosticTestReport
@@ -447,9 +448,7 @@ class ReportQueryService:
         return qs.filter(
             Q(order_test_line__order__order_number__icontains=term)
             | Q(order_test_line__service__name__icontains=term)
-            | Q(order_test_line__order__patient_profile__first_name__icontains=term)
-            | Q(order_test_line__order__patient_profile__last_name__icontains=term)
-            | Q(order_test_line__order__patient_profile__account__user__username__icontains=term)
+            | patient_profile_name_search_q(term, "order_test_line__order__patient_profile")
         )
 
     @staticmethod

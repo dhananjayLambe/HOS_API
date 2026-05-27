@@ -17,12 +17,17 @@ function isLabDashboardHome(pathname: string): boolean {
   return pathname === "/lab-dashboard" || pathname === "/lab-dashboard/";
 }
 
+function isLabUploadPage(pathname: string): boolean {
+  return pathname.startsWith("/lab-dashboard/reports/upload");
+}
+
 /**
  * Lab workspace shell — white canvas, floating header, floating sidebar (xl+).
  */
 export function LabShellLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isDashboardHome = isLabDashboardHome(pathname ?? "");
+  const isUploadPage = isLabUploadPage(pathname ?? "");
   const isMobile = useMobile();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const sidebarRef = useRef<HTMLDivElement>(null);
@@ -48,7 +53,7 @@ export function LabShellLayout({ children }: { children: React.ReactNode }) {
   const mainOffset = isSidebarOpen ? labMainOffsetSidebarOpen : labMainOffsetSidebarClosed;
 
   return (
-    <LabShellHeaderProvider>
+    <LabShellHeaderProvider sidebarOpen={isSidebarOpen}>
       <div className={cn("flex min-h-screen min-h-[100dvh] w-full max-w-[100vw] flex-col gap-0 overflow-x-hidden", labWorkspaceBg)}>
         <DashboardHeader
           compact={isDashboardHome}
@@ -61,8 +66,12 @@ export function LabShellLayout({ children }: { children: React.ReactNode }) {
           </div>
           <main
             className={cn(
-              "relative min-h-0 w-full min-w-0 max-w-full flex-1 overflow-x-hidden px-3 pt-2 sm:px-4 sm:pt-3 xl:mr-4",
-              isDashboardHome ? "overflow-y-auto pb-3" : "overflow-y-auto pb-6 sm:pb-8 xl:pb-10",
+              "relative min-h-0 w-full min-w-0 max-w-full flex-1 overflow-x-hidden px-3 sm:px-4 xl:mr-4",
+              isDashboardHome
+                ? "overflow-y-auto pb-3 pt-2 sm:pt-3"
+                : isUploadPage
+                  ? "overflow-y-auto pb-3 pt-0 sm:pb-4"
+                  : "overflow-y-auto pb-6 sm:pb-8 pt-2 sm:pt-3 xl:pb-10",
               mainOffset,
               labWorkspaceBg,
             )}
@@ -70,7 +79,11 @@ export function LabShellLayout({ children }: { children: React.ReactNode }) {
             <div
               className={cn(
                 "relative z-[1]",
-                isDashboardHome ? "space-y-1.5" : "space-y-6 sm:space-y-8",
+                isDashboardHome
+                  ? "space-y-1.5"
+                  : isUploadPage
+                    ? "space-y-0"
+                    : "space-y-6 sm:space-y-8",
               )}
             >
               {children}

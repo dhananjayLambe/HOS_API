@@ -66,9 +66,38 @@ INV_SUGGEST_MAX_PACKAGE_SIZE = int(os.getenv("INV_SUGGEST_MAX_PACKAGE_SIZE", "25
 INV_SUGGEST_CACHE_TTL_SECONDS = int(os.getenv("INV_SUGGEST_CACHE_TTL_SECONDS", "120"))
 
 # Diagnostic report artifact uploads (per-file and batch limits)
-MAX_REPORT_UPLOAD_SIZE_MB = int(os.getenv("MAX_REPORT_UPLOAD_SIZE_MB", "25"))
+MAX_REPORT_UPLOAD_SIZE_MB = int(os.getenv("MAX_REPORT_UPLOAD_SIZE_MB", "20"))
 MAX_REPORT_BATCH_UPLOAD_SIZE_MB = int(os.getenv("MAX_REPORT_BATCH_UPLOAD_SIZE_MB", "100"))
 MAX_REPORT_UPLOAD_FILES = int(os.getenv("MAX_REPORT_UPLOAD_FILES", "10"))
+
+# Report object storage (S3) — optional; local MEDIA_ROOT when unset
+AWS_REPORTS_BUCKET = os.getenv("AWS_REPORTS_BUCKET", "").strip() or None
+AWS_S3_REGION_NAME = os.getenv("AWS_S3_REGION_NAME", os.getenv("AWS_REGION", "ap-south-1"))
+AWS_S3_SIGNATURE_VERSION = os.getenv("AWS_S3_SIGNATURE_VERSION", "s3v4")
+AWS_S3_FILE_OVERWRITE = False
+AWS_DEFAULT_ACL = None
+AWS_S3_OBJECT_PARAMETERS = {"ServerSideEncryption": os.getenv("AWS_S3_SSE", "AES256")}
+REPORT_PRESIGNED_URL_EXPIRY_SECONDS = int(os.getenv("REPORT_PRESIGNED_URL_EXPIRY_SECONDS", "300"))
+IDEMPOTENCY_KEY_TTL_HOURS = int(os.getenv("IDEMPOTENCY_KEY_TTL_HOURS", "24"))
+REPORT_DELIVERY_ASYNC = os.getenv("REPORT_DELIVERY_ASYNC", "true").lower() in ("1", "true", "yes", "on")
+
+if AWS_REPORTS_BUCKET:
+    STORAGES = {
+        "default": {
+            "BACKEND": "storages.backends.s3boto3.S3Boto3Storage",
+            "OPTIONS": {
+                "bucket_name": AWS_REPORTS_BUCKET,
+                "region_name": AWS_S3_REGION_NAME,
+                "signature_version": AWS_S3_SIGNATURE_VERSION,
+                "file_overwrite": AWS_S3_FILE_OVERWRITE,
+                "default_acl": AWS_DEFAULT_ACL,
+                "object_parameters": AWS_S3_OBJECT_PARAMETERS,
+            },
+        },
+        "staticfiles": {
+            "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+        },
+    }
 
 # Placeholder public report download base (never expose raw S3 URLs in delivery metadata)
 REPORT_PUBLIC_DOWNLOAD_BASE_URL = os.getenv(

@@ -8,6 +8,8 @@ import {
   labMainOffsetSidebarClosed,
   labMainOffsetSidebarOpen,
   labPageTitle,
+  labShellHeaderHeightDefault,
+  labShellHeaderHeightDense,
   labTextMuted,
 } from "@/components/labs/labDesignTokens";
 import { Button } from "@/components/ui/button";
@@ -30,6 +32,10 @@ export function DashboardHeader({ onMenuClick, sidebarOpen, compact }: Dashboard
   const pageHeader = useLabShellHeaderRead();
   const { data, isPending, isError } = useLabSession();
 
+  const isDense = pageHeader?.dense ?? false;
+  const headerBarCompact = compact || isDense;
+  const headerHeightVar = isDense ? labShellHeaderHeightDense : labShellHeaderHeightDefault;
+
   const fullName = data
     ? [data.user.first_name, data.user.last_name].filter(Boolean).join(" ").trim() || "—"
     : "";
@@ -40,15 +46,16 @@ export function DashboardHeader({ onMenuClick, sidebarOpen, compact }: Dashboard
     <header
       className={cn(
         "sticky top-0 z-40 shrink-0 px-3 sm:px-4",
-        compact ? "pt-2 sm:pt-2" : "pt-3 sm:pt-4",
+        headerBarCompact ? "pt-1 sm:pt-1" : "pt-3 sm:pt-4",
         sidebarOpen ? labMainOffsetSidebarOpen : labMainOffsetSidebarClosed,
         "xl:mr-4 xl:pr-0",
       )}
+      style={{ ["--lab-shell-header-height" as string]: headerHeightVar }}
     >
       <div
         className={cn(
           "flex w-full min-w-0 items-center justify-between gap-2 rounded-2xl border border-[#ECEBFF] bg-white/88 px-2 shadow-[0_8px_32px_rgba(124,92,252,0.06)] backdrop-blur-xl sm:gap-3 sm:px-3",
-          compact ? "min-h-14 py-1.5" : "min-h-20 py-2.5",
+          headerBarCompact ? "min-h-11 py-1" : "min-h-20 py-2.5",
           "supports-[backdrop-filter]:bg-white/82",
         )}
       >
@@ -83,8 +90,13 @@ export function DashboardHeader({ onMenuClick, sidebarOpen, compact }: Dashboard
             ) : null}
             <div className="min-w-0 flex-1">
               <h1 className={cn(labPageTitle, "text-lg sm:text-xl")}>{pageHeader.title}</h1>
-              {pageHeader.description ? (
-                <p className={cn("mt-0.5 line-clamp-2 text-xs leading-snug sm:text-sm", labTextMuted)}>
+              {pageHeader.description && !isDense ? (
+                <p
+                  className={cn(
+                    isDense ? "mt-0 line-clamp-1 text-xs leading-tight" : "mt-0.5 line-clamp-2 text-xs leading-snug sm:text-sm",
+                    labTextMuted,
+                  )}
+                >
                   {pageHeader.description}
                 </p>
               ) : null}

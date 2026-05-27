@@ -190,7 +190,12 @@ export function ReportsListPage() {
           void runAction(
             task,
             actionKey,
-            () => mutations.sendWhatsAppMock(task.taskId, reportId),
+            () =>
+              mutations.sendWhatsAppMock(
+                reportId,
+                {},
+                { taskId: task.taskId, reportId, assignmentId: task.assignmentId },
+              ),
             actionKey === "wa" ? "WhatsApp delivery queued" : "Report resent",
           );
           break;

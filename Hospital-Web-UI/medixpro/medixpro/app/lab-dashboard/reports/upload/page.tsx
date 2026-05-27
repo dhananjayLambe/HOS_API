@@ -1,7 +1,29 @@
 "use client";
 
-import { ReportUploadPage } from "@/components/labs/reports/upload/ReportUploadPage";
+import { Suspense, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+
+function UploadRedirect() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const taskId = searchParams.get("taskId");
+    const demo = searchParams.get("demo");
+    const params = new URLSearchParams();
+    if (taskId) params.set("openOrder", taskId);
+    if (demo) params.set("demo", demo);
+    else params.set("demo", "1");
+    router.replace(`/lab-dashboard/reports/?${params.toString()}`);
+  }, [router, searchParams]);
+
+  return <p className="p-4 text-sm text-[#6B7280]">Redirecting to reports…</p>;
+}
 
 export default function LabReportUploadRoutePage() {
-  return <ReportUploadPage />;
+  return (
+    <Suspense fallback={<p className="p-4 text-sm text-[#6B7280]">Redirecting…</p>}>
+      <UploadRedirect />
+    </Suspense>
+  );
 }

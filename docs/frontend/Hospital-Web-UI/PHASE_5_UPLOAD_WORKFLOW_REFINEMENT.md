@@ -61,3 +61,13 @@ Vitest under `lib/labs/reports/upload/*.test.ts` — route, draft, primary, vali
 ## Non-goals
 
 Chunked uploads, server drafts, custom PDF renderer, WhatsApp UI simulation, queue-cache hydration for upload page, correction UI.
+
+## UI polish pass (layout v2)
+
+- Folder structure: `upload/layout/`, `steps/`, `sidebar/`, `footer/`, `shared/` (thin re-exports at legacy paths)
+- `UploadWorkflowLayout` — page max-width, grid, footer padding compensation
+- `REPORT_UPLOAD_FOOTER_HEIGHT` (`72px`) + `uploadFooterPaddingStyle` in `upload-layout-styles.ts`
+- `--lab-shell-header-height` on `DashboardHeader`; `labStickyBelowHeader` token
+- `UploadStepStatus` async-ready stepper states
+- Client file validation: duplicate / unsupported / too large (`upload-file-validation.ts`)
+- Footer `z-[45]`, grouped actions, mobile full-width CTA

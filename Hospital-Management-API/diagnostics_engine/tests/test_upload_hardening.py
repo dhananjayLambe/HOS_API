@@ -273,6 +273,7 @@ class ArtifactVersionAndReplaceTests(TestCase):
             primary_file_index=0,
         )[0]
         art.refresh_from_db()
+        self.assertIn("diagnostic-reports/", art.storage_path)
         self.assertIn("encounter=", art.storage_path)
         self.assertIn("artifact_", art.storage_path)
         self.assertNotIn("Rahul", art.storage_path)

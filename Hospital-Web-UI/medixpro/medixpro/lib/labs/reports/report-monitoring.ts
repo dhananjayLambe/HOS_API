@@ -5,6 +5,7 @@ export type ReportMonitorEvent =
   | "upload_fail"
   | "upload_duration"
   | "retry_fail"
+  | "whatsapp_fail"
   | "poll_degraded"
   | "mark_ready_fail";
 

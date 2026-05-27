@@ -19,6 +19,10 @@ Next.js rewrites ` /api/v1/diagnostics/*` → Django backend (`next.config.mjs`)
 - [x] Queue card: `available_action_targets` (upload/mark-ready/WhatsApp report ids, retry log id)
 - [x] Upload: `POST reports/{report_id}/artifacts/upload/` multipart (`files`, `primary_file_index`, `notes`, `version`)
 - [x] Mark ready / retry / detail on `report_id` / `log_id`
+- [x] Presigned download: `GET reports/{id}/download/`
+- [x] Idempotency-Key on mark-ready and send-whatsapp
+- [x] Draft upload: Save draft → upload only; Submit → upload + mark-ready
+- [x] Operational metrics: `GET reports/operational-metrics/`
 - [x] Error codes mapped in `report-api-errors.ts`
 
 ## Queue assignment filter (frontend)

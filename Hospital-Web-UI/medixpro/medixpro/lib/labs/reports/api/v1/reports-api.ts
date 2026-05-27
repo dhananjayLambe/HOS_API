@@ -21,10 +21,24 @@ import type {
 
 const V1_PREFIX = "v1/diagnostics";
 
-function requestHeaders(requestId?: string): Record<string, string> {
+function requestHeaders(
+  requestId?: string,
+  idempotencyKey?: string,
+): Record<string, string> {
   const id = requestId ?? newReportRequestId();
-  return { "X-Request-ID": id };
+  const headers: Record<string, string> = { "X-Request-ID": id };
+  if (idempotencyKey) {
+    headers["Idempotency-Key"] = idempotencyKey;
+  }
+  return headers;
 }
+
+export type ReportDownloadApiData = {
+  download_url: string | null;
+  expires_in: number;
+  filename: string;
+  artifact_id: string;
+};
 
 export async function getReportsQueue(
   params: ReportTasksListQueryParams,
@@ -101,7 +115,10 @@ export async function getEncounterReports(
 export async function uploadReportArtifacts(
   reportId: string,
   formData: FormData,
-  options?: { requestId?: string },
+  options?: {
+    requestId?: string;
+    onUploadProgress?: (percent: number) => void;
+  },
 ): Promise<UploadArtifactsApiData> {
   const { data } = await backendAxiosClient.post<DiagnosticsApiEnvelope<UploadArtifactsApiData>>(
     `${V1_PREFIX}/reports/${encodeURIComponent(reportId)}/artifacts/upload/`,
@@ -111,33 +128,80 @@ export async function uploadReportArtifacts(
         ...requestHeaders(options?.requestId),
         "Content-Type": "multipart/form-data",
       },
+      onUploadProgress: options?.onUploadProgress
+        ? (event) => {
+            const total = event.total ?? 0;
+            if (total > 0) {
+              options.onUploadProgress?.(Math.round((event.loaded / total) * 100));
+            }
+          }
+        : undefined,
     },
   );
   return unwrapApiResponse(data);
 }
 
+export async function getReportDownloadUrl(
+  reportId: string,
+  options?: { signal?: AbortSignal; requestId?: string; stream?: boolean },
+): Promise<ReportDownloadApiData> {
+  const { data } = await backendAxiosClient.get<DiagnosticsApiEnvelope<ReportDownloadApiData>>(
+    `${V1_PREFIX}/reports/${encodeURIComponent(reportId)}/download/`,
+    {
+      params: options?.stream ? { stream: "1" } : undefined,
+      signal: options?.signal,
+      headers: requestHeaders(options?.requestId),
+      responseType: options?.stream ? "blob" : "json",
+    },
+  );
+  if (options?.stream) {
+    return {
+      download_url: URL.createObjectURL(data as unknown as Blob),
+      expires_in: 0,
+      filename: "report.pdf",
+      artifact_id: reportId,
+    };
+  }
+  return unwrapApiResponse(data as DiagnosticsApiEnvelope<ReportDownloadApiData>);
+}
+
 export async function markReportReady(
   reportId: string,
   body?: { notes?: string },
-  options?: { requestId?: string },
+  options?: { requestId?: string; idempotencyKey?: string },
 ): Promise<MarkReadyApiData> {
   const { data } = await backendAxiosClient.post<DiagnosticsApiEnvelope<MarkReadyApiData>>(
     `${V1_PREFIX}/reports/${encodeURIComponent(reportId)}/mark-ready/`,
     body ?? {},
-    { headers: requestHeaders(options?.requestId) },
+    { headers: requestHeaders(options?.requestId, options?.idempotencyKey) },
   );
   return unwrapApiResponse(data);
 }
 
 export async function sendWhatsApp(
   reportId: string,
-  payload: { recipient_phone: string; channel?: string },
-  options?: { requestId?: string },
+  payload: { recipient_phone?: string; recipient_email?: string; channel?: string },
+  options?: { requestId?: string; idempotencyKey?: string },
 ): Promise<SendWhatsAppApiData> {
   const { data } = await backendAxiosClient.post<DiagnosticsApiEnvelope<SendWhatsAppApiData>>(
     `${V1_PREFIX}/reports/${encodeURIComponent(reportId)}/send-whatsapp/`,
     { channel: "WHATSAPP", ...payload },
-    { headers: requestHeaders(options?.requestId) },
+    { headers: requestHeaders(options?.requestId, options?.idempotencyKey) },
+  );
+  return unwrapApiResponse(data);
+}
+
+export async function getReportOperationalMetrics(
+  params?: { days?: number; sla_minutes?: number },
+  options?: { signal?: AbortSignal; requestId?: string },
+): Promise<Record<string, unknown>> {
+  const { data } = await backendAxiosClient.get<DiagnosticsApiEnvelope<Record<string, unknown>>>(
+    `${V1_PREFIX}/reports/operational-metrics/`,
+    {
+      params,
+      signal: options?.signal,
+      headers: requestHeaders(options?.requestId),
+    },
   );
   return unwrapApiResponse(data);
 }

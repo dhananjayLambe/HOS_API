@@ -6,12 +6,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
-from diagnostics_engine.domain.reports import get_active_report_for_line
+from diagnostics_engine.domain.reports import get_active_report_for_line, get_primary_artifact
 from diagnostics_engine.domain.reports.report_actions import ReportAction, allowed_actions_for_report
 from diagnostics_engine.models.choices import ReportLifecycleStatus
 from diagnostics_engine.models.reports import DiagnosticTestReport
 from labs.api.services.lab_orders_presenter import (
-    aggregate_report_status,
     collection_type_from_mode,
     slot_label_for_order,
 )
@@ -36,6 +35,38 @@ def map_lifecycle_to_operational(
     return "PENDING_UPLOAD"
 
 
+# Least-advanced line wins — queue tab reflects remaining work on multi-test orders.
+_QUEUE_OPERATIONAL_PRIORITY = (
+    "FAILED_DELIVERY",
+    "PENDING_UPLOAD",
+    "UPLOADED",
+    "READY_DELIVERY",
+    "DELIVERED",
+)
+
+
+def aggregate_queue_operational_status(order) -> str:
+    """Bottleneck operational bucket across all active test lines."""
+    line_statuses: list[str] = []
+    for line in order.test_lines.all():
+        report = get_active_report_for_line(line)
+        if report is None:
+            line_statuses.append("PENDING_UPLOAD")
+            continue
+        line_statuses.append(
+            map_lifecycle_to_operational(
+                report.status,
+                delivery_status=report.delivery_status,
+            )
+        )
+    if not line_statuses:
+        return "PENDING_UPLOAD"
+    for bucket in _QUEUE_OPERATIONAL_PRIORITY:
+        if bucket in line_statuses:
+            return bucket
+    return line_statuses[0]
+
+
 def format_test_label(test_names: list[str]) -> str:
     if not test_names:
         return "Diagnostic order"
@@ -55,6 +86,13 @@ class ReportLineReportDTO:
 
 
 @dataclass(frozen=True)
+class ReportUploadTargetDTO:
+    report_id: UUID
+    line_id: UUID
+    operational_status: str
+
+
+@dataclass(frozen=True)
 class ReportTaskContextDTO:
     task_id: UUID
     assignment_id: UUID
@@ -67,6 +105,7 @@ class ReportTaskContextDTO:
     visit_or_slot_label: str
     operational_status: str
     active_reports: list[ReportLineReportDTO]
+    upload_target: ReportUploadTargetDTO | None = None
 
 
 @dataclass(frozen=True)
@@ -134,7 +173,10 @@ def build_available_action_targets(assignment: LabOrderAssignment) -> ReportActi
         actions = allowed_actions_for_report(report)
         rid = report.id
         if upload_id is None and ReportAction.UPLOAD_REPORT in actions:
-            upload_id = rid
+            has_primary = get_primary_artifact(report) is not None
+            awaiting_finalize = ReportAction.MARK_READY in actions
+            if not (has_primary and awaiting_finalize):
+                upload_id = rid
         if mark_ready_id is None and ReportAction.MARK_READY in actions:
             mark_ready_id = rid
         if send_whatsapp_id is None and ReportAction.SEND_WHATSAPP in actions:
@@ -170,6 +212,30 @@ def _active_reports_for_order(order) -> list[ReportLineReportDTO]:
     return rows
 
 
+def build_upload_target(assignment: LabOrderAssignment) -> ReportUploadTargetDTO | None:
+    """First active report line eligible for artifact upload (upload page target)."""
+    order = assignment.diagnostic_order
+    fallback: ReportUploadTargetDTO | None = None
+    for line in order.test_lines.all():
+        report = get_active_report_for_line(line)
+        if report is None:
+            continue
+        op = map_lifecycle_to_operational(
+            report.status,
+            delivery_status=report.delivery_status,
+        )
+        candidate = ReportUploadTargetDTO(
+            report_id=report.id,
+            line_id=line.id,
+            operational_status=op,
+        )
+        if fallback is None:
+            fallback = candidate
+        if ReportAction.UPLOAD_REPORT in allowed_actions_for_report(report):
+            return candidate
+    return fallback
+
+
 def build_report_task_context(assignment: LabOrderAssignment) -> ReportTaskContextDTO:
     order = assignment.diagnostic_order
     profile = order.patient_profile
@@ -181,7 +247,7 @@ def build_report_task_context(assignment: LabOrderAssignment) -> ReportTaskConte
         enc = order.consultation.encounter
         encounter_id = enc.id if enc else None
 
-    report_status = aggregate_report_status(order)
+    report_status = aggregate_queue_operational_status(order)
     return ReportTaskContextDTO(
         task_id=assignment.id,
         assignment_id=assignment.id,
@@ -192,8 +258,9 @@ def build_report_task_context(assignment: LabOrderAssignment) -> ReportTaskConte
         encounter_id=encounter_id,
         collection_type=collection_type_from_mode(order.sample_collection_mode),
         visit_or_slot_label=slot_label_for_order(order),
-        operational_status=map_lifecycle_to_operational(report_status),
+        operational_status=report_status,
         active_reports=_active_reports_for_order(order),
+        upload_target=build_upload_target(assignment),
     )
 
 
@@ -227,7 +294,7 @@ def build_report_task_dto(
     test_names = [
         tl.service.name for tl in order.test_lines.all() if getattr(tl, "service_id", None)
     ]
-    report_status = aggregate_report_status(order)
+    operational_status = aggregate_queue_operational_status(order)
 
     uploaded_at = None
     ready_at = None
@@ -252,7 +319,7 @@ def build_report_task_dto(
         patient_phone=_patient_phone(profile),
         collection_type=collection_type_from_mode(order.sample_collection_mode),
         test_label=format_test_label(test_names),
-        operational_status=map_lifecycle_to_operational(report_status),
+        operational_status=operational_status,
         visit_or_slot_label=slot_label_for_order(order),
         pending_sibling_count=pending_sibling_count,
         uploaded_at=uploaded_at,

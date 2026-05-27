@@ -32,6 +32,7 @@ from diagnostics_engine.monitoring.report_events import OUTCOME_FAILED, OUTCOME_
 from diagnostics_engine.services.reports.access_control import get_report_branch_id
 from diagnostics_engine.services.reports.report_audit import emit_report_audit_event
 from diagnostics_engine.services.reports.report_validation_service import ReportValidationService
+from diagnostics_engine.services.reports.report_download_service import ReportDownloadService
 from diagnostics_engine.services.reports.report_workflow_service import ReportWorkflowService
 
 logger = logging.getLogger("diagnostics.reports")
@@ -47,14 +48,22 @@ class ReportDeliveryService:
         cls,
         *,
         report: DiagnosticTestReport,
-        recipient_phone: str,
+        recipient_phone: str | None = None,
+        recipient: str | None = None,
         initiated_by=None,
         channel: str = "WHATSAPP",
     ) -> LabReportDeliveryLog:
         ReportValidationService.validate_report_ready_for_delivery(report)
-        phone = ReportValidationService.validate_delivery_phone(recipient_phone)
+        channel_norm = (channel or "WHATSAPP").strip().upper()
+        raw = (recipient or recipient_phone or "").strip()
+        if channel_norm == "EMAIL":
+            if not raw or "@" not in raw:
+                raise ValidationError("Valid recipient email is required.")
+            destination = raw
+        else:
+            destination = ReportValidationService.validate_delivery_phone(raw)
         artifact = ReportValidationService.validate_primary_artifact_exists(report)
-        download_url, token = cls._build_delivery_download_url()
+        download_url, token = cls._build_delivery_download_url(report=report, artifact=artifact)
 
         metadata: dict[str, Any] = {
             "artifact_id": str(artifact.id),
@@ -63,8 +72,8 @@ class ReportDeliveryService:
         }
         log = cls._create_delivery_log(
             report=report,
-            channel=channel,
-            recipient=phone,
+            channel=channel_norm,
+            recipient=destination,
             delivery_status=DeliveryStatus.PENDING,
             metadata=metadata,
             initiated_by=initiated_by,
@@ -93,6 +102,36 @@ class ReportDeliveryService:
             channel,
         )
         return log
+
+    @classmethod
+    def execute_delivery_send(
+        cls,
+        *,
+        delivery_log: LabReportDeliveryLog,
+        external_message_id: str | None = None,
+    ) -> LabReportDeliveryLog:
+        """Provider send step (WhatsApp/SMS/email). Marks sent then delivered."""
+        from diagnostics_engine.services.reports.delivery_providers import get_delivery_provider
+
+        report = delivery_log.diagnostic_test_report
+        provider = get_delivery_provider(delivery_log.delivery_channel)
+        message_id = provider.send(
+            recipient=delivery_log.recipient,
+            download_url=(delivery_log.metadata or {}).get("download_url", ""),
+            report=report,
+        )
+        cls.mark_delivery_sent(
+            delivery_log=delivery_log,
+            external_message_id=external_message_id or message_id,
+        )
+        safe_emit(
+            emit_report_audit_event,
+            action="delivery_sent",
+            report=report,
+            user=None,
+            metadata={"log_id": str(delivery_log.id), "channel": delivery_log.delivery_channel},
+        )
+        return cls.mark_delivery_delivered(delivery_log=delivery_log)
 
     @classmethod
     @transaction.atomic
@@ -207,7 +246,7 @@ class ReportDeliveryService:
         )
         ReportValidationService.validate_report_ready_for_delivery(report)
         artifact = ReportValidationService.validate_primary_artifact_exists(report)
-        download_url, token = cls._build_delivery_download_url()
+        download_url, token = cls._build_delivery_download_url(report=report, artifact=artifact)
 
         parent_retry = delivery_log.retry_count or 0
         metadata: dict[str, Any] = {
@@ -391,11 +430,14 @@ class ReportDeliveryService:
         return DeliveryStatus.PENDING
 
     @staticmethod
-    def _build_delivery_download_url() -> tuple[str, str]:
-        # Phase 2: replace placeholder token with expiring signed delivery token model.
-        token = uuid.uuid4().hex
-        base = settings.REPORT_PUBLIC_DOWNLOAD_BASE_URL.rstrip("/")
-        return f"{base}/{token}", token
+    def _build_delivery_download_url(*, report, artifact) -> tuple[str, str]:
+        try:
+            payload = ReportDownloadService.build_download_response(report=report, user=None)
+            return payload["download_url"], payload.get("artifact_id", uuid.uuid4().hex)
+        except ValidationError:
+            token = uuid.uuid4().hex
+            base = settings.REPORT_PUBLIC_DOWNLOAD_BASE_URL.rstrip("/")
+            return f"{base}/{token}", token
 
     @staticmethod
     def _create_delivery_log(

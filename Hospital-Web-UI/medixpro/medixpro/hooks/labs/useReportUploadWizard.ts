@@ -22,6 +22,11 @@ import {
   primaryAfterRemove,
 } from "@/lib/labs/reports/upload/upload-primary-selection";
 import {
+  UPLOAD_ACCEPT_ATTR,
+  validateIncomingFiles,
+  type UploadFileRejection,
+} from "@/lib/labs/reports/upload/upload-file-validation";
+import {
   adaptReportTaskContext,
   type UploadTaskContext,
 } from "@/lib/labs/reports/upload/upload-task-context-adapter";
@@ -51,9 +56,6 @@ export type UploadFileItem = UploadDraftFileMeta & {
 export type TaskLoadState = "none" | "loading" | "ready" | "invalid" | "malformed";
 
 export type SubmissionState = "idle" | "uploading" | "success" | "failed";
-
-const ACCEPT =
-  ".pdf,.jpg,.jpeg,.png,.csv,.xlsx,.txt,.zip,application/pdf,image/jpeg,image/png,text/csv,text/plain,application/zip,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
 function inferMimeType(file: File): string {
   if (file.type) return file.type;
@@ -122,6 +124,7 @@ export function useReportUploadWizard(routeState?: UploadRouteState) {
   const [submittedStatus, setSubmittedStatus] = useState<ReportOperationalStatus | null>(null);
   const mutations = useReportMutations(branchId);
   const [draftBannerDismissed, setDraftBannerDismissed] = useState(false);
+  const [fileRejections, setFileRejections] = useState<UploadFileRejection[]>([]);
 
   const uploadContext: UploadTaskContext | null = useMemo(() => {
     if (!contextQuery.data) return null;
@@ -224,8 +227,16 @@ export function useReportUploadWizard(routeState?: UploadRouteState) {
   const addFiles = useCallback((incoming: FileList | File[]) => {
     const list = Array.from(incoming);
     setFiles((prev) => {
+      const { accepted, rejected } = validateIncomingFiles(list, prev);
+      if (rejected.length > 0) {
+        setFileRejections(rejected);
+      } else if (accepted.length > 0) {
+        setFileRejections([]);
+      }
+      if (accepted.length === 0) return prev;
+
       const next = [...prev];
-      for (const f of list) {
+      for (const f of accepted) {
         const meta = fileMeta(f);
         if (!next.some((x) => x.id === meta.id)) next.push(meta);
       }
@@ -233,6 +244,10 @@ export function useReportUploadWizard(routeState?: UploadRouteState) {
       return next;
     });
     setDraftBannerDismissed(true);
+  }, []);
+
+  const dismissFileRejections = useCallback(() => {
+    setFileRejections([]);
   }, []);
 
   const removeFile = useCallback((id: string) => {
@@ -260,6 +275,37 @@ export function useReportUploadWizard(routeState?: UploadRouteState) {
       verified,
     });
   }, [resolvedTaskId, files, primaryFileId, verified]);
+
+  const uploadDraftOnly = useCallback(async () => {
+    if (!resolvedTaskId || files.length === 0) return false;
+    const ctx = contextQuery.data;
+    if (!ctx || !isReportTasksV1ApiEnabled()) return false;
+    const reportId = resolveUploadReportId(ctx);
+    if (!reportId) return false;
+    const fileObjects = files.map((f) => f.file).filter((f): f is File => !!f);
+    if (fileObjects.length === 0) return false;
+    const primaryIndex = Math.max(0, files.findIndex((f) => f.id === primaryFileId));
+    try {
+      await mutations.uploadReport({
+        reportId,
+        files: fileObjects,
+        primaryFileIndex: primaryIndex,
+        taskId: resolvedTaskId,
+        assignmentId: ctx.assignmentId,
+      });
+      saveUploadDraft({
+        version: 1,
+        savedAt: new Date().toISOString(),
+        taskId: resolvedTaskId,
+        filesMeta: files.map(({ id, name, size, type }) => ({ id, name, size, type })),
+        primaryFileId,
+        verified,
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }, [resolvedTaskId, files, primaryFileId, verified, contextQuery.data, mutations]);
 
   const submit = useCallback(
     async (onSuccess?: () => void) => {
@@ -331,6 +377,7 @@ export function useReportUploadWizard(routeState?: UploadRouteState) {
         }
 
         clearUploadDraft(resolvedTaskId);
+        await contextQuery.refetch();
         setSubmittedStatus(result.status);
         setSubmissionState("success");
         setStep("success");
@@ -354,9 +401,24 @@ export function useReportUploadWizard(routeState?: UploadRouteState) {
       submissionState,
       submissionRequestId,
       contextQuery.data,
+      contextQuery.refetch,
       mutations,
     ],
   );
+
+  const continueNextReport = useCallback(async () => {
+    await contextQuery.refetch();
+    setFiles([]);
+    setPrimaryFileId(null);
+    setVerified(false);
+    setSubmittedStatus(null);
+    setSubmissionState("idle");
+    setSubmissionRequestId(null);
+    setSubmitError(null);
+    setSubmitAttempted(false);
+    setDraftBannerDismissed(false);
+    setStep("files");
+  }, [contextQuery]);
 
   const resetForAnother = useCallback(() => {
     setSelectedTaskIdOverride(null);
@@ -435,12 +497,15 @@ export function useReportUploadWizard(routeState?: UploadRouteState) {
     files,
     addFiles,
     removeFile,
+    fileRejections,
+    dismissFileRejections,
     primaryFileId,
     setPrimary,
     primaryFile,
     verified,
     setVerified,
     saveDraft,
+    uploadDraftOnly,
     submit,
     trySubmit,
     tryAdvance,
@@ -451,7 +516,8 @@ export function useReportUploadWizard(routeState?: UploadRouteState) {
     submitAttempted,
     submittedStatus,
     resetForAnother,
-    accept: ACCEPT,
+    continueNextReport,
+    accept: UPLOAD_ACCEPT_ATTR,
     hasTaskIdInUrl,
     resolvedTaskId,
     showDraftReselectBanner,

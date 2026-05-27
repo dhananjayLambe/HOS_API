@@ -12,7 +12,7 @@ import mimetypes
 import time
 
 from django.core.exceptions import ValidationError
-from django.core.files.storage import default_storage
+from diagnostics_engine.storage.report_storage import ReportStorageService
 from django.db import transaction
 from django.db.models import Max
 from django.utils import timezone
@@ -240,8 +240,8 @@ class ArtifactUploadService:
             if not path:
                 continue
             try:
-                if default_storage.exists(path):
-                    default_storage.delete(path)
+                if ReportStorageService.delete_storage_object(path):
+                    continue
             except Exception:
                 logger.warning("storage_cleanup_failed path=%s", path, exc_info=True)
 

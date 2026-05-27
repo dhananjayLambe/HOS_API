@@ -4,8 +4,9 @@ import re
 
 from rest_framework import serializers
 
-_ALLOWED_CHANNELS = frozenset({"WHATSAPP"})
+_ALLOWED_CHANNELS = frozenset({"WHATSAPP", "SMS", "EMAIL"})
 _PHONE_SHAPE_RE = re.compile(r"^[\d\s+\-()]+$")
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 class MarkReadyRequestSerializer(serializers.Serializer):
@@ -13,19 +14,31 @@ class MarkReadyRequestSerializer(serializers.Serializer):
 
 
 class SendWhatsAppRequestSerializer(serializers.Serializer):
-    recipient_phone = serializers.CharField(max_length=20)
+    recipient_phone = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    recipient_email = serializers.EmailField(required=False, allow_blank=True)
     channel = serializers.CharField(max_length=30, default="WHATSAPP", required=False)
 
-    def validate_recipient_phone(self, value):
-        normalized = (value or "").strip()
-        if not normalized:
-            raise serializers.ValidationError("Recipient phone is required.")
-        if not _PHONE_SHAPE_RE.match(normalized):
-            raise serializers.ValidationError("Phone must contain only digits and separators.")
-        digits = re.findall(r"\d", normalized)
+    def validate(self, attrs):
+        channel = (attrs.get("channel") or "WHATSAPP").strip().upper()
+        attrs["channel"] = channel
+        phone = (attrs.get("recipient_phone") or "").strip()
+        email = (attrs.get("recipient_email") or "").strip()
+
+        if channel == "EMAIL":
+            if not email:
+                raise serializers.ValidationError({"recipient_email": "Recipient email is required."})
+            attrs["recipient"] = email
+            return attrs
+
+        if not phone:
+            raise serializers.ValidationError({"recipient_phone": "Recipient phone is required."})
+        if not _PHONE_SHAPE_RE.match(phone):
+            raise serializers.ValidationError({"recipient_phone": "Phone must contain only digits and separators."})
+        digits = re.findall(r"\d", phone)
         if len(digits) < 10 or len(digits) > 15:
-            raise serializers.ValidationError("Phone must contain 10–15 digits.")
-        return normalized
+            raise serializers.ValidationError({"recipient_phone": "Phone must contain 10–15 digits."})
+        attrs["recipient"] = phone
+        return attrs
 
     def validate_channel(self, value):
         channel = (value or "WHATSAPP").strip().upper()

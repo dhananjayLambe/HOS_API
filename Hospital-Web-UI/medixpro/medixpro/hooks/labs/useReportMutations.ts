@@ -10,6 +10,7 @@ import { newReportRequestId } from "@/lib/labs/reports/api/report-api-response";
 import {
   markReportReady,
   retryDelivery,
+  sendWhatsApp,
   uploadReportArtifacts,
 } from "@/lib/labs/reports/api/v1/reports-api";
 import {
@@ -24,11 +25,19 @@ import {
   reportTaskContextQueryKey,
   reportsQueueKeyPrefix,
 } from "@/lib/labs/reports/query-keys";
-import { sendTaskWhatsAppMock } from "@/lib/labs/reports/mock-report-delivery";
 import type { ReportOperationalStatus } from "@/lib/labs/reports/report-operational-status";
 import { trackReportEvent } from "@/lib/labs/reports/report-monitoring";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useRef } from "react";
+
+function newIdempotencyKey(): string {
+  return globalThis.crypto?.randomUUID?.() ?? `idem-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function withOperationalConflict(error: unknown): Error & { operationalConflict: boolean } {
+  const target = error instanceof Error ? error : new Error("Operational conflict");
+  return Object.assign(target, { operationalConflict: true });
+}
 
 export type OperationalConflictContext = {
   taskId?: string;
@@ -44,6 +53,7 @@ export type UploadReportInput = {
   notes?: string;
   version?: number;
   requestId?: string;
+  onUploadProgress?: (percent: number) => void;
   /** Refreshes open View order drawer + queue after upload. */
   taskId?: string;
   assignmentId?: string;
@@ -60,9 +70,10 @@ export function useReportMutations(branchId: string | null | undefined) {
   const inFlightUploadIds = useRef(new Set<string>());
 
   const invalidateReportsQueue = useCallback(async () => {
-    await queryClient.invalidateQueries({
-      queryKey: reportsQueueKeyPrefix(branchId ?? null),
-    });
+    const prefix = reportsQueueKeyPrefix(branchId ?? null);
+    await queryClient.invalidateQueries({ queryKey: prefix });
+    // Upload runs on a separate route — list queries are inactive; refetch all cached tabs.
+    await queryClient.refetchQueries({ queryKey: prefix, type: "all" });
   }, [queryClient, branchId]);
 
   const invalidateReportDetail = useCallback(
@@ -207,7 +218,10 @@ export function useReportMutations(branchId: string | null | undefined) {
         if (input.notes) formData.append("notes", input.notes);
         if (input.version != null) formData.append("version", String(input.version));
 
-        const data = await uploadReportArtifacts(input.reportId, formData, { requestId });
+        const data = await uploadReportArtifacts(input.reportId, formData, {
+          requestId,
+          onUploadProgress: input.onUploadProgress,
+        });
         const effectiveReportId = data.report_id ? String(data.report_id) : input.reportId;
         trackReportEvent("upload_duration", {
           reportId: effectiveReportId,
@@ -245,7 +259,10 @@ export function useReportMutations(branchId: string | null | undefined) {
     async (reportId: string, ctx: OperationalConflictContext = {}) => {
       const requestId = newReportRequestId();
       try {
-        const data = await markReportReady(reportId, undefined, { requestId });
+        const data = await markReportReady(reportId, undefined, {
+          requestId,
+          idempotencyKey: newIdempotencyKey(),
+        });
         await syncDrawerAfterReportLifecycleChange({
           reportId,
           lifecycleStatus: data.status,
@@ -254,7 +271,7 @@ export function useReportMutations(branchId: string | null | undefined) {
         });
       } catch (error) {
         const conflict = await handleOperationalConflict(error, { ...ctx, reportId });
-        if (conflict) throw Object.assign(error, { operationalConflict: true });
+        if (conflict) throw withOperationalConflict(error);
         trackReportEvent("mark_ready_fail", {
           reportId,
           requestId,
@@ -283,7 +300,7 @@ export function useReportMutations(branchId: string | null | undefined) {
           errorCode: extractReportApiErrorCode(error),
         });
         const conflict = await handleOperationalConflict(error, ctx);
-        if (conflict) throw Object.assign(error, { operationalConflict: true });
+        if (conflict) throw withOperationalConflict(error);
         throw error;
       }
     },
@@ -296,19 +313,50 @@ export function useReportMutations(branchId: string | null | undefined) {
     ],
   );
 
-  const sendWhatsAppMock = useCallback(
-    async (taskId: string, reportId?: string) => {
-      await sendTaskWhatsAppMock(taskId);
-      await invalidateReportsQueue();
-      if (reportId) await invalidateReportDetail(reportId);
+  const sendWhatsAppDelivery = useCallback(
+    async (
+      reportId: string,
+      payload: { recipient_phone?: string; recipient_email?: string; channel?: string },
+      ctx: OperationalConflictContext = {},
+    ) => {
+      const requestId = newReportRequestId();
+      try {
+        await sendWhatsApp(reportId, payload, {
+          requestId,
+          idempotencyKey: newIdempotencyKey(),
+        });
+        await invalidateReportsQueue();
+        if (ctx.reportId ?? reportId) {
+          await invalidateReportDetail(ctx.reportId ?? reportId);
+        }
+        await invalidateTaskContext(ctx.taskId);
+      } catch (error) {
+        trackReportEvent("whatsapp_fail", {
+          reportId,
+          requestId,
+          errorCode: extractReportApiErrorCode(error),
+        });
+        const conflict = await handleOperationalConflict(error, { ...ctx, reportId });
+        if (conflict) throw withOperationalConflict(error);
+        throw error;
+      }
     },
-    [invalidateReportsQueue, invalidateReportDetail],
+    [
+      handleOperationalConflict,
+      invalidateReportsQueue,
+      invalidateReportDetail,
+      invalidateTaskContext,
+    ],
   );
+
+  /** @deprecated Use sendWhatsAppDelivery */
+  const sendWhatsAppMock = sendWhatsAppDelivery;
 
   return {
     uploadReport,
     markReady,
     retryDelivery: retryDeliveryMutation,
+    sendWhatsAppDelivery,
     sendWhatsAppMock,
     invalidateReportsQueue,
     invalidateReportDetail,
