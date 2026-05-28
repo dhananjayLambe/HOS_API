@@ -162,6 +162,10 @@ export type OrderLifecycleViewModel = {
   isFullyComplete: boolean;
   readyToSendCount: number;
   hasPendingUpload: boolean;
+  /** Phase 1 operational date filter anchor (report activity proxy). */
+  operationalUpdatedAtIso?: string | null;
+  slaAnchorIso?: string | null;
+  tatBreached?: boolean;
   /** Temporary in-card feedback */
   inCardToast?: string;
 };
@@ -169,7 +173,7 @@ export type OrderLifecycleViewModel = {
 export type CompletionKpis = {
   pendingUploads: number;
   readyToSend: number;
-  urgentDelays: number;
+  delivered: number;
   deliveryFailures: number;
 };
 

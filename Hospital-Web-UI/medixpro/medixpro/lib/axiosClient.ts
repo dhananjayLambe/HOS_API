@@ -213,6 +213,7 @@ backendAxiosClient.interceptors.response.use(
       const isInvestigationSuggestionsEndpoint = fullUrl.includes(
         "/diagnostics/investigations/suggestions/",
       );
+      const is404 = error.response?.status === 404;
       /** Lab session: expected 403/404 during permission or onboarding handling — avoid noisy logs. */
       const isLabsMeExpected =
         fullUrl.includes("labs/me") &&
@@ -223,7 +224,6 @@ backendAxiosClient.interceptors.response.use(
       /** Optional UI enrichment; investigations section uses static fallback — avoid red logs when Django/proxy is unreachable. */
       const isSuppressedSuggestionsNetwork =
         isInvestigationSuggestionsEndpoint && !error.response;
-      const is404 = error.response?.status === 404;
       const isExpectedPreview400 = isPreviewEndpoint && error.response?.status === 400;
       const responseMessage = String((error.response?.data as any)?.message ?? "").toLowerCase();
       const isAlreadyCompleted400 =

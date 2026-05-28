@@ -1,10 +1,15 @@
 "use client";
 
 import { OrderCompletionCard } from "@/components/labs/reports/completion/OrderCompletionCard";
+import {
+  ReportsAssignmentLiveCard,
+  type ReportsAssignmentLiveCardActions,
+} from "@/components/labs/reports/ReportsAssignmentLiveCard";
 import type {
   OrderLifecycleViewModel,
   PatientOrderGroupViewModel,
 } from "@/lib/labs/reports/completion/order-lifecycle.types";
+import type { ReportTask } from "@/lib/labs/reports/report-task";
 import { cn } from "@/lib/utils";
 import { ChevronDown, ChevronRight } from "lucide-react";
 
@@ -21,6 +26,9 @@ export type PatientOrderGroupProps = {
   expanded: boolean;
   onToggleExpanded: () => void;
   cardRefs?: React.MutableRefObject<Record<string, HTMLElement | null>>;
+  /** Live API: resolve queue task for assignment cards. */
+  getTask?: (taskId: string) => ReportTask | null;
+  liveCardActions?: ReportsAssignmentLiveCardActions;
 };
 
 function isUrgentOrder(order: OrderLifecycleViewModel): boolean {
@@ -57,6 +65,8 @@ export function PatientOrderGroup({
   expanded,
   onToggleExpanded,
   cardRefs,
+  getTask,
+  liveCardActions,
 }: PatientOrderGroupProps) {
   const firstOrder = group.orders[0];
   const phone = firstOrder?.patientPhone ?? "";
@@ -94,24 +104,38 @@ export function PatientOrderGroup({
       {expanded ? (
         <div className={cn("border-t border-[#E4E7F0] px-2 py-1.5")}>
           <div className="space-y-1 border-l-2 border-[#DDE3F5] pl-2">
-          {group.orders.map((order) => (
-            <OrderCompletionCard
-              key={order.taskId}
-              ref={(el) => {
-                if (cardRefs) cardRefs.current[order.taskId] = el;
-              }}
-              order={order}
-              hidePatientName
-              highlighted={highlightedTaskId === order.taskId}
-              actionLoading={actionLoadingTaskId === order.taskId}
-              onUpload={(reportId) => onUpload(order.taskId, reportId)}
-              onSendAvailable={(reportIds) => onSendAvailable(order.taskId, reportIds)}
-              onRetry={() => onRetry(order.taskId)}
-              onReupload={(reportId) => onReupload(order.taskId, reportId)}
-              onPreview={(reportId) => onPreview(order.taskId, reportId)}
-              onDismissToast={() => onDismissToast(order.taskId)}
-            />
-          ))}
+            {group.orders.map((order) => {
+              const task = getTask?.(order.taskId);
+              if (task && liveCardActions) {
+                return (
+                  <ReportsAssignmentLiveCard
+                    key={order.taskId}
+                    task={task}
+                    contextEnabled
+                    actionLoading={actionLoadingTaskId}
+                    actions={liveCardActions}
+                  />
+                );
+              }
+              return (
+                <OrderCompletionCard
+                  key={order.taskId}
+                  ref={(el) => {
+                    if (cardRefs) cardRefs.current[order.taskId] = el;
+                  }}
+                  order={order}
+                  hidePatientName
+                  highlighted={highlightedTaskId === order.taskId}
+                  actionLoading={actionLoadingTaskId === order.taskId}
+                  onUpload={(reportId) => onUpload(order.taskId, reportId)}
+                  onSendAvailable={(reportIds) => onSendAvailable(order.taskId, reportIds)}
+                  onRetry={() => onRetry(order.taskId)}
+                  onReupload={(reportId) => onReupload(order.taskId, reportId)}
+                  onPreview={(reportId) => onPreview(order.taskId, reportId)}
+                  onDismissToast={() => onDismissToast(order.taskId)}
+                />
+              );
+            })}
           </div>
         </div>
       ) : null}

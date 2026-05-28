@@ -14,6 +14,7 @@ import {
   type QueueEmptyStateResolved,
 } from "@/lib/labs/reports/report-queue-empty-state";
 import type { ReportTabKey } from "@/lib/labs/reports/report-operational-status";
+import type { ReportsAssignmentLiveCardActions } from "@/components/labs/reports/ReportsAssignmentLiveCard";
 import type { ReportTask } from "@/lib/labs/reports/report-task";
 import { cn } from "@/lib/utils";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -34,6 +35,7 @@ type ReportsWorkflowQueueProps = {
   onPrimaryAction: (task: ReportTask, actionKey: string) => void;
   onPreview: (task: ReportTask) => void;
   onViewOrder: (task: ReportTask) => void;
+  liveCardActions?: ReportsAssignmentLiveCardActions;
 };
 
 function QueueEmptyPanel({
@@ -83,6 +85,7 @@ export function ReportsWorkflowQueue({
   onPrimaryAction,
   onPreview,
   onViewOrder,
+  liveCardActions,
 }: ReportsWorkflowQueueProps) {
   const isMobile = useMobile();
   const defaultExpanded = defaultGroupsExpanded(groups.length, isMobile);
@@ -191,6 +194,7 @@ export function ReportsWorkflowQueue({
             onPrimaryAction={onPrimaryAction}
             onPreview={onPreview}
             onViewOrder={onViewOrder}
+            liveCardActions={liveCardActions}
           />
         ))}
       </div>

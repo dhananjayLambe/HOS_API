@@ -1,3 +1,4 @@
+import { resolveChipAvailableActions } from "@/lib/labs/reports/completion/action-fallback";
 import { recomputeOrderDerived } from "@/lib/labs/reports/completion/next-action-engine";
 import {
   inferArtifactType,
@@ -28,9 +29,17 @@ function lifecycleStatusFromApi(status: string, deliveryStatus: string): ReportC
   if (raw === "failed_upload") return "failed_upload";
   if (raw === "rejected") return "rejected";
   if (raw === "corrected") return "corrected";
+  if (
+    delivery === "sent" ||
+    delivery === "delivered" ||
+    delivery === "viewed" ||
+    raw === "sent" ||
+    raw === "delivered"
+  ) {
+    return "sent";
+  }
   if (raw === "ready") return "ready";
   if (raw === "uploaded" || raw === "in_progress") return "uploaded";
-  if (raw === "sent" || raw === "delivered" || delivery === "sent" || delivery === "delivered") return "sent";
   return "pending";
 }
 
@@ -53,6 +62,7 @@ function artifactViewModel(artifact: ReportArtifact): ReportArtifactViewModel {
     patientVisible: artifactType === "PRIMARY_REPORT" || artifact.isPrimary,
     uploadedAtLabel: formatReportTimestamp(artifact.uploadedAt, ""),
     versionNumber: artifact.version,
+    downloadUrl: artifact.downloadUrl ?? undefined,
   };
 }
 
@@ -93,7 +103,7 @@ function buildReportChip(
         : [],
     latestVersionId: versionId,
     lastUpdatedAtLabel: detail?.readyAt ? formatReportTimestamp(detail.readyAt, "") : undefined,
-    availableActions: line.availableActions,
+    availableActions: resolveChipAvailableActions(line.availableActions, {}),
   };
 }
 

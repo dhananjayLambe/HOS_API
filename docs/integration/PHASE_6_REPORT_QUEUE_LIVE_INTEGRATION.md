@@ -6,11 +6,27 @@
 |----------|---------|
 | `NEXT_PUBLIC_LAB_REPORTS_USE_V1_API` | Default **on**; set `false` to use legacy labs/orders path |
 | `BACKEND_PROXY_TARGET=http://127.0.0.1:8000` | Django for Next `/api` rewrites (see `.env.local.example`) |
-| `NEXT_PUBLIC_LAB_REPORTS_DEMO=true` or `?demo=1` | Optional demo fixtures only (not used in normal queue) |
+| `?demo=1` | Optional fixture queue (QA only; shows demo chip) |
+| `NEXT_PUBLIC_LAB_REPORTS_DEMO=true` | Force fixtures without URL (avoid for live dev) |
+| `NEXT_PUBLIC_LAB_REPORTS_DATA_SOURCE_TOGGLE=true` | Show Live/Mock UI toggle (default: hidden) |
+
+`/lab-dashboard/reports/upload/` redirects to completion with `openOrder` only; it does **not** inject `?demo=1` unless the upload URL already had `demo`.
 
 Copy [`Hospital-Web-UI/medixpro/medixpro/.env.local.example`](Hospital-Web-UI/medixpro/medixpro/.env.local.example) to `.env.local` and restart `npm run dev`.
 
 Next.js rewrites ` /api/v1/diagnostics/*` → Django backend (`next.config.mjs`).
+
+## Completion queue filters (Phase 1)
+
+| Layer | Behavior |
+|-------|----------|
+| Search `?q=` | Backend `q` on patient, phone, order, test |
+| Search keywords | Client-only: `pending`, `ready`, `failed`, `urgent`, `tat`, `tat30` |
+| Workflow / TAT / Urgent | Client filters on stub view models after fetch |
+| Date default | **Today** (client, `operationalUpdatedAtIso` proxy) |
+| API `date_from` / `date_to` | Assignment `assigned_at` — wide window on fetch; do not confuse with visible Today filter |
+
+Future: `GET /report-tasks?date_range=today` filtered on report `updated_at`.
 
 ## Contract checklist
 
@@ -107,6 +123,18 @@ hooks/labs/
 - [ ] Upload correction elsewhere → stale banner → refresh shows new head
 - [ ] Mark ready / retry from drawer
 - [ ] Demo mode (`?demo=1`) still opens sheet from fallback `orderRow`
+
+## Completion UX API readiness
+
+Production reports UI is `ReportsCompletionPage` with provider-based queue loading:
+
+- `resolveReportsQueueProvider()` — live vs `?demo=1` fixtures (never inside hooks)
+- `useReportsOperationalQueue` — polls v1 queue, stub view models, lazy context on expand
+- `useReportsCompletionActions` — mutations + invalidation only (no local queue state)
+- `buildQuickPreviewTarget` — canonical live preview builder
+- Phase 1: no operator `MARK_READY` step (`action-fallback.ts`)
+
+See [REPORTS_UI_API_READINESS_PLAN.md](../frontend/Hospital-Web-UI/REPORTS_UI_API_READINESS_PLAN.md).
 
 ## Manual QA
 

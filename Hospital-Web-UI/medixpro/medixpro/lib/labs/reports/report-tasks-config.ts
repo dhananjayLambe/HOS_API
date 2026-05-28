@@ -1,5 +1,8 @@
 /**
- * Report queue data-source flags (Phase 6 live integration).
+ * Report queue runtime flags.
+ *
+ * Production default: live v1 API + completion UI (see route page).
+ * QA only: ?demo=1 (fixtures), ?legacy=1 (old list rows).
  */
 
 /** Call GET /api/v1/diagnostics/report-tasks/ (Next rewrites to Django). */
@@ -9,16 +12,26 @@ export function isReportTasksV1ApiEnabled(): boolean {
 }
 
 /**
- * Merge demo fixtures into live queue — off by default.
- * Enable only for isolated UI review: NEXT_PUBLIC_LAB_REPORTS_INCLUDE_DEMO=true or ?demo=1.
+ * @deprecated Demo is selected via ?demo=1 / NEXT_PUBLIC_LAB_REPORTS_DEMO at provider resolution only.
  */
 export function shouldIncludeDemoReportTasks(): boolean {
   return process.env.NEXT_PUBLIC_LAB_REPORTS_INCLUDE_DEMO === "true";
 }
 
-/** Phase 1 order-completion UX on /lab-dashboard/reports/ (mock-driven). */
+/**
+ * Completion UI is the only production surface; legacy list uses ?legacy=1.
+ * @deprecated Env toggle retained for emergency rollback — prefer URL flags.
+ */
 export function isOrderCompletionUxEnabled(): boolean {
-  // Default ON for Phase 1 — set NEXT_PUBLIC_LAB_ORDER_COMPLETION_UX=false to restore legacy queue.
   if (process.env.NEXT_PUBLIC_LAB_ORDER_COMPLETION_UX === "false") return false;
   return true;
+}
+
+/**
+ * Show Live / Mock toggle on reports queue (QA only).
+ * Default: hidden. Set NEXT_PUBLIC_LAB_REPORTS_DATA_SOURCE_TOGGLE=true to show in local dev.
+ * Mock fixtures remain available via ?demo=1 without the toggle.
+ */
+export function isReportsDataSourceToggleVisible(): boolean {
+  return process.env.NEXT_PUBLIC_LAB_REPORTS_DATA_SOURCE_TOGGLE === "true";
 }

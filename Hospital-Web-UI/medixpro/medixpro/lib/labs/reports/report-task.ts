@@ -18,6 +18,8 @@ export type ReportTask = {
   visitOrSlotLabel: string;
   collectedAtLabel: string;
   updatedAtLabel: string;
+  /** Phase 1 proxy for operational date filter (delivered_at ?? ready_at ?? uploaded_at). */
+  updatedAtIso: string | null;
   assignedAtIso: string | null;
   createdAtIso: string | null;
   operationalStatus: ReportOperationalStatus;
@@ -113,6 +115,7 @@ export function mapOrderToReportTask(order: LabOrderRow): ReportTask {
     visitOrSlotLabel: order.preferredSlot || "—",
     collectedAtLabel: collectedLabel,
     updatedAtLabel: updatedLabel,
+    updatedAtIso: assignedIso,
     assignedAtIso: assignedIso,
     createdAtIso: assignedIso,
     operationalStatus: mapReportOperationalStatus(order.reportStatus),
@@ -142,7 +145,7 @@ export function buildReportTasksFromOrders(orders: LabOrderRow[]): ReportTask[] 
 
 export function isDeliveredToday(task: ReportTask): boolean {
   if (task.operationalStatus !== "DELIVERED") return false;
-  const iso = task.assignedAtIso;
+  const iso = task.updatedAtIso ?? task.assignedAtIso;
   if (!iso) return false;
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return false;

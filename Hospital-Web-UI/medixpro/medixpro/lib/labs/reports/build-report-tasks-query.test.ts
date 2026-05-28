@@ -21,4 +21,19 @@ describe("build-report-tasks-query", () => {
     });
     expect(params.status).toBe("ACCEPTED");
   });
+
+  it("includes cursor when provided for load-more flow", () => {
+    const params = buildReportTasksQueryParams(DEFAULT_REPORT_TASKS_FILTERS, {
+      cursor: "abc123",
+    });
+    expect(params.cursor).toBe("abc123");
+  });
+
+  it("uses explicit q override over filter search", () => {
+    const params = buildReportTasksQueryParams(
+      { ...DEFAULT_REPORT_TASKS_FILTERS, search: "from-filter" },
+      { q: "from-override" },
+    );
+    expect(params.q).toBe("from-override");
+  });
 });

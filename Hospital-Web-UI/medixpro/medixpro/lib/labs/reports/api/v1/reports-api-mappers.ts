@@ -112,6 +112,12 @@ function slaAnchorFromDto(dto: ReportTaskApiItem): string | null {
   return dto.uploaded_at ?? dto.ready_at ?? dto.delivered_at ?? null;
 }
 
+function mapUrgency(raw: string | null | undefined): UrgencyLevel {
+  const key = (raw ?? "").trim().toUpperCase();
+  if (key === "STAT" || key === "URGENT" || key === "ROUTINE") return key;
+  return "ROUTINE";
+}
+
 export function mapActionTargetsDto(dto: ReportActionTargetsApi): ReportActionTargets {
   return {
     uploadReportId: dto.upload_report_id ? String(dto.upload_report_id) : undefined,
@@ -129,7 +135,7 @@ export function mapReportTaskDto(dto: ReportTaskApiItem, options?: { labName?: s
   const testNames = parseTestNames(dto.test_label);
   const collectionType = dto.collection_type === "VISIT" ? "VISIT" : "HOME";
   const slaAnchorIso = slaAnchorFromDto(dto);
-  const urgency: UrgencyLevel = "ROUTINE";
+  const urgency = mapUrgency(dto.urgency);
   const collectedLabel = formatRelativeCollected(slaAnchorIso);
   const updatedIso = dto.delivered_at ?? dto.ready_at ?? dto.uploaded_at ?? null;
 
@@ -147,6 +153,7 @@ export function mapReportTaskDto(dto: ReportTaskApiItem, options?: { labName?: s
     visitOrSlotLabel: dto.visit_or_slot_label || "—",
     collectedAtLabel: collectedLabel,
     updatedAtLabel: formatReportTimestamp(updatedIso, collectedLabel),
+    updatedAtIso: updatedIso,
     assignedAtIso: slaAnchorIso,
     createdAtIso: slaAnchorIso,
     operationalStatus: mapApiOperationalStatus(dto.operational_status),

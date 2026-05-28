@@ -17,6 +17,7 @@ import { useReportMutations } from "@/hooks/labs/useReportMutations";
 import { useReportUploadWizard } from "@/hooks/labs/useReportUploadWizard";
 import { useToastNotification } from "@/hooks/use-toast-notification";
 import { useLabShellHeader } from "@/lib/labs/layout/lab-shell-header-context";
+import { buildSendWhatsAppPayload } from "@/lib/labs/reports/build-send-whatsapp-payload";
 import {
   buildUploadReturnHref,
   parseUploadWorkflowSearchParams,
@@ -73,7 +74,15 @@ export function ReportUploadPage() {
     try {
       const reportId = wizard.uploadContext?.historicalReports[0]?.reportId;
       if (!reportId) throw new Error("Missing report id");
-      await mutations.sendWhatsAppMock(reportId, {}, { taskId: wizard.resolvedTaskId, reportId });
+      const sendPayload = buildSendWhatsAppPayload(wizard.uploadContext?.patientPhone);
+      if (!sendPayload.ok) {
+        toast.error(sendPayload.error);
+        return;
+      }
+      await mutations.sendWhatsAppMock(reportId, sendPayload.payload, {
+        taskId: wizard.resolvedTaskId,
+        reportId,
+      });
       toast.success("WhatsApp delivery queued");
     } catch {
       toast.error("Could not queue WhatsApp.");

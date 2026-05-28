@@ -10,6 +10,7 @@ from django.utils import timezone
 
 from consultations_core.models.investigation import InvestigationItem
 from diagnostics_engine.models.orders import DiagnosticOrderItem, DiagnosticOrderTestLine
+from diagnostics_engine.models.reports import DiagnosticReportArtifact, DiagnosticTestReport
 from labs.api.services.patient_search import patient_profile_name_search_q
 from labs.api.services.lab_orders_presenter import (
     LabOrderListRowDTO,
@@ -17,6 +18,7 @@ from labs.api.services.lab_orders_presenter import (
     investigation_urgency_for_filter,
 )
 from labs.choices.workflow import LabAssignmentStatus
+from labs.models.lab_tracking import LabReportDeliveryLog
 from labs.models import LabOrderAssignment, LabUser
 
 _ALLOWED_ORDERING = {
@@ -60,7 +62,25 @@ def base_assignments_queryset(lab_user: LabUser):
                 "diagnostic_order__test_lines",
                 queryset=DiagnosticOrderTestLine.objects.select_related("service").prefetch_related(
                     "sample_tracking",
-                    "test_reports",
+                    Prefetch(
+                        "test_reports",
+                        queryset=(
+                            DiagnosticTestReport.objects.filter(deleted_at__isnull=True)
+                            .select_related("supersedes")
+                            .prefetch_related(
+                                Prefetch(
+                                    "artifacts",
+                                    queryset=DiagnosticReportArtifact.objects.filter(is_active=True),
+                                ),
+                                Prefetch(
+                                    "delivery_logs",
+                                    queryset=LabReportDeliveryLog.objects.filter(is_deleted=False).order_by(
+                                        "-created_at"
+                                    ),
+                                ),
+                            )
+                        ),
+                    ),
                 ),
             ),
             Prefetch(

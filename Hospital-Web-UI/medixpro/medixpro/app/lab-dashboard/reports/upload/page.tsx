@@ -13,8 +13,8 @@ function UploadRedirect() {
     const params = new URLSearchParams();
     if (taskId) params.set("openOrder", taskId);
     if (demo) params.set("demo", demo);
-    else params.set("demo", "1");
-    router.replace(`/lab-dashboard/reports/?${params.toString()}`);
+    const qs = params.toString();
+    router.replace(qs ? `/lab-dashboard/reports/?${qs}` : "/lab-dashboard/reports/");
   }, [router, searchParams]);
 
   return <p className="p-4 text-sm text-[#6B7280]">Redirecting to reports…</p>;

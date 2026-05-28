@@ -54,7 +54,48 @@ class ReportAPITestCase(TestCase):
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         self.assertTrue(res.data["success"])
         self.assertIn("results", res.data["data"])
+        self.assertIn("counts", res.data["data"])
         self.assertGreaterEqual(len(res.data["data"]["results"]), 1)
+
+    def test_task_queue_counts_shape(self):
+        url = reverse("v1-report-task-queue")
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        counts = res.data["data"]["counts"]
+        self.assertIn("pending_uploads", counts)
+        self.assertIn("ready_delivery", counts)
+        self.assertIn("delivered", counts)
+        self.assertIn("failed", counts)
+
+    def test_task_queue_invalid_workflow_returns_400(self):
+        url = reverse("v1-report-task-queue")
+        res = self.client.get(url, {"workflow": "not-real"})
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(res.data["success"])
+
+    def test_task_queue_pagination_with_page_size(self):
+        lab_mode_assignment(self.branch)
+        lab_mode_assignment(self.branch)
+        url = reverse("v1-report-task-queue")
+        res = self.client.get(url, {"page_size": 1})
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res.data["data"]["results"]), 1)
+        self.assertIsNotNone(res.data["data"]["next"])
+
+    def test_task_queue_counts_stable_across_pagination_pages(self):
+        lab_mode_assignment(self.branch)
+        lab_mode_assignment(self.branch)
+        url = reverse("v1-report-task-queue")
+        first = self.client.get(url, {"page_size": 1})
+        self.assertEqual(first.status_code, status.HTTP_200_OK)
+        first_counts = first.data["data"]["counts"]
+        next_url = first.data["data"]["next"]
+        self.assertIsNotNone(next_url)
+
+        second = self.client.get(next_url)
+        self.assertEqual(second.status_code, status.HTTP_200_OK)
+        second_counts = second.data["data"]["counts"]
+        self.assertEqual(first_counts, second_counts)
 
     def test_task_queue_includes_action_targets(self):
         url = reverse("v1-report-task-queue")

@@ -27,7 +27,7 @@ export const DEFAULT_REPORT_TASKS_FILTERS: ReportTasksQueryFilters = {
 
 export function buildReportTasksQueryParams(
   filters: ReportTasksQueryFilters,
-  options?: { pageSize?: number; q?: string },
+  options?: { pageSize?: number; q?: string; cursor?: string | null },
 ): ReportTasksListQueryParams {
   const { date_from, date_to } = rangeForLabOrdersPreset(filters.datePreset as LabOrdersDatePreset);
   const params: ReportTasksListQueryParams = {
@@ -42,6 +42,7 @@ export function buildReportTasksQueryParams(
   if (filters.status !== "all") params.status = filters.status;
   if (filters.collectionType !== "all") params.collection_type = filters.collectionType;
   if (filters.urgency !== "all") params.urgency = filters.urgency;
+  if (options?.cursor) params.cursor = options.cursor;
 
   return params;
 }

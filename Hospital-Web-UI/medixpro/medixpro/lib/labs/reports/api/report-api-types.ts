@@ -22,6 +22,7 @@ export type ReportTaskApiItem = {
   uploaded_at: string | null;
   ready_at: string | null;
   delivered_at: string | null;
+  urgency?: string | null;
   available_action_targets: ReportActionTargetsApi;
 };
 
@@ -29,6 +30,12 @@ export type ReportTaskListData = {
   results: ReportTaskApiItem[];
   next: string | null;
   previous: string | null;
+  counts?: {
+    pending_uploads?: number;
+    ready_delivery?: number;
+    delivered?: number;
+    failed?: number;
+  } | null;
 };
 
 export type ReportLineReportApiItem = {

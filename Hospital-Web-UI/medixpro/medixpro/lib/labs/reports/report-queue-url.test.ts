@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_REPORT_TASKS_FILTERS } from "@/lib/labs/reports/build-report-tasks-query";
 import {
+  buildCompletionQueueSearchParams,
   buildReportQueueSearchParams,
+  parseCompletionQueueSearchParams,
   parseReportQueueSearchParams,
   reportQueuePathFromParams,
 } from "@/lib/labs/reports/report-queue-url";
@@ -63,5 +65,59 @@ describe("report-queue-url", () => {
     const params = new URLSearchParams("tab=pending");
     expect(reportQueuePathFromParams(params)).toBe("/lab-dashboard/reports?tab=pending");
     expect(reportQueuePathFromParams(new URLSearchParams())).toBe("/lab-dashboard/reports");
+  });
+});
+
+describe("completion queue URL", () => {
+  it("defaults to today and all workflow", () => {
+    const state = parseCompletionQueueSearchParams(new URLSearchParams());
+    expect(state.datePreset).toBe("today");
+    expect(state.workflow).toBe("all");
+  });
+
+  it("round-trips workflow, date, toggles, and q", () => {
+    const built = buildCompletionQueueSearchParams(new URLSearchParams(), {
+      workflow: "pending",
+      datePreset: "week",
+      urgentOnly: true,
+      tatBreachedOnly: true,
+      searchQ: "rahul",
+    });
+    expect(built.get("workflow")).toBe("pending");
+    expect(built.get("date")).toBe("week");
+    expect(built.get("urgent")).toBe("1");
+    expect(built.get("tat")).toBe("1");
+    expect(built.get("q")).toBe("rahul");
+
+    const reparsed = parseCompletionQueueSearchParams(built);
+    expect(reparsed.workflow).toBe("pending");
+    expect(reparsed.datePreset).toBe("week");
+    expect(reparsed.urgentOnly).toBe(true);
+    expect(reparsed.tatBreachedOnly).toBe(true);
+    expect(reparsed.searchQ).toBe("rahul");
+  });
+
+  it("round-trips custom date bounds and tat30", () => {
+    const built = buildCompletionQueueSearchParams(new URLSearchParams("demo=1"), {
+      workflow: "failed",
+      datePreset: "custom",
+      customFrom: "2026-05-01",
+      customTo: "2026-05-10",
+      tatSoonOnly: true,
+      searchQ: "cbc",
+    });
+    expect(built.get("demo")).toBe("1");
+    expect(built.get("workflow")).toBe("failed");
+    expect(built.get("date")).toBe("custom");
+    expect(built.get("from")).toBe("2026-05-01");
+    expect(built.get("to")).toBe("2026-05-10");
+    expect(built.get("tat30")).toBe("1");
+
+    const reparsed = parseCompletionQueueSearchParams(built);
+    expect(reparsed.datePreset).toBe("custom");
+    expect(reparsed.customFrom).toBe("2026-05-01");
+    expect(reparsed.customTo).toBe("2026-05-10");
+    expect(reparsed.tatSoonOnly).toBe(true);
+    expect(reparsed.workflow).toBe("failed");
   });
 });

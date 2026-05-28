@@ -2,6 +2,7 @@
 
 import { OrderDetailSheet } from "@/components/labs/orders/OrderDetailSheet";
 import { ReportsFiltersRow } from "@/components/labs/reports/ReportsFiltersRow";
+import { ReportsDataSourceToggle } from "@/components/labs/reports/ReportsDataSourceToggle";
 import { ReportsDemoChip } from "@/components/labs/reports/ReportsDemoBanner";
 import { ReportsKpiStrip } from "@/components/labs/reports/ReportsKpiStrip";
 import { ReportsKpiStripSkeleton } from "@/components/labs/reports/ReportsKpiStripSkeleton";
@@ -9,10 +10,12 @@ import { ReportsWorkflowQueue } from "@/components/labs/reports/ReportsWorkflowQ
 import { Button } from "@/components/ui/button";
 import { useLabReportsList } from "@/hooks/labs/useLabReportsList";
 import { useReportMutations } from "@/hooks/labs/useReportMutations";
+import { useReportsCompletionActions } from "@/hooks/labs/useReportsCompletionActions";
 import { useReportOrderDrawer } from "@/hooks/labs/useReportOrderDrawer";
 import { useToastNotification } from "@/hooks/use-toast-notification";
 import { useLabShellHeader } from "@/lib/labs/layout/lab-shell-header-context";
 import { mapReportApiErrorToMessage } from "@/lib/labs/reports/api/report-api-errors";
+import { buildSendWhatsAppPayload } from "@/lib/labs/reports/build-send-whatsapp-payload";
 import { isReportTasksV1ApiEnabled } from "@/lib/labs/reports/report-tasks-config";
 import type { ReportTabKey } from "@/lib/labs/reports/report-operational-status";
 import type { ReportTask } from "@/lib/labs/reports/report-task";
@@ -52,7 +55,25 @@ export function ReportsListPage() {
   } = useLabReportsList(branchLabel);
 
   const mutations = useReportMutations(session?.branch?.id);
+  const { buildLiveCardActions } = useReportsCompletionActions(session?.branch?.id);
   const v1Enabled = isReportTasksV1ApiEnabled();
+
+  const liveCardActions = useMemo(
+    () =>
+      v1Enabled
+        ? {
+            ...buildLiveCardActions(setActionLoading),
+            onPreview: (task: ReportTask, reportId: string) => {
+              window.open(
+                `/lab-dashboard/reports/upload?taskId=${encodeURIComponent(task.taskId)}&reportId=${encodeURIComponent(reportId)}`,
+                "_blank",
+                "noopener,noreferrer",
+              );
+            },
+          }
+        : undefined,
+    [buildLiveCardActions, v1Enabled],
+  );
 
   const handleTabSelect = useCallback(
     (next: ReportTabKey) => {
@@ -161,25 +182,8 @@ export function ReportsListPage() {
     (task: ReportTask, actionKey: string) => {
       const targets = task.actionTargets;
       switch (actionKey) {
-        case "ready": {
-          const reportId = targets.markReadyReportId;
-          if (!reportId) {
-            toast.error("Action no longer available — refresh the queue.");
-            return;
-          }
-          void runAction(
-            task,
-            "ready",
-            () =>
-              mutations.markReady(reportId, {
-                taskId: task.taskId,
-                reportId,
-                assignmentId: task.assignmentId,
-              }),
-            "Marked ready for delivery",
-          );
+        case "ready":
           break;
-        }
         case "wa":
         case "resend": {
           const reportId = targets.sendWhatsappReportId;
@@ -187,15 +191,20 @@ export function ReportsListPage() {
             toast.error("Action no longer available — refresh the queue.");
             return;
           }
+          const sendPayload = buildSendWhatsAppPayload(task.patientPhone);
+          if (!sendPayload.ok) {
+            toast.error(sendPayload.error);
+            return;
+          }
           void runAction(
             task,
             actionKey,
             () =>
-              mutations.sendWhatsAppMock(
+              mutations.sendWhatsAppMock(reportId, sendPayload.payload, {
+                taskId: task.taskId,
                 reportId,
-                {},
-                { taskId: task.taskId, reportId, assignmentId: task.assignmentId },
-              ),
+                assignmentId: task.assignmentId,
+              }),
             actionKey === "wa" ? "WhatsApp delivery queued" : "Report resent",
           );
           break;
@@ -335,9 +344,12 @@ export function ReportsListPage() {
       <ReportsStaleQueueBanner visible={isStaleQueue} />
 
       <div className="flex min-h-0 flex-col gap-2">
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-sm font-semibold text-[#111827]">Pending report workflow</h2>
-          {isDemoFallback || isDemoForced ? <ReportsDemoChip /> : null}
+          <div className="flex flex-wrap items-center gap-2">
+            <ReportsDataSourceToggle />
+            {isDemoFallback || isDemoForced ? <ReportsDemoChip /> : null}
+          </div>
         </div>
         <ReportsFiltersRow
           searchInput={searchInput}
@@ -364,6 +376,7 @@ export function ReportsListPage() {
         onPrimaryAction={handlePrimaryAction}
         onPreview={handlePreview}
         onViewOrder={handleViewOrder}
+        liveCardActions={liveCardActions}
       />
 
       <OrderDetailSheet

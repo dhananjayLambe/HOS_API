@@ -71,6 +71,45 @@ export function inferArtifactType(fileName: string, mimeType: string): ReportArt
   return "SUPPORTING_FILE";
 }
 
+const API_ACTION_TO_WORKFLOW: Record<string, TestWorkflowAction> = {
+  CORRECT_REPORT: "REUPLOAD",
+  REUPLOAD_REPORT: "REUPLOAD",
+  VIEW_REPORT: "VIEW",
+  DOWNLOAD_REPORT: "VIEW",
+  SEND_WHATSAPP: "SEND",
+  UPLOAD_REPORT: "UPLOAD",
+  RETRY_DELIVERY: "RETRY",
+};
+
+/** Maps backend `available_actions` tokens to per-test workflow CTAs. */
+export function workflowActionsFromApiActions(apiActions?: string[]): TestWorkflowAction[] {
+  if (!apiActions?.length) return [];
+  const seen = new Set<TestWorkflowAction>();
+  const out: TestWorkflowAction[] = [];
+  for (const raw of apiActions) {
+    const action = API_ACTION_TO_WORKFLOW[raw.trim().toUpperCase()];
+    if (action && !seen.has(action)) {
+      seen.add(action);
+      out.push(action);
+    }
+  }
+  return out;
+}
+
+function mergeWorkflowActions(...groups: TestWorkflowAction[][]): TestWorkflowAction[] {
+  const seen = new Set<TestWorkflowAction>();
+  const out: TestWorkflowAction[] = [];
+  for (const group of groups) {
+    for (const action of group) {
+      if (!seen.has(action)) {
+        seen.add(action);
+        out.push(action);
+      }
+    }
+  }
+  return out;
+}
+
 export function buildPendingWorkSummary(reports: ReportChipViewModel[]): string {
   const failed = reports.filter((r) => isFailedReport(r) || isRejectedReport(r)).length;
   if (failed > 0) return `${failed} report${failed === 1 ? "" : "s"} need attention`;
@@ -108,16 +147,27 @@ export function buildTestWorkflow(report: ReportChipViewModel): TestWorkflowView
           ? "READY"
           : "NOT_SENT";
 
-  const availableActions: TestWorkflowAction[] = [];
-  const canPreview = report.artifacts.length > 0;
+  const statusBased: TestWorkflowAction[] = [];
   if (deliveryState === "FAILED") {
-    if (canPreview) availableActions.push("VIEW");
-    availableActions.push("RETRY");
+    statusBased.push("VIEW", "RETRY");
+  } else if ((corrected || isReuploaded) && deliveryState !== "SENT") {
+    statusBased.push("VIEW", "SEND");
+  } else if (pending) {
+    statusBased.push("UPLOAD");
+  } else if (deliveryState === "READY") {
+    statusBased.push("VIEW", "SEND");
+  } else if (deliveryState === "SENT") {
+    statusBased.push("VIEW", "REUPLOAD");
   }
-  else if ((corrected || isReuploaded) && deliveryState !== "SENT") availableActions.push(...(canPreview ? ["VIEW" as const] : []), "SEND");
-  else if (pending) availableActions.push("UPLOAD");
-  else if (deliveryState === "READY") availableActions.push(...(canPreview ? ["VIEW" as const] : []), "SEND");
-  else if (deliveryState === "SENT") availableActions.push(...(canPreview ? ["VIEW" as const] : []), "REUPLOAD");
+
+  let availableActions = mergeWorkflowActions(
+    statusBased,
+    workflowActionsFromApiActions(report.availableActions),
+  );
+
+  if (deliveryState === "SENT" || sent) {
+    availableActions = mergeWorkflowActions(availableActions, ["VIEW", "REUPLOAD"]);
+  }
 
   const latestVersion = report.versions.find((version) => version.isLatest);
   const timeline = [

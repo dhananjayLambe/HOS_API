@@ -18,7 +18,7 @@ import {
 import { useArtifactStaging } from "@/hooks/labs/useArtifactStaging";
 import type { StagedArtifactInput } from "@/lib/labs/reports/completion/completion-artifact-staging";
 import type { OrderLifecycleViewModel, ReportArtifactViewModel } from "@/lib/labs/reports/completion/order-lifecycle.types";
-import { isPendingUpload } from "@/lib/labs/reports/completion/operational-contract";
+import { isPendingUpload, isReportSent } from "@/lib/labs/reports/completion/operational-contract";
 import {
   rejectionReasonLabel,
   rejectionReasonMessage,
@@ -50,7 +50,7 @@ function uploadableReports(order: OrderLifecycleViewModel) {
 }
 
 function reuploadableReports(order: OrderLifecycleViewModel) {
-  return order.reports.filter((report) => report.artifacts.length > 0);
+  return order.reports.filter((report) => isReportSent(report) || report.artifacts.length > 0);
 }
 
 function preferredArtifact(artifacts: ReportArtifactViewModel[]): ReportArtifactViewModel | null {

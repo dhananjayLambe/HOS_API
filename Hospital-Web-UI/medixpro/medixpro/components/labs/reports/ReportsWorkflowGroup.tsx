@@ -1,6 +1,10 @@
 "use client";
 
 import { PatientGroupStatusBadges } from "@/components/labs/reports/PatientGroupStatusBadges";
+import {
+  ReportsAssignmentLiveCard,
+  type ReportsAssignmentLiveCardActions,
+} from "@/components/labs/reports/ReportsAssignmentLiveCard";
 import { ReportsWorkflowTaskRow } from "@/components/labs/reports/ReportsWorkflowTaskRow";
 import type { PatientReportGroup } from "@/lib/labs/reports/group-report-tasks";
 import { progressLabelTextClassName } from "@/lib/labs/reports/queue-tokens";
@@ -17,6 +21,8 @@ export type ReportsWorkflowGroupProps = {
   onPrimaryAction: (task: ReportTask, actionKey: string) => void;
   onPreview: (task: ReportTask) => void;
   onViewOrder: (task: ReportTask) => void;
+  /** When set, expanded groups render completion cards with lazy context. */
+  liveCardActions?: ReportsAssignmentLiveCardActions;
 };
 
 export function ReportsWorkflowGroup({
@@ -28,6 +34,7 @@ export function ReportsWorkflowGroup({
   onPrimaryAction,
   onPreview,
   onViewOrder,
+  liveCardActions,
 }: ReportsWorkflowGroupProps) {
   const handleHeaderKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" || e.key === " ") {
@@ -78,16 +85,29 @@ export function ReportsWorkflowGroup({
           role="region"
           aria-label={`Tasks for ${group.patientName}`}
         >
-          {group.tasks.map((task) => (
-            <ReportsWorkflowTaskRow
-              key={task.taskId}
-              task={task}
-              actionLoading={actionLoading}
-              onPrimaryAction={(key) => onPrimaryAction(task, key)}
-              onPreview={() => onPreview(task)}
-              onViewOrder={() => onViewOrder(task)}
-            />
-          ))}
+          {group.tasks.map((task) =>
+            liveCardActions ? (
+              <ReportsAssignmentLiveCard
+                key={task.taskId}
+                task={task}
+                contextEnabled
+                actionLoading={actionLoading}
+                actions={{
+                  ...liveCardActions,
+                  onPreview: (_t, reportId) => liveCardActions.onPreview(task, reportId),
+                }}
+              />
+            ) : (
+              <ReportsWorkflowTaskRow
+                key={task.taskId}
+                task={task}
+                actionLoading={actionLoading}
+                onPrimaryAction={(key) => onPrimaryAction(task, key)}
+                onPreview={() => onPreview(task)}
+                onViewOrder={() => onViewOrder(task)}
+              />
+            ),
+          )}
         </div>
       ) : null}
     </section>

@@ -4,6 +4,7 @@ import {
   inferArtifactType,
   isReportSent,
   summarizeTestWorkflows,
+  workflowActionsFromApiActions,
 } from "@/lib/labs/reports/completion/operational-contract";
 import type { ReportArtifactViewModel, ReportChipViewModel } from "@/lib/labs/reports/completion/order-lifecycle.types";
 import { describe, expect, it } from "vitest";
@@ -61,6 +62,22 @@ describe("operational contract helpers", () => {
     expect(workflows[3]!.availableActions).toEqual(["VIEW", "RETRY"]);
     expect(workflows[0]!.timeline.map((event) => event.label)).toEqual(["Collected", "Report uploaded"]);
     expect(workflows[3]!.timeline.map((event) => event.label)).toEqual(["Collected", "Report uploaded", "Delivery failed"]);
+  });
+
+  it("maps CORRECT_REPORT from API to re-upload workflow action", () => {
+    expect(workflowActionsFromApiActions(["CORRECT_REPORT", "VIEW_REPORT"])).toEqual(["REUPLOAD", "VIEW"]);
+  });
+
+  it("offers preview and re-upload for sent reports without local artifacts", () => {
+    const workflows = buildTestWorkflows([
+      chip("sent", "CBC", "sent", "sent", { availableActions: ["CORRECT_REPORT", "VIEW_REPORT"] }),
+    ]);
+    expect(workflows[0]!.availableActions).toEqual(["VIEW", "REUPLOAD"]);
+  });
+
+  it("treats delivered delivery as sent even when line status is still ready", () => {
+    const workflows = buildTestWorkflows([chip("ready-delivered", "LFT", "ready", "delivered")]);
+    expect(workflows[0]!.availableActions).toEqual(["VIEW", "REUPLOAD"]);
   });
 
   it("prioritizes quick preview actions for delivered and re-uploaded reports", () => {

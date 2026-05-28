@@ -23,6 +23,14 @@ export type LoadReportTasksSource =
 export type LoadReportTasksResult = {
   tasks: ReportTask[];
   source: LoadReportTasksSource;
+  nextCursor: string | null;
+  previousCursor: string | null;
+  counts?: {
+    pendingUploads: number;
+    readyDelivery: number;
+    delivered: number;
+    failed: number;
+  } | null;
 };
 
 async function loadFromOrdersFallback(
@@ -56,13 +64,38 @@ async function loadFromOrdersFallback(
 async function loadFromReportTasksApi(
   branchLabel: string,
   filters: ReportTasksQueryFilters,
+  cursor: string | null,
   signal?: AbortSignal,
-): Promise<ReportTask[]> {
+): Promise<LoadReportTasksResult> {
   const data = await getReportsQueue(
-    buildReportTasksQueryParams(filters, { pageSize: REPORTS_PAGE_SIZE }),
+    buildReportTasksQueryParams(filters, { pageSize: REPORTS_PAGE_SIZE, cursor }),
     { signal },
   );
-  return mapReportTaskDtos(data.results, { labName: branchLabel });
+  return {
+    tasks: mapReportTaskDtos(data.results, { labName: branchLabel }),
+    source: "report-tasks-api",
+    nextCursor: parseCursorFromLink(data.next),
+    previousCursor: parseCursorFromLink(data.previous),
+    counts: data.counts
+      ? {
+          pendingUploads: Math.max(0, Number(data.counts.pending_uploads ?? 0)),
+          readyDelivery: Math.max(0, Number(data.counts.ready_delivery ?? 0)),
+          delivered: Math.max(0, Number(data.counts.delivered ?? 0)),
+          failed: Math.max(0, Number(data.counts.failed ?? 0)),
+        }
+      : null,
+  };
+}
+
+function parseCursorFromLink(link: string | null | undefined): string | null {
+  if (!link) return null;
+  try {
+    const parsed = new URL(link);
+    const cursor = parsed.searchParams.get("cursor");
+    return cursor && cursor.trim() ? cursor : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function loadReportTasks(
@@ -70,15 +103,15 @@ export async function loadReportTasks(
     branchId?: string | null;
     branchLabel?: string;
     filters: ReportTasksQueryFilters;
+    cursor?: string | null;
     signal?: AbortSignal;
   },
 ): Promise<LoadReportTasksResult> {
-  const { branchLabel = "", filters, signal } = options;
+  const { branchLabel = "", filters, cursor = null, signal } = options;
 
   if (isReportTasksV1ApiEnabled()) {
     try {
-      const apiTasks = await loadFromReportTasksApi(branchLabel, filters, signal);
-      return { tasks: apiTasks, source: "report-tasks-api" };
+      return await loadFromReportTasksApi(branchLabel, filters, cursor, signal);
     } catch (err) {
       trackReportEvent("queue_fetch_fail");
       throw err;
@@ -86,5 +119,11 @@ export async function loadReportTasks(
   }
 
   const tasks = await loadFromOrdersFallback(branchLabel, filters, signal);
-  return { tasks, source: "skipped-v1-api" };
+  return {
+    tasks,
+    source: "skipped-v1-api",
+    nextCursor: null,
+    previousCursor: null,
+    counts: null,
+  };
 }

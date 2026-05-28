@@ -2,23 +2,50 @@
 
 import { CompletionKpiStrip } from "@/components/labs/reports/completion/CompletionKpiStrip";
 import { NeedsAttentionSection } from "@/components/labs/reports/completion/NeedsAttentionSection";
-import { OrderCompletionCard } from "@/components/labs/reports/completion/OrderCompletionCard";
 import { OrderUploadDrawer } from "@/components/labs/reports/completion/OrderUploadDrawer";
 import { PatientOrderGroup } from "@/components/labs/reports/completion/PatientOrderGroup";
 import { QuickPreviewPanel, type QuickPreviewTarget } from "@/components/labs/reports/completion/QuickPreviewPanel";
-import { ReportsStickySearch } from "@/components/labs/reports/completion/ReportsStickySearch";
+import { ReportsActiveFilterChips } from "@/components/labs/reports/completion/ReportsActiveFilterChips";
+import { ReportsOperationalFilterBar } from "@/components/labs/reports/completion/ReportsOperationalFilterBar";
 import { SendAvailableReportsDialog } from "@/components/labs/reports/completion/SendAvailableReportsDialog";
-import { TinyFilterChips } from "@/components/labs/reports/completion/TinyFilterChips";
-import { useOrderCompletionQueue } from "@/hooks/labs/useOrderCompletionQueue";
+import { ReportsAssignmentLiveCard } from "@/components/labs/reports/ReportsAssignmentLiveCard";
+import { ReportsDataSourceToggle } from "@/components/labs/reports/ReportsDataSourceToggle";
+import { ReportsDemoChip } from "@/components/labs/reports/ReportsDemoBanner";
+import { isReportsDataSourceToggleVisible } from "@/lib/labs/reports/report-tasks-config";
+import { ReportsStaleQueueBanner } from "@/components/labs/reports/ReportsStaleQueueBanner";
+import { Button } from "@/components/ui/button";
+import {
+  useReportsCompletionActions,
+  type ReportsCompletionDrawerHandlers,
+} from "@/hooks/labs/useReportsCompletionActions";
+import { buildOrderLifecycleFromTaskContext } from "@/lib/labs/reports/completion/report-lifecycle-adapter";
+import { mapReportApiErrorToMessage } from "@/lib/labs/reports/api/report-api-errors";
+import { useToastNotification } from "@/hooks/use-toast-notification";
+import { useReportsOperationalQueue } from "@/hooks/labs/useReportsOperationalQueue";
+import { useReportDetail } from "@/hooks/labs/useReportDetail";
+import { useReportTaskContext } from "@/hooks/labs/useReportTaskContext";
+import {
+  buildQuickPreviewTarget,
+  buildQuickPreviewTargetFromOrder,
+} from "@/lib/labs/reports/build-quick-preview-target";
 import { useLabShellHeader } from "@/lib/labs/layout/lab-shell-header-context";
 import type { CompletionFilterKey } from "@/lib/labs/reports/completion/order-lifecycle.types";
-import { buildTestWorkflow } from "@/lib/labs/reports/completion/operational-contract";
+import { useLabSession } from "@/lib/labs/session/lab-session-context";
+import { LabOrdersErrorState } from "@/components/labs/orders/LabOrdersErrorState";
+import { RotateCcw } from "lucide-react";
 import { useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ReportTask } from "@/lib/labs/reports/report-task";
 
 export function ReportsCompletionPage() {
-  const queue = useOrderCompletionQueue();
+  const { data: session } = useLabSession();
+  const branchId = session?.branch?.id ?? null;
+  const branchLabel = session?.branch?.branch_name ?? "";
   const searchParams = useSearchParams();
+
+  const queue = useReportsOperationalQueue(branchLabel);
+  const { buildLiveCardActions, mutations } = useReportsCompletionActions(branchId);
+  const toast = useToastNotification();
 
   const [uploadTaskId, setUploadTaskId] = useState<string | null>(null);
   const [uploadReportId, setUploadReportId] = useState<string | null>(null);
@@ -26,121 +53,316 @@ export function ReportsCompletionPage() {
   const [sendTaskId, setSendTaskId] = useState<string | null>(null);
   const [previewTarget, setPreviewTarget] = useState<{ taskId: string; reportId: string } | null>(null);
 
+  const setActionLoading = queue.setActionLoadingTaskId;
+  const isLive = queue.isLive;
+
+  const openUploadDrawer = useCallback(
+    (task: ReportTask, options?: { reportId?: string; mode?: "upload" | "reupload" }) => {
+      setUploadMode(options?.mode ?? "upload");
+      setUploadTaskId(task.taskId);
+      setUploadReportId(
+        options?.reportId ??
+          task.actionTargets.uploadReportId ??
+          task.actionTargets.markReadyReportId ??
+          null,
+      );
+    },
+    [],
+  );
+
+  const drawerHandlers = useMemo<ReportsCompletionDrawerHandlers>(
+    () => ({ openUploadDrawer }),
+    [openUploadDrawer],
+  );
+
+  const liveCardActions = useMemo(
+    () => buildLiveCardActions(setActionLoading, drawerHandlers),
+    [buildLiveCardActions, setActionLoading, drawerHandlers],
+  );
+
+  const previewContextQuery = useReportTaskContext(
+    branchId,
+    previewTarget?.taskId ?? null,
+    queue.isLive && previewTarget != null,
+  );
+  const previewDetailQuery = useReportDetail(
+    branchId,
+    previewTarget?.reportId ?? null,
+    queue.isLive && previewTarget != null,
+  );
+
+  const refetchQueueRef = useRef(queue.refetch);
+  refetchQueueRef.current = queue.refetch;
+
+  const headerActions = useMemo(
+    () => (
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="h-9 gap-1.5"
+        onClick={() => refetchQueueRef.current()}
+        disabled={queue.loading || queue.refreshing}
+        aria-label="Refresh report queue"
+      >
+        <RotateCcw className={`h-4 w-4 ${queue.refreshing ? "animate-spin" : ""}`} aria-hidden />
+        Refresh
+      </Button>
+    ),
+    [queue.loading, queue.refreshing],
+  );
+
   useLabShellHeader({
     title: "Reports",
     description: "Upload and send diagnostic reports.",
+    actions: headerActions,
   });
 
+  const openOrderHandledRef = useRef<string | null>(null);
   useEffect(() => {
     const openOrder = searchParams.get("openOrder");
-    if (openOrder) setUploadTaskId(openOrder);
-  }, [searchParams]);
+    if (!openOrder || openOrderHandledRef.current === openOrder) return;
+    openOrderHandledRef.current = openOrder;
+    const task = queue.getTask(openOrder);
+    if (task) {
+      openUploadDrawer(task, { reportId: task.actionTargets.uploadReportId, mode: "upload" });
+    } else {
+      setUploadMode("upload");
+      setUploadTaskId(openOrder);
+    }
+  }, [searchParams, queue.getTask, openUploadDrawer]);
 
-  const uploadOrder = uploadTaskId ? queue.getOrder(uploadTaskId) : null;
+  const uploadContextQuery = useReportTaskContext(
+    branchId,
+    uploadTaskId,
+    Boolean(uploadTaskId && isLive),
+  );
+
+  const uploadOrder = useMemo(() => {
+    if (!uploadTaskId) return null;
+    const task = queue.getTask(uploadTaskId);
+    if (isLive && uploadContextQuery.data) {
+      return buildOrderLifecycleFromTaskContext(uploadContextQuery.data, {
+        urgency: task?.urgency,
+        tatState: task?.tatBreached ? "breached" : "safe",
+        tatLabel: task?.tatBreached ? "TAT breached" : "TAT on track",
+      });
+    }
+    return queue.getOrder(uploadTaskId);
+  }, [uploadTaskId, isLive, uploadContextQuery.data, queue]);
   const sendOrder = sendTaskId ? queue.getOrder(sendTaskId) : null;
+
+  const getOrder = queue.getOrder;
   const quickPreviewTarget = useMemo<QuickPreviewTarget | null>(() => {
     if (!previewTarget) return null;
-    const order = queue.getOrder(previewTarget.taskId);
-    const report = order?.reports.find((item) => item.reportId === previewTarget.reportId);
-    if (!order || !report) return null;
-    const workflow = buildTestWorkflow(report);
-    return {
-      taskId: order.taskId,
-      reportId: report.reportId,
-      patientName: order.patientName,
-      orderNumber: order.orderNumber,
-      testName: workflow.testName,
-      deliveryState: workflow.deliveryState,
-      corrected: workflow.corrected,
-      isReuploaded: workflow.isReuploaded,
-      artifacts: workflow.artifacts,
-      canSend: workflow.availableActions.includes("SEND"),
-      canReupload: workflow.availableActions.includes("REUPLOAD"),
-    };
-  }, [previewTarget, queue]);
-  const handleUpload = useCallback((taskId: string, reportId?: string) => {
-    setUploadMode("upload");
-    setUploadTaskId(taskId);
-    setUploadReportId(reportId ?? null);
-  }, []);
+    if (queue.isLive && previewContextQuery.data) {
+      return buildQuickPreviewTarget(
+        previewContextQuery.data,
+        previewTarget.reportId,
+        previewDetailQuery.data,
+      );
+    }
+    const order = getOrder(previewTarget.taskId);
+    if (!order) return null;
+    return buildQuickPreviewTargetFromOrder(order, previewTarget.reportId);
+  }, [
+    previewTarget,
+    queue.isLive,
+    getOrder,
+    previewContextQuery.data,
+    previewDetailQuery.data,
+  ]);
 
-  const handleReupload = useCallback((taskId: string, reportId: string) => {
-    setUploadMode("reupload");
-    setUploadTaskId(taskId);
-    setUploadReportId(reportId);
-  }, []);
+  const handleUpload = useCallback(
+    (taskId: string, reportId?: string) => {
+      const task = queue.getTask(taskId);
+      if (task) {
+        openUploadDrawer(task, { reportId, mode: "upload" });
+        return;
+      }
+      setUploadMode("upload");
+      setUploadTaskId(taskId);
+      setUploadReportId(reportId ?? null);
+    },
+    [queue, openUploadDrawer],
+  );
+
+  const handleReupload = useCallback(
+    (taskId: string, reportId: string) => {
+      const task = queue.getTask(taskId);
+      if (task) {
+        openUploadDrawer(task, { reportId, mode: "reupload" });
+        return;
+      }
+      setUploadMode("reupload");
+      setUploadTaskId(taskId);
+      setUploadReportId(reportId);
+    },
+    [queue, openUploadDrawer],
+  );
+
+  const handlePersistUpload = useCallback(
+    async (input: { taskId: string; reportId: string; files: File[] }) => {
+      const task = queue.getTask(input.taskId);
+      const reportId = uploadReportId ?? input.reportId;
+      const pdfIndex = input.files.findIndex(
+        (file) => file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf"),
+      );
+      const primaryFileIndex = pdfIndex >= 0 ? pdfIndex : 0;
+      try {
+        await mutations.uploadReport({
+          reportId,
+          files: input.files,
+          primaryFileIndex,
+          taskId: input.taskId,
+          assignmentId: task?.assignmentId,
+        });
+        toast.success(uploadMode === "reupload" ? "Updated report saved" : "Report files uploaded");
+      } catch (err) {
+        toast.error(mapReportApiErrorToMessage(err));
+        throw err;
+      }
+    },
+    [mutations, queue, toast, uploadMode, uploadReportId],
+  );
 
   const handlePreview = useCallback((taskId: string, reportId: string) => {
     setPreviewTarget({ taskId, reportId });
   }, []);
 
+  const getTask = queue.getTask;
+  const setFilter = queue.setFilter;
+
   const handleSendAvailable = useCallback(
     (taskId: string, reportIds?: string[]) => {
-      if (reportIds?.length === 1) {
-        const report = queue.getOrder(taskId)?.reports.find((r) => r.reportId === reportIds[0]);
-        const label = report?.testLabel ?? "Report";
-        queue.setActionLoadingTaskId(taskId);
-        queue.markReportsSent(taskId, reportIds);
-        queue.showInCardToast(taskId, `${label} report sent`);
-        window.setTimeout(() => queue.setActionLoadingTaskId(null), 300);
+      const task = getTask(taskId);
+      if (isLive && task) {
+        if (reportIds?.length) {
+          liveCardActions.onSend(task, reportIds);
+          return;
+        }
+        setSendTaskId(taskId);
         return;
       }
       setSendTaskId(taskId);
     },
-    [queue],
+    [getTask, isLive, liveCardActions],
   );
 
   const handleSendSelected = useCallback(
     (reportIds: string[]) => {
       if (!sendTaskId) return;
-      queue.setActionLoadingTaskId(sendTaskId);
-      queue.markReportsSent(sendTaskId, reportIds);
-      queue.showInCardToast(sendTaskId, `${reportIds.length} report(s) sent`);
-      window.setTimeout(() => queue.setActionLoadingTaskId(null), 300);
+      const task = getTask(sendTaskId);
+      if (isLive && task) {
+        liveCardActions.onSend(task, reportIds);
+        setSendTaskId(null);
+        return;
+      }
+      setSendTaskId(null);
     },
-    [queue, sendTaskId],
+    [getTask, isLive, liveCardActions, sendTaskId],
   );
 
   const handleRetry = useCallback(
     (taskId: string) => {
-      queue.setActionLoadingTaskId(taskId);
-      queue.clearDeliveryFailure(taskId);
-      queue.showInCardToast(taskId, "Retry queued");
-      window.setTimeout(() => queue.setActionLoadingTaskId(null), 300);
+      const task = getTask(taskId);
+      if (isLive && task) {
+        liveCardActions.onRetry(task);
+      }
     },
-    [queue],
+    [getTask, isLive, liveCardActions],
   );
 
   const handleKpiSelect = useCallback(
     (key: CompletionFilterKey) => {
-      queue.setFilter(key === "all" ? "all" : key);
+      queue.setWorkflowFilter(key);
     },
     [queue],
   );
 
+  const showFilterEmpty =
+    !queue.loading &&
+    !queue.error &&
+    queue.totalBeforeWorkflowTat > 0 &&
+    queue.filteredCount === 0;
+
+  const handleLivePreview = useCallback(
+    (taskId: string, reportId: string) => {
+      handlePreview(taskId, reportId);
+    },
+    [handlePreview],
+  );
+
+  const liveActionsWithPreview = useMemo(
+    () => ({
+      ...liveCardActions,
+      onPreview: (task: ReportTask, reportId: string) => {
+        handleLivePreview(task.taskId, reportId);
+      },
+    }),
+    [liveCardActions, handleLivePreview],
+  );
+
+  useEffect(() => {
+    setUploadTaskId(null);
+    setUploadReportId(null);
+    setSendTaskId(null);
+    setPreviewTarget(null);
+  }, [queue.isDemo]);
+
   return (
     <div className="flex min-h-0 min-w-0 flex-col gap-2 overflow-x-hidden pb-20">
-      <div className="flex items-center justify-end gap-2">
-        <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-800">
-          Preview · mock data
-        </span>
-      </div>
+      {queue.isDemo || isReportsDataSourceToggleVisible() ? (
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <ReportsDataSourceToggle />
+          {queue.isDemo ? <ReportsDemoChip /> : null}
+        </div>
+      ) : null}
+      {queue.isStaleQueue && !queue.isDemo ? <ReportsStaleQueueBanner visible /> : null}
 
-      <ReportsStickySearch value={queue.searchInput} onChange={queue.setSearchInput} />
+      <ReportsOperationalFilterBar
+        searchInput={queue.searchInput}
+        onSearchChange={queue.setSearchInput}
+        filterState={queue.filterState}
+        onPatchFilters={queue.patchFilters}
+        disabled={queue.loading}
+      />
 
-      <CompletionKpiStrip kpis={queue.kpis} onSelect={handleKpiSelect} />
+      <ReportsActiveFilterChips chips={queue.activeFilterChips} onClear={queue.clearActiveChip} />
+
+      <CompletionKpiStrip
+        kpis={queue.kpis}
+        activeWorkflow={queue.filterState.workflow}
+        onSelect={handleKpiSelect}
+      />
 
       <NeedsAttentionSection items={queue.attentionItems} onJumpTo={queue.jumpToCard} />
 
-      <TinyFilterChips active={queue.filter} onChange={queue.setFilter} />
+      {queue.loading && queue.groups.length === 0 ? (
+        <p className="rounded-lg border border-[#ECEBFF] bg-white px-3 py-8 text-center text-sm text-[#6B7280]">
+          Loading reports…
+        </p>
+      ) : null}
 
-      <section aria-label={queue.filter === "delivered" ? "Delivered orders" : "Active orders"} className="space-y-1.5">
+      {queue.error && !queue.loading ? (
+        <LabOrdersErrorState message={queue.error} onRetry={queue.refetch} retrying={queue.refreshing} />
+      ) : null}
+
+      <section
+        aria-label={queue.filterState.workflow === "delivered" ? "Delivered orders" : "Orders"}
+        className="space-y-1.5"
+      >
         <h2 className="text-xs font-semibold uppercase tracking-wide text-[#6B7280]">
-          {queue.filter === "delivered" ? "Delivered" : "Active orders"}
+          {queue.filterState.workflow === "delivered" ? "Delivered" : "Orders"}
         </h2>
-        {queue.groups.length === 0 ? (
+        {showFilterEmpty ? (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-6 text-center text-sm text-amber-950">
+            <p className="font-medium">No reports match current filters.</p>
+            <p className="mt-1 text-amber-800">Try clearing workflow or TAT filters.</p>
+          </div>
+        ) : !queue.loading && queue.groups.length === 0 && !queue.error ? (
           <p className="rounded-lg border border-dashed border-[#E5E7EB] px-3 py-6 text-center text-sm text-[#6B7280]">
-            No orders match your search or filter.
+            No reports in queue for the selected date range.
           </p>
         ) : (
           queue.groups.map((group) => (
@@ -152,33 +374,31 @@ export function ReportsCompletionPage() {
               expanded={queue.expandedPatientKeys.has(group.patientKey)}
               onToggleExpanded={() => queue.togglePatientGroup(group.patientKey)}
               cardRefs={queue.cardRefs}
+              getTask={queue.isLive ? queue.getTask : undefined}
+              liveCardActions={queue.isLive ? liveActionsWithPreview : undefined}
               onUpload={handleUpload}
               onSendAvailable={handleSendAvailable}
               onRetry={handleRetry}
               onReupload={handleReupload}
               onPreview={handlePreview}
-              onDismissToast={queue.dismissToast}
+              onDismissToast={() => undefined}
             />
           ))
         )}
+        {queue.groups.length > 0 && queue.hasMore ? (
+          <div className="flex justify-center pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={queue.loadMore}
+              disabled={queue.loadingMore}
+            >
+              {queue.loadingMore ? "Loading more..." : "Load more"}
+            </Button>
+          </div>
+        ) : null}
       </section>
-
-      {queue.filter !== "delivered" && queue.completedToday.length > 0 ? (
-        <section aria-label="Completed today" className="space-y-1">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-[#6B7280]">Completed today</h2>
-          {queue.completedToday.map((order) => (
-            <OrderCompletionCard
-              key={order.taskId}
-              order={order}
-              onUpload={() => undefined}
-              onSendAvailable={() => undefined}
-              onReupload={(reportId) => handleReupload(order.taskId, reportId)}
-              onPreview={(reportId) => handlePreview(order.taskId, reportId)}
-              onDismissToast={() => undefined}
-            />
-          ))}
-        </section>
-      ) : null}
 
       <OrderUploadDrawer
         open={uploadTaskId != null}
@@ -190,14 +410,9 @@ export function ReportsCompletionPage() {
           if (!open) setUploadMode("upload");
         }}
         initialReportId={uploadReportId}
-        onUploadComplete={(taskId, reportId, _testLabel, artifacts, options) => {
-          if (options?.mode === "reupload") {
-            queue.reuploadReport(taskId, reportId, artifacts, {
-              reason: options.reuploadReason ?? "Report re-uploaded",
-            });
-            return;
-          }
-          queue.markReportUploaded(taskId, reportId, artifacts);
+        onPersistUpload={isLive ? handlePersistUpload : undefined}
+        onUploadComplete={() => {
+          void queue.refetch();
         }}
         onPreviewCurrent={handlePreview}
       />
@@ -223,7 +438,6 @@ export function ReportsCompletionPage() {
           handleReupload(taskId, reportId);
         }}
       />
-
     </div>
   );
 }

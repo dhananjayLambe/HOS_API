@@ -1,4 +1,9 @@
-import type { CollectionType } from "@/lib/labs/constants/collection-type";
+import {
+  DEFAULT_REPORTS_QUEUE_FILTERS,
+  type ReportsDatePreset,
+  type ReportsQueueFilterState,
+  type ReportsWorkflowFilter,
+} from "@/lib/labs/reports/completion/reports-queue-filters";
 import {
   DEFAULT_REPORT_TASKS_FILTERS,
   type ReportTasksQueryFilters,
@@ -81,4 +86,82 @@ export function buildReportQueueSearchParams(
 export function reportQueuePathFromParams(params: URLSearchParams): string {
   const qs = params.toString();
   return qs ? `/lab-dashboard/reports?${qs}` : "/lab-dashboard/reports";
+}
+
+const WORKFLOW_URL_VALUES = new Set<ReportsWorkflowFilter>([
+  "all",
+  "pending",
+  "ready",
+  "delivered",
+  "failed",
+]);
+
+const DATE_URL_VALUES = new Set<ReportsDatePreset>([
+  "today",
+  "yesterday",
+  "week",
+  "month",
+  "custom",
+]);
+
+function parseWorkflowParam(value: string | null): ReportsWorkflowFilter {
+  const v = (value ?? "").trim().toLowerCase() as ReportsWorkflowFilter;
+  return WORKFLOW_URL_VALUES.has(v) ? v : "all";
+}
+
+function parseDateParam(value: string | null): ReportsDatePreset {
+  const v = (value ?? "").trim().toLowerCase() as ReportsDatePreset;
+  if (DATE_URL_VALUES.has(v)) return v;
+  return "today";
+}
+
+/** Completion queue filter state from URL (defaults: workflow=all, date=today). */
+export function parseCompletionQueueSearchParams(
+  params: Pick<URLSearchParams, "get"> | null | undefined,
+): ReportsQueueFilterState {
+  const q = (params?.get("q") ?? "").trim();
+  return {
+    workflow: parseWorkflowParam(params?.get("workflow")),
+    datePreset: parseDateParam(params?.get("date")),
+    customFrom: params?.get("from")?.trim() || undefined,
+    customTo: params?.get("to")?.trim() || undefined,
+    urgentOnly: parseBoolFlag(params?.get("urgent")),
+    tatBreachedOnly: parseBoolFlag(params?.get("tat")),
+    tatSoonOnly: parseBoolFlag(params?.get("tat30")),
+    searchQ: q,
+  };
+}
+
+export type CompletionQueueUrlPatch = Partial<ReportsQueueFilterState>;
+
+export function buildCompletionQueueSearchParams(
+  existing: URLSearchParams,
+  patch: CompletionQueueUrlPatch,
+): URLSearchParams {
+  const params = new URLSearchParams(existing.toString());
+  const state = { ...DEFAULT_REPORTS_QUEUE_FILTERS, ...parseCompletionQueueSearchParams(params), ...patch };
+
+  if (state.workflow === "all") params.delete("workflow");
+  else params.set("workflow", state.workflow);
+
+  if (state.datePreset === "today") params.delete("date");
+  else params.set("date", state.datePreset);
+
+  if (state.datePreset === "custom" && state.customFrom) params.set("from", state.customFrom);
+  else params.delete("from");
+  if (state.datePreset === "custom" && state.customTo) params.set("to", state.customTo);
+  else params.delete("to");
+
+  if (state.urgentOnly) params.set("urgent", "1");
+  else params.delete("urgent");
+  if (state.tatBreachedOnly) params.set("tat", "1");
+  else params.delete("tat");
+  if (state.tatSoonOnly) params.set("tat30", "1");
+  else params.delete("tat30");
+
+  const q = state.searchQ.trim();
+  if (q) params.set("q", q);
+  else params.delete("q");
+
+  return params;
 }

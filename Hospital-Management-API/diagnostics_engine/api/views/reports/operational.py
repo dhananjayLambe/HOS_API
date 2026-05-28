@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from datetime import date, datetime, timedelta
+
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from labs.models.lab_workflow import LabOrderAssignment
 from rest_framework import status
 from rest_framework.parsers import FormParser, MultiPartParser
@@ -39,6 +42,7 @@ from diagnostics_engine.services.reports.report_detail_presenter import build_re
 from diagnostics_engine.services.reports.report_task_presenter import (
     build_report_task_context,
     build_report_task_dtos,
+    compute_report_task_counts,
 )
 from labs.api.services.lab_orders_list_service import (
     apply_list_filters,
@@ -55,8 +59,13 @@ class ReportTaskQueueView(LabReportOperationalMixin):
         if err:
             return err
 
-        params = parse_list_params(request.query_params)
+        try:
+            normalized = _normalize_report_task_query_params(request.query_params)
+            params = parse_list_params(normalized)
+        except DjangoValidationError as exc:
+            return validation_error_response(exc, request=request)
         qs = apply_list_filters(base_assignments_queryset(lab_user), params)
+        counts = compute_report_task_counts(list(qs))
         paginator = ReportTaskCursorPagination()
         page = paginator.paginate_queryset(qs, request, view=self)
         assignments = list(page) if page is not None else []
@@ -69,6 +78,12 @@ class ReportTaskQueueView(LabReportOperationalMixin):
                 "results": tasks,
                 "next": paginator.get_next_link(),
                 "previous": paginator.get_previous_link(),
+                "counts": {
+                    "pending_uploads": counts.pending_uploads,
+                    "ready_delivery": counts.ready_delivery,
+                    "delivered": counts.delivered,
+                    "failed": counts.failed,
+                },
             },
             request=request,
         )
@@ -266,3 +281,92 @@ class ReportOperationalDownloadView(LabReportOperationalMixin):
             return FileResponse(content, as_attachment=True, filename=filename)
 
         return success_response(payload, request=request)
+
+
+def _normalize_report_task_query_params(query_params):
+    """
+    Normalize compatibility query params for report task queue.
+
+    Notes:
+    - `workflow` and `tat_filter` are validated for client contract safety.
+    - Assignment-centric queue filtering remains based on q/status/collection/date/urgency.
+      Workflow/TAT toggles are currently frontend-applied operational filters.
+    """
+    params = dict(query_params.items())
+    q = (params.get("search") or params.get("q") or "").strip()
+    workflow = (params.get("workflow") or "").strip().lower()
+    tat_filter = (params.get("tat_filter") or "").strip().lower()
+    date_filter = (params.get("date_filter") or "").strip().lower()
+
+    date_from = (params.get("start_date") or params.get("date_from") or "").strip()
+    date_to = (params.get("end_date") or params.get("date_to") or "").strip()
+
+    allowed_workflows = {
+        "",
+        "all",
+        "pending_upload",
+        "ready_delivery",
+        "delivered",
+        "failed",
+        "awaiting_reports",
+        "tat_breached",
+        "urgent",
+    }
+    if workflow not in allowed_workflows:
+        raise DjangoValidationError("Invalid workflow filter.")
+
+    allowed_tat_filters = {"", "tat_lt_30m", "tat_breached", "urgent", "priority"}
+    if tat_filter not in allowed_tat_filters:
+        raise DjangoValidationError("Invalid tat_filter value.")
+
+    if date_filter and date_filter not in {"today", "tomorrow", "this_week", "this_month", "custom"}:
+        raise DjangoValidationError("Invalid date_filter value.")
+
+    if date_filter and date_filter != "custom" and (not date_from and not date_to):
+        today = timezone.localdate()
+        if date_filter == "today":
+            date_from = today.isoformat()
+            date_to = today.isoformat()
+        elif date_filter == "tomorrow":
+            day = today + timedelta(days=1)
+            date_from = day.isoformat()
+            date_to = day.isoformat()
+        elif date_filter == "this_week":
+            start = today - timedelta(days=today.weekday())
+            end = start + timedelta(days=6)
+            date_from = start.isoformat()
+            date_to = end.isoformat()
+        elif date_filter == "this_month":
+            start = today.replace(day=1)
+            if start.month == 12:
+                next_month = date(start.year + 1, 1, 1)
+            else:
+                next_month = date(start.year, start.month + 1, 1)
+            end = next_month - timedelta(days=1)
+            date_from = start.isoformat()
+            date_to = end.isoformat()
+
+    parsed_from = _parse_iso_date(date_from) if date_from else None
+    parsed_to = _parse_iso_date(date_to) if date_to else None
+    if parsed_from and parsed_to and parsed_from > parsed_to:
+        raise DjangoValidationError("start_date cannot be after end_date.")
+
+    ordering = (params.get("ordering") or "-assigned_at").strip()
+    return {
+        "q": q,
+        "status": params.get("status"),
+        "collection_type": params.get("collection_type"),
+        "urgency": params.get("urgency"),
+        "date_from": parsed_from.isoformat() if parsed_from else "",
+        "date_to": parsed_to.isoformat() if parsed_to else "",
+        "ordering": ordering,
+        "page_size": params.get("page_size"),
+        "cursor": params.get("cursor"),
+    }
+
+
+def _parse_iso_date(value: str) -> date:
+    try:
+        return datetime.fromisoformat(value).date() if "T" in value else date.fromisoformat(value)
+    except ValueError as exc:
+        raise DjangoValidationError(f"Invalid date value: {value}") from exc
