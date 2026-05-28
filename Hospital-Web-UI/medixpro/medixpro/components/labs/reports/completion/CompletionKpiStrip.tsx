@@ -17,10 +17,11 @@ export type CompletionKpiStripProps = {
 
 export function CompletionKpiStrip({ kpis, activeWorkflow, onSelect }: CompletionKpiStripProps) {
   const items: KpiItem[] = [
-    { key: "pending", label: "Pending Upload", value: kpis.pendingUploads },
-    { key: "ready", label: "Ready Delivery", value: kpis.readyToSend },
+    { key: "pending", label: "Not Started", value: kpis.notStarted },
+    { key: "all", label: "In Progress", value: kpis.inProgress },
+    { key: "ready", label: "Ready To Send", value: kpis.readyToSend },
     { key: "delivered", label: "Delivered", value: kpis.delivered },
-    { key: "failed", label: "Failed", value: kpis.deliveryFailures },
+    { key: "failed", label: "Attention Required", value: kpis.attentionRequired },
   ];
 
   return (

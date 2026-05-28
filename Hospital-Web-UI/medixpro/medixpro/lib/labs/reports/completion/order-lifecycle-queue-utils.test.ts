@@ -29,6 +29,7 @@ function order(partial: Partial<OrderLifecycleViewModel>): OrderLifecycleViewMod
     isFullyComplete: partial.isFullyComplete ?? false,
     readyToSendCount: partial.readyToSendCount ?? 0,
     hasPendingUpload: partial.hasPendingUpload ?? false,
+    orderWorkflowState: partial.orderWorkflowState,
     deliveryFailure: partial.deliveryFailure,
     tatBreached: partial.tatBreached,
   };
@@ -65,6 +66,7 @@ describe("computeCompletionKpis", () => {
   it("counts delivered separately from active buckets", () => {
     const kpis = computeCompletionKpis([
       order({
+        orderWorkflowState: "pending_upload",
         hasPendingUpload: true,
         reports: [
           {
@@ -77,11 +79,13 @@ describe("computeCompletionKpis", () => {
           },
         ],
       }),
-      order({ readyToSendCount: 1 }),
-      order({ isFullyComplete: true }),
+      order({ orderWorkflowState: "partial_upload", hasPendingUpload: true }),
+      order({ orderWorkflowState: "ready_to_send", readyToSendCount: 1 }),
+      order({ orderWorkflowState: "delivered", isFullyComplete: true }),
     ]);
     expect(kpis).toMatchObject({
-      pendingUploads: 1,
+      notStarted: 1,
+      inProgress: 1,
       readyToSend: 1,
       delivered: 1,
     });

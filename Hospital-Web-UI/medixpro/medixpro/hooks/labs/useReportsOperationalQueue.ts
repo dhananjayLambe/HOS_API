@@ -185,20 +185,9 @@ export function useReportsOperationalQueue(branchLabel = "") {
   );
   const attentionItems = useMemo(() => buildAttentionItems(activeOrders), [activeOrders]);
   const localKpis = useMemo(() => computeCompletionKpis(sortedBase), [sortedBase]);
-  const backendKpis = useMemo(() => {
-    for (const snapshot of snapshots) {
-      if (snapshot.mode === "live" && snapshot.counts) {
-        return {
-          pendingUploads: snapshot.counts.pendingUploads,
-          readyToSend: snapshot.counts.readyDelivery,
-          delivered: snapshot.counts.delivered,
-          deliveryFailures: snapshot.counts.failed,
-        };
-      }
-    }
-    return null;
-  }, [snapshots]);
-  const kpis = backendKpis ?? localKpis;
+  // Keep all KPI buckets on the same derivation source to avoid mixed-count drift
+  // (backend currently does not expose split not-started vs in-progress counters).
+  const kpis = localKpis;
   const readyToSendCount = useMemo(() => countReadyToSendReports(activeOrders), [activeOrders]);
   const activeFilterChips = useMemo(() => buildActiveFilterChips(filterState), [filterState]);
 

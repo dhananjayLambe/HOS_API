@@ -53,6 +53,11 @@ export function fallbackOrderFromTask(task: ReportTask): OrderLifecycleViewModel
     lastUpdatedLabel: task.updatedAtLabel,
   };
 
+  const isFullyComplete = task.orderWorkflowState === "delivered";
+  const hasPendingUpload =
+    task.orderWorkflowState === "pending_upload" || task.orderWorkflowState === "partial_upload";
+  const readyToSendCount = task.orderWorkflowState === "ready_to_send" ? task.requiredReports : 0;
+
   const base: OrderLifecycleViewModel = {
     taskId: task.taskId,
     orderNumber: task.orderNumber,
@@ -65,13 +70,24 @@ export function fallbackOrderFromTask(task: ReportTask): OrderLifecycleViewModel
     reports: [report],
     nextAction: { line: "", showSendAvailable: false, showUpload: false, readyReportIds: [] },
     lastActivity: { atLabel: task.updatedAtLabel, byName: "System" },
+    orderWorkflowState: task.orderWorkflowState,
+    orderWorkflowReason: task.orderWorkflowReason,
+    requiredReports: task.requiredReports,
+    uploadedRequiredReports: task.uploadedRequiredReports,
+    totalReports: task.totalReports ?? task.requiredReports,
+    uploadedReports: task.uploadedReports,
+    deliveredReports: task.deliveredReports,
+    pendingReports: task.pendingReports,
+    failedReports: task.failedReports,
+    completedAtIso: task.completedAtIso,
+    lastReportUploadedAtIso: task.lastReportUploadedAtIso,
     operationalUpdatedAtIso: task.updatedAtIso ?? task.assignedAtIso,
     slaAnchorIso: task.assignedAtIso,
     tatBreached: task.tatBreached,
     attentionReasons: [],
-    isFullyComplete: status === "sent" && !hasRetry,
-    readyToSendCount: hasSend || hasMarkReady ? 1 : 0,
-    hasPendingUpload: hasUpload,
+    isFullyComplete,
+    readyToSendCount,
+    hasPendingUpload,
   };
 
   return recomputeOrderDerived(base);

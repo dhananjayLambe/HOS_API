@@ -138,6 +138,17 @@ export function mapReportTaskDto(dto: ReportTaskApiItem, options?: { labName?: s
   const urgency = mapUrgency(dto.urgency);
   const collectedLabel = formatRelativeCollected(slaAnchorIso);
   const updatedIso = dto.delivered_at ?? dto.ready_at ?? dto.uploaded_at ?? null;
+  const totalReports = Math.max(1, Number(dto.total_reports ?? (testNames.length || 1)));
+  const requiredReports = Math.max(1, Number(dto.required_reports ?? totalReports));
+  const uploadedReports = Math.max(0, Number(dto.uploaded_reports ?? 0));
+  const uploadedRequiredReports = Math.max(0, Number(dto.uploaded_required_reports ?? uploadedReports));
+  const deliveredReports = Math.max(0, Number(dto.delivered_reports ?? 0));
+  const pendingReports = Math.max(0, Number(dto.pending_reports ?? requiredReports - uploadedRequiredReports));
+  const failedReports = Math.max(0, Number(dto.failed_reports ?? 0));
+  const orderWorkflowState = (
+    dto.order_workflow_state ?? (pendingReports > 0 ? "pending_upload" : "ready_to_send")
+  ) as ReportTask["orderWorkflowState"];
+  const reason = dto.order_workflow_reason ?? null;
 
   return {
     taskId: dto.task_id,
@@ -162,6 +173,19 @@ export function mapReportTaskDto(dto: ReportTaskApiItem, options?: { labName?: s
     tatBreached: isTatBreached(slaAnchorIso, urgency),
     labName: options?.labName ?? "",
     reportCount: testNames.length,
+    requiredReports,
+    uploadedReports,
+    uploadedRequiredReports,
+    deliveredReports,
+    pendingReports,
+    failedReports,
+    orderWorkflowState,
+    orderWorkflowReason: {
+      code: String(reason?.code ?? "DERIVED"),
+      message: String(reason?.message ?? "Order state derived from report completion."),
+    },
+    lastReportUploadedAtIso: dto.last_report_uploaded_at ?? dto.uploaded_at ?? null,
+    completedAtIso: dto.completed_at ?? null,
     actionTargets: mapActionTargetsDto(dto.available_action_targets),
   };
 }

@@ -109,11 +109,26 @@ class ReportTaskSerializer(serializers.Serializer):
     uploaded_at = serializers.DateTimeField(allow_null=True)
     ready_at = serializers.DateTimeField(allow_null=True)
     delivered_at = serializers.DateTimeField(allow_null=True)
+    total_reports = serializers.IntegerField()
+    required_reports = serializers.IntegerField()
+    uploaded_reports = serializers.IntegerField()
+    uploaded_required_reports = serializers.IntegerField()
+    delivered_reports = serializers.IntegerField()
+    pending_reports = serializers.IntegerField()
+    failed_reports = serializers.IntegerField()
+    order_workflow_state = serializers.CharField()
+    order_workflow_reason = serializers.DictField()
+    last_report_uploaded_at = serializers.DateTimeField(allow_null=True)
+    completed_at = serializers.DateTimeField(allow_null=True)
     available_action_targets = ReportActionTargetsSerializer()
 
     @classmethod
     def from_dto(cls, dto: ReportTaskDTO):
         payload = {**dto.__dict__}
+        payload["order_workflow_reason"] = {
+            "code": dto.order_workflow_reason_code,
+            "message": dto.order_workflow_reason_message,
+        }
         payload["available_action_targets"] = ReportActionTargetsSerializer.from_dto(
             dto.available_action_targets
         ).data

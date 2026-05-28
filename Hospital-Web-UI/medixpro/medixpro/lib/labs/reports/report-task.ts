@@ -28,6 +28,24 @@ export type ReportTask = {
   tatBreached: boolean;
   labName: string;
   reportCount: number;
+  requiredReports: number;
+  uploadedReports: number;
+  uploadedRequiredReports: number;
+  deliveredReports: number;
+  pendingReports: number;
+  failedReports: number;
+  orderWorkflowState:
+    | "pending_upload"
+    | "partial_upload"
+    | "ready_to_send"
+    | "delivered"
+    | "attention_required";
+  orderWorkflowReason: {
+    code: string;
+    message: string;
+  };
+  lastReportUploadedAtIso: string | null;
+  completedAtIso: string | null;
   /** Mutation targets from queue DTO — no per-CTA context fetch. */
   actionTargets: ReportActionTargets;
   /** Legacy: present only when loaded via labs/orders fallback. */
@@ -124,6 +142,28 @@ export function mapOrderToReportTask(order: LabOrderRow): ReportTask {
     tatBreached: isTatBreached(assignedIso, urgency),
     labName: order.branch || "",
     reportCount: testNames.length,
+    requiredReports: testNames.length,
+    uploadedReports: order.reportStatus === "pending" ? 0 : testNames.length,
+    uploadedRequiredReports: order.reportStatus === "pending" ? 0 : testNames.length,
+    deliveredReports: order.reportStatus === "delivered" ? testNames.length : 0,
+    pendingReports: order.reportStatus === "pending" ? testNames.length : 0,
+    failedReports: order.reportStatus === "rejected" ? testNames.length : 0,
+    orderWorkflowState:
+      order.reportStatus === "delivered"
+        ? "delivered"
+        : order.reportStatus === "rejected"
+          ? "attention_required"
+          : order.reportStatus === "ready"
+            ? "ready_to_send"
+            : order.reportStatus === "pending"
+              ? "pending_upload"
+              : "partial_upload",
+    orderWorkflowReason: {
+      code: "LEGACY_FALLBACK",
+      message: "Derived from order report status in fallback mode.",
+    },
+    lastReportUploadedAtIso: assignedIso,
+    completedAtIso: order.reportStatus === "delivered" ? assignedIso : null,
     actionTargets: emptyActionTargets(),
     orderRow: order,
   };

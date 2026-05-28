@@ -89,7 +89,18 @@ export const OrderCompletionCard = forwardRef<HTMLElement, OrderCompletionCardPr
     const hasReady = order.reports.some(isReadyToSend);
     const hasUpdated = order.reports.some(isUpdatedReportPendingSend);
     const hasSent = order.reports.some(isReportSent);
-    const orderState = hasFailure
+    const backendState = order.orderWorkflowState;
+    const orderState = backendState === "attention_required"
+      ? { label: "Attention Required", className: "border-red-200 bg-red-50 text-red-800", strip: "bg-red-500" }
+      : backendState === "delivered"
+        ? { label: "Delivered", className: "border-emerald-200 bg-emerald-50 text-emerald-800", strip: "bg-emerald-500" }
+        : backendState === "ready_to_send"
+          ? { label: "Ready To Send", className: "border-blue-200 bg-blue-50 text-blue-800", strip: "bg-blue-500" }
+          : backendState === "partial_upload"
+            ? { label: "Partial Upload", className: "border-violet-200 bg-violet-50 text-violet-800", strip: "bg-violet-500" }
+            : backendState === "pending_upload"
+              ? { label: "Pending Upload", className: "border-amber-200 bg-amber-50 text-amber-800", strip: "bg-amber-500" }
+              : hasFailure
       ? { label: "Attention", className: "border-red-200 bg-red-50 text-red-800", strip: "bg-red-500" }
       : order.isFullyComplete
         ? { label: "Completed", className: "border-emerald-200 bg-emerald-50 text-emerald-800", strip: "bg-emerald-500" }
@@ -100,6 +111,12 @@ export const OrderCompletionCard = forwardRef<HTMLElement, OrderCompletionCardPr
             : hasReady
               ? { label: "Ready To Send", className: "border-blue-200 bg-blue-50 text-blue-800", strip: "bg-blue-500" }
               : { label: "Awaiting Reports", className: "border-amber-200 bg-amber-50 text-amber-800", strip: "bg-amber-500" };
+    const progressText =
+      typeof order.uploadedRequiredReports === "number" &&
+      typeof order.requiredReports === "number" &&
+      order.requiredReports > 0
+        ? `${order.uploadedRequiredReports}/${order.requiredReports} required uploaded`
+        : null;
     const summaryChips = [
       ["Pending", workflowSummary.pending],
       ["Ready", workflowSummary.ready],
@@ -163,7 +180,11 @@ export const OrderCompletionCard = forwardRef<HTMLElement, OrderCompletionCardPr
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 pl-1.5 text-[11px] font-medium text-[#4B5563]">
           <span>{workflows.length} test{workflows.length === 1 ? "" : "s"}</span>
+          {progressText ? <span>· {progressText}</span> : null}
         </div>
+        {order.orderWorkflowReason?.message ? (
+          <p className="mt-1 pl-1.5 text-[11px] text-[#6B7280]">{order.orderWorkflowReason.message}</p>
+        ) : null}
 
         <div className="mt-2 flex flex-wrap gap-1 pl-1.5">
           {summaryChips.length > 0 ? (

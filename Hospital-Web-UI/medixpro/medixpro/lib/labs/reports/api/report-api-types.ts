@@ -22,6 +22,20 @@ export type ReportTaskApiItem = {
   uploaded_at: string | null;
   ready_at: string | null;
   delivered_at: string | null;
+  total_reports?: number;
+  required_reports?: number;
+  uploaded_reports?: number;
+  uploaded_required_reports?: number;
+  delivered_reports?: number;
+  pending_reports?: number;
+  failed_reports?: number;
+  order_workflow_state?: string;
+  order_workflow_reason?: {
+    code?: string;
+    message?: string;
+  } | null;
+  last_report_uploaded_at?: string | null;
+  completed_at?: string | null;
   urgency?: string | null;
   available_action_targets: ReportActionTargetsApi;
 };

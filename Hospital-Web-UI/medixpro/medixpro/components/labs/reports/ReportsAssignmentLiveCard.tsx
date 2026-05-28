@@ -43,11 +43,31 @@ export function ReportsAssignmentLiveCard({
 
   const order = useMemo((): OrderLifecycleViewModel => {
     if (contextQuery.data?.activeReports.length) {
-      return buildOrderLifecycleFromTaskContext(contextQuery.data, {
+      const derived = buildOrderLifecycleFromTaskContext(contextQuery.data, {
         urgency: task.urgency,
         tatState: task.tatBreached ? "breached" : "safe",
         tatLabel: task.tatBreached ? "TAT breached" : "TAT on track",
       });
+      return {
+        ...derived,
+        orderWorkflowState: task.orderWorkflowState,
+        orderWorkflowReason: task.orderWorkflowReason,
+        requiredReports: task.requiredReports,
+        uploadedRequiredReports: task.uploadedRequiredReports,
+        totalReports: task.totalReports,
+        uploadedReports: task.uploadedReports,
+        deliveredReports: task.deliveredReports,
+        pendingReports: task.pendingReports,
+        failedReports: task.failedReports,
+        completedAtIso: task.completedAtIso,
+        lastReportUploadedAtIso: task.lastReportUploadedAtIso,
+        isFullyComplete: task.orderWorkflowState === "delivered",
+        hasPendingUpload:
+          task.orderWorkflowState === "pending_upload" ||
+          task.orderWorkflowState === "partial_upload",
+        readyToSendCount:
+          task.orderWorkflowState === "ready_to_send" ? task.requiredReports : 0,
+      };
     }
     return fallbackOrderFromTask(task);
   }, [contextQuery.data, task]);

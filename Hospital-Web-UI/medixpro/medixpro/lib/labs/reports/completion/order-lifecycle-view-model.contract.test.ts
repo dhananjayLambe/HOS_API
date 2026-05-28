@@ -63,6 +63,19 @@ const stubTask: ReportTask = {
   tatBreached: false,
   labName: "Lab",
   reportCount: 1,
+  requiredReports: 1,
+  uploadedReports: 0,
+  uploadedRequiredReports: 0,
+  deliveredReports: 0,
+  pendingReports: 1,
+  failedReports: 0,
+  orderWorkflowState: "pending_upload",
+  orderWorkflowReason: {
+    code: "PENDING_UPLOAD",
+    message: "No required reports uploaded yet.",
+  },
+  lastReportUploadedAtIso: null,
+  completedAtIso: null,
   actionTargets: {
     uploadReportId: "report-1",
   },
@@ -94,7 +107,10 @@ const stubContext: ReportTaskContext = {
 
 describe("OrderLifecycleViewModel contract", () => {
   it("fallbackOrderFromTask matches stable shape", () => {
-    assertOrderShape(fallbackOrderFromTask(stubTask));
+    const fallback = fallbackOrderFromTask(stubTask);
+    assertOrderShape(fallback);
+    expect(fallback).toHaveProperty("orderWorkflowState");
+    expect(fallback).toHaveProperty("requiredReports");
   });
 
   it("buildOrderLifecycleFromTaskContext matches same top-level shape as fallback", () => {

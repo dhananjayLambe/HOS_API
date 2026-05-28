@@ -88,3 +88,26 @@ def emit_report_metric(
         )
     except Exception:
         logger.warning("report_metric_failed name=%s", name, exc_info=True)
+
+
+def emit_order_state_changed(
+    *,
+    assignment_id,
+    order_id,
+    from_state: str,
+    to_state: str,
+    reason_code: str,
+    reason_message: str,
+) -> None:
+    emit_report_event(
+        "ORDER_STATE_CHANGED",
+        outcome=OUTCOME_SUCCESS,
+        assignment_id=assignment_id,
+        extra={
+            "order_id": str(order_id),
+            "from_state": from_state,
+            "to_state": to_state,
+            "reason_code": reason_code,
+            "reason_message": reason_message,
+        },
+    )

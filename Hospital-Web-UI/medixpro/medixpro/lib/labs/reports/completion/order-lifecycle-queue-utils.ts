@@ -12,6 +12,30 @@ import {
   isUpdatedReportPendingSend,
 } from "@/lib/labs/reports/completion/operational-contract";
 
+type DerivedOrderWorkflowState =
+  | "pending_upload"
+  | "partial_upload"
+  | "ready_to_send"
+  | "delivered"
+  | "attention_required";
+
+function resolveOrderWorkflowState(order: OrderLifecycleViewModel): DerivedOrderWorkflowState {
+  if (order.orderWorkflowState) return order.orderWorkflowState;
+  if (order.deliveryFailure || order.reports.some(isFailedReport)) return "attention_required";
+  if (order.isFullyComplete) return "delivered";
+  const required = order.requiredReports ?? order.totalReports ?? order.reports.length;
+  const uploadedRequired = order.uploadedRequiredReports ?? order.uploadedReports;
+  if (typeof required === "number" && required > 0 && typeof uploadedRequired === "number") {
+    if (uploadedRequired >= required) return "ready_to_send";
+    if (uploadedRequired > 0) return "partial_upload";
+    return "pending_upload";
+  }
+  if (order.hasPendingUpload && order.readyToSendCount > 0) return "partial_upload";
+  if (order.hasPendingUpload) return "pending_upload";
+  if (order.readyToSendCount > 0) return "ready_to_send";
+  return "pending_upload";
+}
+
 export function buildAttentionItems(orders: OrderLifecycleViewModel[]): AttentionItem[] {
   const items: AttentionItem[] = [];
   for (const order of orders) {
@@ -57,37 +81,68 @@ export function buildAttentionItems(orders: OrderLifecycleViewModel[]): Attentio
 }
 
 export function computeCompletionKpis(orders: OrderLifecycleViewModel[]): CompletionKpis {
-  let pendingUploads = 0;
+  let notStarted = 0;
+  let inProgress = 0;
   let readyToSend = 0;
   let delivered = 0;
-  let deliveryFailures = 0;
+  let attentionRequired = 0;
 
   for (const order of orders) {
-    if (order.isFullyComplete) {
+    const state = resolveOrderWorkflowState(order);
+    if (state === "delivered" || order.isFullyComplete) {
       delivered += 1;
       continue;
     }
-    pendingUploads += order.reports.filter(isPendingUpload).length;
-    readyToSend += order.readyToSendCount;
-    if (order.deliveryFailure || order.reports.some(isFailedReport)) {
-      deliveryFailures += 1;
+    if (state === "pending_upload") {
+      notStarted += 1;
+    }
+    if (state === "partial_upload") {
+      inProgress += 1;
+    }
+    if (state === "ready_to_send") {
+      readyToSend += 1;
+    }
+    if (
+      state === "attention_required" ||
+      order.deliveryFailure ||
+      order.reports.some(isFailedReport)
+    ) {
+      attentionRequired += 1;
     }
   }
 
-  return { pendingUploads, readyToSend, delivered, deliveryFailures };
+  return { notStarted, inProgress, readyToSend, delivered, attentionRequired };
 }
 
 export function filterOrdersByWorkflow(
   orders: OrderLifecycleViewModel[],
   filter: CompletionFilterKey,
 ): OrderLifecycleViewModel[] {
+  // Queue definitions:
+  // - pending => pending_upload + partial_upload
+  // - ready => ready_to_send only
+  // - delivered => delivered only
+  // - failed => attention_required only
   if (filter === "all") return orders;
-  if (filter === "pending") return orders.filter((o) => !o.isFullyComplete && o.hasPendingUpload);
-  if (filter === "ready") return orders.filter((o) => !o.isFullyComplete && o.readyToSendCount > 0);
-  if (filter === "delivered") return orders.filter((o) => o.isFullyComplete);
+  if (filter === "pending") {
+    return orders.filter(
+      (o) => {
+        const state = resolveOrderWorkflowState(o);
+        return state === "pending_upload" || state === "partial_upload";
+      },
+    );
+  }
+  if (filter === "ready") {
+    return orders.filter(
+      (o) => resolveOrderWorkflowState(o) === "ready_to_send",
+    );
+  }
+  if (filter === "delivered") {
+    return orders.filter((o) => resolveOrderWorkflowState(o) === "delivered" || o.isFullyComplete);
+  }
   if (filter === "failed") {
     return orders.filter(
-      (o) => !o.isFullyComplete && (o.deliveryFailure != null || o.reports.some(isFailedReport)),
+      (o) => resolveOrderWorkflowState(o) === "attention_required",
     );
   }
   if (filter === "urgent") {

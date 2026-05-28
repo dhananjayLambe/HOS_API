@@ -7,6 +7,7 @@ from datetime import datetime
 from uuid import UUID
 
 from diagnostics_engine.domain.reports import get_active_report_for_line, get_primary_artifact
+from diagnostics_engine.monitoring.report_events import emit_order_state_changed, safe_emit
 from diagnostics_engine.domain.reports.report_actions import ReportAction, allowed_actions_for_report
 from diagnostics_engine.models.choices import ReportLifecycleStatus
 from diagnostics_engine.models.reports import DiagnosticTestReport
@@ -114,6 +115,18 @@ class ReportTaskDTO:
     uploaded_at: datetime | None
     ready_at: datetime | None
     delivered_at: datetime | None
+    total_reports: int
+    required_reports: int
+    uploaded_reports: int
+    uploaded_required_reports: int
+    delivered_reports: int
+    pending_reports: int
+    failed_reports: int
+    order_workflow_state: str
+    order_workflow_reason_code: str
+    order_workflow_reason_message: str
+    last_report_uploaded_at: datetime | None
+    completed_at: datetime | None
     available_action_targets: ReportActionTargetsDTO
 
 
@@ -338,16 +351,54 @@ def build_report_task_dto(
     uploaded_at = None
     ready_at = None
     delivered_at = None
+    total_reports = 0
+    uploaded_reports = 0
+    delivered_reports = 0
+    failed_reports = 0
     for line in order.test_lines.all():
         report = line_report_map.get(str(line.id))
+        total_reports += 1
         if report is None:
             continue
+        if report.status != ReportLifecycleStatus.PENDING:
+            uploaded_reports += 1
+        if report.status == ReportLifecycleStatus.DELIVERED:
+            delivered_reports += 1
+        if (
+            report.status == ReportLifecycleStatus.REJECTED
+            or report.delivery_status == DeliveryStatus.FAILED
+        ):
+            failed_reports += 1
         if report.uploaded_at and (uploaded_at is None or report.uploaded_at > uploaded_at):
             uploaded_at = report.uploaded_at
         if report.ready_at and (ready_at is None or report.ready_at > ready_at):
             ready_at = report.ready_at
         if report.delivered_at and (delivered_at is None or report.delivered_at > delivered_at):
             delivered_at = report.delivered_at
+
+    required_reports = total_reports
+    uploaded_required_reports = min(uploaded_reports, required_reports)
+    pending_reports = max(required_reports - uploaded_required_reports, 0)
+    order_workflow_state, reason_code, reason_message = derive_order_workflow_state(
+        required_reports=required_reports,
+        uploaded_required_reports=uploaded_required_reports,
+        delivered_reports=delivered_reports,
+        failed_reports=failed_reports,
+        critical_tat_breach=False,
+    )
+    if order_workflow_state == "ready_to_send" and pending_reports > 0:
+        raise ValueError("Invalid queue invariant: ready_to_send cannot have pending_reports > 0")
+    completed_at = delivered_at if order_workflow_state == "delivered" else None
+    if operational_status != map_order_state_to_legacy_operational(order_workflow_state):
+        safe_emit(
+            emit_order_state_changed,
+            assignment_id=assignment.id,
+            order_id=order.id,
+            from_state=operational_status.lower(),
+            to_state=order_workflow_state,
+            reason_code=reason_code,
+            reason_message=reason_message,
+        )
 
     return ReportTaskDTO(
         task_id=str(assignment.id),
@@ -364,6 +415,18 @@ def build_report_task_dto(
         uploaded_at=uploaded_at,
         ready_at=ready_at,
         delivered_at=delivered_at,
+        total_reports=total_reports,
+        required_reports=required_reports,
+        uploaded_reports=uploaded_reports,
+        uploaded_required_reports=uploaded_required_reports,
+        delivered_reports=delivered_reports,
+        pending_reports=pending_reports,
+        failed_reports=failed_reports,
+        order_workflow_state=order_workflow_state,
+        order_workflow_reason_code=reason_code,
+        order_workflow_reason_message=reason_message,
+        last_report_uploaded_at=uploaded_at,
+        completed_at=completed_at,
         available_action_targets=build_available_action_targets(
             assignment,
             line_report_map=line_report_map,
@@ -423,3 +486,44 @@ def compute_report_task_counts(assignments: list[LabOrderAssignment]) -> ReportT
         delivered=delivered,
         failed=failed,
     )
+
+
+def derive_order_workflow_state(
+    *,
+    required_reports: int,
+    uploaded_required_reports: int,
+    delivered_reports: int,
+    failed_reports: int,
+    critical_tat_breach: bool,
+) -> tuple[str, str, str]:
+    if failed_reports > 0 or critical_tat_breach:
+        return (
+            "attention_required",
+            "ATTENTION_REQUIRED",
+            "Action needed due to failed delivery/upload or critical SLA breach.",
+        )
+    if required_reports > 0 and delivered_reports >= required_reports:
+        return ("delivered", "DELIVERED", "All required reports are delivered.")
+    if required_reports > 0 and uploaded_required_reports >= required_reports:
+        return (
+            "ready_to_send",
+            "READY_TO_SEND",
+            f"{uploaded_required_reports} of {required_reports} required reports uploaded.",
+        )
+    if uploaded_required_reports > 0:
+        return (
+            "partial_upload",
+            "PARTIAL_UPLOAD",
+            f"{uploaded_required_reports} of {required_reports} required reports uploaded.",
+        )
+    return ("pending_upload", "PENDING_UPLOAD", "No required reports uploaded yet.")
+
+
+def map_order_state_to_legacy_operational(order_state: str) -> str:
+    if order_state == "attention_required":
+        return "FAILED_DELIVERY"
+    if order_state == "delivered":
+        return "DELIVERED"
+    if order_state == "ready_to_send":
+        return "READY_DELIVERY"
+    return "PENDING_UPLOAD"

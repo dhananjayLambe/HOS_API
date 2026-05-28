@@ -28,6 +28,21 @@ Next.js rewrites ` /api/v1/diagnostics/*` → Django backend (`next.config.mjs`)
 
 Future: `GET /report-tasks?date_range=today` filtered on report `updated_at`.
 
+## Queue membership semantics (authoritative)
+
+Order-level queue membership is backend-authoritative via `order_workflow_state`:
+
+- Pending queue includes: `pending_upload`, `partial_upload`
+- Ready queue includes: `ready_to_send`
+- Delivered queue includes: `delivered`
+- Attention queue includes: `attention_required`
+
+Notes:
+
+- `ready_to_send` is allowed only when `uploaded_required_reports == required_reports`
+- Invariant: `ready_to_send` cannot have `pending_reports > 0`
+- Frontend renders these states and must not re-derive conflicting order state from report chips
+
 ## Contract checklist
 
 - [x] Envelope: `{ success, request_id, data, error }`

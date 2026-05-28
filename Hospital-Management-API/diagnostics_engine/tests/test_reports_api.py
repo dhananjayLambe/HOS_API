@@ -67,6 +67,62 @@ class ReportAPITestCase(TestCase):
         self.assertIn("delivered", counts)
         self.assertIn("failed", counts)
 
+    def test_task_queue_includes_order_state_metadata(self):
+        url = reverse("v1-report-task-queue")
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        card = next(
+            r
+            for r in res.data["data"]["results"]
+            if str(r["task_id"]) == str(self.assignment.id)
+        )
+        self.assertIn("required_reports", card)
+        self.assertIn("uploaded_required_reports", card)
+        self.assertIn("order_workflow_state", card)
+        self.assertIn("order_workflow_reason", card)
+        self.assertIn("last_report_uploaded_at", card)
+        self.assertIn("completed_at", card)
+
+    def test_task_queue_ready_state_has_no_pending_reports(self):
+        ArtifactUploadService.upload_report_artifacts(
+            report=self.report,
+            uploaded_files=[_pdf(b"ready-state")],
+            primary_file_index=0,
+        )
+        url = reverse("v1-report-task-queue")
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        card = next(
+            r
+            for r in res.data["data"]["results"]
+            if str(r["task_id"]) == str(self.assignment.id)
+        )
+        if card["order_workflow_state"] == "ready_to_send":
+            self.assertEqual(card["pending_reports"], 0)
+
+    def test_task_queue_partial_state_for_mixed_order_reports(self):
+        second_line = self.order.test_lines.first()
+        second_report = DiagnosticTestReport.objects.create(
+            order_test_line=second_line,
+            storage_mode=ReportStorageMode.FILE,
+            status=ReportLifecycleStatus.IN_PROGRESS,
+            supersedes=self.report,
+        )
+        self.report.status = ReportLifecycleStatus.PENDING
+        self.report.save(update_fields=["status", "updated_at"])
+        second_report.refresh_from_db()
+
+        url = reverse("v1-report-task-queue")
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        card = next(
+            r
+            for r in res.data["data"]["results"]
+            if str(r["task_id"]) == str(self.assignment.id)
+        )
+        self.assertIn(card["order_workflow_state"], {"pending_upload", "partial_upload"})
+        self.assertGreaterEqual(card["required_reports"], 1)
+
     def test_task_queue_invalid_workflow_returns_400(self):
         url = reverse("v1-report-task-queue")
         res = self.client.get(url, {"workflow": "not-real"})

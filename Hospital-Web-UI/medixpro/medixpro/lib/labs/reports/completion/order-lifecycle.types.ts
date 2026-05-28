@@ -162,6 +162,25 @@ export type OrderLifecycleViewModel = {
   isFullyComplete: boolean;
   readyToSendCount: number;
   hasPendingUpload: boolean;
+  orderWorkflowState?:
+    | "pending_upload"
+    | "partial_upload"
+    | "ready_to_send"
+    | "delivered"
+    | "attention_required";
+  orderWorkflowReason?: {
+    code: string;
+    message: string;
+  };
+  requiredReports?: number;
+  uploadedRequiredReports?: number;
+  totalReports?: number;
+  uploadedReports?: number;
+  deliveredReports?: number;
+  pendingReports?: number;
+  failedReports?: number;
+  completedAtIso?: string | null;
+  lastReportUploadedAtIso?: string | null;
   /** Phase 1 operational date filter anchor (report activity proxy). */
   operationalUpdatedAtIso?: string | null;
   slaAnchorIso?: string | null;
@@ -171,10 +190,11 @@ export type OrderLifecycleViewModel = {
 };
 
 export type CompletionKpis = {
-  pendingUploads: number;
+  notStarted: number;
+  inProgress: number;
   readyToSend: number;
   delivered: number;
-  deliveryFailures: number;
+  attentionRequired: number;
 };
 
 export type PatientOrderGroupViewModel = {

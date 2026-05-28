@@ -1,6 +1,7 @@
 from django.core.exceptions import ValidationError
 
 from diagnostics_engine.api.views.reports.operational import _normalize_report_task_query_params
+from diagnostics_engine.services.reports.report_task_presenter import derive_order_workflow_state
 
 
 def test_normalize_report_task_query_params_maps_search_and_dates():
@@ -55,3 +56,27 @@ def test_normalize_report_task_query_params_accepts_workflow_but_keeps_query_con
     )
     assert params["q"] == "abc"
     assert "workflow" not in params
+
+
+def test_derive_order_workflow_state_priority_attention_first():
+    state, code, _ = derive_order_workflow_state(
+        required_reports=2,
+        uploaded_required_reports=2,
+        delivered_reports=2,
+        failed_reports=1,
+        critical_tat_breach=False,
+    )
+    assert state == "attention_required"
+    assert code == "ATTENTION_REQUIRED"
+
+
+def test_derive_order_workflow_state_ready_requires_required_reports():
+    state, code, _ = derive_order_workflow_state(
+        required_reports=2,
+        uploaded_required_reports=2,
+        delivered_reports=0,
+        failed_reports=0,
+        critical_tat_breach=False,
+    )
+    assert state == "ready_to_send"
+    assert code == "READY_TO_SEND"
