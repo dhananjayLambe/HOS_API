@@ -37,6 +37,7 @@ export type ReportActionTargets = {
 
 export type ReportArtifact = {
   id: string;
+  artifactId?: string;
   artifactType: string;
   originalFilename: string;
   downloadFilename: string;
@@ -44,7 +45,15 @@ export type ReportArtifact = {
   contentType: string;
   isPrimary: boolean;
   version: number;
+  storageState?: string;
+  patientAccountUuid?: string | null;
+  patientProfileUuid?: string | null;
+  sourceType?: string | null;
+  artifactCategory?: string | null;
+  retentionUntil?: string | null;
+  legalHold?: boolean;
   uploadedAt: string;
+  uploadedBy?: string | null;
   downloadUrl: string | null;
 };
 
@@ -200,16 +209,27 @@ export function mapReportTaskDtos(
 export { mapReportTaskContextDto };
 
 export function mapReportArtifactDto(dto: ReportArtifactApiItem): ReportArtifact {
+  const originalFilename = dto.original_filename ?? dto.download_filename ?? "Unnamed artifact";
+  const downloadFilename = dto.download_filename ?? originalFilename;
   return {
     id: String(dto.id),
+    artifactId: String(dto.artifact_id ?? dto.id),
     artifactType: dto.artifact_type,
-    originalFilename: dto.original_filename,
-    downloadFilename: dto.download_filename,
-    fileSize: dto.file_size,
-    contentType: dto.content_type,
+    originalFilename,
+    downloadFilename,
+    fileSize: dto.file_size ?? 0,
+    contentType: dto.content_type ?? "",
     isPrimary: dto.is_primary,
     version: dto.version,
-    uploadedAt: dto.uploaded_at,
+    storageState: dto.storage_state ?? undefined,
+    patientAccountUuid: dto.patient_account_uuid ?? null,
+    patientProfileUuid: dto.patient_profile_uuid ?? null,
+    sourceType: dto.source_type ?? null,
+    artifactCategory: dto.artifact_category ?? null,
+    retentionUntil: dto.retention_until ?? null,
+    legalHold: dto.legal_hold ?? false,
+    uploadedAt: dto.uploaded_at ?? "",
+    uploadedBy: dto.uploaded_by ?? null,
     downloadUrl: dto.download_url,
   };
 }

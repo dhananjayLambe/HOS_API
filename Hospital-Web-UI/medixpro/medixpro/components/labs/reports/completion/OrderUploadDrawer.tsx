@@ -41,12 +41,24 @@ export type OrderUploadDrawerProps = {
     options?: { mode?: "upload" | "reupload"; reuploadReason?: string },
   ) => void;
   initialReportId?: string | null;
-  onPersistUpload?: (input: { taskId: string; reportId: string; files: File[] }) => Promise<void>;
+  onPersistUpload?: (input: {
+    taskId: string;
+    reportId: string;
+    files: File[];
+    mode: "upload" | "reupload";
+    reuploadReason?: string;
+    hasExistingArtifact?: boolean;
+  }) => Promise<void>;
   onPreviewCurrent?: (taskId: string, reportId: string) => void;
 };
 
 function uploadableReports(order: OrderLifecycleViewModel) {
-  return order.reports.filter(isPendingUpload);
+  return order.reports.filter((report) => {
+    if (report.availableActions?.some((action) => action.trim().toUpperCase() === "UPLOAD_REPORT")) {
+      return true;
+    }
+    return isPendingUpload(report);
+  });
 }
 
 function reuploadableReports(order: OrderLifecycleViewModel) {
@@ -112,7 +124,8 @@ export function OrderUploadDrawer({
     if (!order || !selectedReport) return;
     const trimmedReason = reuploadReasonChoice === "Other" ? reuploadReasonOther.trim() : reuploadReasonChoice;
     if (mode === "reupload" && trimmedReason.length === 0) return;
-    const artifacts: StagedArtifactInput[] = staging.validFiles
+    const selectedFiles = mode === "reupload" ? staging.validFiles.slice(0, 1) : staging.validFiles;
+    const artifacts: StagedArtifactInput[] = selectedFiles
       .filter((f) => f.file)
       .map((f) => ({
         fileName: f.name,
@@ -130,7 +143,10 @@ export function OrderUploadDrawer({
         await onPersistUpload({
           taskId: order.taskId,
           reportId: selectedReport.reportId,
-          files: staging.validFiles.map((file) => file.file).filter((file): file is File => Boolean(file)),
+          mode,
+          reuploadReason: trimmedReason || undefined,
+          hasExistingArtifact: selectedReport.artifacts.length > 0,
+          files: selectedFiles.map((file) => file.file).filter((file): file is File => Boolean(file)),
         });
       } else {
         await new Promise((r) => setTimeout(r, 200));
@@ -387,6 +403,7 @@ export function OrderUploadDrawer({
                   disabled={
                     uploading ||
                     staging.validFiles.length === 0 ||
+                    (mode === "reupload" && staging.validFiles.length !== 1) ||
                     (mode === "reupload" &&
                       (reuploadReasonChoice.length === 0 ||
                         (reuploadReasonChoice === "Other" && reuploadReasonOther.trim().length === 0)))

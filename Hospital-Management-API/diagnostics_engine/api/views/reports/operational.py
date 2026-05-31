@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.cache import cache
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from labs.models.lab_workflow import LabOrderAssignment
@@ -29,6 +30,7 @@ from diagnostics_engine.api.serializers.reports.report_task import (
 from diagnostics_engine.api.serializers.reports.upload_request import UploadArtifactRequestSerializer
 from diagnostics_engine.models.choices import ReportLifecycleStatus
 from diagnostics_engine.models.reports import DiagnosticTestReport
+from diagnostics_engine.domain.reports import get_primary_artifact
 from diagnostics_engine.permissions.reports import CanDownloadReports, CanUploadReports, CanViewReportDetail
 from diagnostics_engine.services.reports import (
     ArtifactUploadService,
@@ -124,6 +126,7 @@ class ReportOperationalArtifactUploadView(LabReportOperationalMixin):
 
     permission_classes = [IsAuthenticated, CanUploadReports]
     parser_classes = [MultiPartParser, FormParser]
+    _UPLOAD_INTENTS = {"UPLOAD_NEW", "REUPLOAD_REPLACE"}
 
     def post(self, request, report_id):
         lab_user, err = self.resolve_lab(request)
@@ -148,10 +151,69 @@ class ReportOperationalArtifactUploadView(LabReportOperationalMixin):
         data = {"files": files, "notes": request.data.get("notes", "")}
         raw_index = request.data.get("primary_file_index")
         if raw_index is not None and str(raw_index).strip() != "":
-            data["primary_file_index"] = int(raw_index)
+            try:
+                data["primary_file_index"] = int(raw_index)
+            except (TypeError, ValueError):
+                return error_response(
+                    "primary_file_index must be an integer.",
+                    code=error_codes.VALIDATION_FAILED,
+                    status=status.HTTP_400_BAD_REQUEST,
+                    request=request,
+                )
         raw_version = request.data.get("version")
         if raw_version is not None and str(raw_version).strip() != "":
-            data["version"] = int(raw_version)
+            try:
+                data["version"] = int(raw_version)
+            except (TypeError, ValueError):
+                return error_response(
+                    "version must be an integer.",
+                    code=error_codes.VALIDATION_FAILED,
+                    status=status.HTTP_400_BAD_REQUEST,
+                    request=request,
+                )
+
+        upload_intent = str(request.data.get("upload_intent") or "").strip().upper()
+        legacy_mode = str(request.data.get("mode") or "").strip().lower()
+        if not upload_intent and legacy_mode:
+            upload_intent = "REUPLOAD_REPLACE" if legacy_mode == "reupload" else "UPLOAD_NEW"
+        if not upload_intent:
+            upload_intent = "UPLOAD_NEW"
+        if upload_intent not in self._UPLOAD_INTENTS:
+            return error_response(
+                "Unsupported upload_intent.",
+                code=error_codes.INVALID_UPLOAD_INTENT,
+                status=status.HTTP_400_BAD_REQUEST,
+                request=request,
+            )
+
+        upload_request_id = str(request.data.get("upload_request_id") or request.headers.get("Idempotency-Key") or "").strip()
+        if upload_request_id:
+            key = f"diagnostics:upload:req:{report.id}:{upload_request_id}"
+            if not cache.add(key, "1", timeout=120):
+                return error_response(
+                    "Duplicate upload request.",
+                    code=error_codes.IDEMPOTENCY_CONFLICT,
+                    status=status.HTTP_409_CONFLICT,
+                    request=request,
+                )
+
+        if report.order_test_line_id is None or getattr(report.order_test_line, "order_id", None) is None:
+            return error_response(
+                "Report ownership linkage is invalid.",
+                code=error_codes.REPORT_OWNERSHIP_MISMATCH,
+                status=status.HTTP_400_BAD_REQUEST,
+                request=request,
+            )
+        if report.artifacts.filter(
+            is_active=True,
+            artifact_state__in=["archived", "quarantine", "deleted"],
+        ).exists():
+            return error_response(
+                "Report has blocked artifact state for upload.",
+                code=error_codes.REPORT_NOT_READY,
+                status=status.HTTP_400_BAD_REQUEST,
+                request=request,
+            )
 
         ser = UploadArtifactRequestSerializer(data=data)
         if not ser.is_valid():
@@ -164,14 +226,62 @@ class ReportOperationalArtifactUploadView(LabReportOperationalMixin):
 
         validated = ser.validated_data
         version = validated.get("version")
+        is_reupload = upload_intent == "REUPLOAD_REPLACE"
         try:
-            artifacts = ArtifactUploadService.upload_report_artifacts(
-                report=report,
-                uploaded_files=validated["files"],
-                uploaded_by=request.user,
-                primary_file_index=validated.get("primary_file_index"),
-                version=version,
-            )
+            if is_reupload:
+                files = validated["files"]
+                if len(files) != 1:
+                    return error_response(
+                        "Re-upload supports exactly one file.",
+                        code=error_codes.MULTI_FILE_REUPLOAD_NOT_ALLOWED,
+                        status=status.HTTP_400_BAD_REQUEST,
+                        request=request,
+                    )
+                notes = str(validated.get("notes") or "").strip()
+                if not notes:
+                    return error_response(
+                        "Re-upload reason is required.",
+                        code=error_codes.VALIDATION_FAILED,
+                        status=status.HTTP_400_BAD_REQUEST,
+                        request=request,
+                    )
+                old_artifact = get_primary_artifact(report) or report.artifacts.filter(is_active=True).order_by("-uploaded_at").first()
+                if old_artifact is None:
+                    return error_response(
+                        "Re-upload requires an existing active artifact.",
+                        code=error_codes.REPORT_NOT_READY,
+                        status=status.HTTP_400_BAD_REQUEST,
+                        request=request,
+                    )
+                replaced = ArtifactUploadService.replace_artifact(
+                    report=report,
+                    old_artifact=old_artifact,
+                    file=files[0],
+                    uploaded_by=request.user,
+                )
+                artifacts = [replaced]
+                safe_emit(
+                    emit_report_audit_event,
+                    action="report_reuploaded",
+                    report=report,
+                    user=request.user,
+                    metadata={
+                        "upload_request_id": upload_request_id or None,
+                        "reason": notes,
+                        "old_version": getattr(old_artifact, "version", None),
+                        "new_version": getattr(replaced, "version", None),
+                        "old_artifact_id": str(old_artifact.id),
+                        "new_artifact_id": str(replaced.id),
+                    },
+                )
+            else:
+                artifacts = ArtifactUploadService.upload_report_artifacts(
+                    report=report,
+                    uploaded_files=validated["files"],
+                    uploaded_by=request.user,
+                    primary_file_index=validated.get("primary_file_index"),
+                    version=version,
+                )
             if report.status == ReportLifecycleStatus.PENDING:
                 ReportWorkflowService.mark_in_progress(report, user=request.user)
         except DjangoValidationError as exc:
@@ -231,7 +341,7 @@ class ReportOperationalDetailView(LabReportOperationalMixin):
                 )
             return validation_error_response(exc, request=request)
 
-        payload = ReportDetailSerializer.from_dto(dto).data
+        payload = ReportDetailSerializer.from_dto(dto, context={"request": request}).data
         safe_emit(
             emit_report_audit_event,
             action="report_viewed",
@@ -278,7 +388,8 @@ class ReportOperationalDownloadView(LabReportOperationalMixin):
                 )
             content = ReportStorageService.open_for_read(artifact)
             filename = ReportStorageService.download_filename(artifact)
-            return FileResponse(content, as_attachment=True, filename=filename)
+            inline = request.query_params.get("inline") == "1"
+            return FileResponse(content, as_attachment=not inline, filename=filename)
 
         return success_response(payload, request=request)
 

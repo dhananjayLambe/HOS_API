@@ -94,6 +94,7 @@ class ReportValidationService:
                 f"Report must be in progress before marking ready (current: {report.status})."
             )
         cls.validate_report_has_active_artifacts(report)
+        cls.validate_deterministic_primary_artifact(report)
         cls.validate_primary_artifact_exists(report)
 
     @classmethod
@@ -107,7 +108,28 @@ class ReportValidationService:
             raise ValidationError(
                 f"Report must be READY or DELIVERED for delivery (current: {report.status})."
             )
+        cls.validate_deterministic_primary_artifact(report)
         cls.validate_primary_artifact_exists(report)
+
+    @classmethod
+    def validate_deterministic_primary_artifact(cls, report: DiagnosticTestReport) -> None:
+        active_artifacts = report.artifacts.filter(is_active=True)
+        if not active_artifacts.exists():
+            return
+
+        primary_qs = active_artifacts.filter(is_primary=True)
+        primary_count = primary_qs.count()
+        if primary_count == 1:
+            return
+
+        if primary_count == 0:
+            reason = "No active primary artifact found while active artifacts exist."
+            cls._emit_artifact_gap_warning(report, code="PRIMARY_MISSING", message=reason)
+            raise ValidationError(reason)
+
+        reason = "Multiple active primary artifacts found for this report."
+        cls._emit_artifact_gap_warning(report, code="MULTIPLE_PRIMARY", message=reason)
+        raise ValidationError(reason)
 
     @classmethod
     def validate_report_can_be_corrected(cls, report: DiagnosticTestReport) -> None:
@@ -259,6 +281,30 @@ class ReportValidationService:
         if not artifact.file:
             return False
         return bool(str(artifact.file).strip())
+
+    @classmethod
+    def _emit_artifact_gap_warning(
+        cls,
+        report: DiagnosticTestReport,
+        *,
+        code: str,
+        message: str,
+    ) -> None:
+        from diagnostics_engine.monitoring.report_events import safe_emit
+        from diagnostics_engine.services.reports.report_audit import emit_report_audit_event
+
+        logger.warning(
+            "report_artifact_primary_gap report_id=%s code=%s message=%s",
+            report.pk,
+            code,
+            message,
+        )
+        safe_emit(
+            emit_report_audit_event,
+            action="artifact_primary_gap_detected",
+            report=report,
+            metadata={"code": code, "message": message},
+        )
 
     @staticmethod
     def _normalize_generation_status(status: str) -> str:

@@ -85,9 +85,18 @@ export function ReportsCompletionPage() {
     previewTarget?.taskId ?? null,
     queue.isLive && previewTarget != null,
   );
+  const previewDetailReportId = useMemo(() => {
+    if (!previewTarget) return null;
+    if (!queue.isLive || !previewContextQuery.data) return previewTarget.reportId;
+    const exact = previewContextQuery.data.activeReports.find(
+      (report) => report.reportId === previewTarget.reportId,
+    );
+    if (exact) return exact.reportId;
+    return previewContextQuery.data.activeReports[0]?.reportId ?? null;
+  }, [previewTarget, queue.isLive, previewContextQuery.data]);
   const previewDetailQuery = useReportDetail(
     branchId,
-    previewTarget?.reportId ?? null,
+    previewDetailReportId,
     queue.isLive && previewTarget != null,
   );
 
@@ -156,11 +165,21 @@ export function ReportsCompletionPage() {
   const quickPreviewTarget = useMemo<QuickPreviewTarget | null>(() => {
     if (!previewTarget) return null;
     if (queue.isLive && previewContextQuery.data) {
-      return buildQuickPreviewTarget(
+      const target = buildQuickPreviewTarget(
         previewContextQuery.data,
         previewTarget.reportId,
         previewDetailQuery.data,
       );
+      if (target) return target;
+      // Keep mock/live preview UI behavior aligned: if context has reports, still open with first report.
+      if (previewContextQuery.data.activeReports.length > 0) {
+        return buildQuickPreviewTarget(
+          previewContextQuery.data,
+          previewContextQuery.data.activeReports[0]!.reportId,
+          previewDetailQuery.data,
+        );
+      }
+      return null;
     }
     const order = getOrder(previewTarget.taskId);
     if (!order) return null;
@@ -202,28 +221,70 @@ export function ReportsCompletionPage() {
   );
 
   const handlePersistUpload = useCallback(
-    async (input: { taskId: string; reportId: string; files: File[] }) => {
+    async (input: {
+      taskId: string;
+      reportId: string;
+      files: File[];
+      mode: "upload" | "reupload";
+      reuploadReason?: string;
+      hasExistingArtifact?: boolean;
+    }) => {
       const task = queue.getTask(input.taskId);
-      const reportId = uploadReportId ?? input.reportId;
+      const reportId = input.reportId;
+      if (!reportId) {
+        toast.error("No target report selected. Please re-open drawer and try again.");
+        throw new Error("Missing selected report target.");
+      }
       const pdfIndex = input.files.findIndex(
         (file) => file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf"),
       );
       const primaryFileIndex = pdfIndex >= 0 ? pdfIndex : 0;
+      const resolvedIntent =
+        input.mode === "reupload" || input.hasExistingArtifact
+          ? "REUPLOAD_REPLACE"
+          : "UPLOAD_NEW";
       try {
         await mutations.uploadReport({
           reportId,
           files: input.files,
           primaryFileIndex,
+          uploadIntent: resolvedIntent,
+          uploadRequestId: globalThis.crypto?.randomUUID?.() ?? undefined,
+          notes:
+            input.reuploadReason ??
+            (resolvedIntent === "REUPLOAD_REPLACE" ? "Operator replacement upload" : undefined),
           taskId: input.taskId,
           assignmentId: task?.assignmentId,
         });
-        toast.success(uploadMode === "reupload" ? "Updated report saved" : "Report files uploaded");
+
+        // Keep completion drawer flow aligned with wizard flow:
+        // after successful upload, transition report to ready so live CTA buttons
+        // move to Send/Re-upload/Preview without waiting for manual mark-ready.
+        try {
+          await mutations.markReady(reportId, {
+            taskId: input.taskId,
+            reportId,
+            assignmentId: task?.assignmentId,
+          });
+        } catch (readyErr) {
+          const conflict = await mutations.handleOperationalConflict(readyErr, {
+            taskId: input.taskId,
+            reportId,
+            assignmentId: task?.assignmentId,
+          });
+          if (!conflict) {
+            throw readyErr;
+          }
+        }
+
+        await queue.refetch();
+        toast.success(input.mode === "reupload" ? "Updated report saved" : "Report files uploaded");
       } catch (err) {
         toast.error(mapReportApiErrorToMessage(err));
         throw err;
       }
     },
-    [mutations, queue, toast, uploadMode, uploadReportId],
+    [mutations, queue, toast],
   );
 
   const handlePreview = useCallback((taskId: string, reportId: string) => {
@@ -429,6 +490,22 @@ export function ReportsCompletionPage() {
       <QuickPreviewPanel
         open={previewTarget != null}
         target={quickPreviewTarget}
+        loading={
+          queue.isLive &&
+          previewTarget != null &&
+          (previewContextQuery.isPending || previewDetailQuery.isPending)
+        }
+        error={
+          queue.isLive && previewTarget != null && previewDetailQuery.isError
+            ? (previewDetailQuery.error instanceof Error
+              ? previewDetailQuery.error.message
+              : "Unable to load report preview.")
+            : null
+        }
+        onRetry={() => {
+          void previewContextQuery.refetch();
+          void previewDetailQuery.refetch();
+        }}
         onOpenChange={(open) => {
           if (!open) setPreviewTarget(null);
         }}

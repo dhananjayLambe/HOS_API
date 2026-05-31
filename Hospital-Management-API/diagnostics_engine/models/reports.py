@@ -81,6 +81,30 @@ class ReportArtifactType(models.TextChoices):
     ZIP = "ZIP", "ZIP"
     DICOM = "DICOM", "DICOM"
 
+
+class ArtifactLifecycleState(models.TextChoices):
+    ACTIVE = "active", "Active"
+    ARCHIVED = "archived", "Archived"
+    DELETED = "deleted", "Deleted"
+    QUARANTINE = "quarantine", "Quarantine"
+
+
+class ArtifactSourceType(models.TextChoices):
+    LAB_UPLOAD = "lab_upload", "Lab Upload"
+    DOCTOR_UPLOAD = "doctor_upload", "Doctor Upload"
+    PATIENT_UPLOAD = "patient_upload", "Patient Upload"
+    SYSTEM_GENERATED = "system_generated", "System Generated"
+    AI_GENERATED = "ai_generated", "AI Generated"
+
+
+class ArtifactCategory(models.TextChoices):
+    DIAGNOSTIC_REPORT = "diagnostic_report", "Diagnostic Report"
+    IMAGING = "imaging", "Imaging"
+    PRESCRIPTION = "prescription", "Prescription"
+    INVOICE = "invoice", "Invoice"
+    CONSENT_FORM = "consent_form", "Consent Form"
+    OTHER = "other", "Other"
+
 # =========================================================
 # DIAGNOSTIC REPORT DOMAIN
 # =========================================================
@@ -623,6 +647,14 @@ class DiagnosticReportArtifact(models.Model):
         on_delete=models.CASCADE,
         related_name="artifacts",
     )
+    # Denormalized external UUID for API/query convenience.
+    # Source of relational truth remains ``report`` FK.
+    report_public_id = models.UUIDField(null=True, blank=True, db_index=True)
+    # Immutable external identity for artifact references.
+    artifact_public_id = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    patient_account_uuid = models.UUIDField(null=True, blank=True, db_index=True)
+    patient_profile_uuid = models.UUIDField(null=True, blank=True, db_index=True)
+    encounter_uuid = models.UUIDField(null=True, blank=True, db_index=True)
 
     # Infrastructure-safe immutable filename.
     # Example:
@@ -666,13 +698,40 @@ class DiagnosticReportArtifact(models.Model):
     content_type = models.CharField(max_length=255, blank=True, null=True)
 
     checksum = models.CharField(max_length=255, blank=True, null=True)
+    checksum_sha256 = models.CharField(max_length=128, blank=True, null=True, db_index=True)
 
     # Full object storage path.
     # Example:
 # diagnostic-reports/year=2026/.../encounter=<uuid>/report=<uuid>/artifact_<id>_v<n>.pdf
     storage_path = models.TextField(blank=True, null=True)
+    # Canonical object key. Retrieval must prefer this metadata field.
+    storage_key = models.TextField(blank=True, null=True)
 
     version = models.PositiveIntegerField(default=1)
+    artifact_version = models.PositiveIntegerField(default=1)
+    artifact_state = models.CharField(
+        max_length=20,
+        choices=ArtifactLifecycleState.choices,
+        default=ArtifactLifecycleState.ACTIVE,
+        db_index=True,
+    )
+    retention_until = models.DateTimeField(null=True, blank=True)
+    legal_hold = models.BooleanField(default=False)
+    source_type = models.CharField(
+        max_length=30,
+        choices=ArtifactSourceType.choices,
+        default=ArtifactSourceType.LAB_UPLOAD,
+    )
+    generated_by_user_uuid = models.UUIDField(null=True, blank=True)
+    source_organization_uuid = models.UUIDField(null=True, blank=True)
+    uploaded_by_user_uuid = models.UUIDField(null=True, blank=True)
+    artifact_category = models.CharField(
+        max_length=30,
+        choices=ArtifactCategory.choices,
+        default=ArtifactCategory.DIAGNOSTIC_REPORT,
+    )
+    is_archived = models.BooleanField(default=False)
+    is_deleted = models.BooleanField(default=False)
 
     is_active = models.BooleanField(default=True)
 
@@ -684,6 +743,18 @@ class DiagnosticReportArtifact(models.Model):
         - download filename generation
         - storage path persistence
         """
+
+        if self.pk:
+            previous = type(self).objects.filter(pk=self.pk).values("artifact_public_id").first()
+            if previous and previous["artifact_public_id"] != self.artifact_public_id:
+                raise ValidationError("artifact_public_id is immutable and cannot be changed.")
+
+        if not self.report_public_id:
+            self.report_public_id = self.report_id
+        if self.uploaded_by_id and not self.uploaded_by_user_uuid:
+            self.uploaded_by_user_uuid = self.uploaded_by_id
+        if not self.artifact_version:
+            self.artifact_version = self.version or 1
 
         if self.file and not self.original_filename:
             uploaded_name = getattr(self.file, "name", None)
@@ -705,7 +776,14 @@ class DiagnosticReportArtifact(models.Model):
 
         if self.file and not self.storage_path:
             self.storage_path = self.file.name
-            super().save(update_fields=["storage_path"])
+            if not self.storage_key:
+                self.storage_key = self.file.name
+                super().save(update_fields=["storage_path", "storage_key"])
+            else:
+                super().save(update_fields=["storage_path"])
+        elif self.file and not self.storage_key:
+            self.storage_key = self.file.name
+            super().save(update_fields=["storage_key"])
 
     def clean(self):
         """
@@ -736,6 +814,17 @@ class DiagnosticReportArtifact(models.Model):
             models.Index(fields=["is_primary"]),
             models.Index(fields=["version"]),
             models.Index(fields=["is_active"]),
+            models.Index(fields=["patient_profile_uuid", "artifact_state", "uploaded_at"]),
+            models.Index(fields=["patient_account_uuid", "artifact_state", "uploaded_at"]),
+            models.Index(fields=["report", "artifact_type", "artifact_state", "is_active"]),
+            models.Index(fields=["checksum_sha256", "report", "is_active"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["report", "artifact_type"],
+                condition=models.Q(is_active=True, artifact_state=ArtifactLifecycleState.ACTIVE),
+                name="unique_active_artifact_per_report_type",
+            )
         ]
 
     def __str__(self):

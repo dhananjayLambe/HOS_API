@@ -282,6 +282,12 @@ export function useReportUploadWizard(routeState?: UploadRouteState) {
     if (!ctx || !isReportTasksV1ApiEnabled()) return false;
     const reportId = resolveUploadReportId(ctx);
     if (!reportId) return false;
+    const selectedLine = ctx.activeReports.find((row) => row.reportId === reportId);
+    const requiresReplaceIntent =
+      selectedLine != null &&
+      String(selectedLine.status || "")
+        .trim()
+        .toLowerCase() !== "pending";
     const fileObjects = files.map((f) => f.file).filter((f): f is File => !!f);
     if (fileObjects.length === 0) return false;
     const primaryIndex = Math.max(0, files.findIndex((f) => f.id === primaryFileId));
@@ -290,6 +296,9 @@ export function useReportUploadWizard(routeState?: UploadRouteState) {
         reportId,
         files: fileObjects,
         primaryFileIndex: primaryIndex,
+        uploadIntent: requiresReplaceIntent ? "REUPLOAD_REPLACE" : "UPLOAD_NEW",
+        notes: requiresReplaceIntent ? "Upload wizard replacement upload" : undefined,
+        uploadRequestId: globalThis.crypto?.randomUUID?.() ?? undefined,
         taskId: resolvedTaskId,
         assignmentId: ctx.assignmentId,
       });
@@ -345,6 +354,12 @@ export function useReportUploadWizard(routeState?: UploadRouteState) {
         return;
       }
 
+      const selectedLine = ctx.activeReports.find((row) => row.reportId === reportId);
+      const requiresReplaceIntent =
+        selectedLine != null &&
+        String(selectedLine.status || "")
+          .trim()
+          .toLowerCase() !== "pending";
       const primaryIndex = Math.max(
         0,
         files.findIndex((f) => f.id === primaryFileId),
@@ -355,6 +370,9 @@ export function useReportUploadWizard(routeState?: UploadRouteState) {
           reportId,
           files: fileObjects,
           primaryFileIndex: primaryIndex,
+          uploadIntent: requiresReplaceIntent ? "REUPLOAD_REPLACE" : "UPLOAD_NEW",
+          notes: requiresReplaceIntent ? "Upload wizard replacement upload" : undefined,
+          uploadRequestId: globalThis.crypto?.randomUUID?.() ?? undefined,
           requestId,
           taskId: resolvedTaskId,
           assignmentId: ctx.assignmentId,

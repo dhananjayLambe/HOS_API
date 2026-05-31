@@ -34,6 +34,9 @@ from diagnostics_engine.services.reports.report_workflow_service import ReportWo
 from diagnostics_engine.models.choices import ReportLifecycleStatus, ReportStorageMode
 from diagnostics_engine.models.orders import DiagnosticOrderTestLine
 from diagnostics_engine.models.reports import (
+    ArtifactCategory,
+    ArtifactLifecycleState,
+    ArtifactSourceType,
     DiagnosticReportArtifact,
     DiagnosticTestReport,
     ReportArtifactType,
@@ -509,18 +512,53 @@ class ArtifactUploadService:
         checksum: str,
         download_filename: str,
     ) -> DiagnosticReportArtifact:
+        report_public_id = report.id
+        patient_profile_id = None
+        patient_account_id = None
+        encounter_id = None
+        source_org_id = None
+        try:
+            order = report.order_test_line.order
+            profile = order.patient_profile
+            patient_profile_id = profile.id if profile else None
+            patient_account_id = profile.account_id if profile and profile.account_id else None
+            encounter_id = order.encounter_id
+            source_org_id = order.branch.organization_id if order.branch_id and order.branch else None
+        except AttributeError:
+            pass
+
+        # Enforce single active version per report + artifact_type.
+        DiagnosticReportArtifact.objects.filter(
+            report=report,
+            artifact_type=artifact_type,
+            is_active=True,
+            artifact_state=ArtifactLifecycleState.ACTIVE,
+        ).update(is_active=False, artifact_state=ArtifactLifecycleState.ARCHIVED)
+
         artifact = DiagnosticReportArtifact(
             report=report,
+            report_public_id=report_public_id,
             file=file,
             artifact_type=artifact_type,
             is_primary=is_primary,
             version=version,
+            artifact_version=version,
             uploaded_by=uploaded_by,
+            patient_profile_uuid=patient_profile_id,
+            patient_account_uuid=patient_account_id,
+            encounter_uuid=encounter_id,
+            uploaded_by_user_uuid=getattr(uploaded_by, "pk", None),
+            generated_by_user_uuid=getattr(uploaded_by, "pk", None),
+            source_organization_uuid=source_org_id,
+            source_type=ArtifactSourceType.LAB_UPLOAD,
+            artifact_category=ArtifactCategory.DIAGNOSTIC_REPORT,
+            artifact_state=ArtifactLifecycleState.ACTIVE,
             original_filename=original_filename,
             file_extension=file_extension,
             content_type=content_type or "",
             file_size=file_size,
             checksum=checksum,
+            checksum_sha256=checksum,
             download_filename=download_filename,
             is_active=True,
         )
@@ -528,7 +566,10 @@ class ArtifactUploadService:
         artifact.save()
         if artifact.file and not artifact.storage_path:
             artifact.storage_path = artifact.file.name
-            artifact.save(update_fields=["storage_path"])
+        if artifact.file and not artifact.storage_key:
+            artifact.storage_key = artifact.file.name
+        if artifact.storage_path or artifact.storage_key:
+            artifact.save(update_fields=["storage_path", "storage_key"])
         logger.info(
             "artifact_upload_created artifact_id=%s report_id=%s primary=%s",
             artifact.pk,

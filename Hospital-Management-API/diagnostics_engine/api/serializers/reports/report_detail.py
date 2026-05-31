@@ -42,7 +42,7 @@ class ReportDetailSerializer(serializers.Serializer):
     available_actions = serializers.ListField(child=serializers.CharField())
 
     @classmethod
-    def from_dto(cls, dto: ReportDetailDTO):
+    def from_dto(cls, dto: ReportDetailDTO, *, context: dict | None = None):
         report = dto.report
         delivery_data = None
         if dto.latest_delivery is not None:
@@ -58,9 +58,10 @@ class ReportDetailSerializer(serializers.Serializer):
                     "delivered_at": report.delivered_at,
                 },
                 "patient": dto.patient_summary,
-                "artifacts": ReportArtifactSerializer(dto.artifacts, many=True).data,
+                "artifacts": dto.artifacts,
                 "delivery": delivery_data,
                 "history": dto.lineage,
                 "available_actions": dto.available_actions,
-            }
+            },
+            context=context,
         )

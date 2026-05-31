@@ -3,6 +3,7 @@
 import { PreviewArtifactTabs } from "@/components/labs/reports/completion/PreviewArtifactTabs";
 import { SpreadsheetPreviewPanel } from "@/components/labs/reports/upload/shared/SpreadsheetPreviewPanel";
 import { Button } from "@/components/ui/button";
+import { fetchArtifactBlob } from "@/lib/labs/reports/api/v1/reports-api";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import type { ReportArtifactViewModel, TestDeliveryState } from "@/lib/labs/reports/completion/order-lifecycle.types";
 import { isSpreadsheetFile } from "@/lib/labs/reports/parse-spreadsheet-preview";
@@ -48,18 +49,28 @@ function deliveryLabel(state: TestDeliveryState, isReuploaded?: boolean): string
 }
 
 function preferredArtifactId(artifacts: ReportArtifactViewModel[]): string | undefined {
-  return artifacts.find((artifact) => artifact.patientVisible)?.id ?? artifacts[0]?.id;
+  return (
+    artifacts.find((artifact) => artifact.isPrimary)?.id ??
+    artifacts.find((artifact) => artifact.patientVisible)?.id ??
+    artifacts[0]?.id
+  );
 }
 
 export function QuickPreviewPanel({
   open,
   target,
+  loading = false,
+  error = null,
+  onRetry,
   onOpenChange,
   onSend,
   onReupload,
 }: {
   open: boolean;
   target: QuickPreviewTarget | null;
+  loading?: boolean;
+  error?: string | null;
+  onRetry?: () => void;
   onOpenChange: (open: boolean) => void;
   onSend: (taskId: string, reportIds: string[]) => void;
   onReupload: (taskId: string, reportId: string) => void;
@@ -101,7 +112,20 @@ export function QuickPreviewPanel({
         </div>
 
         <div className="flex-1 overflow-y-auto bg-slate-50 px-4 py-4 sm:px-5">
-          {target ? (
+          {loading ? (
+            <EmptyPreview message="Loading report preview..." />
+          ) : error ? (
+            <div className="space-y-2">
+              <EmptyPreview message={error} />
+              {onRetry ? (
+                <div className="flex justify-center">
+                  <Button type="button" variant="outline" size="sm" onClick={onRetry}>
+                    Retry
+                  </Button>
+                </div>
+              ) : null}
+            </div>
+          ) : target ? (
             <div className="space-y-3">
               <PreviewArtifactTabs
                 artifacts={artifacts}
@@ -178,6 +202,9 @@ function PreviewHeader({ artifact, kind }: { artifact: ReportArtifactViewModel |
 
 function ArtifactPreview({ artifact, kind }: { artifact: ReportArtifactViewModel | null; kind: PreviewKind }) {
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
+  const [remotePreviewFile, setRemotePreviewFile] = useState<File | null>(null);
+  const [remoteObjectUrl, setRemoteObjectUrl] = useState<string | null>(null);
+  const [remoteLoadFailed, setRemoteLoadFailed] = useState(false);
 
   useEffect(() => {
     if (!artifact?.previewFile) {
@@ -189,17 +216,69 @@ function ArtifactPreview({ artifact, kind }: { artifact: ReportArtifactViewModel
     return () => URL.revokeObjectURL(url);
   }, [artifact?.previewFile]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const sourceUrl = artifact?.previewUrl ?? artifact?.downloadUrl ?? null;
+    const canInlineRemotely =
+      kind === "pdf" || kind === "image" || kind === "spreadsheet" || kind === "text";
+    if (!sourceUrl || !canInlineRemotely) {
+      setRemoteLoadFailed(false);
+      setRemotePreviewFile(null);
+      setRemoteObjectUrl((current) => {
+        if (current) URL.revokeObjectURL(current);
+        return null;
+      });
+      return;
+    }
+    setRemoteLoadFailed(false);
+    void fetchArtifactBlob(sourceUrl)
+      .then((blob) => {
+        const fileName = artifact?.fileName || "preview";
+        const mimeType = artifact?.mimeType || "application/octet-stream";
+        const file = new File([blob], fileName, { type: mimeType });
+        if (cancelled) {
+          return;
+        }
+        setRemotePreviewFile(file);
+        setRemoteObjectUrl((current) => {
+          if (current) URL.revokeObjectURL(current);
+          return URL.createObjectURL(file);
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setRemoteLoadFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [artifact?.downloadUrl, artifact?.previewUrl, kind]);
+
+  useEffect(
+    () => () => {
+      if (remoteObjectUrl) URL.revokeObjectURL(remoteObjectUrl);
+    },
+    [remoteObjectUrl],
+  );
+
   if (!artifact) {
     return <EmptyPreview message="No report files are available for this test yet." />;
   }
 
-  const url = artifact.previewUrl ?? objectUrl;
+  // Live API can provide a download URL without a dedicated preview URL.
+  const url = remoteObjectUrl ?? artifact.previewUrl ?? artifact.downloadUrl ?? objectUrl;
+  const effectivePreviewFile = artifact.previewFile ?? remotePreviewFile ?? undefined;
 
   if (kind === "pdf") {
     return url ? (
       <iframe title={`Preview ${artifact.fileName}`} src={url} className="h-[68vh] w-full rounded-md border bg-[#FAFAFF]" />
     ) : (
-      <EmptyPreview message="PDF preview will appear here when the uploaded report URL is available." />
+      <EmptyPreview
+        message={
+          remoteLoadFailed
+            ? "Preview could not be loaded with authenticated access. Use Download and retry."
+            : "PDF preview will appear here when the uploaded report URL is available."
+        }
+      />
     );
   }
 
@@ -208,24 +287,38 @@ function ArtifactPreview({ artifact, kind }: { artifact: ReportArtifactViewModel
       // eslint-disable-next-line @next/next/no-img-element
       <img src={url} alt={`Preview ${artifact.fileName}`} className="max-h-[68vh] w-full rounded-md border object-contain" />
     ) : (
-      <EmptyPreview message="Image preview will appear here when the uploaded report URL is available." />
+      <EmptyPreview
+        message={
+          remoteLoadFailed
+            ? "Preview could not be loaded with authenticated access. Use Download and retry."
+            : "Image preview will appear here when the uploaded report URL is available."
+        }
+      />
     );
   }
 
   if (kind === "spreadsheet") {
-    if (artifact.previewFile) {
-      return <SpreadsheetPreviewPanel file={artifact.previewFile} fileName={artifact.fileName} />;
+    if (effectivePreviewFile) {
+      return <SpreadsheetPreviewPanel file={effectivePreviewFile} fileName={artifact.fileName} />;
     }
     if (artifact.previewRows?.length) {
       return <PreviewRowsTable rows={artifact.previewRows} />;
     }
-    return <EmptyPreview message="Spreadsheet preview will appear here when file data is available." />;
+    return url ? (
+      <EmptyPreview message="Spreadsheet inline preview is not available in this view. Use Download to inspect this file." />
+    ) : (
+      <EmptyPreview message="Spreadsheet preview is unavailable because file URL is missing." />
+    );
   }
 
   if (kind === "text") {
     if (artifact.previewText) return <pre className="max-h-[68vh] overflow-auto whitespace-pre-wrap rounded-md border bg-[#FAFAFF] p-3 text-xs text-[#111827]">{artifact.previewText}</pre>;
-    if (artifact.previewFile) return <TextFilePreview file={artifact.previewFile} />;
-    return <EmptyPreview message="Text preview will appear here when file data is available." />;
+    if (effectivePreviewFile) return <TextFilePreview file={effectivePreviewFile} />;
+    return url ? (
+      <EmptyPreview message="Text inline preview is not available in this view. Use Download to inspect this file." />
+    ) : (
+      <EmptyPreview message="Text preview is unavailable because file URL is missing." />
+    );
   }
 
   if (kind === "zip") {
@@ -236,7 +329,13 @@ function ArtifactPreview({ artifact, kind }: { artifact: ReportArtifactViewModel
         ))}
       </ul>
     ) : (
-      <EmptyPreview message="ZIP inline rendering is not supported in Phase 1. Download the file to inspect contents." />
+      <EmptyPreview
+        message={
+          url
+            ? "ZIP inline rendering is not supported. Use Download to inspect contents."
+            : "ZIP preview is unavailable because file URL is missing."
+        }
+      />
     );
   }
 

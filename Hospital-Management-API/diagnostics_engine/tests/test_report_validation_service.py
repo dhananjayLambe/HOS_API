@@ -122,7 +122,7 @@ class ReportValidationServiceTests(TestCase):
         )
         DiagnosticReportArtifact.objects.create(
             report=report,
-            artifact_type=ReportArtifactType.PDF,
+            artifact_type=ReportArtifactType.CSV,
             is_primary=True,
             is_active=True,
             file=_pdf(b"b"),
@@ -149,6 +149,39 @@ class ReportValidationServiceTests(TestCase):
     def test_pending_rejected_for_delivery(self):
         _, line = _minimal_order_with_line()
         report = _report_on_line(line, status=ReportLifecycleStatus.PENDING)
+        with self.assertRaises(ValidationError):
+            ReportValidationService.validate_report_ready_for_delivery(report)
+
+    def test_delivery_rejected_when_active_artifacts_have_no_primary(self):
+        _, line = _minimal_order_with_line()
+        report = _report_on_line(line, status=ReportLifecycleStatus.READY)
+        DiagnosticReportArtifact.objects.create(
+            report=report,
+            artifact_type=ReportArtifactType.PDF,
+            is_primary=False,
+            is_active=True,
+            file=_pdf(b"non-primary"),
+        )
+        with self.assertRaises(ValidationError):
+            ReportValidationService.validate_report_ready_for_delivery(report)
+
+    def test_delivery_rejected_when_multiple_active_primaries_exist(self):
+        _, line = _minimal_order_with_line()
+        report = _report_on_line(line, status=ReportLifecycleStatus.READY)
+        DiagnosticReportArtifact.objects.create(
+            report=report,
+            artifact_type=ReportArtifactType.PDF,
+            is_primary=True,
+            is_active=True,
+            file=_pdf(b"a"),
+        )
+        DiagnosticReportArtifact.objects.create(
+            report=report,
+            artifact_type=ReportArtifactType.CSV,
+            is_primary=True,
+            is_active=True,
+            file=_pdf(b"b"),
+        )
         with self.assertRaises(ValidationError):
             ReportValidationService.validate_report_ready_for_delivery(report)
 

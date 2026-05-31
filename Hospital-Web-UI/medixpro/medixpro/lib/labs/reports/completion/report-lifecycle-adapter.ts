@@ -22,6 +22,18 @@ import type {
 import type { ReportLineContext, ReportTaskContext } from "@/lib/labs/reports/report-task-context";
 import { formatReportTimestamp } from "@/lib/labs/reports/format-report-timestamp";
 
+function toInlinePreviewUrl(downloadUrl: string | null): string | undefined {
+  if (!downloadUrl) return undefined;
+  try {
+    const parsed = new URL(downloadUrl, globalThis?.location?.origin ?? "http://localhost");
+    parsed.searchParams.set("inline", "1");
+    return parsed.toString();
+  } catch {
+    const joiner = downloadUrl.includes("?") ? "&" : "?";
+    return `${downloadUrl}${joiner}inline=1`;
+  }
+}
+
 function lifecycleStatusFromApi(status: string, deliveryStatus: string): ReportChipStatus {
   const raw = status.trim().toLowerCase();
   const delivery = deliveryStatus.trim().toLowerCase();
@@ -59,9 +71,11 @@ function artifactViewModel(artifact: ReportArtifact): ReportArtifactViewModel {
     fileName: artifact.originalFilename,
     mimeType: artifact.contentType,
     artifactType,
-    patientVisible: artifactType === "PRIMARY_REPORT" || artifact.isPrimary,
-    uploadedAtLabel: formatReportTimestamp(artifact.uploadedAt, ""),
+    isPrimary: artifact.isPrimary,
+    patientVisible: artifact.isPrimary || artifactType === "PRIMARY_REPORT",
+    uploadedAtLabel: artifact.uploadedAt ? formatReportTimestamp(artifact.uploadedAt, "") : undefined,
     versionNumber: artifact.version,
+    previewUrl: toInlinePreviewUrl(artifact.downloadUrl),
     downloadUrl: artifact.downloadUrl ?? undefined,
   };
 }

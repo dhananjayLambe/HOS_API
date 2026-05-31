@@ -346,6 +346,84 @@ class ReportAPITestCase(TestCase):
         self.assertFalse(res.data["success"])
         self.assertEqual(res.data["error"]["code"], "DUPLICATE_ARTIFACT")
 
+    def test_upload_invalid_intent_rejected(self):
+        url = reverse("v1-report-artifact-upload", kwargs={"report_id": self.report.id})
+        res = self.client.post(
+            url,
+            {"files": _pdf(b"intent"), "upload_intent": "BAD_INTENT"},
+            format="multipart",
+        )
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(res.data["error"]["code"], "INVALID_UPLOAD_INTENT")
+
+    def test_reupload_requires_single_file(self):
+        ArtifactUploadService.upload_report_artifacts(
+            report=self.report,
+            uploaded_files=[_pdf(b"base")],
+            primary_file_index=0,
+        )
+        url = reverse("v1-report-artifact-upload", kwargs={"report_id": self.report.id})
+        res = self.client.post(
+            url,
+            {
+                "files": [_pdf(b"a"), _pdf(b"b")],
+                "upload_intent": "REUPLOAD_REPLACE",
+                "notes": "correction",
+            },
+            format="multipart",
+        )
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(res.data["error"]["code"], "MULTI_FILE_REUPLOAD_NOT_ALLOWED")
+
+    def test_reupload_same_checksum_succeeds(self):
+        content = b"same-checksum"
+        ArtifactUploadService.upload_report_artifacts(
+            report=self.report,
+            uploaded_files=[_pdf(content)],
+            primary_file_index=0,
+        )
+        url = reverse("v1-report-artifact-upload", kwargs={"report_id": self.report.id})
+        res = self.client.post(
+            url,
+            {
+                "files": _pdf(content),
+                "upload_intent": "REUPLOAD_REPLACE",
+                "notes": "doctor correction",
+            },
+            format="multipart",
+        )
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(res.data["success"])
+
+    def test_reupload_requires_reason(self):
+        ArtifactUploadService.upload_report_artifacts(
+            report=self.report,
+            uploaded_files=[_pdf(b"seed")],
+            primary_file_index=0,
+        )
+        url = reverse("v1-report-artifact-upload", kwargs={"report_id": self.report.id})
+        res = self.client.post(
+            url,
+            {
+                "files": _pdf(b"new"),
+                "upload_intent": "REUPLOAD_REPLACE",
+            },
+            format="multipart",
+        )
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_upload_invalid_numeric_inputs_return_400(self):
+        url = reverse("v1-report-artifact-upload", kwargs={"report_id": self.report.id})
+        res = self.client.post(
+            url,
+            {
+                "files": _pdf(b"num"),
+                "primary_file_index": "abc",
+            },
+            format="multipart",
+        )
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
     def test_upload_oversized_rejected(self):
         from django.test import override_settings
 
@@ -385,6 +463,7 @@ class ReportAPITestCase(TestCase):
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         self.assertTrue(res.data["success"])
         self.assertEqual(len(res.data["data"]["artifacts"]), 1)
+        self.assertTrue(res.data["data"]["artifacts"][0]["download_url"])
         self.assertIn("available_actions", res.data["data"])
 
     def test_detail_excludes_inactive_artifacts(self):
@@ -435,6 +514,62 @@ class ReportAPITestCase(TestCase):
         self.assertIn("artifact_id", data)
         self.assertIn("filename", data)
         self.assertIn("expires_in", data)
+
+    @override_settings(REPORT_PUBLIC_DOWNLOAD_BASE_URL="")
+    def test_download_local_fallback_uses_stream_url(self):
+        url = reverse("v1-report-artifact-upload", kwargs={"report_id": self.report.id})
+        self.client.post(url, {"files": [_pdf()]}, format="multipart")
+        self.report.refresh_from_db()
+        ReportWorkflowService.mark_ready(self.report, user=self.lab_user.user)
+
+        dl = reverse("v1-report-download", kwargs={"report_id": self.report.id})
+        res = self.client.get(dl)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertTrue(res.data["data"]["download_url"].endswith("?stream=1"))
+
+    def test_legacy_artifact_download_denies_other_branch(self):
+        _other_client, other_lab_user, other_branch, _ = lab_admin_client(
+            branch_name="Other Lab Branch 3"
+        )
+        _assignment2, order2 = lab_mode_assignment(other_branch)
+        line2 = order2.test_lines.first()
+        report2 = DiagnosticTestReport.objects.create(
+            order_test_line=line2,
+            storage_mode=ReportStorageMode.FILE,
+            status=ReportLifecycleStatus.PENDING,
+        )
+        ArtifactUploadService.upload_report_artifacts(
+            report=report2,
+            uploaded_files=[_pdf(b"other-branch")],
+            uploaded_by=other_lab_user.user,
+            primary_file_index=0,
+        )
+        artifact = report2.artifacts.filter(is_active=True).first()
+        self.assertIsNotNone(artifact)
+
+        legacy_download = reverse(
+            "diagnostic-report-artifact-download",
+            kwargs={"report_id": report2.id, "artifact_id": artifact.id},
+        )
+        res = self.client.get(legacy_download)
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_legacy_artifact_download_inline_disposition(self):
+        ArtifactUploadService.upload_report_artifacts(
+            report=self.report,
+            uploaded_files=[_pdf(b"inline")],
+            uploaded_by=self.lab_user.user,
+            primary_file_index=0,
+        )
+        artifact = self.report.artifacts.filter(is_active=True).first()
+        self.assertIsNotNone(artifact)
+        legacy_download = reverse(
+            "diagnostic-report-artifact-download",
+            kwargs={"report_id": self.report.id, "artifact_id": artifact.id},
+        )
+        res = self.client.get(f"{legacy_download}?inline=1")
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertIn("inline", res.headers.get("Content-Disposition", "").lower())
 
     def test_branch_access_denied(self):
         _other_client, _other_lu, other_br, _ = lab_admin_client(branch_name="Other Lab Branch 2")

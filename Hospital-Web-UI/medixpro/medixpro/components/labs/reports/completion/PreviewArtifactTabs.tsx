@@ -35,6 +35,7 @@ export function PreviewArtifactTabs({
               onClick={() => onSelect(artifact.id)}
             >
               {artifact.fileName}
+              {artifact.isPrimary ? " · Primary" : ""}
             </button>
           );
         })}

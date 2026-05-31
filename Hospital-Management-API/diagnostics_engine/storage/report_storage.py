@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-from django.core.files.storage import default_storage
-
 from diagnostics_engine.models.reports import DiagnosticReportArtifact
+from diagnostics_engine.storage.providers import DefaultStorageProvider
 from diagnostics_engine.storage.s3_report_storage import (
-    delete_object,
     generate_presigned_download_url,
     reports_s3_enabled,
 )
@@ -14,10 +12,11 @@ from diagnostics_engine.storage.s3_report_storage import (
 
 class ReportStorageService:
     """Thin wrapper over Django file storage for report blobs."""
+    provider = DefaultStorageProvider()
 
     @staticmethod
     def storage_path(artifact: DiagnosticReportArtifact) -> str | None:
-        return artifact.storage_path or (artifact.file.name if artifact.file else None)
+        return artifact.storage_key
 
     @staticmethod
     def download_url(artifact: DiagnosticReportArtifact, *, expires_in: int | None = None) -> str | None:
@@ -42,7 +41,7 @@ class ReportStorageService:
         path = ReportStorageService.storage_path(artifact)
         if not path:
             return False
-        return default_storage.exists(path)
+        return ReportStorageService.provider.exists(path)
 
     @staticmethod
     def open_for_read(artifact: DiagnosticReportArtifact):
@@ -56,4 +55,4 @@ class ReportStorageService:
 
     @staticmethod
     def delete_storage_object(storage_key: str) -> bool:
-        return delete_object(storage_key)
+        return ReportStorageService.provider.delete(storage_key)

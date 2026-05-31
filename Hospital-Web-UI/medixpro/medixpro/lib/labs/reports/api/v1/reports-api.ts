@@ -40,6 +40,18 @@ export type ReportDownloadApiData = {
   artifact_id: string;
 };
 
+export async function fetchArtifactBlob(
+  sourceUrl: string,
+  options?: { signal?: AbortSignal; requestId?: string },
+): Promise<Blob> {
+  const response = await backendAxiosClient.get<Blob>(sourceUrl, {
+    signal: options?.signal,
+    headers: requestHeaders(options?.requestId),
+    responseType: "blob",
+  });
+  return response.data;
+}
+
 export async function getReportsQueue(
   params: ReportTasksListQueryParams,
   options?: { signal?: AbortSignal; requestId?: string },

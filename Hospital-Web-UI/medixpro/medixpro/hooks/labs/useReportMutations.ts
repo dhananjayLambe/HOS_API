@@ -50,9 +50,11 @@ export type UploadReportInput = {
   reportId: string;
   files: File[];
   primaryFileIndex: number;
+  uploadIntent?: "UPLOAD_NEW" | "REUPLOAD_REPLACE";
   notes?: string;
   version?: number;
   requestId?: string;
+  uploadRequestId?: string;
   onUploadProgress?: (percent: number) => void;
   /** Refreshes open View order drawer + queue after upload. */
   taskId?: string;
@@ -215,6 +217,8 @@ export function useReportMutations(branchId: string | null | undefined) {
           formData.append("files", file);
         }
         formData.append("primary_file_index", String(input.primaryFileIndex));
+        if (input.uploadIntent) formData.append("upload_intent", input.uploadIntent);
+        if (input.uploadRequestId) formData.append("upload_request_id", input.uploadRequestId);
         if (input.notes) formData.append("notes", input.notes);
         if (input.version != null) formData.append("version", String(input.version));
 

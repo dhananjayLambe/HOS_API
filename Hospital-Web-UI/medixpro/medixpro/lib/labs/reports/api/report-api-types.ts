@@ -84,14 +84,23 @@ export type ReportTaskContextApiData = {
 
 export type ReportArtifactApiItem = {
   id: string;
+  artifact_id?: string;
   artifact_type: string;
-  original_filename: string;
-  download_filename: string;
-  file_size: number;
-  content_type: string;
+  original_filename: string | null;
+  download_filename: string | null;
+  file_size: number | null;
+  content_type: string | null;
   is_primary: boolean;
   version: number;
-  uploaded_at: string;
+  storage_state?: string;
+  patient_account_uuid?: string | null;
+  patient_profile_uuid?: string | null;
+  source_type?: string | null;
+  artifact_category?: string | null;
+  retention_until?: string | null;
+  legal_hold?: boolean;
+  uploaded_at: string | null;
+  uploaded_by?: string | null;
   download_url: string | null;
 };
 

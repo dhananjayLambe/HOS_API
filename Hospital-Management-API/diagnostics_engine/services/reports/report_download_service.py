@@ -64,8 +64,9 @@ class ReportDownloadService:
 
     @staticmethod
     def _local_download_fallback(report, artifact) -> str:
-        """Dev fallback: API-relative download via v1 route (still not raw media URL)."""
+        """Dev fallback: stream bytes from API (never metadata self-loop)."""
+        del artifact
         base = getattr(settings, "REPORT_PUBLIC_DOWNLOAD_BASE_URL", "").rstrip("/")
         if base:
-            return f"{base}/{report.id}"
-        return f"/api/v1/diagnostics/reports/{report.id}/download/"
+            return f"{base}/{report.id}?stream=1"
+        return f"/api/v1/diagnostics/reports/{report.id}/download/?stream=1"

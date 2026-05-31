@@ -11,6 +11,10 @@ export type ReportApiErrorCode =
   | "PERMISSION_DENIED"
   | "ASSIGNMENT_NOT_FOUND"
   | "DELIVERY_LOG_NOT_FOUND"
+  | "INVALID_UPLOAD_INTENT"
+  | "MULTI_FILE_REUPLOAD_NOT_ALLOWED"
+  | "REPORT_OWNERSHIP_MISMATCH"
+  | "IDEMPOTENCY_CONFLICT"
   | string;
 
 const OPERATIONAL_COPY: Record<string, string> = {
@@ -25,6 +29,10 @@ const OPERATIONAL_COPY: Record<string, string> = {
   PERMISSION_DENIED: "You do not have permission to perform this action.",
   ASSIGNMENT_NOT_FOUND: "This task is no longer on your queue. Refresh to see current work.",
   DELIVERY_LOG_NOT_FOUND: "Delivery record not found. Refresh and try again.",
+  INVALID_UPLOAD_INTENT: "Upload intent is invalid. Refresh and try again.",
+  MULTI_FILE_REUPLOAD_NOT_ALLOWED: "Re-upload accepts exactly one file.",
+  REPORT_OWNERSHIP_MISMATCH: "This report is not linked correctly and cannot be uploaded.",
+  IDEMPOTENCY_CONFLICT: "A similar upload is already being processed. Please wait a moment.",
 };
 
 export function isOperationalConflictCode(code: string): boolean {

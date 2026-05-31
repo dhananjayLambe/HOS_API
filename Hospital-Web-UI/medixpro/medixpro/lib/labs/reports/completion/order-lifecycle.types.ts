@@ -65,6 +65,7 @@ export type ReportArtifactViewModel = {
   fileName: string;
   mimeType: string;
   artifactType: ReportArtifactType;
+  isPrimary?: boolean;
   patientVisible: boolean;
   uploadedAtLabel?: string;
   uploadedByName?: string;

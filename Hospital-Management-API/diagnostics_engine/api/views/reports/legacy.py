@@ -24,7 +24,9 @@ from diagnostics_engine.services.reports import (
 )
 from diagnostics_engine.storage.report_storage import ReportStorageService
 from diagnostics_engine.permissions.reports import CanUploadReports
+from diagnostics_engine.services.reports.access_control import report_belongs_to_branch
 from labs.api.permissions import IsLabAdminUser
+from labs.api.services.lab_session_resolver import LabSessionDenied, resolve_lab_user
 
 
 class TestLineReportView(APIView):
@@ -132,11 +134,20 @@ class ReportArtifactDownloadView(APIView):
 
     def get(self, request, report_id, artifact_id):
         report = get_object_or_404(DiagnosticTestReport, pk=report_id)
+        resolved = resolve_lab_user(request)
+        if isinstance(resolved, LabSessionDenied):
+            return resolved.response
+        if not report_belongs_to_branch(
+            report=report,
+            branch_id=resolved.lab_user.branch_id,
+        ):
+            return Response({"detail": "Branch access denied."}, status=status.HTTP_403_FORBIDDEN)
         artifact = get_object_or_404(report.artifacts, pk=artifact_id, is_active=True)
         filename = ReportStorageService.download_filename(artifact)
+        inline = request.query_params.get("inline") == "1"
         return FileResponse(
             ReportStorageService.open_for_read(artifact),
-            as_attachment=True,
+            as_attachment=not inline,
             filename=filename,
         )
 
