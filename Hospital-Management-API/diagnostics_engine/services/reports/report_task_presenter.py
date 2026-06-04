@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
+from django.db.models import Exists, OuterRef, Q, QuerySet
+
 from diagnostics_engine.domain.reports import get_active_report_for_line, get_primary_artifact
 from diagnostics_engine.monitoring.report_events import emit_order_state_changed, safe_emit
 from diagnostics_engine.domain.reports.report_actions import ReportAction, allowed_actions_for_report
@@ -16,6 +18,7 @@ from labs.api.services.lab_orders_presenter import (
     slot_label_for_order,
 )
 from labs.choices.tracking import DeliveryStatus
+from labs.choices.workflow import AppointmentStatus, CollectionStatus
 from labs.models.lab_workflow import LabOrderAssignment
 
 
@@ -167,13 +170,81 @@ def _operational_anchor_at(
     ready_at: datetime | None,
     delivered_at: datetime | None,
 ) -> datetime | None:
+    """Queue date anchor — logistics milestone or report activity, not assignment accept."""
     return (
         sample_collected_at
-        or assigned_at
         or uploaded_at
         or ready_at
         or delivered_at
     )
+
+
+def _assignment_has_upload_activity(order) -> bool:
+    """Keep rows with partial/in-progress report work regardless of logistics milestone."""
+    for line in order.test_lines.all():
+        report = _active_report_for_line_prefetched(line)
+        if report is None:
+            continue
+        if (report.status or "").strip().lower() != ReportLifecycleStatus.PENDING:
+            return True
+    return False
+
+
+def assignment_ready_for_report_queue(assignment: LabOrderAssignment) -> bool:
+    """
+    Read-only logistics gate for report-tasks list (does not mutate visit/home workflows).
+
+    - Home: collection COLLECTED
+    - Visit: appointment CHECKED_IN or COMPLETED with checked_in_at
+    - Exception: any active report already past pending (partial upload)
+    """
+    order = assignment.diagnostic_order
+    if _assignment_has_upload_activity(order):
+        return True
+
+    mode = (order.sample_collection_mode or "lab").strip().lower()
+    if mode == "home":
+        collection = getattr(order, "collection_request", None)
+        return (
+            collection is not None
+            and collection.collection_status == CollectionStatus.COLLECTED
+        )
+
+    visit = getattr(order, "visit_appointment", None)
+    if visit is None:
+        return False
+    return (
+        visit.checked_in_at is not None
+        and visit.status in {AppointmentStatus.CHECKED_IN, AppointmentStatus.COMPLETED}
+    )
+
+
+def filter_assignments_ready_for_report_queue(
+    qs: QuerySet[LabOrderAssignment],
+) -> QuerySet[LabOrderAssignment]:
+    """DB filter mirroring assignment_ready_for_report_queue for list/count endpoints."""
+    from diagnostics_engine.models.reports import DiagnosticTestReport
+
+    upload_started = Exists(
+        DiagnosticTestReport.objects.filter(
+            order_test_line__order_id=OuterRef("diagnostic_order_id"),
+            deleted_at__isnull=True,
+            supersedes_id__isnull=True,
+        ).exclude(status=ReportLifecycleStatus.PENDING),
+    )
+    home_ready = Q(
+        diagnostic_order__sample_collection_mode="home",
+        diagnostic_order__collection_request__collection_status=CollectionStatus.COLLECTED,
+    )
+    visit_ready = Q(
+        diagnostic_order__sample_collection_mode="lab",
+        diagnostic_order__visit_appointment__checked_in_at__isnull=False,
+        diagnostic_order__visit_appointment__status__in=[
+            AppointmentStatus.CHECKED_IN,
+            AppointmentStatus.COMPLETED,
+        ],
+    )
+    return qs.filter(upload_started | home_ready | visit_ready)
 
 
 def _latest_failed_delivery_log_id(report: DiagnosticTestReport) -> UUID | None:

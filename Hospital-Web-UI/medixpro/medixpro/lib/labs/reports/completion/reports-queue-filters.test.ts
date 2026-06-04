@@ -128,6 +128,22 @@ describe("applyReportsQueueFilters", () => {
     expect(result.map((o) => o.taskId)).toEqual(["match"]);
   });
 
+  it("hides pre-milestone pending upload without logistics anchor", () => {
+    const list = applyReportsQueueFilters(
+      [
+        order({
+          taskId: "pre-milestone",
+          operationalUpdatedAtIso: null,
+          slaAnchorIso: null,
+          orderWorkflowState: "pending_upload",
+          hasPendingUpload: true,
+        }),
+      ],
+      { ...DEFAULT_REPORTS_QUEUE_FILTERS, datePreset: "month" },
+    );
+    expect(list).toHaveLength(0);
+  });
+
   it("does not apply text search in live mode when clientSearch=false", () => {
     const result = applyReportsQueueFilters(
       [order({ taskId: "a", patientName: "Rahul" }), order({ taskId: "b", patientName: "Neha" })],

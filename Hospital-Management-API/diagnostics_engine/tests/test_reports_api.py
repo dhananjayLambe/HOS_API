@@ -25,9 +25,12 @@ from diagnostics_engine.services.reports import (
 from labs.choices.tracking import DeliveryStatus
 from labs.models.lab_tracking import LabReportDeliveryLog
 from labs.tests.support.workflow_factories import (
+    accept_lab_visit,
+    collection_at_status,
     lab_admin_client,
     lab_mode_assignment,
     other_branch,
+    visit_ready_for_report_queue,
 )
 
 User = get_user_model()
@@ -41,6 +44,7 @@ class ReportAPITestCase(TestCase):
     def setUp(self):
         self.client, self.lab_user, self.branch, self.org = lab_admin_client()
         self.assignment, self.order = lab_mode_assignment(self.branch)
+        visit_ready_for_report_queue(self.client, self.assignment)
         self.line = self.order.test_lines.first()
         self.report = DiagnosticTestReport.objects.create(
             order_test_line=self.line,
@@ -130,8 +134,10 @@ class ReportAPITestCase(TestCase):
         self.assertFalse(res.data["success"])
 
     def test_task_queue_pagination_with_page_size(self):
-        lab_mode_assignment(self.branch)
-        lab_mode_assignment(self.branch)
+        a2, _ = lab_mode_assignment(self.branch)
+        a3, _ = lab_mode_assignment(self.branch)
+        visit_ready_for_report_queue(self.client, a2)
+        visit_ready_for_report_queue(self.client, a3)
         url = reverse("v1-report-task-queue")
         res = self.client.get(url, {"page_size": 1})
         self.assertEqual(res.status_code, status.HTTP_200_OK)
@@ -139,8 +145,10 @@ class ReportAPITestCase(TestCase):
         self.assertIsNotNone(res.data["data"]["next"])
 
     def test_task_queue_counts_stable_across_pagination_pages(self):
-        lab_mode_assignment(self.branch)
-        lab_mode_assignment(self.branch)
+        a2, _ = lab_mode_assignment(self.branch)
+        a3, _ = lab_mode_assignment(self.branch)
+        visit_ready_for_report_queue(self.client, a2)
+        visit_ready_for_report_queue(self.client, a3)
         url = reverse("v1-report-task-queue")
         first = self.client.get(url, {"page_size": 1})
         self.assertEqual(first.status_code, status.HTTP_200_OK)
@@ -174,6 +182,7 @@ class ReportAPITestCase(TestCase):
 
     def test_task_queue_search_by_order_number(self):
         other_assignment, other_order = lab_mode_assignment(self.branch)
+        visit_ready_for_report_queue(self.client, other_assignment)
         other_order.order_number = "ORD-QUEUE-FINDME"
         other_order.save(update_fields=["order_number"])
         self.order.order_number = "ORD-QUEUE-OTHER99"

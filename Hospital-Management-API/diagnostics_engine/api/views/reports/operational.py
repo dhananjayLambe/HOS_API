@@ -45,6 +45,7 @@ from diagnostics_engine.services.reports.report_task_presenter import (
     build_report_task_context,
     build_report_task_dtos,
     compute_report_task_counts,
+    filter_assignments_ready_for_report_queue,
 )
 from labs.api.services.lab_orders_list_service import (
     apply_list_filters,
@@ -67,6 +68,7 @@ class ReportTaskQueueView(LabReportOperationalMixin):
         except DjangoValidationError as exc:
             return validation_error_response(exc, request=request)
         qs = apply_list_filters(base_assignments_queryset(lab_user), params)
+        qs = filter_assignments_ready_for_report_queue(qs)
         counts = compute_report_task_counts(list(qs))
         paginator = ReportTaskCursorPagination()
         page = paginator.paginate_queryset(qs, request, view=self)
@@ -116,6 +118,11 @@ class ReportTaskContextView(LabReportOperationalMixin):
                 order_test_line=line,
                 uploaded_by=request.user,
             )
+        # Re-fetch so newly provisioned report heads are visible (prefetch cache is stale).
+        assignment = ReportQueryService.get_lab_assignment_for_branch(
+            assignment_id=task_id,
+            branch_id=lab_user.branch_id,
+        )
         dto = build_report_task_context(assignment)
         payload = ReportTaskContextSerializer.from_dto(dto).data
         return success_response(payload, request=request)

@@ -200,12 +200,23 @@ function matchesTatSoonToggle(order: OrderLifecycleViewModel): boolean {
   return isTatWithinMinutes(anchor, order.urgency, 30) && !isTatBreached(anchor, order.urgency);
 }
 
+/** Backend gates pre-milestone rows; hide any stale client rows without logistics/upload anchor. */
+function logisticsMilestoneReached(order: OrderLifecycleViewModel): boolean {
+  if (order.operationalUpdatedAtIso || order.slaAnchorIso) return true;
+  if (order.orderWorkflowState === "partial_upload") return true;
+  if (order.orderWorkflowState === "ready_to_send") return true;
+  if (order.orderWorkflowState === "delivered") return true;
+  return false;
+}
+
 export function applyReportsQueueFilters(
   orders: OrderLifecycleViewModel[],
   state: ReportsQueueFilterState,
   options?: { clientSearch?: boolean },
 ): OrderLifecycleViewModel[] {
-  let list = filterOrdersByOperationalDate(orders, state.datePreset, {
+  let list = orders.filter(logisticsMilestoneReached);
+
+  list = filterOrdersByOperationalDate(list, state.datePreset, {
     from: state.customFrom,
     to: state.customTo,
   });

@@ -27,7 +27,7 @@ from diagnostics_engine.tests.test_order_creation_service import (
     _lab_org_and_branch,
 )
 from labs.choices.auth import LabUserRole
-from labs.choices.workflow import CollectionStatus, LabAssignmentStatus
+from labs.choices.workflow import CollectionStatus, LabAssignmentStatus, AppointmentStatus
 from labs.models import LabBranch, LabCollectionRequest, LabOrderAssignment, LabUser, LabVisitAppointment
 
 if TYPE_CHECKING:
@@ -193,6 +193,25 @@ def accept_home_collection(client: APIClient, assignment: LabOrderAssignment) ->
     res = client.post(url)
     assert res.status_code == 200, res.content
     return LabCollectionRequest.objects.get(diagnostic_order=assignment.diagnostic_order)
+
+
+def visit_ready_for_report_queue(
+    client: APIClient,
+    assignment: LabOrderAssignment,
+) -> LabVisitAppointment:
+    """
+    Advance existing visit workflow to check-in so assignment appears on report-tasks queue.
+    Does not change workflow rules — uses confirm + check-in APIs only.
+    """
+    visit = accept_lab_visit(client, assignment)
+    if visit.status == AppointmentStatus.PENDING:
+        client.post(reverse("lab-visit-appointment-confirm", kwargs={"visit_id": visit.id}))
+        visit.refresh_from_db()
+    if visit.status == AppointmentStatus.CONFIRMED:
+        res = client.post(reverse("lab-visit-appointment-check-in", kwargs={"visit_id": visit.id}))
+        assert res.status_code == 200, res.content
+        visit.refresh_from_db()
+    return visit
 
 
 def collection_at_status(

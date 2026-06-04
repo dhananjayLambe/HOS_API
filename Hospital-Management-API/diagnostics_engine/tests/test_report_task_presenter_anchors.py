@@ -42,10 +42,22 @@ def test_operational_anchor_at_prefers_sample_collected_over_assigned():
 def test_operational_anchor_at_falls_back_to_upload_timestamps():
     uploaded = datetime(2026, 6, 5, 9, 0, tzinfo=timezone.utc)
     anchor = _operational_anchor_at(
-        assigned_at=None,
+        assigned_at=datetime(2026, 6, 1, 8, 0, tzinfo=timezone.utc),
         sample_collected_at=None,
         uploaded_at=uploaded,
         ready_at=None,
         delivered_at=None,
     )
     assert anchor == uploaded
+
+
+def test_operational_anchor_at_ignores_assigned_at_without_logistics_or_upload():
+    assigned = datetime(2026, 6, 3, 8, 0, tzinfo=timezone.utc)
+    anchor = _operational_anchor_at(
+        assigned_at=assigned,
+        sample_collected_at=None,
+        uploaded_at=None,
+        ready_at=None,
+        delivered_at=None,
+    )
+    assert anchor is None
