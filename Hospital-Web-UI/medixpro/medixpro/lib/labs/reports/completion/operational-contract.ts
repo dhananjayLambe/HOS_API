@@ -37,6 +37,20 @@ export function isReportSent(report: ReportChipViewModel): boolean {
   return report.status === "sent" || SENT_DELIVERY_STATES.includes(report.deliveryState);
 }
 
+/** Reports that already have an upload and may be replaced (ready, sent, corrected, etc.). */
+export function isReuploadEligible(report: ReportChipViewModel): boolean {
+  if (isReportSent(report) || report.artifacts.length > 0) return true;
+  if (isReadyToSend(report) || report.status === "uploaded" || report.status === "corrected") {
+    return true;
+  }
+  return (
+    report.availableActions?.some((action) => {
+      const key = action.trim().toUpperCase();
+      return key === "CORRECT_REPORT" || key === "REUPLOAD_REPORT";
+    }) ?? false
+  );
+}
+
 export function reportStatusLabel(status: ReportLifecycleStatus, deliveryState?: ReportDeliveryState): string {
   if (deliveryState === "failed") return "Failed";
   switch (status) {

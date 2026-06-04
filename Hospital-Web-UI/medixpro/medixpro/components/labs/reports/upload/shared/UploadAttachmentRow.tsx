@@ -30,7 +30,7 @@ const REJECTION_BADGE: Record<UploadFileRejectionReason, string> = {
 type UploadAttachmentRowProps = {
   file: UploadFileItem;
   isPrimary: boolean;
-  onSetPrimary: () => void;
+  onSetPrimary?: () => void;
   onRemove: () => void;
   rejectionReason?: UploadFileRejectionReason;
 };
@@ -47,22 +47,24 @@ export function UploadAttachmentRow({
 
   return (
     <li className="flex min-w-0 items-center gap-2 rounded-md border border-[#F0EFFF] bg-white px-2 py-1.5">
-      <button
-        type="button"
-        className="flex shrink-0 items-center gap-1"
-        onClick={onSetPrimary}
-        aria-pressed={isPrimary}
-        aria-label={isPrimary ? `${file.name} is primary report` : `Set ${file.name} as primary report`}
-        disabled={!!rejectionReason}
-      >
-        <Circle
-          className={cn(
-            "h-3.5 w-3.5",
-            isPrimary ? "fill-[#7C5CFC] text-[#7C5CFC]" : "text-[#D4CCFF]",
-          )}
-          aria-hidden
-        />
-      </button>
+      {onSetPrimary ? (
+        <button
+          type="button"
+          className="flex shrink-0 items-center gap-1"
+          onClick={onSetPrimary}
+          aria-pressed={isPrimary}
+          aria-label={isPrimary ? `${file.name} is primary report` : `Set ${file.name} as primary report`}
+          disabled={!!rejectionReason}
+        >
+          <Circle
+            className={cn(
+              "h-3.5 w-3.5",
+              isPrimary ? "fill-[#7C5FC] text-[#7C5CFC]" : "text-[#D4CCFF]",
+            )}
+            aria-hidden
+          />
+        </button>
+      ) : null}
       <span className="min-w-0 flex-1 truncate text-xs font-medium text-[#111827]">{file.name}</span>
       <span className="shrink-0 text-[10px] text-[#9CA3AF]">{formatSize(file.size)}</span>
       <span className="shrink-0 rounded bg-[#F0EFFF] px-1 py-0.5 text-[9px] font-medium uppercase text-[#6B7280]">

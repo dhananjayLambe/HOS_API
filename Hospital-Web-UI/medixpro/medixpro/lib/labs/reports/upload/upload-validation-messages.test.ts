@@ -20,6 +20,7 @@ describe("upload-validation-messages", () => {
     expect(getUploadPrimaryButtonLabel("files")).toBe("Continue");
     expect(getUploadPrimaryButtonLabel("preview")).toBe("Review & Confirm");
     expect(getUploadPrimaryButtonLabel("confirm")).toBe("Upload Reports");
+    expect(getUploadPrimaryButtonLabel("confirm", true)).toBe("Save Updated Report");
   });
 
   it("disabled reason when not verified on confirm", () => {

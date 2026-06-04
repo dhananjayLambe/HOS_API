@@ -326,6 +326,26 @@ export function resolveUploadReportId(ctx: ReportTaskContext): string | undefine
   return line?.reportId ?? ctx.activeReports[0]?.reportId;
 }
 
+/** Upload / re-upload: URL reportId wins, then upload_target, then default resolver. */
+export function resolveTargetReportId(
+  ctx: ReportTaskContext,
+  urlReportId?: string | null,
+): string | undefined {
+  if (urlReportId) {
+    const fromUrl = ctx.activeReports.find((r) => r.reportId === urlReportId);
+    if (fromUrl) return fromUrl.reportId;
+  }
+  if (ctx.uploadTarget?.reportId) {
+    const fromTarget = ctx.activeReports.find(
+      (r) =>
+        r.reportId === ctx.uploadTarget!.reportId ||
+        r.lineId === ctx.uploadTarget!.lineId,
+    );
+    if (fromTarget) return fromTarget.reportId;
+  }
+  return resolveUploadReportId(ctx);
+}
+
 export function mapLifecycleStatusToOperational(status: string): ReportOperationalStatus {
   const key = status.trim().toLowerCase();
   if (key === "ready") return "READY_DELIVERY";

@@ -2,6 +2,7 @@ import {
   buildPendingWorkSummary,
   buildTestWorkflows,
   inferArtifactType,
+  isReuploadEligible,
   isReportSent,
   summarizeTestWorkflows,
   workflowActionsFromApiActions,
@@ -66,6 +67,16 @@ describe("operational contract helpers", () => {
 
   it("maps CORRECT_REPORT from API to re-upload workflow action", () => {
     expect(workflowActionsFromApiActions(["CORRECT_REPORT", "VIEW_REPORT"])).toEqual(["REUPLOAD", "VIEW"]);
+  });
+
+  it("isReuploadEligible includes ready reports without local artifacts", () => {
+    expect(isReuploadEligible(chip("1", "CBC", "ready", "not_sent"))).toBe(true);
+    expect(isReuploadEligible(chip("2", "LFT", "pending", "not_sent"))).toBe(false);
+    expect(
+      isReuploadEligible(
+        chip("3", "KFT", "sent", "sent", { availableActions: ["CORRECT_REPORT"] }),
+      ),
+    ).toBe(true);
   });
 
   it("offers preview and re-upload for sent reports without local artifacts", () => {

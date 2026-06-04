@@ -5,6 +5,8 @@ import { CompletionAttachmentRow } from "@/components/labs/reports/completion/Co
 import { NextActionLine } from "@/components/labs/reports/completion/NextActionLine";
 import { ReportStatusChips } from "@/components/labs/reports/completion/ReportStatusChips";
 import { TatUrgencyIndicator } from "@/components/labs/reports/completion/TatUrgencyIndicator";
+import { ReuploadInfoBanner } from "@/components/labs/reports/upload/shared/ReuploadInfoBanner";
+import { ReuploadReasonField } from "@/components/labs/reports/upload/shared/ReuploadReasonField";
 import { UploadDropzone } from "@/components/labs/reports/upload/shared/UploadDropzone";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -18,7 +20,11 @@ import {
 import { useArtifactStaging } from "@/hooks/labs/useArtifactStaging";
 import type { StagedArtifactInput } from "@/lib/labs/reports/completion/completion-artifact-staging";
 import type { OrderLifecycleViewModel, ReportArtifactViewModel } from "@/lib/labs/reports/completion/order-lifecycle.types";
-import { isPendingUpload, isReportSent } from "@/lib/labs/reports/completion/operational-contract";
+import {
+  isPendingUpload,
+  isReuploadEligible,
+} from "@/lib/labs/reports/completion/operational-contract";
+import { resolveReuploadReason } from "@/lib/labs/reports/upload/reupload-config";
 import {
   rejectionReasonLabel,
   rejectionReasonMessage,
@@ -61,22 +67,19 @@ function uploadableReports(order: OrderLifecycleViewModel) {
   });
 }
 
-function reuploadableReports(order: OrderLifecycleViewModel) {
-  return order.reports.filter((report) => isReportSent(report) || report.artifacts.length > 0);
+function reuploadableReports(order: OrderLifecycleViewModel, initialReportId?: string | null) {
+  const eligible = order.reports.filter((report) => isReuploadEligible(report));
+  if (!initialReportId) return eligible;
+  const pinned = order.reports.find((r) => r.reportId === initialReportId);
+  if (pinned && !eligible.some((r) => r.reportId === initialReportId)) {
+    return [...eligible, pinned];
+  }
+  return eligible;
 }
 
 function preferredArtifact(artifacts: ReportArtifactViewModel[]): ReportArtifactViewModel | null {
   return artifacts.find((artifact) => artifact.patientVisible) ?? artifacts[0] ?? null;
 }
-
-const REUPLOAD_REASON_OPTIONS = [
-  "Wrong file uploaded",
-  "Signed PDF replacing unsigned report",
-  "Report regenerated",
-  "Typo / value update",
-  "Doctor requested update",
-  "Other",
-] as const;
 
 export function OrderUploadDrawer({
   open,
@@ -95,8 +98,13 @@ export function OrderUploadDrawer({
   const [uploading, setUploading] = useState(false);
 
   const reportsForDrawer = useMemo(
-    () => (order ? (mode === "reupload" ? reuploadableReports(order) : uploadableReports(order)) : []),
-    [mode, order],
+    () =>
+      order
+        ? mode === "reupload"
+          ? reuploadableReports(order, initialReportId)
+          : uploadableReports(order)
+        : [],
+    [mode, order, initialReportId],
   );
 
   const selectedReport = useMemo(() => {
@@ -104,15 +112,30 @@ export function OrderUploadDrawer({
     return order.reports.find((r) => r.reportId === selectedReportId) ?? null;
   }, [order, selectedReportId]);
 
+  const handleAddFiles = useCallback(
+    (incoming: FileList | File[]) => {
+      if (mode === "reupload") {
+        staging.clearAll();
+        const list = Array.from(incoming).slice(0, 1);
+        if (list.length > 0) staging.addFiles(list);
+        return;
+      }
+      staging.addFiles(incoming);
+    },
+    [mode, staging],
+  );
+
   useEffect(() => {
     if (!open || !order) return;
     const initial =
-      initialReportId && reportsForDrawer.some((r) => r.reportId === initialReportId)
+      initialReportId && order.reports.some((r) => r.reportId === initialReportId)
         ? initialReportId
-        : order.nextAction.uploadReportId &&
-            reportsForDrawer.some((r) => r.reportId === order.nextAction.uploadReportId)
-          ? order.nextAction.uploadReportId
-          : reportsForDrawer[0]?.reportId ?? null;
+        : initialReportId && reportsForDrawer.some((r) => r.reportId === initialReportId)
+          ? initialReportId
+          : order.nextAction.uploadReportId &&
+              reportsForDrawer.some((r) => r.reportId === order.nextAction.uploadReportId)
+            ? order.nextAction.uploadReportId
+            : reportsForDrawer[0]?.reportId ?? null;
     setSelectedReportId(initial);
     setReuploadReasonChoice("");
     setReuploadReasonOther("");
@@ -122,8 +145,11 @@ export function OrderUploadDrawer({
 
   const handleSave = useCallback(async () => {
     if (!order || !selectedReport) return;
-    const trimmedReason = reuploadReasonChoice === "Other" ? reuploadReasonOther.trim() : reuploadReasonChoice;
-    if (mode === "reupload" && trimmedReason.length === 0) return;
+    const trimmedReason =
+      mode === "reupload"
+        ? resolveReuploadReason(reuploadReasonChoice, reuploadReasonOther)
+        : null;
+    if (mode === "reupload" && !trimmedReason) return;
     const selectedFiles = mode === "reupload" ? staging.validFiles.slice(0, 1) : staging.validFiles;
     const artifacts: StagedArtifactInput[] = selectedFiles
       .filter((f) => f.file)
@@ -181,7 +207,9 @@ export function OrderUploadDrawer({
     ? mode === "reupload"
       ? `Re-upload ${selectedReport.testLabel} Report`
       : `Upload Files — ${selectedReport.testLabel} Report`
-    : `Upload Files — #${order.orderNumber}`;
+    : mode === "reupload"
+      ? `Re-upload Report — #${order.orderNumber}`
+      : `Upload Files — #${order.orderNumber}`;
   const currentArtifact = preferredArtifact(selectedReport?.artifacts ?? []);
 
   return (
@@ -278,60 +306,23 @@ export function OrderUploadDrawer({
                 </div>
               ) : null}
 
-              {mode === "reupload" ? (
-                <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900">
-                  Re-uploading creates an updated version. Previous delivery history remains visible.
-                </div>
-              ) : null}
+              {mode === "reupload" ? <ReuploadInfoBanner /> : null}
 
               {mode === "reupload" ? (
-                <div className="space-y-1">
-                  <Label className="text-xs font-semibold text-[#374151]">
-                    Reason for re-upload <span className="text-red-600">*</span>
-                  </Label>
-                  <RadioGroup
-                    value={reuploadReasonChoice}
-                    onValueChange={(value) => {
-                      setReuploadReasonChoice(value);
-                      if (value !== "Other") setReuploadReasonOther("");
-                    }}
-                    className="grid gap-1.5 sm:grid-cols-2"
-                  >
-                    {REUPLOAD_REASON_OPTIONS.map((reason) => (
-                      <label
-                        key={reason}
-                        className={cn(
-                          "flex cursor-pointer items-center gap-2 rounded-md border px-2 py-1.5 text-xs",
-                          reuploadReasonChoice === reason
-                            ? "border-[#7C5CFC] bg-[#F4F1FF]"
-                            : "border-[#E5E7EB] bg-white",
-                        )}
-                      >
-                        <RadioGroupItem value={reason} id={`reupload-reason-${reason.replace(/\W+/g, "-").toLowerCase()}`} />
-                        <span className="font-medium">{reason}</span>
-                      </label>
-                    ))}
-                  </RadioGroup>
-                  {reuploadReasonChoice === "Other" ? (
-                    <textarea
-                      id="reupload-reason-other"
-                      value={reuploadReasonOther}
-                      onChange={(event) => setReuploadReasonOther(event.target.value)}
-                      placeholder="Enter reason"
-                      className="min-h-16 w-full rounded-md border border-[#E5E7EB] px-3 py-2 text-sm outline-none focus:border-[#7C5CFC] focus:ring-2 focus:ring-[#7C5CFC]/20"
-                    />
-                  ) : null}
-                  <p className="text-[10px] text-[#6B7280]">
-                    Select a reason so repeated re-uploads stay controlled.
-                  </p>
-                </div>
+                <ReuploadReasonField
+                  choice={reuploadReasonChoice}
+                  otherText={reuploadReasonOther}
+                  onChoiceChange={setReuploadReasonChoice}
+                  onOtherTextChange={setReuploadReasonOther}
+                  idPrefix="drawer-reupload"
+                />
               ) : null}
 
               <div className="space-y-1">
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-[#6B7280]">
                   {mode === "reupload" ? "Upload Updated File" : "Add Files"}
                 </p>
-                <UploadDropzone accept={UPLOAD_ACCEPT_ATTR} onAddFiles={staging.addFiles} />
+                <UploadDropzone accept={UPLOAD_ACCEPT_ATTR} onAddFiles={handleAddFiles} />
               </div>
 
               {staging.fileRejections.length > 0 ? (

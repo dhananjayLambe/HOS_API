@@ -23,14 +23,17 @@ export function getUploadPrimaryDisabledReason(input: UploadValidationInput): st
   return getBlockedReason(step, input, "advance");
 }
 
-export function getUploadPrimaryButtonLabel(step: UploadWorkflowStep): string {
+export function getUploadPrimaryButtonLabel(
+  step: UploadWorkflowStep,
+  isReupload?: boolean,
+): string {
   switch (step) {
     case "files":
       return "Continue";
     case "preview":
       return "Review & Confirm";
     case "confirm":
-      return "Upload Reports";
+      return isReupload ? "Save Updated Report" : "Upload Reports";
     default:
       return "Continue";
   }

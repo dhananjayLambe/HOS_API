@@ -12,6 +12,7 @@ export type ReportsCompletionDrawerHandlers = {
     task: ReportTask,
     options?: { reportId?: string; mode?: "upload" | "reupload" },
   ) => void;
+  navigateToReupload?: (task: ReportTask, reportId: string) => void;
 };
 
 export function useReportsCompletionActions(branchId: string | null | undefined) {

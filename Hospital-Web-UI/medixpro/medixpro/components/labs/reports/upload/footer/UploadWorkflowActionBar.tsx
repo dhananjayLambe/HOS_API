@@ -44,10 +44,15 @@ export function UploadWorkflowActionBar({
   const input = { ...workflowContext, step };
   const enabled = isUploadPrimaryEnabled(input);
   const secondaryHint = getUploadSecondaryDisabledHint(input);
-  const label = getUploadPrimaryButtonLabel(step);
+  const label = getUploadPrimaryButtonLabel(step, workflowContext.isReupload);
   const action = getPrimaryActionForStep(step);
   const displayLabel =
-    submitting && action === "upload" ? "Uploading reports…" : label;
+    submitting && action === "upload"
+      ? workflowContext.isReupload
+        ? "Saving updated report…"
+        : "Uploading reports…"
+      : label;
+  const showSaveDraft = !workflowContext.isReupload;
 
   return (
     <div
@@ -70,24 +75,28 @@ export function UploadWorkflowActionBar({
               <span className="sr-only sm:hidden">Back</span>
             </Button>
           ) : null}
-          <Button
-            type="button"
-            variant="link"
-            size="sm"
-            className="h-9 min-h-9 px-2 text-sm text-[#6B7280] underline-offset-2 hover:text-[#111827] sm:hidden"
-            onClick={onSaveDraft}
-          >
-            Save draft
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="hidden h-9 min-h-9 text-sm sm:inline-flex"
-            onClick={onSaveDraft}
-          >
-            Save draft
-          </Button>
+          {showSaveDraft ? (
+            <>
+              <Button
+                type="button"
+                variant="link"
+                size="sm"
+                className="h-9 min-h-9 px-2 text-sm text-[#6B7280] underline-offset-2 hover:text-[#111827] sm:hidden"
+                onClick={onSaveDraft}
+              >
+                Save draft
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="hidden h-9 min-h-9 text-sm sm:inline-flex"
+                onClick={onSaveDraft}
+              >
+                Save draft
+              </Button>
+            </>
+          ) : null}
         </div>
 
         <div className={UPLOAD_FOOTER_RIGHT}>

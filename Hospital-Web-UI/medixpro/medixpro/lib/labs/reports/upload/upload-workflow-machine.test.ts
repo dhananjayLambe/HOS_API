@@ -53,5 +53,37 @@ describe("upload-workflow-machine", () => {
       ),
     ).toBe("Please reselect report files to continue.");
   });
+
+  it("re-upload requires exactly one file", () => {
+    expect(
+      getBlockedReason(
+        "files",
+        { ...baseCtx, isReupload: true, maxFiles: 1, fileCount: 2, reuploadReasonReady: true },
+        "advance",
+      ),
+    ).toBe("Re-upload accepts exactly one replacement file.");
+  });
+
+  it("re-upload requires reason on files step", () => {
+    expect(
+      getBlockedReason(
+        "files",
+        { ...baseCtx, isReupload: true, maxFiles: 1, fileCount: 1, reuploadReasonReady: false },
+        "advance",
+      ),
+    ).toBe("Select a reason for re-upload.");
+  });
+
+  it("re-upload canSubmit when reason and one file verified", () => {
+    expect(
+      canSubmit("confirm", {
+        ...baseCtx,
+        isReupload: true,
+        maxFiles: 1,
+        fileCount: 1,
+        reuploadReasonReady: true,
+      }),
+    ).toBe(true);
+  });
 });
 

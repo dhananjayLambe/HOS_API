@@ -63,7 +63,7 @@ export function ReportUploadPage() {
   }, [mutations, router, reportsListHref]);
 
   useLabShellHeader({
-    title: "Upload report",
+    title: wizard.isReupload ? "Re-upload report" : "Upload report",
     back: shellBack,
     dense: true,
   });
@@ -72,7 +72,7 @@ export function ReportUploadPage() {
     if (!wizard.resolvedTaskId) return;
     setWaSending(true);
     try {
-      const reportId = wizard.uploadContext?.historicalReports[0]?.reportId;
+      const reportId = wizard.targetReportId ?? wizard.uploadContext?.historicalReports[0]?.reportId;
       if (!reportId) throw new Error("Missing report id");
       const sendPayload = buildSendWhatsAppPayload(wizard.uploadContext?.patientPhone);
       if (!sendPayload.ok) {
@@ -94,7 +94,9 @@ export function ReportUploadPage() {
   const handlePrimary = useCallback(() => {
     const action = getPrimaryActionForStep(wizard.step);
     if (action === "upload") {
-      wizard.trySubmit(() => toast.success("Report submitted"));
+      wizard.trySubmit(() =>
+        toast.success(wizard.isReupload ? "Updated report saved" : "Report submitted"),
+      );
       return;
     }
     wizard.tryAdvance();
@@ -105,10 +107,23 @@ export function ReportUploadPage() {
     !wizard.error &&
     wizard.taskLoadState !== "malformed";
 
+  const readyFileCount = wizard.files.filter((f) => !!f.file).length;
   const showFileRequiredError =
+    wizard.submitAttempted && wizard.step === "files" && readyFileCount === 0;
+  const showReuploadFileCountError =
     wizard.submitAttempted &&
     wizard.step === "files" &&
-    wizard.files.filter((f) => !!f.file).length === 0;
+    wizard.isReupload &&
+    readyFileCount > 1;
+
+  const handlePreviewCurrent = useCallback(() => {
+    const primary =
+      wizard.reportDetail?.artifacts.find((a) => a.isPrimary) ??
+      wizard.reportDetail?.artifacts[0];
+    if (primary?.downloadUrl) {
+      window.open(primary.downloadUrl, "_blank", "noopener,noreferrer");
+    }
+  }, [wizard.reportDetail]);
 
   const renderMain = () => {
     if (wizard.loading) {
@@ -182,12 +197,20 @@ export function ReportUploadPage() {
           files={wizard.files}
           primaryFileId={wizard.primaryFileId}
           accept={wizard.accept}
+          isReupload={wizard.isReupload}
+          currentArtifacts={wizard.reportDetail?.artifacts ?? []}
+          currentArtifactsLoading={wizard.reportDetailLoading}
+          onPreviewCurrent={handlePreviewCurrent}
+          reuploadReasonChoice={wizard.reuploadReasonChoice}
+          reuploadReasonOther={wizard.reuploadReasonOther}
+          onReuploadReasonChoiceChange={wizard.setReuploadReasonChoice}
+          onReuploadReasonOtherChange={wizard.setReuploadReasonOther}
           showDraftReselectBanner={wizard.showDraftReselectBanner}
           onDismissDraftBanner={wizard.dismissDraftBanner}
           onAddFiles={wizard.addFiles}
           onRemove={wizard.removeFile}
           onSetPrimary={wizard.setPrimary}
-          showFileRequiredError={showFileRequiredError}
+          showFileRequiredError={showFileRequiredError || showReuploadFileCountError}
           fileRejections={wizard.fileRejections}
           onDismissRejections={wizard.dismissFileRejections}
           submitting={wizard.submitting}
@@ -209,6 +232,8 @@ export function ReportUploadPage() {
           primaryFileName={wizard.primaryFile?.name ?? null}
           verified={wizard.verified}
           onVerifiedChange={wizard.setVerified}
+          isReupload={wizard.isReupload}
+          reuploadReason={wizard.reuploadReasonResolved}
         />
       );
     }
@@ -219,6 +244,7 @@ export function ReportUploadPage() {
           task={wizard.uploadContext}
           status={wizard.submittedStatus}
           returnHref={reportsListHref}
+          isReupload={wizard.isReupload}
           onSendWhatsApp={handleSendWhatsApp}
           onUploadAnother={wizard.resetForAnother}
           onContinueNextReport={wizard.continueNextReport}

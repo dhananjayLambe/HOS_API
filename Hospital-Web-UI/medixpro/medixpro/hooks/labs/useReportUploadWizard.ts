@@ -1,10 +1,20 @@
 "use client";
 
+import { useReportDetail } from "@/hooks/labs/useReportDetail";
 import { useReportMutations } from "@/hooks/labs/useReportMutations";
 import { useReportTaskContext } from "@/hooks/labs/useReportTaskContext";
 import { newReportRequestId } from "@/lib/labs/reports/api/report-api-response";
 import { mapReportApiErrorToMessage } from "@/lib/labs/reports/api/report-api-errors";
-import { resolveUploadReportId } from "@/lib/labs/reports/api/v1/reports-api-mappers";
+import {
+  resolveTargetReportId,
+} from "@/lib/labs/reports/api/v1/reports-api-mappers";
+import type { ReportTaskContext } from "@/lib/labs/reports/report-task-context";
+import {
+  isReuploadMode,
+  isReuploadReasonReady,
+  resolveReuploadReason,
+  type UploadWorkflowMode,
+} from "@/lib/labs/reports/upload/reupload-config";
 import { loadReportTasks } from "@/lib/labs/reports/load-report-tasks";
 import { DEFAULT_REPORT_TASKS_FILTERS } from "@/lib/labs/reports/build-report-tasks-query";
 import { groupTasksByPatient, type PatientReportGroup } from "@/lib/labs/reports/group-report-tasks";
@@ -90,6 +100,14 @@ function metaFromDraft(meta: UploadDraftFileMeta): UploadFileItem {
   return { ...meta, objectUrl: undefined };
 }
 
+function lineRequiresReupload(line: ReportTaskContext["activeReports"][number]): boolean {
+  if (line.availableActions.some((a) => a.trim().toUpperCase() === "CORRECT_REPORT")) {
+    return true;
+  }
+  const status = String(line.status || "").trim().toLowerCase();
+  return status !== "pending" && status !== "";
+}
+
 export function useReportUploadWizard(routeState?: UploadRouteState) {
   const searchParams = useSearchParams();
   const parsedRoute = routeState ?? parseUploadWorkflowSearchParams(searchParams);
@@ -125,11 +143,40 @@ export function useReportUploadWizard(routeState?: UploadRouteState) {
   const mutations = useReportMutations(branchId);
   const [draftBannerDismissed, setDraftBannerDismissed] = useState(false);
   const [fileRejections, setFileRejections] = useState<UploadFileRejection[]>([]);
+  const [reuploadReasonChoice, setReuploadReasonChoice] = useState("");
+  const [reuploadReasonOther, setReuploadReasonOther] = useState("");
+
+  const targetReportId = useMemo(() => {
+    const ctx = contextQuery.data;
+    if (!ctx) return null;
+    return resolveTargetReportId(ctx, parsedRoute.reportId) ?? null;
+  }, [contextQuery.data, parsedRoute.reportId]);
+
+  const uploadMode: UploadWorkflowMode = useMemo(() => {
+    if (isReuploadMode(parsedRoute.mode)) return "reupload";
+    const ctx = contextQuery.data;
+    if (!ctx || !targetReportId) return "upload";
+    const line = ctx.activeReports.find((r) => r.reportId === targetReportId);
+    if (line && lineRequiresReupload(line)) return "reupload";
+    return "upload";
+  }, [parsedRoute.mode, contextQuery.data, targetReportId]);
+
+  const isReupload = uploadMode === "reupload";
+
+  const reportDetailQuery = useReportDetail(
+    branchId,
+    targetReportId,
+    isReupload && !!targetReportId && isReportTasksV1ApiEnabled(),
+  );
 
   const uploadContext: UploadTaskContext | null = useMemo(() => {
     if (!contextQuery.data) return null;
-    return adaptReportTaskContext(contextQuery.data, { pendingSiblingCount: 0 });
-  }, [contextQuery.data]);
+    const base = adaptReportTaskContext(contextQuery.data, { pendingSiblingCount: 0 });
+    if (!targetReportId) return base;
+    const line = contextQuery.data.activeReports.find((r) => r.reportId === targetReportId);
+    if (!line?.testLabel) return base;
+    return { ...base, uploadTestLabel: line.testLabel };
+  }, [contextQuery.data, targetReportId]);
 
   const taskLoadState: TaskLoadState = useMemo(() => {
     if (parsedRoute.taskIdMalformed) return "malformed";
@@ -153,7 +200,7 @@ export function useReportUploadWizard(routeState?: UploadRouteState) {
   }, [hasTaskIdInUrl, taskLoadState]);
 
   useEffect(() => {
-    if (!resolvedTaskId || taskLoadState !== "ready") return;
+    if (!resolvedTaskId || taskLoadState !== "ready" || isReupload) return;
     const draft = loadUploadDraft(resolvedTaskId);
     if (!draft) return;
     if (draft.filesMeta.length > 0 && files.length === 0) {
@@ -164,7 +211,13 @@ export function useReportUploadWizard(routeState?: UploadRouteState) {
       setVerified(draft.verified);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resolvedTaskId, taskLoadState]);
+  }, [resolvedTaskId, taskLoadState, isReupload]);
+
+  useEffect(() => {
+    if (!isReupload) return;
+    setReuploadReasonChoice("");
+    setReuploadReasonOther("");
+  }, [isReupload, resolvedTaskId, targetReportId]);
 
   useEffect(() => {
     if (hasTaskIdInUrl) return;
@@ -224,27 +277,32 @@ export function useReportUploadWizard(routeState?: UploadRouteState) {
     }
   }, []);
 
-  const addFiles = useCallback((incoming: FileList | File[]) => {
-    const list = Array.from(incoming);
-    setFiles((prev) => {
-      const { accepted, rejected } = validateIncomingFiles(list, prev);
-      if (rejected.length > 0) {
-        setFileRejections(rejected);
-      } else if (accepted.length > 0) {
-        setFileRejections([]);
-      }
-      if (accepted.length === 0) return prev;
+  const addFiles = useCallback(
+    (incoming: FileList | File[]) => {
+      const list = Array.from(incoming);
+      setFiles((prev) => {
+        const base = isReupload ? [] : prev;
+        const { accepted, rejected } = validateIncomingFiles(list, base);
+        if (rejected.length > 0) {
+          setFileRejections(rejected);
+        } else if (accepted.length > 0) {
+          setFileRejections([]);
+        }
+        if (accepted.length === 0) return prev;
 
-      const next = [...prev];
-      for (const f of accepted) {
-        const meta = fileMeta(f);
-        if (!next.some((x) => x.id === meta.id)) next.push(meta);
-      }
-      setPrimaryFileId((pid) => pickPrimaryFileId(next, pid));
-      return next;
-    });
-    setDraftBannerDismissed(true);
-  }, []);
+        const capped = isReupload ? accepted.slice(0, 1) : accepted;
+        const next = isReupload ? [] : [...prev];
+        for (const f of capped) {
+          const meta = fileMeta(f);
+          if (!next.some((x) => x.id === meta.id)) next.push(meta);
+        }
+        setPrimaryFileId((pid) => pickPrimaryFileId(next, pid));
+        return next;
+      });
+      setDraftBannerDismissed(true);
+    },
+    [isReupload],
+  );
 
   const dismissFileRejections = useCallback(() => {
     setFileRejections([]);
@@ -265,7 +323,7 @@ export function useReportUploadWizard(routeState?: UploadRouteState) {
   }, []);
 
   const saveDraft = useCallback(() => {
-    if (!resolvedTaskId) return;
+    if (!resolvedTaskId || isReupload) return;
     saveUploadDraft({
       version: 1,
       savedAt: new Date().toISOString(),
@@ -274,20 +332,14 @@ export function useReportUploadWizard(routeState?: UploadRouteState) {
       primaryFileId,
       verified,
     });
-  }, [resolvedTaskId, files, primaryFileId, verified]);
+  }, [resolvedTaskId, files, primaryFileId, verified, isReupload]);
 
   const uploadDraftOnly = useCallback(async () => {
-    if (!resolvedTaskId || files.length === 0) return false;
+    if (!resolvedTaskId || files.length === 0 || isReupload) return false;
     const ctx = contextQuery.data;
     if (!ctx || !isReportTasksV1ApiEnabled()) return false;
-    const reportId = resolveUploadReportId(ctx);
+    const reportId = resolveTargetReportId(ctx, parsedRoute.reportId);
     if (!reportId) return false;
-    const selectedLine = ctx.activeReports.find((row) => row.reportId === reportId);
-    const requiresReplaceIntent =
-      selectedLine != null &&
-      String(selectedLine.status || "")
-        .trim()
-        .toLowerCase() !== "pending";
     const fileObjects = files.map((f) => f.file).filter((f): f is File => !!f);
     if (fileObjects.length === 0) return false;
     const primaryIndex = Math.max(0, files.findIndex((f) => f.id === primaryFileId));
@@ -296,8 +348,7 @@ export function useReportUploadWizard(routeState?: UploadRouteState) {
         reportId,
         files: fileObjects,
         primaryFileIndex: primaryIndex,
-        uploadIntent: requiresReplaceIntent ? "REUPLOAD_REPLACE" : "UPLOAD_NEW",
-        notes: requiresReplaceIntent ? "Upload wizard replacement upload" : undefined,
+        uploadIntent: "UPLOAD_NEW",
         uploadRequestId: globalThis.crypto?.randomUUID?.() ?? undefined,
         taskId: resolvedTaskId,
         assignmentId: ctx.assignmentId,
@@ -314,11 +365,17 @@ export function useReportUploadWizard(routeState?: UploadRouteState) {
     } catch {
       return false;
     }
-  }, [resolvedTaskId, files, primaryFileId, verified, contextQuery.data, mutations]);
+  }, [resolvedTaskId, files, primaryFileId, verified, contextQuery.data, mutations, isReupload, parsedRoute.reportId]);
+
+  const reuploadReasonResolved = useMemo(
+    () => resolveReuploadReason(reuploadReasonChoice, reuploadReasonOther),
+    [reuploadReasonChoice, reuploadReasonOther],
+  );
 
   const submit = useCallback(
     async (onSuccess?: () => void) => {
       if (!resolvedTaskId || files.length === 0 || !verified) return;
+      if (isReupload && !reuploadReasonResolved) return;
       if (submissionState === "uploading") return;
 
       const requestId = newReportRequestId();
@@ -340,7 +397,7 @@ export function useReportUploadWizard(routeState?: UploadRouteState) {
         return;
       }
 
-      const reportId = resolveUploadReportId(ctx);
+      const reportId = resolveTargetReportId(ctx, parsedRoute.reportId);
       if (!reportId) {
         setSubmissionState("failed");
         setSubmitError("No upload target for this task. Refresh the queue and try again.");
@@ -354,12 +411,12 @@ export function useReportUploadWizard(routeState?: UploadRouteState) {
         return;
       }
 
-      const selectedLine = ctx.activeReports.find((row) => row.reportId === reportId);
-      const requiresReplaceIntent =
-        selectedLine != null &&
-        String(selectedLine.status || "")
-          .trim()
-          .toLowerCase() !== "pending";
+      if (isReupload && fileObjects.length !== 1) {
+        setSubmissionState("failed");
+        setSubmitError("Re-upload accepts exactly one replacement file.");
+        return;
+      }
+
       const primaryIndex = Math.max(
         0,
         files.findIndex((f) => f.id === primaryFileId),
@@ -368,10 +425,10 @@ export function useReportUploadWizard(routeState?: UploadRouteState) {
       try {
         let result = await mutations.uploadReport({
           reportId,
-          files: fileObjects,
+          files: isReupload ? fileObjects.slice(0, 1) : fileObjects,
           primaryFileIndex: primaryIndex,
-          uploadIntent: requiresReplaceIntent ? "REUPLOAD_REPLACE" : "UPLOAD_NEW",
-          notes: requiresReplaceIntent ? "Upload wizard replacement upload" : undefined,
+          uploadIntent: isReupload ? "REUPLOAD_REPLACE" : "UPLOAD_NEW",
+          notes: isReupload ? reuploadReasonResolved ?? undefined : undefined,
           uploadRequestId: globalThis.crypto?.randomUUID?.() ?? undefined,
           requestId,
           taskId: resolvedTaskId,
@@ -421,6 +478,9 @@ export function useReportUploadWizard(routeState?: UploadRouteState) {
       contextQuery.data,
       contextQuery.refetch,
       mutations,
+      isReupload,
+      reuploadReasonResolved,
+      parsedRoute.reportId,
     ],
   );
 
@@ -472,19 +532,23 @@ export function useReportUploadWizard(routeState?: UploadRouteState) {
     (onSuccess?: () => void) => {
       setSubmitAttempted(true);
       if (!verified || files.length === 0) return;
+      if (isReupload && !reuploadReasonResolved) return;
       void submit(onSuccess);
     },
-    [submit, verified, files.length],
+    [submit, verified, files.length, isReupload, reuploadReasonResolved],
   );
 
   const primaryFile = files.find((f) => f.id === primaryFileId) ?? files[0] ?? null;
   const loadedDraft = resolvedTaskId ? loadUploadDraft(resolvedTaskId) : null;
   const showDraftReselectBanner =
+    !isReupload &&
     !draftBannerDismissed &&
     draftNeedsFileReselect(
       loadedDraft,
       files.filter((f) => !!f.file).length,
     );
+
+  const reuploadReasonReady = isReuploadReasonReady(reuploadReasonChoice, reuploadReasonOther);
 
   const contextLoading = !!resolvedTaskId && contextQuery.isPending;
   const loading = hasTaskIdInUrl
@@ -540,6 +604,16 @@ export function useReportUploadWizard(routeState?: UploadRouteState) {
     resolvedTaskId,
     showDraftReselectBanner,
     dismissDraftBanner: () => setDraftBannerDismissed(true),
+    uploadMode,
+    isReupload,
+    targetReportId,
+    reportDetail: reportDetailQuery.data ?? null,
+    reportDetailLoading: reportDetailQuery.isPending,
+    reuploadReasonChoice,
+    reuploadReasonOther,
+    setReuploadReasonChoice,
+    setReuploadReasonOther,
+    reuploadReasonResolved,
     workflowContext: {
       hasTaskIdInUrl: hasTaskIdInUrl || !!resolvedTaskId,
       fileCount: files.filter((f) => !!f.file).length,
@@ -547,6 +621,9 @@ export function useReportUploadWizard(routeState?: UploadRouteState) {
       verified,
       canUpload: session?.permissions.can_upload_reports ?? true,
       submitAttempted,
+      isReupload,
+      reuploadReasonReady,
+      maxFiles: isReupload ? 1 : undefined,
     },
   };
 }

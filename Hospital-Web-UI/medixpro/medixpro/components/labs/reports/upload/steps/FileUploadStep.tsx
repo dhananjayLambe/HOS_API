@@ -1,9 +1,13 @@
 "use client";
 
 import { OrderReportsChecklist } from "@/components/labs/reports/upload/shared/OrderReportsChecklist";
+import { ReuploadContextPanel } from "@/components/labs/reports/upload/shared/ReuploadContextPanel";
+import { ReuploadInfoBanner } from "@/components/labs/reports/upload/shared/ReuploadInfoBanner";
+import { ReuploadReasonField } from "@/components/labs/reports/upload/shared/ReuploadReasonField";
 import { UploadAttachmentRow } from "@/components/labs/reports/upload/shared/UploadAttachmentRow";
 import { UploadDropzone } from "@/components/labs/reports/upload/shared/UploadDropzone";
 import type { UploadFileItem } from "@/hooks/labs/useReportUploadWizard";
+import type { ReportArtifact } from "@/lib/labs/reports/api/v1/reports-api-mappers";
 import type { UploadFileRejection } from "@/lib/labs/reports/upload/upload-file-validation";
 import {
   rejectionReasonLabel,
@@ -17,6 +21,14 @@ type FileUploadStepProps = {
   files: UploadFileItem[];
   primaryFileId: string | null;
   accept: string;
+  isReupload?: boolean;
+  currentArtifacts?: ReportArtifact[];
+  currentArtifactsLoading?: boolean;
+  onPreviewCurrent?: () => void;
+  reuploadReasonChoice?: string;
+  reuploadReasonOther?: string;
+  onReuploadReasonChoiceChange?: (value: string) => void;
+  onReuploadReasonOtherChange?: (value: string) => void;
   showDraftReselectBanner?: boolean;
   onDismissDraftBanner?: () => void;
   onAddFiles: (files: FileList | File[]) => void;
@@ -33,6 +45,14 @@ export function FileUploadStep({
   files,
   primaryFileId,
   accept,
+  isReupload = false,
+  currentArtifacts = [],
+  currentArtifactsLoading,
+  onPreviewCurrent,
+  reuploadReasonChoice = "",
+  reuploadReasonOther = "",
+  onReuploadReasonChoiceChange,
+  onReuploadReasonOtherChange,
   showDraftReselectBanner,
   onDismissDraftBanner,
   onAddFiles,
@@ -43,10 +63,34 @@ export function FileUploadStep({
   onDismissRejections,
   submitting = false,
 }: FileUploadStepProps) {
+  const fileErrorMessage = isReupload
+    ? "Select exactly one replacement file."
+    : "Select at least one report file.";
+
   return (
     <div className="space-y-2">
-      {task.reportLines.length > 1 ? (
+      {!isReupload && task.reportLines.length > 1 ? (
         <OrderReportsChecklist lines={task.reportLines} progress={task.uploadProgress} />
+      ) : null}
+
+      {isReupload ? (
+        <>
+          <ReuploadContextPanel
+            artifacts={currentArtifacts}
+            loading={currentArtifactsLoading}
+            onPreviewCurrent={onPreviewCurrent}
+          />
+          <ReuploadInfoBanner />
+          {onReuploadReasonChoiceChange && onReuploadReasonOtherChange ? (
+            <ReuploadReasonField
+              choice={reuploadReasonChoice}
+              otherText={reuploadReasonOther}
+              onChoiceChange={onReuploadReasonChoiceChange}
+              onOtherTextChange={onReuploadReasonOtherChange}
+              idPrefix="wizard-reupload"
+            />
+          ) : null}
+        </>
       ) : null}
 
       {showDraftReselectBanner ? (
@@ -73,11 +117,14 @@ export function FileUploadStep({
         </div>
       ) : null}
 
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-[#6B7280]">
+        {isReupload ? "Upload Updated File" : "Add Files"}
+      </p>
       <UploadDropzone accept={accept} onAddFiles={onAddFiles} />
 
       {showFileRequiredError ? (
         <p className="text-xs font-medium text-red-600" role="alert">
-          Select at least one report file.
+          {fileErrorMessage}
         </p>
       ) : null}
 
@@ -123,12 +170,18 @@ export function FileUploadStep({
             <UploadAttachmentRow
               key={f.id}
               file={f}
-              isPrimary={f.id === primaryFileId}
-              onSetPrimary={() => onSetPrimary(f.id)}
+              isPrimary={!isReupload && f.id === primaryFileId}
+              onSetPrimary={isReupload ? undefined : () => onSetPrimary(f.id)}
               onRemove={() => onRemove(f.id)}
             />
           ))}
         </ul>
+      ) : null}
+
+      {isReupload ? (
+        <p className="text-[10px] text-[#6B7280]">
+          Next: Resend updated report from the test row after saving.
+        </p>
       ) : null}
     </div>
   );

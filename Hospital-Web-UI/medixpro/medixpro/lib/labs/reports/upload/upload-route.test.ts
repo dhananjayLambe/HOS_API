@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildUploadReturnHref,
   parseUploadWorkflowSearchParams,
+  uploadPathForReupload,
   validateTaskId,
 } from "@/lib/labs/reports/upload/upload-route";
 
@@ -34,5 +35,31 @@ describe("upload-route", () => {
 
   it("validateTaskId accepts demo ids", () => {
     expect(validateTaskId("demo-pending-1")).toBe("ok");
+  });
+
+  it("parses mode=reupload and reportId", () => {
+    const params = new URLSearchParams(
+      "taskId=task-1&reportId=report-2&mode=reupload",
+    );
+    const state = parseUploadWorkflowSearchParams(params);
+    expect(state.mode).toBe("reupload");
+    expect(state.reportId).toBe("report-2");
+  });
+
+  it("defaults mode to upload", () => {
+    const state = parseUploadWorkflowSearchParams(new URLSearchParams("taskId=t1"));
+    expect(state.mode).toBe("upload");
+  });
+
+  it("uploadPathForReupload builds deep link", () => {
+    const path = uploadPathForReupload("task-1", "report-2", {
+      returnUrl: "/lab-dashboard/reports",
+      demo: "1",
+    });
+    expect(path).toContain("taskId=task-1");
+    expect(path).toContain("reportId=report-2");
+    expect(path).toContain("mode=reupload");
+    expect(path).toContain("returnUrl=");
+    expect(path).toContain("demo=1");
   });
 });

@@ -1,6 +1,9 @@
+import { isReuploadMode, type UploadWorkflowMode } from "@/lib/labs/reports/upload/reupload-config";
+
 export type UploadRouteState = {
   taskId: string | null;
   reportId: string | null;
+  mode: UploadWorkflowMode;
   returnUrl: string | null;
   demo: string | null;
   taskIdMalformed: boolean;
@@ -30,10 +33,13 @@ export function parseUploadWorkflowSearchParams(
 
   const returnUrl = (params?.get("returnUrl") ?? "").trim() || null;
   const demo = params?.get("demo");
+  const rawMode = (params?.get("mode") ?? "").trim().toLowerCase();
+  const mode: UploadWorkflowMode = isReuploadMode(rawMode) ? "reupload" : "upload";
 
   return {
     taskId,
     reportId,
+    mode,
     returnUrl,
     demo,
     taskIdMalformed: rawTaskId != null && rawTaskId.trim() !== "" && taskValidation === "malformed",
@@ -54,5 +60,19 @@ export function buildUploadReturnHref(
 export function uploadPathWithTaskId(taskId: string, existing?: URLSearchParams): string {
   const params = new URLSearchParams(existing?.toString() ?? "");
   params.set("taskId", taskId);
+  return `/lab-dashboard/reports/upload?${params.toString()}`;
+}
+
+export function uploadPathForReupload(
+  taskId: string,
+  reportId: string,
+  options?: { returnUrl?: string | null; demo?: string | null },
+): string {
+  const params = new URLSearchParams();
+  params.set("taskId", taskId);
+  params.set("reportId", reportId);
+  params.set("mode", "reupload");
+  if (options?.returnUrl) params.set("returnUrl", options.returnUrl);
+  if (options?.demo) params.set("demo", options.demo);
   return `/lab-dashboard/reports/upload?${params.toString()}`;
 }

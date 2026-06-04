@@ -14,6 +14,10 @@ export type UploadWorkflowContext = {
   verified: boolean;
   canUpload: boolean;
   submitAttempted: boolean;
+  isReupload?: boolean;
+  reuploadReasonReady?: boolean;
+  /** When set (e.g. 1 for re-upload), file count must match exactly to advance/submit. */
+  maxFiles?: number;
 };
 
 const STEP_ORDER_WITH_TASK: UploadWorkflowStep[] = ["files", "preview", "confirm", "success"];
@@ -49,14 +53,21 @@ export function getPreviousStep(
   return order[idx - 1] ?? null;
 }
 
+function fileCountValid(ctx: UploadWorkflowContext): boolean {
+  if (ctx.fileCount === 0) return false;
+  if (ctx.maxFiles != null && ctx.fileCount !== ctx.maxFiles) return false;
+  return true;
+}
+
 export function canAdvance(step: UploadWorkflowStep, ctx: UploadWorkflowContext): boolean {
   switch (step) {
     case "select_task":
       return false;
     case "files":
-      return ctx.fileCount > 0;
+      if (ctx.isReupload && !ctx.reuploadReasonReady) return false;
+      return fileCountValid(ctx);
     case "preview":
-      return ctx.fileCount > 0;
+      return fileCountValid(ctx);
     case "confirm":
       return false;
     case "success":
@@ -68,7 +79,8 @@ export function canAdvance(step: UploadWorkflowStep, ctx: UploadWorkflowContext)
 
 export function canSubmit(step: UploadWorkflowStep, ctx: UploadWorkflowContext): boolean {
   if (step !== "confirm") return canAdvance(step, ctx);
-  return ctx.fileCount > 0 && ctx.verified && ctx.canUpload;
+  if (ctx.isReupload && !ctx.reuploadReasonReady) return false;
+  return fileCountValid(ctx) && ctx.verified && ctx.canUpload;
 }
 
 export function getPrimaryActionForStep(step: UploadWorkflowStep): "continue" | "review_confirm" | "upload" | null {
@@ -96,18 +108,48 @@ export function getBlockedReason(
   if (ctx.fileCount === 0 && (ctx.metadataOnlyCount ?? 0) > 0) {
     return "Please reselect report files to continue.";
   }
-  if (ctx.fileCount === 0) return "Select at least one report file.";
+  if (ctx.isReupload && ctx.maxFiles === 1 && ctx.fileCount > 1) {
+    return "Re-upload accepts exactly one replacement file.";
+  }
+  if (ctx.fileCount === 0) {
+    return ctx.isReupload
+      ? "Select exactly one replacement file."
+      : "Select at least one report file.";
+  }
+  if (ctx.isReupload && ctx.maxFiles === 1 && ctx.fileCount !== 1) {
+    return "Select exactly one replacement file.";
+  }
+  if (ctx.isReupload && !ctx.reuploadReasonReady && (step === "files" || step === "confirm")) {
+    return "Select a reason for re-upload.";
+  }
   if (step === "confirm" && intent === "submit" && !ctx.verified) {
-    return "Complete the verification checklist.";
+    return ctx.isReupload
+      ? "Complete the re-upload verification checklist."
+      : "Complete the verification checklist.";
   }
   if (intent === "advance" && !canAdvance(step, ctx)) {
     if (ctx.fileCount === 0 && (ctx.metadataOnlyCount ?? 0) > 0) {
-    return "Please reselect report files to continue.";
-  }
-  if (ctx.fileCount === 0) return "Select at least one report file.";
+      return "Please reselect report files to continue.";
+    }
+    if (ctx.isReupload && !ctx.reuploadReasonReady && step === "files") {
+      return "Select a reason for re-upload.";
+    }
+    if (ctx.fileCount === 0) {
+      return ctx.isReupload
+        ? "Select exactly one replacement file."
+        : "Select at least one report file.";
+    }
+    if (ctx.isReupload && ctx.maxFiles === 1 && ctx.fileCount !== 1) {
+      return "Select exactly one replacement file.";
+    }
   }
   if (intent === "submit" && step === "confirm" && !canSubmit(step, ctx)) {
-    if (!ctx.verified) return "Complete the verification checklist.";
+    if (ctx.isReupload && !ctx.reuploadReasonReady) return "Select a reason for re-upload.";
+    if (!ctx.verified) {
+      return ctx.isReupload
+        ? "Complete the re-upload verification checklist."
+        : "Complete the verification checklist.";
+    }
   }
   return null;
 }

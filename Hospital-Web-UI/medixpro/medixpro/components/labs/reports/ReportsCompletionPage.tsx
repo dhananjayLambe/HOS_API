@@ -32,16 +32,24 @@ import { useLabShellHeader } from "@/lib/labs/layout/lab-shell-header-context";
 import type { CompletionFilterKey } from "@/lib/labs/reports/completion/order-lifecycle.types";
 import { useLabSession } from "@/lib/labs/session/lab-session-context";
 import { LabOrdersErrorState } from "@/components/labs/orders/LabOrdersErrorState";
+import { uploadPathForReupload } from "@/lib/labs/reports/upload/upload-route";
+import { isReportsReuploadDrawerEnabled } from "@/lib/labs/reports/report-tasks-config";
 import { RotateCcw } from "lucide-react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReportTask } from "@/lib/labs/reports/report-task";
 
 export function ReportsCompletionPage() {
+  const router = useRouter();
   const { data: session } = useLabSession();
   const branchId = session?.branch?.id ?? null;
   const branchLabel = session?.branch?.branch_name ?? "";
   const searchParams = useSearchParams();
+
+  const queueReturnUrl = useMemo(() => {
+    const qs = searchParams.toString();
+    return qs ? `/lab-dashboard/reports?${qs}` : "/lab-dashboard/reports";
+  }, [searchParams]);
 
   const queue = useReportsOperationalQueue(branchLabel);
   const { buildLiveCardActions, mutations } = useReportsCompletionActions(branchId);
@@ -70,9 +78,21 @@ export function ReportsCompletionPage() {
     [],
   );
 
+  const navigateToReupload = useCallback(
+    (task: ReportTask, reportId: string) => {
+      router.push(
+        uploadPathForReupload(task.taskId, reportId, {
+          returnUrl: queueReturnUrl,
+          demo: searchParams.get("demo"),
+        }),
+      );
+    },
+    [router, queueReturnUrl, searchParams],
+  );
+
   const drawerHandlers = useMemo<ReportsCompletionDrawerHandlers>(
-    () => ({ openUploadDrawer }),
-    [openUploadDrawer],
+    () => ({ openUploadDrawer, navigateToReupload }),
+    [openUploadDrawer, navigateToReupload],
   );
 
   const liveCardActions = useMemo(
@@ -147,18 +167,38 @@ export function ReportsCompletionPage() {
     Boolean(uploadTaskId && isLive),
   );
 
+  const uploadReportDetailQuery = useReportDetail(
+    branchId,
+    uploadMode === "reupload" ? uploadReportId : null,
+    Boolean(uploadTaskId && isLive && uploadMode === "reupload" && uploadReportId),
+  );
+
   const uploadOrder = useMemo(() => {
     if (!uploadTaskId) return null;
     const task = queue.getTask(uploadTaskId);
     if (isLive && uploadContextQuery.data) {
+      const detailsByReportId: Record<string, NonNullable<typeof uploadReportDetailQuery.data>> =
+        {};
+      if (uploadReportId && uploadReportDetailQuery.data) {
+        detailsByReportId[uploadReportId] = uploadReportDetailQuery.data;
+      }
       return buildOrderLifecycleFromTaskContext(uploadContextQuery.data, {
         urgency: task?.urgency,
         tatState: task?.tatBreached ? "breached" : "safe",
         tatLabel: task?.tatBreached ? "TAT breached" : "TAT on track",
+        detailsByReportId,
       });
     }
     return queue.getOrder(uploadTaskId);
-  }, [uploadTaskId, isLive, uploadContextQuery.data, queue]);
+  }, [
+    uploadTaskId,
+    uploadReportId,
+    uploadMode,
+    isLive,
+    uploadContextQuery.data,
+    uploadReportDetailQuery.data,
+    queue,
+  ]);
   const sendOrder = sendTaskId ? queue.getOrder(sendTaskId) : null;
 
   const getOrder = queue.getOrder;
@@ -209,6 +249,17 @@ export function ReportsCompletionPage() {
   const handleReupload = useCallback(
     (taskId: string, reportId: string) => {
       const task = queue.getTask(taskId);
+      if (isReportsReuploadDrawerEnabled()) {
+        if (task) {
+          openUploadDrawer(task, { reportId, mode: "reupload" });
+          return;
+        }
+        setUploadMode("reupload");
+        setUploadTaskId(taskId);
+        setUploadReportId(reportId);
+        return;
+      }
+      // Same side drawer as upload (default). Full-page route is optional via env flag above.
       if (task) {
         openUploadDrawer(task, { reportId, mode: "reupload" });
         return;

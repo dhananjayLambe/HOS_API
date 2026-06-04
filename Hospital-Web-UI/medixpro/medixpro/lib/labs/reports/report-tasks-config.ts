@@ -35,3 +35,8 @@ export function isOrderCompletionUxEnabled(): boolean {
 export function isReportsDataSourceToggleVisible(): boolean {
   return process.env.NEXT_PUBLIC_LAB_REPORTS_DATA_SOURCE_TOGGLE === "true";
 }
+
+/** Use sheet drawer for re-upload instead of /reports/upload route (rollback / QA). */
+export function isReportsReuploadDrawerEnabled(): boolean {
+  return process.env.NEXT_PUBLIC_LAB_REPORTS_REUPLOAD_DRAWER === "true";
+}

@@ -12,6 +12,7 @@ type UploadSuccessStepProps = {
   task: UploadTaskContext;
   status: ReportOperationalStatus;
   returnHref: string;
+  isReupload?: boolean;
   onSendWhatsApp: () => void;
   onUploadAnother: () => void;
   onContinueNextReport?: () => void;
@@ -23,6 +24,7 @@ export function UploadSuccessStep({
   task,
   status,
   returnHref,
+  isReupload = false,
   onSendWhatsApp,
   onUploadAnother,
   onContinueNextReport,
@@ -37,11 +39,13 @@ export function UploadSuccessStep({
     <div className="rounded-xl border border-emerald-200/80 bg-emerald-50/50 p-6 text-center shadow-sm">
       <CheckCircle2 className="mx-auto h-10 w-10 text-emerald-600" aria-hidden />
       <h2 className="mt-2 text-lg font-semibold text-[#111827]">
-        {hasMoreUploads
-          ? `${task.uploadTestLabel} uploaded — more reports pending on this order.`
-          : task.uploadProgress.isOrderReadyForDelivery
-            ? "All reports on this order are uploaded and ready for review."
-            : "Report uploaded successfully and ready for review."}
+        {isReupload
+          ? "Updated report saved — resend from the test row when ready."
+          : hasMoreUploads
+            ? `${task.uploadTestLabel} uploaded — more reports pending on this order.`
+            : task.uploadProgress.isOrderReadyForDelivery
+              ? "All reports on this order are uploaded and ready for review."
+              : "Report uploaded successfully and ready for review."}
       </h2>
       <p className="mt-1 text-sm text-[#6B7280]">
         Status: <span className="font-medium text-[#111827]">{operationalStatusLabel(status)}</span>
@@ -70,9 +74,11 @@ export function UploadSuccessStep({
           <MessageCircle className="h-4 w-4" aria-hidden />
           Send WhatsApp Notification
         </Button>
-        <Button type="button" variant="outline" size="sm" className="h-9" onClick={onUploadAnother}>
-          Upload Another
-        </Button>
+        {!isReupload ? (
+          <Button type="button" variant="outline" size="sm" className="h-9" onClick={onUploadAnother}>
+            Upload Another
+          </Button>
+        ) : null}
         {onBackToQueue ? (
           <Button type="button" variant="secondary" size="sm" className="h-9" onClick={onBackToQueue}>
             Back to reports queue

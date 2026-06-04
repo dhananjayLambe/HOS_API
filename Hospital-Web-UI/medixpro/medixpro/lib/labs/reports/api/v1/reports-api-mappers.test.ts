@@ -3,6 +3,7 @@ import {
   mapActionTargetsDto,
   mapReportDetailDto,
   mapReportTaskDto,
+  resolveTargetReportId,
   resolveUploadReportId,
 } from "@/lib/labs/reports/api/v1/reports-api-mappers";
 import type { ReportTaskApiItem } from "@/lib/labs/reports/api/report-api-types";
@@ -91,6 +92,41 @@ describe("reports-api-mappers", () => {
       ],
     };
     expect(resolveUploadReportId(ctx)).toBe("r-upload");
+  });
+
+  it("resolveTargetReportId prefers URL reportId", () => {
+    const ctx: ReportTaskContext = {
+      taskId: "t1",
+      assignmentId: "t1",
+      orderUuid: "o1",
+      orderNumber: "ORD-1",
+      patientName: "P",
+      patientPhone: "",
+      encounterId: null,
+      collectionType: "HOME",
+      visitOrSlotLabel: "—",
+      operationalStatus: "DELIVERED",
+      activeReports: [
+        {
+          reportId: "r-sent",
+          lineId: "l1",
+          testLabel: "CBC",
+          status: "delivered",
+          deliveryStatus: "SENT",
+          availableActions: ["CORRECT_REPORT"],
+        },
+        {
+          reportId: "r-other",
+          lineId: "l2",
+          testLabel: "LFT",
+          status: "pending",
+          deliveryStatus: "PENDING",
+          availableActions: ["UPLOAD_REPORT"],
+        },
+      ],
+    };
+    expect(resolveTargetReportId(ctx, "r-sent")).toBe("r-sent");
+    expect(resolveTargetReportId(ctx, "missing")).toBe("r-other");
   });
 
   it("mapReportDetailDto maps nested fields", () => {

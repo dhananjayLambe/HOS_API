@@ -12,6 +12,8 @@ type UploadConfirmationStepProps = {
   primaryFileName: string | null;
   verified: boolean;
   onVerifiedChange: (v: boolean) => void;
+  isReupload?: boolean;
+  reuploadReason?: string | null;
 };
 
 export function UploadConfirmationStep({
@@ -20,18 +22,24 @@ export function UploadConfirmationStep({
   primaryFileName,
   verified,
   onVerifiedChange,
+  isReupload = false,
+  reuploadReason,
 }: UploadConfirmationStepProps) {
+  const replacementName = primaryFileName ?? files[0]?.name ?? "—";
+
   return (
     <div className="space-y-4 rounded-xl border border-[#ECEBFF] bg-[#FAFAFF] p-4">
-      <h3 className="text-sm font-semibold text-[#111827]">Confirm upload</h3>
+      <h3 className="text-sm font-semibold text-[#111827]">
+        {isReupload ? "Confirm re-upload" : "Confirm upload"}
+      </h3>
       <div className="rounded-lg border border-[#ECEBFF] bg-white px-3 py-2.5">
         <p className="text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF]">
-          Uploading report for
+          {isReupload ? "Replacing report for" : "Uploading report for"}
         </p>
         <p className="mt-0.5 text-sm font-semibold text-[#111827]">{task.uploadTestLabel}</p>
       </div>
 
-      {task.reportLines.length > 0 ? (
+      {!isReupload && task.reportLines.length > 0 ? (
         <OrderReportsChecklist lines={task.reportLines} progress={task.uploadProgress} />
       ) : null}
 
@@ -39,13 +47,29 @@ export function UploadConfirmationStep({
         <li>
           Correct patient: <span className="font-medium text-[#111827]">{task.patientName}</span>
         </li>
-        <li>
-          Correct report files: <span className="font-medium text-[#111827]">{files.length} attached</span>
-        </li>
-        <li>
-          Primary report selected:{" "}
-          <span className="font-medium text-[#111827]">{primaryFileName ?? "—"}</span>
-        </li>
+        {isReupload ? (
+          <>
+            <li>
+              Re-upload reason:{" "}
+              <span className="font-medium text-[#111827]">{reuploadReason ?? "—"}</span>
+            </li>
+            <li>
+              Replacement file:{" "}
+              <span className="font-medium text-[#111827]">{replacementName}</span>
+            </li>
+          </>
+        ) : (
+          <>
+            <li>
+              Correct report files:{" "}
+              <span className="font-medium text-[#111827]">{files.length} attached</span>
+            </li>
+            <li>
+              Primary report selected:{" "}
+              <span className="font-medium text-[#111827]">{primaryFileName ?? "—"}</span>
+            </li>
+          </>
+        )}
       </ul>
       <dl className="grid gap-2 text-xs sm:grid-cols-2">
         <div>
@@ -64,8 +88,19 @@ export function UploadConfirmationStep({
           onCheckedChange={(c) => onVerifiedChange(c === true)}
         />
         <Label htmlFor="verify-report" className="text-sm font-normal leading-snug text-[#374151]">
-          I verified this report is for <span className="font-medium text-[#111827]">{task.uploadTestLabel}</span>
-          , the selected patient, and visit.
+          {isReupload ? (
+            <>
+              I verified this replacement is for{" "}
+              <span className="font-medium text-[#111827]">{task.uploadTestLabel}</span>, the
+              correct patient, visit, and re-upload reason.
+            </>
+          ) : (
+            <>
+              I verified this report is for{" "}
+              <span className="font-medium text-[#111827]">{task.uploadTestLabel}</span>, the
+              selected patient, and visit.
+            </>
+          )}
         </Label>
       </div>
     </div>
