@@ -3,6 +3,7 @@ import {
   mapActionTargetsDto,
   mapReportDetailDto,
   mapReportTaskDto,
+  resolveCorrectReportId,
   resolveTargetReportId,
   resolveUploadReportId,
 } from "@/lib/labs/reports/api/v1/reports-api-mappers";
@@ -28,6 +29,7 @@ const baseTaskDto = (): ReportTaskApiItem => ({
   available_action_targets: {
     upload_report_id: null,
     mark_ready_report_id: null,
+    correct_report_id: null,
     send_whatsapp_report_id: null,
     retry_delivery_log_id: null,
   },
@@ -52,10 +54,12 @@ describe("reports-api-mappers", () => {
     const targets = mapActionTargetsDto({
       upload_report_id: null,
       mark_ready_report_id: "mr-1",
+      correct_report_id: "cr-1",
       send_whatsapp_report_id: null,
       retry_delivery_log_id: "log-1",
     });
     expect(targets.markReadyReportId).toBe("mr-1");
+    expect(targets.correctReportId).toBe("cr-1");
     expect(targets.retryDeliveryLogId).toBe("log-1");
     expect(targets.uploadReportId).toBeUndefined();
   });
@@ -127,6 +131,8 @@ describe("reports-api-mappers", () => {
     };
     expect(resolveTargetReportId(ctx, "r-sent")).toBe("r-sent");
     expect(resolveTargetReportId(ctx, "missing")).toBe("r-other");
+    expect(resolveCorrectReportId(ctx)).toBe("r-sent");
+    expect(resolveTargetReportId(ctx, undefined, { mode: "reupload" })).toBe("r-sent");
   });
 
   it("mapReportDetailDto maps nested fields", () => {

@@ -15,6 +15,7 @@ class OperationalReportHistoryDTO:
     report_id: UUID
     supersedes_id: UUID | None
     superseded_by_id: UUID | None
+    last_reupload_reason: str | None
     artifacts: list[DiagnosticReportArtifact]
     delivery_logs: list[LabReportDeliveryLog]
 
@@ -32,6 +33,7 @@ def build_operational_report_history_dto(report: DiagnosticTestReport) -> Operat
         report_id=report.id,
         supersedes_id=supersedes_id,
         superseded_by_id=superseded_by_id,
+        last_reupload_reason=report.last_reupload_reason,
         artifacts=artifacts,
         delivery_logs=delivery_logs,
     )

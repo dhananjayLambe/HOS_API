@@ -96,6 +96,7 @@ class ReportActionTargetsDTO:
 
     upload_report_id: UUID | None = None
     mark_ready_report_id: UUID | None = None
+    correct_report_id: UUID | None = None
     send_whatsapp_report_id: UUID | None = None
     retry_delivery_log_id: UUID | None = None
 
@@ -299,6 +300,7 @@ def build_available_action_targets(
     order = assignment.diagnostic_order
     upload_id: UUID | None = None
     mark_ready_id: UUID | None = None
+    correct_id: UUID | None = None
     send_whatsapp_id: UUID | None = None
     retry_log_id: UUID | None = None
 
@@ -317,6 +319,8 @@ def build_available_action_targets(
                 upload_id = rid
         if mark_ready_id is None and ReportAction.MARK_READY in actions:
             mark_ready_id = rid
+        if correct_id is None and ReportAction.CORRECT_REPORT in actions:
+            correct_id = rid
         if send_whatsapp_id is None and ReportAction.SEND_WHATSAPP in actions:
             send_whatsapp_id = rid
         if retry_log_id is None and ReportAction.RETRY_DELIVERY in actions:
@@ -325,6 +329,7 @@ def build_available_action_targets(
     return ReportActionTargetsDTO(
         upload_report_id=upload_id,
         mark_ready_report_id=mark_ready_id,
+        correct_report_id=correct_id,
         send_whatsapp_report_id=send_whatsapp_id,
         retry_delivery_log_id=retry_log_id,
     )

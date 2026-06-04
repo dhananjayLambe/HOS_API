@@ -55,6 +55,7 @@ export type ReportTask = {
 export type ReportActionTargets = {
   uploadReportId?: string;
   markReadyReportId?: string;
+  correctReportId?: string;
   sendWhatsappReportId?: string;
   retryDeliveryLogId?: string;
 };

@@ -48,7 +48,7 @@ Notes:
 - [x] Envelope: `{ success, request_id, data, error }`
 - [x] Queue: single page `page_size=50`, no client cursor chaining on poll
 - [x] Queue card: `available_action_targets` (upload/mark-ready/WhatsApp report ids, retry log id)
-- [x] Upload: `POST reports/{report_id}/artifacts/upload/` multipart (`files`, `primary_file_index`, `notes`, `version`)
+- [x] Upload: `POST reports/{report_id}/artifacts/upload/` multipart (`files`, `primary_file_index`, `notes`, `version`, `upload_intent`, `upload_request_id`)
 - [x] Mark ready / retry / detail on `report_id` / `log_id`
 - [x] Presigned download: `GET reports/{id}/download/`
 - [x] Idempotency-Key on mark-ready and send-whatsapp
@@ -79,6 +79,27 @@ Operational queue search uses **`?q=`** on `GET /api/v1/diagnostics/report-tasks
 - Empty API `results` with active `q` shows **search_empty**, not **no_tasks**
 - Phase 1 uses `icontains`; trigram/full-text indexes are a future optimization
 
+## Artifact upload (`POST reports/{report_id}/artifacts/upload/`)
+
+Single v1 upload entry for new files and in-place corrections.
+
+| Field | `UPLOAD_NEW` (default) | `REUPLOAD_REPLACE` |
+|-------|------------------------|---------------------|
+| `files` | 1+ required | **Exactly 1** required |
+| `primary_file_index` | Optional | Ignored |
+| `notes` | Optional | **Required** (non-empty) — correction reason |
+| `upload_intent` | `UPLOAD_NEW` or omit | `REUPLOAD_REPLACE` |
+| `mode` (legacy) | `upload` | `reupload` → maps to `REUPLOAD_REPLACE` |
+| `upload_request_id` / `Idempotency-Key` | Optional (120s cache) | Same |
+
+Auth: `CanUploadReports` for new upload; `CanCorrectReports` when `upload_intent=REUPLOAD_REPLACE`.
+
+Re-upload replaces the active primary on the **same** report head (version bump; old artifact deactivated). Allowed when lifecycle is `IN_PROGRESS`, `READY`, or `DELIVERED` (locked delivered heads use `validate_report_ready_for_reupload`, not new-upload gates). After replace when delivery had progressed, `delivery_status` resets to `PENDING` so operators must resend.
+
+**Persisted reason:** `notes` is stored on `DiagnosticReportArtifact.reupload_reason` (per replacement) and `DiagnosticTestReport.last_reupload_reason` (latest). Exposed on upload response, `GET reports/{id}/`, and `GET reports/{id}/history/`.
+
+Stable errors: `INVALID_UPLOAD_INTENT`, `MULTI_FILE_REUPLOAD_NOT_ALLOWED`, `REUPLOAD_REASON_REQUIRED`, `REPORT_NOT_READY` (no prior artifact).
+
 ## Action target precedence (backend)
 
 Per assignment, scan active report lines in test-line order; first line eligible per action wins:
@@ -87,8 +108,22 @@ Per assignment, scan active report lines in test-line order; first line eligible
 |--------------|--------|
 | `upload_report_id` | `UPLOAD_REPORT` |
 | `mark_ready_report_id` | `MARK_READY` |
+| `correct_report_id` | `CORRECT_REPORT` (re-upload / replace) |
 | `send_whatsapp_report_id` | `SEND_WHATSAPP` |
 | `retry_delivery_log_id` | `RETRY_DELIVERY` (latest failed delivery log on that line) |
+
+## Re-upload E2E matrix (READY path)
+
+| # | Scenario | Expected API | Expected UI |
+|---|----------|--------------|-------------|
+| 1 | READY report, 1 PDF + reason | 201, artifact v2, status stays `ready` | Drawer success; Send enabled |
+| 2 | Missing reason | 400 `REUPLOAD_REASON_REQUIRED` | Blocked at confirm |
+| 3 | 2 files | 400 `MULTI_FILE_REUPLOAD_NOT_ALLOWED` | Blocked at files step |
+| 4 | No prior artifact | 400 `REPORT_NOT_READY` | Empty state / error toast |
+| 5 | Same checksum file | 201 | Success |
+| 6 | Duplicate `upload_request_id` | 409 `IDEMPOTENCY_CONFLICT` | Idempotency toast |
+| 7 | After success, GET detail | Primary = new file | Preview shows new name |
+| 8 | DELIVERED + `CORRECT_REPORT` | 201 replace; `delivery_status` → `PENDING` | Re-upload CTA; resend after prior send |
 
 ## Degraded-mode matrix
 

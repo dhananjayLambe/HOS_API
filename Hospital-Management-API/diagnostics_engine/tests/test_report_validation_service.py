@@ -146,6 +146,22 @@ class ReportValidationServiceTests(TestCase):
         ReportWorkflowService.mark_ready(report)
         ReportValidationService.validate_report_ready_for_delivery(report)
 
+    def test_delivered_locked_report_passes_reupload_validation(self):
+        _, line = _minimal_order_with_line()
+        report = _report_on_line(line, status=ReportLifecycleStatus.PENDING)
+        ArtifactUploadService.upload_report_artifacts(
+            report=report,
+            uploaded_files=[_pdf()],
+            primary_file_index=0,
+        )
+        ReportWorkflowService.mark_ready(report)
+        ReportWorkflowService.mark_delivered(report)
+        report.refresh_from_db()
+        self.assertFalse(report.is_editable)
+        with self.assertRaises(ValidationError):
+            ReportValidationService.validate_report_ready_for_upload(report)
+        ReportValidationService.validate_report_ready_for_reupload(report)
+
     def test_pending_rejected_for_delivery(self):
         _, line = _minimal_order_with_line()
         report = _report_on_line(line, status=ReportLifecycleStatus.PENDING)

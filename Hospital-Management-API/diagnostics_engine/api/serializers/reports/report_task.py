@@ -79,6 +79,7 @@ class ReportTaskContextSerializer(serializers.Serializer):
 class ReportActionTargetsSerializer(serializers.Serializer):
     upload_report_id = serializers.UUIDField(allow_null=True)
     mark_ready_report_id = serializers.UUIDField(allow_null=True)
+    correct_report_id = serializers.UUIDField(allow_null=True)
     send_whatsapp_report_id = serializers.UUIDField(allow_null=True)
     retry_delivery_log_id = serializers.UUIDField(allow_null=True)
 
@@ -88,6 +89,7 @@ class ReportActionTargetsSerializer(serializers.Serializer):
             {
                 "upload_report_id": dto.upload_report_id,
                 "mark_ready_report_id": dto.mark_ready_report_id,
+                "correct_report_id": dto.correct_report_id,
                 "send_whatsapp_report_id": dto.send_whatsapp_report_id,
                 "retry_delivery_log_id": dto.retry_delivery_log_id,
             }

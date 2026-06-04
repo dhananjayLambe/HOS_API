@@ -354,13 +354,14 @@ class ArtifactUploadService:
         old_artifact: DiagnosticReportArtifact,
         file,
         uploaded_by=None,
+        reupload_reason: str | None = None,
     ) -> DiagnosticReportArtifact:
         """
         Deactivate ``old_artifact``, upload replacement file, promote new primary.
 
         Same-checksum re-upload is allowed (explicit replacement flow).
         """
-        ReportValidationService.validate_report_ready_for_upload(report)
+        ReportValidationService.validate_report_ready_for_reupload(report)
         ReportValidationService.validate_artifact_belongs_to_report(old_artifact, report)
         if not old_artifact.is_active:
             raise ValidationError("Cannot replace an inactive artifact.")
@@ -378,6 +379,7 @@ class ArtifactUploadService:
             batch_checksums=None,
             skip_duplicate_check=True,
         )
+        reason = (reupload_reason or "").strip() or None
         new_artifact = cls._create_artifact(
             report=report,
             file=meta["file"],
@@ -391,8 +393,10 @@ class ArtifactUploadService:
             file_size=meta["file_size"],
             checksum=meta["checksum"],
             download_filename=meta["download_filename"],
+            reupload_reason=reason,
         )
         cls._transition_report_on_upload(report, uploaded_by=uploaded_by)
+        cls._finalize_report_after_reupload(report, reupload_reason=reason)
         emit_report_audit_event(
             action="artifact_replaced",
             report=report,
@@ -409,6 +413,29 @@ class ArtifactUploadService:
             new_artifact.pk,
         )
         return new_artifact
+
+    @classmethod
+    def _finalize_report_after_reupload(
+        cls,
+        report: DiagnosticTestReport,
+        *,
+        reupload_reason: str | None,
+    ) -> None:
+        """Persist correction reason and reset delivery when a resend is required."""
+        from labs.choices.tracking import DeliveryStatus
+
+        update_fields: list[str] = []
+        if reupload_reason:
+            report.last_reupload_reason = reupload_reason
+            update_fields.append("last_reupload_reason")
+        if report.delivery_status != DeliveryStatus.PENDING:
+            report.delivery_status = DeliveryStatus.PENDING
+            update_fields.append("delivery_status")
+        if not update_fields:
+            return
+        report.updated_at = timezone.now()
+        update_fields.append("updated_at")
+        report.save(update_fields=update_fields)
 
     @classmethod
     def prepare_correction_upload(
@@ -511,6 +538,7 @@ class ArtifactUploadService:
         file_size: int,
         checksum: str,
         download_filename: str,
+        reupload_reason: str | None = None,
     ) -> DiagnosticReportArtifact:
         report_public_id = report.id
         patient_profile_id = None
@@ -561,6 +589,7 @@ class ArtifactUploadService:
             checksum_sha256=checksum,
             download_filename=download_filename,
             is_active=True,
+            reupload_reason=reupload_reason,
         )
         artifact.full_clean()
         artifact.save()

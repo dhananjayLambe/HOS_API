@@ -33,6 +33,7 @@ class ReportArtifactSerializer(serializers.ModelSerializer):
             "legal_hold",
             "uploaded_at",
             "uploaded_by",
+            "reupload_reason",
             "download_url",
         ]
         read_only_fields = fields

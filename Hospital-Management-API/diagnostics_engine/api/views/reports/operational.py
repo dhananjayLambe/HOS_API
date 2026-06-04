@@ -31,7 +31,12 @@ from diagnostics_engine.api.serializers.reports.upload_request import UploadArti
 from diagnostics_engine.models.choices import ReportLifecycleStatus
 from diagnostics_engine.models.reports import DiagnosticTestReport
 from diagnostics_engine.domain.reports import get_primary_artifact
-from diagnostics_engine.permissions.reports import CanDownloadReports, CanUploadReports, CanViewReportDetail
+from diagnostics_engine.permissions.reports import (
+    CanCorrectReports,
+    CanDownloadReports,
+    CanUploadReports,
+    CanViewReportDetail,
+)
 from diagnostics_engine.services.reports import (
     ArtifactUploadService,
     ReportQueryService,
@@ -234,6 +239,13 @@ class ReportOperationalArtifactUploadView(LabReportOperationalMixin):
         validated = ser.validated_data
         version = validated.get("version")
         is_reupload = upload_intent == "REUPLOAD_REPLACE"
+        if is_reupload and not CanCorrectReports().has_permission(request, self):
+            return error_response(
+                "You do not have permission to correct reports.",
+                code=error_codes.PERMISSION_DENIED,
+                status=status.HTTP_403_FORBIDDEN,
+                request=request,
+            )
         try:
             if is_reupload:
                 files = validated["files"]
@@ -248,7 +260,7 @@ class ReportOperationalArtifactUploadView(LabReportOperationalMixin):
                 if not notes:
                     return error_response(
                         "Re-upload reason is required.",
-                        code=error_codes.VALIDATION_FAILED,
+                        code=error_codes.REUPLOAD_REASON_REQUIRED,
                         status=status.HTTP_400_BAD_REQUEST,
                         request=request,
                     )
@@ -265,6 +277,7 @@ class ReportOperationalArtifactUploadView(LabReportOperationalMixin):
                     old_artifact=old_artifact,
                     file=files[0],
                     uploaded_by=request.user,
+                    reupload_reason=notes,
                 )
                 artifacts = [replaced]
                 safe_emit(
@@ -299,6 +312,7 @@ class ReportOperationalArtifactUploadView(LabReportOperationalMixin):
             {
                 "report_id": str(report.id),
                 "status": report.status,
+                "last_reupload_reason": report.last_reupload_reason,
                 "artifacts": ReportArtifactSerializer(artifacts, many=True).data,
             },
             status=status.HTTP_201_CREATED,

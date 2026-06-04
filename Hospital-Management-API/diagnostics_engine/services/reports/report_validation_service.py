@@ -80,6 +80,28 @@ class ReportValidationService:
             )
 
     @classmethod
+    def validate_report_ready_for_reupload(cls, report: DiagnosticTestReport) -> None:
+        """
+        In-place artifact replacement (REUPLOAD_REPLACE).
+
+        Allows READY and DELIVERED heads even when ``is_editable`` is false after delivery.
+        Does not permit REJECTED or superseded reports.
+        """
+        cls.validate_report_active(report)
+        cls.validate_report_not_superseded(report)
+        if report.status == ReportLifecycleStatus.REJECTED:
+            raise ValidationError("Cannot replace artifacts on a rejected report.")
+        if report.status not in (
+            ReportLifecycleStatus.PENDING,
+            ReportLifecycleStatus.IN_PROGRESS,
+            ReportLifecycleStatus.READY,
+            ReportLifecycleStatus.DELIVERED,
+        ):
+            raise ValidationError(
+                f"Cannot replace artifacts when report status is {report.status}."
+            )
+
+    @classmethod
     def validate_report_has_active_artifacts(cls, report: DiagnosticTestReport) -> None:
         if not report.artifacts.filter(is_active=True).exists():
             raise ValidationError("At least one active artifact is required.")

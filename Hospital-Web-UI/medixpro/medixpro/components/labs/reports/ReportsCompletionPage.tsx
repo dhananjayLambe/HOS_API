@@ -70,8 +70,12 @@ export function ReportsCompletionPage() {
       setUploadTaskId(task.taskId);
       setUploadReportId(
         options?.reportId ??
+          (options?.mode === "reupload"
+            ? task.actionTargets.correctReportId
+            : undefined) ??
           task.actionTargets.uploadReportId ??
           task.actionTargets.markReadyReportId ??
+          task.actionTargets.correctReportId ??
           null,
       );
     },
@@ -249,24 +253,25 @@ export function ReportsCompletionPage() {
   const handleReupload = useCallback(
     (taskId: string, reportId: string) => {
       const task = queue.getTask(taskId);
+      const targetReportId = task?.actionTargets.correctReportId ?? reportId;
       if (isReportsReuploadDrawerEnabled()) {
         if (task) {
-          openUploadDrawer(task, { reportId, mode: "reupload" });
+          openUploadDrawer(task, { reportId: targetReportId, mode: "reupload" });
           return;
         }
         setUploadMode("reupload");
         setUploadTaskId(taskId);
-        setUploadReportId(reportId);
+        setUploadReportId(targetReportId);
         return;
       }
       // Same side drawer as upload (default). Full-page route is optional via env flag above.
       if (task) {
-        openUploadDrawer(task, { reportId, mode: "reupload" });
+        openUploadDrawer(task, { reportId: targetReportId, mode: "reupload" });
         return;
       }
       setUploadMode("reupload");
       setUploadTaskId(taskId);
-      setUploadReportId(reportId);
+      setUploadReportId(targetReportId);
     },
     [queue, openUploadDrawer],
   );
@@ -295,7 +300,7 @@ export function ReportsCompletionPage() {
           ? "REUPLOAD_REPLACE"
           : "UPLOAD_NEW";
       try {
-        await mutations.uploadReport({
+        const uploadResult = await mutations.uploadReport({
           reportId,
           files: input.files,
           primaryFileIndex,
@@ -308,23 +313,28 @@ export function ReportsCompletionPage() {
           assignmentId: task?.assignmentId,
         });
 
-        // Keep completion drawer flow aligned with wizard flow:
-        // after successful upload, transition report to ready so live CTA buttons
-        // move to Send/Re-upload/Preview without waiting for manual mark-ready.
-        try {
-          await mutations.markReady(reportId, {
-            taskId: input.taskId,
-            reportId,
-            assignmentId: task?.assignmentId,
-          });
-        } catch (readyErr) {
-          const conflict = await mutations.handleOperationalConflict(readyErr, {
-            taskId: input.taskId,
-            reportId,
-            assignmentId: task?.assignmentId,
-          });
-          if (!conflict) {
-            throw readyErr;
+        const skipMarkReady =
+          resolvedIntent === "REUPLOAD_REPLACE" &&
+          (uploadResult.status === "READY_DELIVERY" ||
+            uploadResult.status === "DELIVERED");
+
+        // After new upload, transition to ready so Send/Re-upload CTAs appear.
+        if (!skipMarkReady) {
+          try {
+            await mutations.markReady(reportId, {
+              taskId: input.taskId,
+              reportId,
+              assignmentId: task?.assignmentId,
+            });
+          } catch (readyErr) {
+            const conflict = await mutations.handleOperationalConflict(readyErr, {
+              taskId: input.taskId,
+              reportId,
+              assignmentId: task?.assignmentId,
+            });
+            if (!conflict) {
+              throw readyErr;
+            }
           }
         }
 

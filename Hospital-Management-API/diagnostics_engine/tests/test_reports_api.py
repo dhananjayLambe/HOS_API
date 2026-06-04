@@ -173,6 +173,7 @@ class ReportAPITestCase(TestCase):
         targets = card["available_action_targets"]
         self.assertIn("upload_report_id", targets)
         self.assertIn("mark_ready_report_id", targets)
+        self.assertIn("correct_report_id", targets)
         self.assertIn("send_whatsapp_report_id", targets)
         self.assertIn("retry_delivery_log_id", targets)
         self.assertEqual(str(targets["upload_report_id"]), str(self.report.id))
@@ -420,6 +421,87 @@ class ReportAPITestCase(TestCase):
             format="multipart",
         )
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(res.data["error"]["code"], "REUPLOAD_REASON_REQUIRED")
+
+    def test_reupload_after_mark_ready_bumps_version(self):
+        ArtifactUploadService.upload_report_artifacts(
+            report=self.report,
+            uploaded_files=[_pdf(b"v1")],
+            primary_file_index=0,
+        )
+        ReportWorkflowService.mark_ready(self.report, user=self.lab_user.user)
+        self.report.refresh_from_db()
+        old_artifact = self.report.artifacts.filter(is_active=True, is_primary=True).get()
+        url = reverse("v1-report-artifact-upload", kwargs={"report_id": self.report.id})
+        res = self.client.post(
+            url,
+            {
+                "files": _pdf(b"v2"),
+                "upload_intent": "REUPLOAD_REPLACE",
+                "notes": "post-ready correction",
+            },
+            format="multipart",
+        )
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(res.data["data"]["status"], ReportLifecycleStatus.READY)
+        self.assertEqual(
+            res.data["data"]["last_reupload_reason"],
+            "post-ready correction",
+        )
+        new_artifacts = res.data["data"]["artifacts"]
+        self.assertEqual(len(new_artifacts), 1)
+        self.assertEqual(new_artifacts[0]["version"], old_artifact.version + 1)
+        self.assertEqual(new_artifacts[0]["reupload_reason"], "post-ready correction")
+        old_artifact.refresh_from_db()
+        self.assertFalse(old_artifact.is_active)
+        self.report.refresh_from_db()
+        self.assertEqual(self.report.last_reupload_reason, "post-ready correction")
+        new_db = DiagnosticReportArtifact.objects.get(pk=new_artifacts[0]["id"])
+        self.assertEqual(new_db.reupload_reason, "post-ready correction")
+
+    def test_reupload_on_delivered_report_succeeds(self):
+        ArtifactUploadService.upload_report_artifacts(
+            report=self.report,
+            uploaded_files=[_pdf(b"delivered-v1")],
+            primary_file_index=0,
+        )
+        ReportWorkflowService.mark_ready(self.report, user=self.lab_user.user)
+        ReportWorkflowService.mark_delivered(self.report, user=self.lab_user.user)
+        self.report.delivery_status = DeliveryStatus.SENT
+        self.report.save(update_fields=["delivery_status", "updated_at"])
+        url = reverse("v1-report-artifact-upload", kwargs={"report_id": self.report.id})
+        res = self.client.post(
+            url,
+            {
+                "files": _pdf(b"delivered-v2"),
+                "upload_intent": "REUPLOAD_REPLACE",
+                "notes": "delivered correction",
+            },
+            format="multipart",
+        )
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        self.report.refresh_from_db()
+        self.assertEqual(self.report.status, ReportLifecycleStatus.DELIVERED)
+        self.assertEqual(self.report.delivery_status, DeliveryStatus.PENDING)
+
+    def test_task_queue_correct_report_id_after_mark_ready(self):
+        ArtifactUploadService.upload_report_artifacts(
+            report=self.report,
+            uploaded_files=[_pdf(b"correct-target")],
+            primary_file_index=0,
+        )
+        ReportWorkflowService.mark_ready(self.report, user=self.lab_user.user)
+        url = reverse("v1-report-task-queue")
+        res = self.client.get(url)
+        card = next(
+            r
+            for r in res.data["data"]["results"]
+            if str(r["task_id"]) == str(self.assignment.id)
+        )
+        targets = card["available_action_targets"]
+        self.assertIn("correct_report_id", targets)
+        self.assertEqual(str(targets["correct_report_id"]), str(self.report.id))
+        self.assertIsNone(targets["upload_report_id"])
 
     def test_upload_invalid_numeric_inputs_return_400(self):
         url = reverse("v1-report-artifact-upload", kwargs={"report_id": self.report.id})

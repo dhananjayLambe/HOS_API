@@ -37,11 +37,19 @@ Upload → Ready for delivery → Delivered. `MARK_READY` is not shown as a sepa
 
 Key modules: `reports-queue-filters.ts`, `ReportsOperationalFilterBar.tsx`, `ReportsActiveFilterChips.tsx`.
 
+## Re-upload integration (v1)
+
+- [x] `POST reports/{id}/artifacts/upload/` with `upload_intent=REUPLOAD_REPLACE`, single file, required `notes`
+- [x] Queue `available_action_targets.correct_report_id` for `CORRECT_REPORT`
+- [x] Drawer / completion flow: `correctReportId ?? reportId`; skip redundant `mark-ready` when upload response is already `ready` / `delivered`
+- [x] Error code `REUPLOAD_REASON_REQUIRED` mapped in `report-api-errors.ts`
+- [x] DELIVERED: in-place replace allowed; delivery resets to pending for resend
+
 ## Manual parity checklist
 
 - [ ] Default route loads live API (no demo banner)
 - [ ] Expand patient group → multi-test lines from context API
-- [ ] Upload / re-upload opens upload route with correct `reportId`
+- [x] Upload / re-upload opens drawer (or upload route) with `correct_report_id` / `reportId`
 - [ ] Send / retry use `available_action_targets`
 - [ ] Preview uses `buildQuickPreviewTarget` (live) — no placeholder assets
 - [ ] Queue poll failure shows stale banner; refresh recovers

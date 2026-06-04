@@ -31,6 +31,7 @@ import { isTatBreached } from "@/lib/labs/reports/tat-sla";
 export type ReportActionTargets = {
   uploadReportId?: string;
   markReadyReportId?: string;
+  correctReportId?: string;
   sendWhatsappReportId?: string;
   retryDeliveryLogId?: string;
 };
@@ -54,6 +55,7 @@ export type ReportArtifact = {
   legalHold?: boolean;
   uploadedAt: string;
   uploadedBy?: string | null;
+  reuploadReason?: string | null;
   downloadUrl: string | null;
 };
 
@@ -70,6 +72,7 @@ export type ReportHistory = {
   reportId: string;
   supersedesId: string | null;
   supersededById: string | null;
+  lastReuploadReason: string | null;
   artifacts: ReportArtifact[];
   deliveryLogs: ReportDelivery[];
 };
@@ -81,6 +84,7 @@ export type ReportDetail = {
   revisionNumber: number;
   readyAt: string | null;
   deliveredAt: string | null;
+  lastReuploadReason: string | null;
   patientName: string;
   patientPhone: string;
   encounterId: string | null;
@@ -157,6 +161,7 @@ export function mapActionTargetsDto(dto: ReportActionTargetsApi): ReportActionTa
   return {
     uploadReportId: dto.upload_report_id ? String(dto.upload_report_id) : undefined,
     markReadyReportId: dto.mark_ready_report_id ? String(dto.mark_ready_report_id) : undefined,
+    correctReportId: dto.correct_report_id ? String(dto.correct_report_id) : undefined,
     sendWhatsappReportId: dto.send_whatsapp_report_id
       ? String(dto.send_whatsapp_report_id)
       : undefined,
@@ -259,6 +264,7 @@ export function mapReportArtifactDto(dto: ReportArtifactApiItem): ReportArtifact
     legalHold: dto.legal_hold ?? false,
     uploadedAt: dto.uploaded_at ?? "",
     uploadedBy: dto.uploaded_by ?? null,
+    reuploadReason: dto.reupload_reason ?? null,
     downloadUrl: dto.download_url,
   };
 }
@@ -282,6 +288,7 @@ export function mapReportDetailDto(dto: ReportDetailApiData): ReportDetail {
     revisionNumber: dto.report.revision_number,
     readyAt: dto.report.ready_at,
     deliveredAt: dto.report.delivered_at,
+    lastReuploadReason: dto.report.last_reupload_reason ?? null,
     patientName: dto.patient.name,
     patientPhone: dto.patient.phone,
     encounterId: dto.patient.encounter_id,
@@ -300,6 +307,7 @@ export function mapReportHistoryDto(dto: ReportHistoryApiData): ReportHistory {
     reportId: String(dto.report_id),
     supersedesId: dto.supersedes_id ? String(dto.supersedes_id) : null,
     supersededById: dto.superseded_by_id ? String(dto.superseded_by_id) : null,
+    lastReuploadReason: dto.last_reupload_reason ?? null,
     artifacts: dto.artifacts.map(mapReportArtifactDto),
     deliveryLogs: dto.delivery_logs.map(mapDeliveryDto),
   };
@@ -326,11 +334,30 @@ export function resolveUploadReportId(ctx: ReportTaskContext): string | undefine
   return line?.reportId ?? ctx.activeReports[0]?.reportId;
 }
 
-/** Upload / re-upload: URL reportId wins, then upload_target, then default resolver. */
-export function resolveTargetReportId(
+/** Re-upload / correction: URL reportId wins, then first line with CORRECT_REPORT. */
+export function resolveCorrectReportId(
   ctx: ReportTaskContext,
   urlReportId?: string | null,
 ): string | undefined {
+  if (urlReportId) {
+    const fromUrl = ctx.activeReports.find((r) => r.reportId === urlReportId);
+    if (fromUrl) return fromUrl.reportId;
+  }
+  const line = ctx.activeReports.find((r) =>
+    r.availableActions.includes("CORRECT_REPORT"),
+  );
+  return line?.reportId;
+}
+
+/** Upload / re-upload: URL reportId wins, then upload_target or correction target. */
+export function resolveTargetReportId(
+  ctx: ReportTaskContext,
+  urlReportId?: string | null,
+  options?: { mode?: "upload" | "reupload" },
+): string | undefined {
+  if (options?.mode === "reupload") {
+    return resolveCorrectReportId(ctx, urlReportId) ?? resolveUploadReportId(ctx);
+  }
   if (urlReportId) {
     const fromUrl = ctx.activeReports.find((r) => r.reportId === urlReportId);
     if (fromUrl) return fromUrl.reportId;

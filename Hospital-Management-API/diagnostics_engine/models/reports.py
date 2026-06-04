@@ -492,6 +492,9 @@ class DiagnosticTestReport(models.Model):
 
     reviewed_at = models.DateTimeField(null=True, blank=True)
 
+    # Latest operator-provided reason for in-place re-upload (REUPLOAD_REPLACE).
+    last_reupload_reason = models.TextField(blank=True, null=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
@@ -538,6 +541,7 @@ class DiagnosticTestReport(models.Model):
                     delivery_only = update_fields is not None and set(update_fields) <= {
                         "delivery_status",
                         "updated_at",
+                        "last_reupload_reason",
                     }
                     if not delivery_only:
                         raise ValidationError("Report locked.")
@@ -732,6 +736,9 @@ class DiagnosticReportArtifact(models.Model):
     is_deleted = models.BooleanField(default=False)
 
     is_active = models.BooleanField(default=True)
+
+    # Operator reason when this artifact replaced a prior primary (re-upload flow).
+    reupload_reason = models.TextField(blank=True, null=True)
 
     def save(self, *args, **kwargs):
         """

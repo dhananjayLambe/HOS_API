@@ -21,6 +21,7 @@ function dto(partial: Partial<ReportTaskApiItem>): ReportTaskApiItem {
     available_action_targets: {
       upload_report_id: "report-uuid-1",
       mark_ready_report_id: null,
+      correct_report_id: null,
       send_whatsapp_report_id: null,
       retry_delivery_log_id: null,
     },
@@ -53,6 +54,7 @@ describe("mapReportTaskDtoToReportTask", () => {
         available_action_targets: {
           upload_report_id: null,
           mark_ready_report_id: "ready-report-id",
+          correct_report_id: "correct-report-id",
           send_whatsapp_report_id: "wa-report-id",
           retry_delivery_log_id: "log-id",
         },
@@ -60,6 +62,7 @@ describe("mapReportTaskDtoToReportTask", () => {
     );
     expect(task.actionTargets.uploadReportId).toBeUndefined();
     expect(task.actionTargets.markReadyReportId).toBe("ready-report-id");
+    expect(task.actionTargets.correctReportId).toBe("correct-report-id");
     expect(task.actionTargets.sendWhatsappReportId).toBe("wa-report-id");
     expect(task.actionTargets.retryDeliveryLogId).toBe("log-id");
   });

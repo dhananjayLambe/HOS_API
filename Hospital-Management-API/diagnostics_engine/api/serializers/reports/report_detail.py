@@ -31,6 +31,7 @@ class ReportInfoSerializer(serializers.Serializer):
     revision_number = serializers.IntegerField()
     ready_at = serializers.DateTimeField(allow_null=True)
     delivered_at = serializers.DateTimeField(allow_null=True)
+    last_reupload_reason = serializers.CharField(allow_null=True, required=False)
 
 
 class ReportDetailSerializer(serializers.Serializer):
@@ -56,6 +57,7 @@ class ReportDetailSerializer(serializers.Serializer):
                     "revision_number": report.revision_number,
                     "ready_at": report.ready_at,
                     "delivered_at": report.delivered_at,
+                    "last_reupload_reason": report.last_reupload_reason,
                 },
                 "patient": dto.patient_summary,
                 "artifacts": dto.artifacts,

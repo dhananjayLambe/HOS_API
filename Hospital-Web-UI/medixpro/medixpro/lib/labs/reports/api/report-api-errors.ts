@@ -13,6 +13,7 @@ export type ReportApiErrorCode =
   | "DELIVERY_LOG_NOT_FOUND"
   | "INVALID_UPLOAD_INTENT"
   | "MULTI_FILE_REUPLOAD_NOT_ALLOWED"
+  | "REUPLOAD_REASON_REQUIRED"
   | "REPORT_OWNERSHIP_MISMATCH"
   | "IDEMPOTENCY_CONFLICT"
   | string;
@@ -31,6 +32,7 @@ const OPERATIONAL_COPY: Record<string, string> = {
   DELIVERY_LOG_NOT_FOUND: "Delivery record not found. Refresh and try again.",
   INVALID_UPLOAD_INTENT: "Upload intent is invalid. Refresh and try again.",
   MULTI_FILE_REUPLOAD_NOT_ALLOWED: "Re-upload accepts exactly one file.",
+  REUPLOAD_REASON_REQUIRED: "Enter a reason for this report correction before saving.",
   REPORT_OWNERSHIP_MISMATCH: "This report is not linked correctly and cannot be uploaded.",
   IDEMPOTENCY_CONFLICT: "A similar upload is already being processed. Please wait a moment.",
 };

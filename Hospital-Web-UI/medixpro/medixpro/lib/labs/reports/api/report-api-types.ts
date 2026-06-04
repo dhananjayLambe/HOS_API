@@ -3,6 +3,7 @@
 export type ReportActionTargetsApi = {
   upload_report_id: string | null;
   mark_ready_report_id: string | null;
+  correct_report_id: string | null;
   send_whatsapp_report_id: string | null;
   retry_delivery_log_id: string | null;
 };
@@ -104,6 +105,7 @@ export type ReportArtifactApiItem = {
   legal_hold?: boolean;
   uploaded_at: string | null;
   uploaded_by?: string | null;
+  reupload_reason?: string | null;
   download_url: string | null;
 };
 
@@ -124,6 +126,7 @@ export type ReportDetailApiData = {
     revision_number: number;
     ready_at: string | null;
     delivered_at: string | null;
+    last_reupload_reason?: string | null;
   };
   patient: {
     name: string;
@@ -185,6 +188,7 @@ export type ReportHistoryApiData = {
   report_id: string;
   supersedes_id: string | null;
   superseded_by_id: string | null;
+  last_reupload_reason?: string | null;
   artifacts: ReportArtifactApiItem[];
   delivery_logs: DeliveryLogApiItem[];
 };

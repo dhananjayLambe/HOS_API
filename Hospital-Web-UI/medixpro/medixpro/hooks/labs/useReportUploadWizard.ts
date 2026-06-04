@@ -149,8 +149,9 @@ export function useReportUploadWizard(routeState?: UploadRouteState) {
   const targetReportId = useMemo(() => {
     const ctx = contextQuery.data;
     if (!ctx) return null;
-    return resolveTargetReportId(ctx, parsedRoute.reportId) ?? null;
-  }, [contextQuery.data, parsedRoute.reportId]);
+    const mode = isReuploadMode(parsedRoute.mode) ? "reupload" : "upload";
+    return resolveTargetReportId(ctx, parsedRoute.reportId, { mode }) ?? null;
+  }, [contextQuery.data, parsedRoute.reportId, parsedRoute.mode]);
 
   const uploadMode: UploadWorkflowMode = useMemo(() => {
     if (isReuploadMode(parsedRoute.mode)) return "reupload";
@@ -338,7 +339,7 @@ export function useReportUploadWizard(routeState?: UploadRouteState) {
     if (!resolvedTaskId || files.length === 0 || isReupload) return false;
     const ctx = contextQuery.data;
     if (!ctx || !isReportTasksV1ApiEnabled()) return false;
-    const reportId = resolveTargetReportId(ctx, parsedRoute.reportId);
+    const reportId = resolveTargetReportId(ctx, parsedRoute.reportId, { mode: "upload" });
     if (!reportId) return false;
     const fileObjects = files.map((f) => f.file).filter((f): f is File => !!f);
     if (fileObjects.length === 0) return false;
@@ -397,7 +398,9 @@ export function useReportUploadWizard(routeState?: UploadRouteState) {
         return;
       }
 
-      const reportId = resolveTargetReportId(ctx, parsedRoute.reportId);
+      const reportId = resolveTargetReportId(ctx, parsedRoute.reportId, {
+        mode: isReupload ? "reupload" : "upload",
+      });
       if (!reportId) {
         setSubmissionState("failed");
         setSubmitError("No upload target for this task. Refresh the queue and try again.");
@@ -435,20 +438,26 @@ export function useReportUploadWizard(routeState?: UploadRouteState) {
           assignmentId: ctx.assignmentId,
         });
 
-        try {
-          await mutations.markReady(reportId, {
-            taskId: resolvedTaskId,
-            reportId,
-            assignmentId: ctx.assignmentId,
-          });
-          result = { ...result, status: "READY_DELIVERY" as ReportOperationalStatus };
-        } catch (readyErr) {
-          await mutations.handleOperationalConflict(readyErr, {
-            taskId: resolvedTaskId,
-            reportId,
-            assignmentId: ctx.assignmentId,
-          });
-          setSubmitError(mapReportApiErrorToMessage(readyErr));
+        const skipMarkReady =
+          isReupload &&
+          (result.status === "READY_DELIVERY" || result.status === "DELIVERED");
+
+        if (!skipMarkReady) {
+          try {
+            await mutations.markReady(reportId, {
+              taskId: resolvedTaskId,
+              reportId,
+              assignmentId: ctx.assignmentId,
+            });
+            result = { ...result, status: "READY_DELIVERY" as ReportOperationalStatus };
+          } catch (readyErr) {
+            await mutations.handleOperationalConflict(readyErr, {
+              taskId: resolvedTaskId,
+              reportId,
+              assignmentId: ctx.assignmentId,
+            });
+            setSubmitError(mapReportApiErrorToMessage(readyErr));
+          }
         }
 
         clearUploadDraft(resolvedTaskId);

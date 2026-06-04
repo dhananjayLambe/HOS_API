@@ -54,7 +54,7 @@
 |--------|-------|---------|
 | GET | `api/v1/diagnostics/report-tasks/` | Paginated operational queue (assignment cards) |
 | GET | `api/v1/diagnostics/report-tasks/<task_id>/` | Assignment context + active reports (upload targets) |
-| POST | `api/v1/diagnostics/reports/<report_id>/artifacts/upload/` | **Only upload entry** |
+| POST | `api/v1/diagnostics/reports/<report_id>/artifacts/upload/` | **Only upload entry** (see re-upload below) |
 | GET | `api/v1/diagnostics/reports/<report_id>/` | Operational detail (active head only) |
 | GET | `api/v1/diagnostics/reports/<report_id>/download/` | Presigned URL `{ download_url, expires_in, filename, artifact_id }`; local dev `?stream=1` |
 | POST | `api/v1/diagnostics/reports/<report_id>/mark-ready/` | IN_PROGRESS → READY; supports `Idempotency-Key` |
@@ -66,6 +66,19 @@
 | GET | `api/v1/diagnostics/encounters/<encounter_id>/reports/` | Encounter summaries (ASC `updated_at`) |
 
 Legacy: `api/diagnostics/...` (deprecated).
+
+### Artifact upload / re-upload (same route)
+
+| `upload_intent` | Files | `notes` | Permission | Lifecycle gate |
+|-----------------|-------|---------|------------|----------------|
+| `UPLOAD_NEW` (default) | 1+ | Optional | `CanUploadReports` | `validate_report_ready_for_upload` — blocks `DELIVERED` / `REJECTED` |
+| `REUPLOAD_REPLACE` | Exactly 1 | Required (`REUPLOAD_REASON_REQUIRED` if empty) | `CanCorrectReports` | `validate_report_ready_for_reupload` — allows `READY` and `DELIVERED` (in-place replace on same head) |
+
+Service: `ArtifactUploadService.replace_artifact` deactivates old primary, creates versioned primary, audits `artifact_replaced`; view audits `report_reuploaded` with reason metadata. **`notes`** persists to `DiagnosticReportArtifact.reupload_reason` and `DiagnosticTestReport.last_reupload_reason`.
+
+**DELIVERED correction policy (Phase 1):** In-place replace on the active head (not HTTP-wired supersede). `is_editable=False` does not block replace; only `delivery_status` / `updated_at` may change on the locked head besides artifacts. After replace when delivery had left `PENDING`, `delivery_status` resets to `PENDING` so resend is required. Supersede chain (`prepare_correction_upload`) remains alternate / not exposed on this route.
+
+Queue target: `available_action_targets.correct_report_id` — first line with `CORRECT_REPORT`.
 
 ## API package layout (matches `labs.api` / `diagnostics_engine.api`)
 
