@@ -11,7 +11,7 @@ from diagnostics_engine.storage.report_upload_paths import build_report_artifact
 
 
 class ReportArtifactUploadPathTests(SimpleTestCase):
-    def test_hive_path_uses_patient_encounter_report_and_type(self):
+    def test_path_uses_patient_encounter_report_and_type_segments(self):
         encounter_id = uuid.uuid4()
         patient_profile_id = uuid.uuid4()
         patient_account_id = uuid.uuid4()
@@ -37,16 +37,17 @@ class ReportArtifactUploadPathTests(SimpleTestCase):
         path = build_report_artifact_upload_path(artifact, "signed-report.pdf")
 
         self.assertTrue(path.startswith("diagnostic-reports/active/"))
-        self.assertIn(f"patient-account={patient_account_id}", path)
-        self.assertIn(f"patient={patient_profile_id}", path)
-        self.assertIn("year=", path)
-        self.assertIn("month=", path)
+        self.assertIn(f"{patient_account_id}/", path)
+        self.assertIn(f"{patient_profile_id}/", path)
+        self.assertRegex(path, r"/\d{4}/\d{2}/")
         self.assertNotIn("day=", path)
-        self.assertIn(f"encounter={encounter_id}", path)
-        self.assertIn(f"report={report_id}", path)
-        self.assertIn("artifact-type=pdf", path)
+        self.assertIn(f"{encounter_id}/", path)
+        self.assertIn(f"{report_id}/", path)
+        self.assertIn("/pdf/", path)
         self.assertIn(f"artifact_{artifact.id}_v1.pdf", path)
         self.assertEqual(artifact.stored_filename, f"artifact_{artifact.id}_v1.pdf")
+        self.assertNotIn("patient-account=", path)
+        self.assertNotIn("encounter=", path)
 
     def test_unknown_encounter_when_missing(self):
         report_id = uuid.uuid4()
@@ -64,6 +65,6 @@ class ReportArtifactUploadPathTests(SimpleTestCase):
 
         path = build_report_artifact_upload_path(artifact, "report.pdf")
 
-        self.assertIn("encounter=unknown-encounter", path)
-        self.assertIn("patient-account=unknown-account", path)
-        self.assertIn("patient=unknown-patient", path)
+        self.assertIn("unknown-encounter/", path)
+        self.assertIn("unknown-account/", path)
+        self.assertIn("unknown-patient/", path)

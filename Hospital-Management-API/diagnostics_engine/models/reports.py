@@ -223,8 +223,8 @@ class ArtifactCategory(models.TextChoices):
 # download filename:
 #     Rahul_K_CBC_Report_19_May_2026.pdf
 #
-# storage path (S3/local key only — never patient name):
-# diagnostic-reports/year=2026/month=05/day=19/encounter=<uuid>/report=<uuid>/artifact_<id>_v2.pdf
+# storage path (S3/local key only — never patient name; see report_upload_paths.py):
+# diagnostic-reports/active/<account_id>/<profile_id>/2026/05/<encounter_id>/<report_id>/pdf/artifact_<id>_v2.pdf
 
 
 class DiagnosticReport(models.Model):
@@ -700,9 +700,7 @@ class DiagnosticReportArtifact(models.Model):
     checksum = models.CharField(max_length=255, blank=True, null=True)
     checksum_sha256 = models.CharField(max_length=128, blank=True, null=True, db_index=True)
 
-    # Full object storage path.
-    # Example:
-# diagnostic-reports/year=2026/.../encounter=<uuid>/report=<uuid>/artifact_<id>_v<n>.pdf
+    # Full object storage relative key (see diagnostics_engine.storage.report_upload_paths).
     storage_path = models.TextField(blank=True, null=True)
     # Canonical object key. Retrieval must prefer this metadata field.
     storage_key = models.TextField(blank=True, null=True)

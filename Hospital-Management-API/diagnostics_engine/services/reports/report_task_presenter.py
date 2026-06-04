@@ -127,6 +127,9 @@ class ReportTaskDTO:
     order_workflow_reason_message: str
     last_report_uploaded_at: datetime | None
     completed_at: datetime | None
+    assigned_at: datetime | None
+    sample_collected_at: datetime | None
+    operational_anchor_at: datetime | None
     available_action_targets: ReportActionTargetsDTO
 
 
@@ -143,6 +146,34 @@ def _patient_phone(profile) -> str:
         return ""
     user = getattr(profile.account, "user", None)
     return getattr(user, "username", "") or ""
+
+
+def _sample_collected_at_for_order(order) -> datetime | None:
+    """Home: collection collected_at; visit: appointment checked_in_at."""
+    collection = getattr(order, "collection_request", None)
+    if collection is not None and collection.collected_at:
+        return collection.collected_at
+    visit = getattr(order, "visit_appointment", None)
+    if visit is not None and visit.checked_in_at:
+        return visit.checked_in_at
+    return None
+
+
+def _operational_anchor_at(
+    *,
+    assigned_at: datetime | None,
+    sample_collected_at: datetime | None,
+    uploaded_at: datetime | None,
+    ready_at: datetime | None,
+    delivered_at: datetime | None,
+) -> datetime | None:
+    return (
+        sample_collected_at
+        or assigned_at
+        or uploaded_at
+        or ready_at
+        or delivered_at
+    )
 
 
 def _latest_failed_delivery_log_id(report: DiagnosticTestReport) -> UUID | None:
@@ -400,6 +431,16 @@ def build_report_task_dto(
             reason_message=reason_message,
         )
 
+    assigned_at = assignment.assigned_at
+    sample_collected_at = _sample_collected_at_for_order(order)
+    operational_anchor_at = _operational_anchor_at(
+        assigned_at=assigned_at,
+        sample_collected_at=sample_collected_at,
+        uploaded_at=uploaded_at,
+        ready_at=ready_at,
+        delivered_at=delivered_at,
+    )
+
     return ReportTaskDTO(
         task_id=str(assignment.id),
         assignment_id=str(assignment.id),
@@ -427,6 +468,9 @@ def build_report_task_dto(
         order_workflow_reason_message=reason_message,
         last_report_uploaded_at=uploaded_at,
         completed_at=completed_at,
+        assigned_at=assigned_at,
+        sample_collected_at=sample_collected_at,
+        operational_anchor_at=operational_anchor_at,
         available_action_targets=build_available_action_targets(
             assignment,
             line_report_map=line_report_map,

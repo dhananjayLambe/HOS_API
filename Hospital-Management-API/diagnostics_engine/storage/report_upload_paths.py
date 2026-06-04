@@ -1,4 +1,16 @@
-"""Structured object-storage paths for diagnostic report artifacts."""
+"""
+Object-storage relative keys for diagnostic report artifact uploads.
+
+Used as Django ``FileField.upload_to`` for ``DiagnosticReportArtifact``.
+The returned string is stored on the artifact as ``storage_path`` / ``storage_key``
+and is resolved under:
+
+- **Local dev:** ``{MEDIA_ROOT}/<key>``  (see ``main.settings.MEDIA_ROOT``)
+- **Production:** ``AWS_REPORTS_BUCKET`` object key ``<key>`` when S3 is configured
+
+This module only defines the blob layout. Business lookups use database IDs,
+not path parsing.
+"""
 
 from __future__ import annotations
 
@@ -48,24 +60,34 @@ def _resolve_artifact_type(instance, filename: str) -> str:
 
 def build_report_artifact_upload_path(instance, filename: str) -> str:
     """
-    Infrastructure-oriented S3/local key — not used for business queries.
+    Build the relative storage key for one uploaded report file.
 
-    layout:
+    Path layout (each segment is a directory name; no ``key=value`` prefixes):
+
         diagnostic-reports/
             active/
-                patient-account=<uuid>/
-                    patient=<uuid>/
-                        year=<YYYY>/
-                            month=<MM>/
-                                encounter=<uuid>/
-                                    report=<uuid>/
-                                        artifact-type=<type>/
+                <patient_account_id>/
+                    <patient_profile_id>/
+                        <YYYY>/
+                            <MM>/
+                                <encounter_id>/
+                                    <report_id>/
+                                        <artifact_type>/
                                             artifact_<artifact_id>_v<version><ext>
 
-  Separate from:
-    - original_filename  — what the operator uploaded (audit)
-    - stored_filename    — opaque blob name (artifact_<id>_v<n>.<ext>)
-    - download_filename  — human-readable name for WhatsApp / browser download
+    Example::
+
+        diagnostic-reports/active/550e8400-e29b-41d4-a716-446655440000/
+            6ba7b810-9dad-11d1-80b4-00c04fd430c8/2026/06/
+            7c9e6679-7425-40de-944b-e07fc1f90ae7/
+            8f14e45f-ceea-467f-a0f8-5c2b5c0b3f1a/pdf/
+            artifact_9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d_v1.pdf
+
+    Filename fields on the model (not part of this path):
+
+    - ``original_filename`` — name from the uploader (audit)
+    - ``stored_filename``     — opaque blob name set here (``artifact_<id>_v<n>.<ext>``)
+    - ``download_filename``   — human-readable name for WhatsApp / browser download
     """
     uploaded_at = timezone.now()
     extension = Path(filename).suffix.lower() or ".bin"
@@ -84,15 +106,16 @@ def build_report_artifact_upload_path(instance, filename: str) -> str:
     stored_filename = f"artifact_{artifact_id}_v{version}{extension}"
     instance.stored_filename = stored_filename
 
+    # Relative key: prefix / lifecycle / patient hierarchy / time / clinical context / blob
     return (
         f"diagnostic-reports/"
         f"active/"
-        f"patient-account={patient_account_id}/"
-        f"patient={patient_profile_id}/"
-        f"year={uploaded_at:%Y}/"
-        f"month={uploaded_at:%m}/"
-        f"encounter={encounter_id}/"
-        f"report={report_id}/"
-        f"artifact-type={artifact_type}/"
+        f"{patient_account_id}/"
+        f"{patient_profile_id}/"
+        f"{uploaded_at:%Y}/"
+        f"{uploaded_at:%m}/"
+        f"{encounter_id}/"
+        f"{report_id}/"
+        f"{artifact_type}/"
         f"{stored_filename}"
     )

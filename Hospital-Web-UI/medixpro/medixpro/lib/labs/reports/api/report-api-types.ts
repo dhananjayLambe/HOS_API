@@ -36,6 +36,9 @@ export type ReportTaskApiItem = {
   } | null;
   last_report_uploaded_at?: string | null;
   completed_at?: string | null;
+  assigned_at?: string | null;
+  sample_collected_at?: string | null;
+  operational_anchor_at?: string | null;
   urgency?: string | null;
   available_action_targets: ReportActionTargetsApi;
 };

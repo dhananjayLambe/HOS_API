@@ -2,11 +2,51 @@ import { describe, expect, it } from "vitest";
 import {
   mapActionTargetsDto,
   mapReportDetailDto,
+  mapReportTaskDto,
   resolveUploadReportId,
 } from "@/lib/labs/reports/api/v1/reports-api-mappers";
+import type { ReportTaskApiItem } from "@/lib/labs/reports/api/report-api-types";
 import type { ReportTaskContext } from "@/lib/labs/reports/report-task-context";
 
+const baseTaskDto = (): ReportTaskApiItem => ({
+  task_id: "task-1",
+  assignment_id: "task-1",
+  order_uuid: "order-1",
+  order_number: "ORD-HOME-1",
+  patient_name: "Patient",
+  patient_phone: "9999999999",
+  collection_type: "HOME",
+  test_label: "CBC",
+  operational_status: "PENDING_UPLOAD",
+  visit_or_slot_label: "Home",
+  pending_sibling_count: 0,
+  uploaded_at: null,
+  ready_at: null,
+  delivered_at: null,
+  order_workflow_state: "pending_upload",
+  available_action_targets: {
+    upload_report_id: null,
+    mark_ready_report_id: null,
+    send_whatsapp_report_id: null,
+    retry_delivery_log_id: null,
+  },
+});
+
 describe("reports-api-mappers", () => {
+  it("mapReportTaskDto uses logistics anchors when uploads are absent", () => {
+    const collected = "2026-06-04T10:00:00.000Z";
+    const assigned = "2026-06-03T08:00:00.000Z";
+    const task = mapReportTaskDto({
+      ...baseTaskDto(),
+      assigned_at: assigned,
+      sample_collected_at: collected,
+      operational_anchor_at: collected,
+    });
+    expect(task.updatedAtIso).toBe(collected);
+    expect(task.assignedAtIso).toBe(assigned);
+    expect(task.collectedAtLabel).toContain("Collected");
+  });
+
   it("mapActionTargetsDto normalizes nulls", () => {
     const targets = mapActionTargetsDto({
       upload_report_id: null,

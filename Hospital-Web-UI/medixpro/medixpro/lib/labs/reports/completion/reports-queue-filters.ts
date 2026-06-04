@@ -150,11 +150,17 @@ export function dateRangeForPreset(
   }
 }
 
-export function orderOperationalUpdatedAt(order: OrderLifecycleViewModel): Date | null {
-  const iso = order.operationalUpdatedAtIso;
+function parseOperationalIso(iso: string | null | undefined): Date | null {
   if (!iso) return null;
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? null : d;
+}
+
+export function orderOperationalUpdatedAt(order: OrderLifecycleViewModel): Date | null {
+  return (
+    parseOperationalIso(order.operationalUpdatedAtIso) ??
+    parseOperationalIso(order.slaAnchorIso)
+  );
 }
 
 export function filterOrdersByOperationalDate(
@@ -165,7 +171,11 @@ export function filterOrdersByOperationalDate(
   const { from, to } = dateRangeForPreset(preset, custom);
   return orders.filter((order) => {
     const at = orderOperationalUpdatedAt(order);
-    if (!at) return preset === "month";
+    if (!at) {
+      if (preset === "month") return true;
+      const state = order.orderWorkflowState;
+      return state === "pending_upload" || state === "partial_upload";
+    }
     return at >= from && at <= to;
   });
 }

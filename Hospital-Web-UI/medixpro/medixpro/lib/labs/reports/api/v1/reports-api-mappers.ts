@@ -117,8 +117,34 @@ function parseTestNames(testLabel: string): string[] {
   return [trimmed];
 }
 
+function logisticsAnchorFromDto(dto: ReportTaskApiItem): string | null {
+  return (
+    dto.operational_anchor_at ??
+    dto.sample_collected_at ??
+    dto.assigned_at ??
+    null
+  );
+}
+
 function slaAnchorFromDto(dto: ReportTaskApiItem): string | null {
-  return dto.uploaded_at ?? dto.ready_at ?? dto.delivered_at ?? null;
+  return (
+    dto.sample_collected_at ??
+    dto.assigned_at ??
+    dto.uploaded_at ??
+    dto.ready_at ??
+    dto.delivered_at ??
+    null
+  );
+}
+
+function updatedAtIsoFromDto(dto: ReportTaskApiItem): string | null {
+  return (
+    dto.operational_anchor_at ??
+    dto.delivered_at ??
+    dto.ready_at ??
+    dto.uploaded_at ??
+    null
+  );
 }
 
 function mapUrgency(raw: string | null | undefined): UrgencyLevel {
@@ -145,8 +171,11 @@ export function mapReportTaskDto(dto: ReportTaskApiItem, options?: { labName?: s
   const collectionType = dto.collection_type === "VISIT" ? "VISIT" : "HOME";
   const slaAnchorIso = slaAnchorFromDto(dto);
   const urgency = mapUrgency(dto.urgency);
-  const collectedLabel = formatRelativeCollected(slaAnchorIso);
-  const updatedIso = dto.delivered_at ?? dto.ready_at ?? dto.uploaded_at ?? null;
+  const collectedLabel = formatRelativeCollected(
+    dto.sample_collected_at ?? dto.assigned_at ?? logisticsAnchorFromDto(dto),
+  );
+  const updatedIso = updatedAtIsoFromDto(dto);
+  const assignedAtIso = dto.assigned_at ?? null;
   const totalReports = Math.max(1, Number(dto.total_reports ?? (testNames.length || 1)));
   const requiredReports = Math.max(1, Number(dto.required_reports ?? totalReports));
   const uploadedReports = Math.max(0, Number(dto.uploaded_reports ?? 0));
@@ -174,8 +203,8 @@ export function mapReportTaskDto(dto: ReportTaskApiItem, options?: { labName?: s
     collectedAtLabel: collectedLabel,
     updatedAtLabel: formatReportTimestamp(updatedIso, collectedLabel),
     updatedAtIso: updatedIso,
-    assignedAtIso: slaAnchorIso,
-    createdAtIso: slaAnchorIso,
+    assignedAtIso,
+    createdAtIso: assignedAtIso ?? slaAnchorIso,
     operationalStatus: mapApiOperationalStatus(dto.operational_status),
     pendingSiblingCount: dto.pending_sibling_count,
     urgency,

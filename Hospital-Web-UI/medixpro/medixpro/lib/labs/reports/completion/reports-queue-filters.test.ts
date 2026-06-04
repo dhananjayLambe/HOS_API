@@ -32,8 +32,12 @@ function order(partial: Partial<OrderLifecycleViewModel>): OrderLifecycleViewMod
     isFullyComplete: partial.isFullyComplete ?? false,
     readyToSendCount: partial.readyToSendCount ?? 0,
     hasPendingUpload: partial.hasPendingUpload ?? false,
-    operationalUpdatedAtIso: partial.operationalUpdatedAtIso ?? new Date().toISOString(),
+    operationalUpdatedAtIso:
+      partial.operationalUpdatedAtIso !== undefined
+        ? partial.operationalUpdatedAtIso
+        : new Date().toISOString(),
     slaAnchorIso: partial.slaAnchorIso,
+    orderWorkflowState: partial.orderWorkflowState,
     tatBreached: partial.tatBreached,
     deliveryFailure: partial.deliveryFailure,
   };
@@ -156,6 +160,54 @@ describe("buildActiveFilterChips", () => {
 });
 
 describe("filterOrdersByOperationalDate", () => {
+  it("includes home-collected pending upload with collected-at today", () => {
+    const todayIso = new Date().toISOString();
+    const list = filterOrdersByOperationalDate(
+      [
+        order({
+          taskId: "home-1",
+          operationalUpdatedAtIso: todayIso,
+          orderWorkflowState: "pending_upload",
+          hasPendingUpload: true,
+        }),
+      ],
+      "today",
+    );
+    expect(list.map((o) => o.taskId)).toEqual(["home-1"]);
+  });
+
+  it("includes pending upload with null operational date on today (safety net)", () => {
+    const list = filterOrdersByOperationalDate(
+      [
+        order({
+          taskId: "pending-null-date",
+          operationalUpdatedAtIso: null,
+          slaAnchorIso: null,
+          orderWorkflowState: "pending_upload",
+          hasPendingUpload: true,
+        }),
+      ],
+      "today",
+    );
+    expect(list.map((o) => o.taskId)).toEqual(["pending-null-date"]);
+  });
+
+  it("excludes delivered orders with null operational date on today", () => {
+    const list = filterOrdersByOperationalDate(
+      [
+        order({
+          taskId: "delivered-null",
+          operationalUpdatedAtIso: null,
+          slaAnchorIso: null,
+          orderWorkflowState: "delivered",
+          isFullyComplete: true,
+        }),
+      ],
+      "today",
+    );
+    expect(list).toHaveLength(0);
+  });
+
   it("includes orders updated today", () => {
     const todayIso = new Date().toISOString();
     const list = filterOrdersByOperationalDate(

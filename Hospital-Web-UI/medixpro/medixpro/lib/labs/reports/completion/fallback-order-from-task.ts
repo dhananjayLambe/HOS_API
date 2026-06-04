@@ -81,8 +81,9 @@ export function fallbackOrderFromTask(task: ReportTask): OrderLifecycleViewModel
     failedReports: task.failedReports,
     completedAtIso: task.completedAtIso,
     lastReportUploadedAtIso: task.lastReportUploadedAtIso,
-    operationalUpdatedAtIso: task.updatedAtIso ?? task.assignedAtIso,
-    slaAnchorIso: task.assignedAtIso,
+    operationalUpdatedAtIso:
+      task.updatedAtIso ?? task.assignedAtIso ?? null,
+    slaAnchorIso: task.assignedAtIso ?? task.updatedAtIso ?? null,
     tatBreached: task.tatBreached,
     attentionReasons: [],
     isFullyComplete,

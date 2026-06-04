@@ -120,6 +120,9 @@ class ReportTaskSerializer(serializers.Serializer):
     order_workflow_reason = serializers.DictField()
     last_report_uploaded_at = serializers.DateTimeField(allow_null=True)
     completed_at = serializers.DateTimeField(allow_null=True)
+    assigned_at = serializers.DateTimeField(allow_null=True)
+    sample_collected_at = serializers.DateTimeField(allow_null=True)
+    operational_anchor_at = serializers.DateTimeField(allow_null=True)
     available_action_targets = ReportActionTargetsSerializer()
 
     @classmethod
