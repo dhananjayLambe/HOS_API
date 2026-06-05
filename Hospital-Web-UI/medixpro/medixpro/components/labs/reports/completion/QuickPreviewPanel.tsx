@@ -1,15 +1,17 @@
 "use client";
 
+import { ArtifactDownloadButton } from "@/components/labs/reports/completion/ArtifactDownloadButton";
 import { PreviewArtifactTabs } from "@/components/labs/reports/completion/PreviewArtifactTabs";
 import { SpreadsheetPreviewPanel } from "@/components/labs/reports/upload/shared/SpreadsheetPreviewPanel";
 import { Button } from "@/components/ui/button";
 import { fetchArtifactBlob } from "@/lib/labs/reports/api/v1/reports-api";
+import { canDownloadArtifact } from "@/lib/labs/reports/completion/artifact-download";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import type { ReportArtifactViewModel, TestDeliveryState } from "@/lib/labs/reports/completion/order-lifecycle.types";
 import { isSpreadsheetFile } from "@/lib/labs/reports/parse-spreadsheet-preview";
 import { cn } from "@/lib/utils";
-import { Download, FileArchive, FileSpreadsheet, FileText, ImageIcon, Send, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { FileArchive, FileSpreadsheet, FileText, ImageIcon, Send, X } from "lucide-react";
+import { useEffect, useState } from "react";
 
 export type QuickPreviewTarget = {
   taskId: string;
@@ -76,16 +78,21 @@ export function QuickPreviewPanel({
   onReupload: (taskId: string, reportId: string) => void;
 }) {
   const [selectedArtifactId, setSelectedArtifactId] = useState<string | undefined>();
+  const [remoteBlobUrl, setRemoteBlobUrl] = useState<string | null>(null);
   const artifacts = target?.artifacts ?? [];
 
   useEffect(() => {
     setSelectedArtifactId(preferredArtifactId(artifacts));
   }, [target?.taskId, target?.reportId, artifacts]);
 
+  useEffect(() => {
+    setRemoteBlobUrl(null);
+  }, [selectedArtifactId]);
+
   const selectedArtifact =
     artifacts.find((artifact) => artifact.id === selectedArtifactId) ?? artifacts[0] ?? null;
   const kind = previewKind(selectedArtifact);
-  const canDownload = Boolean(selectedArtifact?.downloadUrl || selectedArtifact?.previewUrl || selectedArtifact?.previewFile);
+  const canDownload = canDownloadArtifact(selectedArtifact, { remoteBlobUrl });
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -133,9 +140,18 @@ export function QuickPreviewPanel({
                 onSelect={setSelectedArtifactId}
               />
               <div className="overflow-hidden rounded-2xl border bg-white shadow-sm">
-                <PreviewHeader artifact={selectedArtifact} kind={kind} />
+                <PreviewHeader
+                  artifact={selectedArtifact}
+                  kind={kind}
+                  remoteBlobUrl={remoteBlobUrl}
+                  canDownload={canDownload}
+                />
                 <div className="p-3">
-                  <ArtifactPreview artifact={selectedArtifact} kind={kind} />
+                  <ArtifactPreview
+                    artifact={selectedArtifact}
+                    kind={kind}
+                    onRemoteBlobReady={setRemoteBlobUrl}
+                  />
                 </div>
               </div>
             </div>
@@ -167,7 +183,12 @@ export function QuickPreviewPanel({
               Re-upload Report
             </Button>
           ) : null}
-          <DownloadButton artifact={selectedArtifact} disabled={!canDownload} />
+          <ArtifactDownloadButton
+            artifact={selectedArtifact}
+            remoteBlobUrl={remoteBlobUrl}
+            disabled={!canDownload}
+            className="min-h-10"
+          />
           <Button type="button" variant="ghost" className="min-h-10" onClick={() => onOpenChange(false)}>
             <X className="mr-1.5 h-4 w-4" aria-hidden />
             Close
@@ -178,7 +199,17 @@ export function QuickPreviewPanel({
   );
 }
 
-function PreviewHeader({ artifact, kind }: { artifact: ReportArtifactViewModel | null; kind: PreviewKind }) {
+function PreviewHeader({
+  artifact,
+  kind,
+  remoteBlobUrl,
+  canDownload,
+}: {
+  artifact: ReportArtifactViewModel | null;
+  kind: PreviewKind;
+  remoteBlobUrl: string | null;
+  canDownload: boolean;
+}) {
   const Icon =
     kind === "image"
       ? ImageIcon
@@ -190,17 +221,34 @@ function PreviewHeader({ artifact, kind }: { artifact: ReportArtifactViewModel |
   return (
     <div className="flex min-w-0 items-center gap-2 border-b bg-white px-3 py-2">
       <Icon className={cn("h-4 w-4 shrink-0", kind === "pdf" ? "text-red-500" : "text-[#7C5CFC]")} aria-hidden />
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold text-[#111827]">
           {artifact?.fileName ?? "No file selected"}
         </p>
         {artifact ? <p className="text-[10px] uppercase tracking-wide text-[#6B7280]">{kind}</p> : null}
       </div>
+      <ArtifactDownloadButton
+        artifact={artifact}
+        remoteBlobUrl={remoteBlobUrl}
+        disabled={!canDownload}
+        variant="ghost"
+        size="sm"
+        className="h-7 shrink-0 px-2 text-[10px]"
+        iconClassName="mr-1 h-3 w-3"
+      />
     </div>
   );
 }
 
-function ArtifactPreview({ artifact, kind }: { artifact: ReportArtifactViewModel | null; kind: PreviewKind }) {
+function ArtifactPreview({
+  artifact,
+  kind,
+  onRemoteBlobReady,
+}: {
+  artifact: ReportArtifactViewModel | null;
+  kind: PreviewKind;
+  onRemoteBlobReady?: (url: string | null) => void;
+}) {
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
   const [remotePreviewFile, setRemotePreviewFile] = useState<File | null>(null);
   const [remoteObjectUrl, setRemoteObjectUrl] = useState<string | null>(null);
@@ -215,6 +263,10 @@ function ArtifactPreview({ artifact, kind }: { artifact: ReportArtifactViewModel
     setObjectUrl(url);
     return () => URL.revokeObjectURL(url);
   }, [artifact?.previewFile]);
+
+  useEffect(() => {
+    onRemoteBlobReady?.(remoteObjectUrl);
+  }, [remoteObjectUrl, onRemoteBlobReady]);
 
   useEffect(() => {
     let cancelled = false;
@@ -240,18 +292,29 @@ function ArtifactPreview({ artifact, kind }: { artifact: ReportArtifactViewModel
           return;
         }
         setRemotePreviewFile(file);
+        const nextUrl = URL.createObjectURL(file);
         setRemoteObjectUrl((current) => {
           if (current) URL.revokeObjectURL(current);
-          return URL.createObjectURL(file);
+          return nextUrl;
         });
       })
       .catch(() => {
-        if (!cancelled) setRemoteLoadFailed(true);
+        if (!cancelled) {
+          setRemoteLoadFailed(true);
+          setRemoteObjectUrl((current) => {
+            if (current) URL.revokeObjectURL(current);
+            return null;
+          });
+        }
       });
     return () => {
       cancelled = true;
+      setRemoteObjectUrl((current) => {
+        if (current) URL.revokeObjectURL(current);
+        return null;
+      });
     };
-  }, [artifact?.downloadUrl, artifact?.previewUrl, kind]);
+  }, [artifact?.downloadUrl, artifact?.previewUrl, artifact?.fileName, artifact?.mimeType, kind]);
 
   useEffect(
     () => () => {
@@ -388,39 +451,6 @@ function TextFilePreview({ file }: { file: File }) {
   }, [file]);
 
   return <pre className="max-h-[68vh] overflow-auto whitespace-pre-wrap rounded-md border bg-[#FAFAFF] p-3 text-xs text-[#111827]">{text}</pre>;
-}
-
-function DownloadButton({ artifact, disabled }: { artifact: ReportArtifactViewModel | null; disabled?: boolean }) {
-  const [objectUrl, setObjectUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!artifact?.previewFile) {
-      setObjectUrl(null);
-      return;
-    }
-    const url = URL.createObjectURL(artifact.previewFile);
-    setObjectUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [artifact?.previewFile]);
-
-  const href = artifact?.downloadUrl ?? artifact?.previewUrl ?? objectUrl;
-  if (!href || disabled) {
-    return (
-      <Button type="button" variant="outline" className="min-h-10" disabled>
-        <Download className="mr-1.5 h-4 w-4" aria-hidden />
-        Download
-      </Button>
-    );
-  }
-
-  return (
-    <Button type="button" variant="outline" className="min-h-10" asChild>
-      <a href={href} download={artifact?.fileName}>
-        <Download className="mr-1.5 h-4 w-4" aria-hidden />
-        Download
-      </a>
-    </Button>
-  );
 }
 
 function EmptyPreview({ message }: { message: string }) {
