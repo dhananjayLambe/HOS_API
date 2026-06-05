@@ -557,6 +557,20 @@ class ReportAPITestCase(TestCase):
         self.assertTrue(res.data["data"]["artifacts"][0]["download_url"])
         self.assertIn("available_actions", res.data["data"])
 
+    def test_detail_includes_delivery_log_when_present(self):
+        self._upload_primary()
+        ReportWorkflowService.mark_ready(self.report)
+        ReportDeliveryService.prepare_report_delivery(
+            report=self.report,
+            recipient_phone="9876543210",
+        )
+        url = reverse("v1-report-detail", kwargs={"report_id": self.report.id})
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        delivery = res.data["data"]["delivery"]
+        self.assertIsNotNone(delivery)
+        self.assertEqual(delivery["status"], DeliveryStatus.PENDING)
+
     def test_detail_excludes_inactive_artifacts(self):
         ArtifactUploadService.upload_report_artifacts(
             report=self.report,

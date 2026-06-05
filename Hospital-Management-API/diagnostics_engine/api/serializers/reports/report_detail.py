@@ -45,9 +45,6 @@ class ReportDetailSerializer(serializers.Serializer):
     @classmethod
     def from_dto(cls, dto: ReportDetailDTO, *, context: dict | None = None):
         report = dto.report
-        delivery_data = None
-        if dto.latest_delivery is not None:
-            delivery_data = DeliveryLogSerializer(dto.latest_delivery).data
         return cls(
             {
                 "report": {
@@ -61,7 +58,7 @@ class ReportDetailSerializer(serializers.Serializer):
                 },
                 "patient": dto.patient_summary,
                 "artifacts": dto.artifacts,
-                "delivery": delivery_data,
+                "delivery": dto.latest_delivery,
                 "history": dto.lineage,
                 "available_actions": dto.available_actions,
             },
