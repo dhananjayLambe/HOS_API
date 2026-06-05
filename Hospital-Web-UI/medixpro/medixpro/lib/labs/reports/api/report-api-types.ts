@@ -193,4 +193,16 @@ export type ReportHistoryApiData = {
   delivery_logs: DeliveryLogApiItem[];
 };
 
+export type ReportTimelineEventApiItem = {
+  event_type: string;
+  timestamp: string;
+  actor_name: string;
+  message: string;
+};
+
+export type ReportTimelineApiData = {
+  report_id: string;
+  events: ReportTimelineEventApiItem[];
+};
+
 export type ReportTasksListQueryParams = Record<string, string | number>;

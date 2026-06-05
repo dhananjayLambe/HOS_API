@@ -183,24 +183,6 @@ export function buildTestWorkflow(report: ReportChipViewModel): TestWorkflowView
     availableActions = mergeWorkflowActions(availableActions, ["VIEW", "REUPLOAD"]);
   }
 
-  const latestVersion = report.versions.find((version) => version.isLatest);
-  const timeline = [
-    { id: `${report.reportId}-collected`, atLabel: "09:20 AM", label: "Collected" },
-    report.artifacts.length > 0
-      ? {
-          id: `${report.reportId}-uploaded`,
-          atLabel: latestVersion?.createdAtLabel ?? report.artifacts[0]?.uploadedAtLabel ?? "09:45 AM",
-          label: isReuploaded || corrected ? "Report re-uploaded" : "Report uploaded",
-        }
-      : undefined,
-    sent
-      ? { id: `${report.reportId}-sent`, atLabel: report.lastUpdatedAtLabel ?? "10:10 AM", label: "Sent to patient" }
-      : undefined,
-    deliveryState === "FAILED"
-      ? { id: `${report.reportId}-failed`, atLabel: report.lastUpdatedAtLabel ?? "Latest", label: "Delivery failed" }
-      : undefined,
-  ].filter((event): event is TestWorkflowViewModel["timeline"][number] => Boolean(event));
-
   return {
     reportId: report.reportId,
     testName: report.testLabel,
@@ -209,7 +191,6 @@ export function buildTestWorkflow(report: ReportChipViewModel): TestWorkflowView
     corrected,
     isReuploaded,
     lastUpdatedLabel: report.lastUpdatedLabel ?? report.lastUpdatedAtLabel,
-    timeline,
     availableActions,
     artifacts: report.artifacts,
   };

@@ -104,6 +104,7 @@ export function ReportsAssignmentLiveCard({
   return (
     <OrderCompletionCard
       order={order}
+      branchId={branchId}
       hidePatientName
       actionLoading={isCardLoading}
       onUpload={(reportId) => actions.onUpload(task, reportId)}

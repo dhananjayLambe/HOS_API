@@ -23,6 +23,7 @@ import { forwardRef, useMemo, useState } from "react";
 
 export type OrderCompletionCardProps = {
   order: OrderLifecycleViewModel;
+  branchId?: string | null;
   highlighted?: boolean;
   actionLoading?: boolean;
   hidePatientName?: boolean;
@@ -65,6 +66,7 @@ export const OrderCompletionCard = forwardRef<HTMLElement, OrderCompletionCardPr
   function OrderCompletionCard(
     {
       order,
+      branchId = null,
       highlighted,
       actionLoading,
       hidePatientName,
@@ -219,6 +221,7 @@ export const OrderCompletionCard = forwardRef<HTMLElement, OrderCompletionCardPr
           {workflows.map((workflow) => (
             <TestWorkflowRow
               key={workflow.reportId}
+              branchId={branchId}
               workflow={workflow}
               loading={actionLoading}
               onAction={handleWorkflowAction}

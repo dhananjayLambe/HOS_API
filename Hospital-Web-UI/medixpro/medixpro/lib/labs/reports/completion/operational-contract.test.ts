@@ -61,8 +61,6 @@ describe("operational contract helpers", () => {
     expect(workflows[1]!.availableActions).toEqual(["UPLOAD"]);
     expect(workflows[2]!.availableActions).toEqual(["UPLOAD"]);
     expect(workflows[3]!.availableActions).toEqual(["VIEW", "RETRY"]);
-    expect(workflows[0]!.timeline.map((event) => event.label)).toEqual(["Collected", "Report uploaded"]);
-    expect(workflows[3]!.timeline.map((event) => event.label)).toEqual(["Collected", "Report uploaded", "Delivery failed"]);
   });
 
   it("maps CORRECT_REPORT from API to re-upload workflow action", () => {
@@ -101,7 +99,6 @@ describe("operational contract helpers", () => {
     expect(workflows[0]!.availableActions).toEqual(["VIEW", "REUPLOAD"]);
     expect(workflows[1]!.availableActions).toEqual(["VIEW", "SEND"]);
     expect(workflows[1]!.isReuploaded).toBe(true);
-    expect(workflows[1]!.timeline.map((event) => event.label)).toEqual(["Collected", "Report re-uploaded"]);
     expect(workflows[2]!.availableActions).toEqual(["VIEW", "REUPLOAD"]);
   });
 

@@ -15,6 +15,7 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 
 export type PatientOrderGroupProps = {
   group: PatientOrderGroupViewModel;
+  branchId?: string | null;
   highlightedTaskId?: string | null;
   actionLoadingTaskId?: string | null;
   onUpload: (taskId: string, reportId?: string) => void;
@@ -54,6 +55,7 @@ function pluralize(count: number, singular: string, plural = `${singular}s`): st
 
 export function PatientOrderGroup({
   group,
+  branchId = null,
   highlightedTaskId,
   actionLoadingTaskId,
   onUpload,
@@ -120,6 +122,7 @@ export function PatientOrderGroup({
               return (
                 <OrderCompletionCard
                   key={order.taskId}
+                  branchId={branchId}
                   ref={(el) => {
                     if (cardRefs) cardRefs.current[order.taskId] = el;
                   }}

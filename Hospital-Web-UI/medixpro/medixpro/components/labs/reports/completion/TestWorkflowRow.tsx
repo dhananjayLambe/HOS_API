@@ -1,6 +1,9 @@
 "use client";
 
+import { ReportTestTimeline } from "@/components/labs/reports/completion/ReportTestTimeline";
 import { Button } from "@/components/ui/button";
+import { useReportTimeline } from "@/hooks/labs/useReportTimeline";
+import { mapReportApiErrorToMessage } from "@/lib/labs/reports/api/report-api-errors";
 import type { TestWorkflowAction, TestWorkflowViewModel } from "@/lib/labs/reports/completion/order-lifecycle.types";
 import { cn } from "@/lib/utils";
 import { ChevronDown, ChevronRight } from "lucide-react";
@@ -44,16 +47,22 @@ function actionIsPrimary(action: TestWorkflowAction): boolean {
 }
 
 export function TestWorkflowRow({
+  branchId,
   workflow,
   loading,
   onAction,
 }: {
+  branchId: string | null;
   workflow: TestWorkflowViewModel;
   loading?: boolean;
   onAction: (reportId: string, action: TestWorkflowAction) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const tone = workflowTone(workflow);
+  const timelineQuery = useReportTimeline(branchId, workflow.reportId, expanded);
+  const timelineError = timelineQuery.error
+    ? mapReportApiErrorToMessage(timelineQuery.error)
+    : null;
 
   return (
     <section className={cn("rounded-lg border px-3 py-2", tone.className)}>
@@ -87,30 +96,25 @@ export function TestWorkflowRow({
             {actionLabel(workflow, action)}
           </Button>
         ))}
-        {workflow.timeline.length > 0 ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-8 px-2.5 text-xs text-[#6B7280]"
-            onClick={() => setExpanded((current) => !current)}
-            aria-expanded={expanded}
-          >
-            {expanded ? <ChevronDown className="mr-1 h-3.5 w-3.5" /> : <ChevronRight className="mr-1 h-3.5 w-3.5" />}
-            Timeline
-          </Button>
-        ) : null}
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-8 px-2.5 text-xs text-[#6B7280]"
+          onClick={() => setExpanded((current) => !current)}
+          aria-expanded={expanded}
+        >
+          {expanded ? <ChevronDown className="mr-1 h-3.5 w-3.5" /> : <ChevronRight className="mr-1 h-3.5 w-3.5" />}
+          Timeline
+        </Button>
       </div>
 
       {expanded ? (
-        <ol className="mt-2 space-y-1 rounded-md border border-white/70 bg-white/70 p-2 text-xs text-[#374151]">
-          {workflow.timeline.map((event) => (
-            <li key={event.id} className="flex flex-wrap gap-1">
-              <span className="font-semibold">{event.atLabel}</span>
-              <span>{event.label}</span>
-            </li>
-          ))}
-        </ol>
+        <ReportTestTimeline
+          events={timelineQuery.data ?? []}
+          loading={timelineQuery.isPending}
+          error={timelineError}
+        />
       ) : null}
     </section>
   );

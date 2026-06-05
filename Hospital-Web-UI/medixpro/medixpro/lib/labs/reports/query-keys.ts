@@ -39,6 +39,9 @@ export const labOrderAssignmentQueryKey = (branchId: string | null, assignmentId
 export const reportHistoryQueryKey = (branchId: string | null, reportId: string | null) =>
   ["lab", branchId ?? "unknown", "report-history", reportId ?? "none"] as const;
 
+export const reportTimelineQueryKey = (branchId: string | null, reportId: string | null) =>
+  ["lab", branchId ?? "unknown", "report-timeline", reportId ?? "none"] as const;
+
 /** Prefix for invalidating all report-task list queries for a branch. */
 export const reportsQueueKeyPrefix = (branchId: string | null) =>
   ["lab", branchId ?? "unknown", "report-tasks"] as const;

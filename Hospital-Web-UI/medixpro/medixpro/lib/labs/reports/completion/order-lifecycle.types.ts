@@ -31,12 +31,6 @@ export type TestWorkflowAction =
   | "DOWNLOAD"
   | "RETRY";
 
-export type TestTimelineEvent = {
-  id: string;
-  atLabel: string;
-  label: string;
-};
-
 export type TestWorkflowViewModel = {
   reportId: string;
   testName: string;
@@ -45,7 +39,6 @@ export type TestWorkflowViewModel = {
   corrected: boolean;
   isReuploaded?: boolean;
   lastUpdatedLabel?: string;
-  timeline: TestTimelineEvent[];
   availableActions: TestWorkflowAction[];
   artifacts: ReportArtifactViewModel[];
 };

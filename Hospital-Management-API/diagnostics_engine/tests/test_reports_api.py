@@ -878,6 +878,68 @@ class ReportAPITestCase(TestCase):
         self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
         self.assertEqual(res.data["error"]["code"], "REPORT_SUPERSEDED")
 
+    def test_report_timeline_upload_ready_send_ascending(self):
+        self._upload_primary()
+        ReportWorkflowService.mark_ready(self.report, user=self.lab_user.user)
+        ReportDeliveryService.deliver_via_channel(
+            report=self.report,
+            channel="WHATSAPP",
+            recipient="9876543210",
+        )
+        url = reverse("v1-report-timeline", kwargs={"report_id": self.report.id})
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        data = res.data["data"]
+        self.assertEqual(str(data["report_id"]), str(self.report.id))
+        event_types = [e["event_type"] for e in data["events"]]
+        self.assertIn("collected", event_types)
+        self.assertIn("upload_completed", event_types)
+        self.assertIn("ready_to_send", event_types)
+        self.assertIn("sent", event_types)
+        self.assertIn("delivered", event_types)
+        timestamps = [e["timestamp"] for e in data["events"]]
+        self.assertEqual(timestamps, sorted(timestamps))
+
+    def test_report_timeline_reupload_event(self):
+        self._upload_primary()
+        old = self.report.artifacts.filter(is_active=True).first()
+        ArtifactUploadService.replace_artifact(
+            report=self.report,
+            old_artifact=old,
+            file=_pdf(b"replaced"),
+            uploaded_by=self.lab_user.user,
+            reupload_reason="Corrected values",
+        )
+        url = reverse("v1-report-timeline", kwargs={"report_id": self.report.id})
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        event_types = [e["event_type"] for e in res.data["data"]["events"]]
+        self.assertIn("upload_completed", event_types)
+        self.assertIn("artifact_reuploaded", event_types)
+        reupload = next(e for e in res.data["data"]["events"] if e["event_type"] == "artifact_reuploaded")
+        self.assertTrue(reupload["message"])
+
+    def test_report_timeline_empty_for_pending_report(self):
+        url = reverse("v1-report-timeline", kwargs={"report_id": self.report.id})
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        event_types = [e["event_type"] for e in res.data["data"]["events"]]
+        self.assertIn("collected", event_types)
+        self.assertNotIn("upload_completed", event_types)
+
+    def test_report_timeline_superseded_404(self):
+        DiagnosticTestReport.objects.create(
+            order_test_line=self.line,
+            storage_mode=ReportStorageMode.FILE,
+            status=ReportLifecycleStatus.PENDING,
+            revision_number=2,
+            supersedes=self.report,
+        )
+        url = reverse("v1-report-timeline", kwargs={"report_id": self.report.id})
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(res.data["error"]["code"], "REPORT_SUPERSEDED")
+
     def test_patient_reports_list(self):
         self._upload_primary()
         patient_id = self.order.patient_profile_id

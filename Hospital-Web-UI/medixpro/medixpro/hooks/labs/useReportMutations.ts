@@ -22,6 +22,7 @@ import {
   labOrderAssignmentQueryKey,
   reportDetailQueryKey,
   reportHistoryQueryKey,
+  reportTimelineQueryKey,
   reportTaskContextQueryKey,
   reportsQueueKeyPrefix,
 } from "@/lib/labs/reports/query-keys";
@@ -108,6 +109,16 @@ export function useReportMutations(branchId: string | null | undefined) {
     [queryClient, branchId],
   );
 
+  const invalidateReportTimeline = useCallback(
+    async (reportId: string | undefined) => {
+      if (!reportId) return;
+      await queryClient.invalidateQueries({
+        queryKey: reportTimelineQueryKey(branchId ?? null, reportId),
+      });
+    },
+    [queryClient, branchId],
+  );
+
   const invalidateLabOrderAssignment = useCallback(
     async (assignmentId: string | undefined) => {
       if (!assignmentId) return;
@@ -152,6 +163,7 @@ export function useReportMutations(branchId: string | null | undefined) {
       for (const id of reportIds) {
         await invalidateReportDetail(id);
         await invalidateReportHistory(id);
+        await invalidateReportTimeline(id);
       }
       await invalidateTaskContext(params.taskId);
       await invalidateLabOrderAssignment(params.assignmentId);
@@ -162,6 +174,7 @@ export function useReportMutations(branchId: string | null | undefined) {
       invalidateReportsQueue,
       invalidateReportDetail,
       invalidateReportHistory,
+      invalidateReportTimeline,
       invalidateTaskContext,
       invalidateLabOrderAssignment,
     ],
@@ -172,12 +185,14 @@ export function useReportMutations(branchId: string | null | undefined) {
       await invalidateTaskContext(ctx.taskId);
       await invalidateReportDetail(ctx.reportId);
       await invalidateReportHistory(ctx.reportId);
+      await invalidateReportTimeline(ctx.reportId);
       await invalidateLabOrderAssignment(ctx.assignmentId);
     },
     [
       invalidateTaskContext,
       invalidateReportDetail,
       invalidateReportHistory,
+      invalidateReportTimeline,
       invalidateLabOrderAssignment,
     ],
   );

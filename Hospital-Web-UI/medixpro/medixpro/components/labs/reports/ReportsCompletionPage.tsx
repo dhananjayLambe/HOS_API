@@ -491,6 +491,7 @@ export function ReportsCompletionPage() {
             <PatientOrderGroup
               key={group.patientKey}
               group={group}
+              branchId={branchId}
               highlightedTaskId={queue.highlightedTaskId}
               actionLoadingTaskId={queue.actionLoadingTaskId}
               expanded={queue.expandedPatientKeys.has(group.patientKey)}

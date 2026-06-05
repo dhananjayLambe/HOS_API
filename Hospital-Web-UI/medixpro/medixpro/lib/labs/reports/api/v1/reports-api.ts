@@ -14,6 +14,7 @@ import type {
   ReportTaskContextApiData,
   ReportTaskListData,
   ReportTasksListQueryParams,
+  ReportTimelineApiData,
   RetryDeliveryApiData,
   SendWhatsAppApiData,
   UploadArtifactsApiData,
@@ -95,6 +96,17 @@ export async function getReportHistory(
 ): Promise<ReportHistoryApiData> {
   const { data } = await backendAxiosClient.get<DiagnosticsApiEnvelope<ReportHistoryApiData>>(
     `${V1_PREFIX}/reports/${encodeURIComponent(reportId)}/history/`,
+    { signal: options?.signal, headers: requestHeaders(options?.requestId) },
+  );
+  return unwrapApiResponse(data);
+}
+
+export async function getReportTimeline(
+  reportId: string,
+  options?: { signal?: AbortSignal; requestId?: string },
+): Promise<ReportTimelineApiData> {
+  const { data } = await backendAxiosClient.get<DiagnosticsApiEnvelope<ReportTimelineApiData>>(
+    `${V1_PREFIX}/reports/${encodeURIComponent(reportId)}/timeline/`,
     { signal: options?.signal, headers: requestHeaders(options?.requestId) },
   );
   return unwrapApiResponse(data);

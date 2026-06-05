@@ -19,6 +19,7 @@ from diagnostics_engine.api.views.reports.operational import (
 )
 from diagnostics_engine.api.views.reports.patient_reports import PatientReportsView
 from diagnostics_engine.api.views.reports.report_history import ReportHistoryView
+from diagnostics_engine.api.views.reports.report_timeline import ReportTimelineView
 from diagnostics_engine.api.views.reports.retry_delivery import RetryDeliveryView
 from diagnostics_engine.api.views.reports.send_whatsapp import SendWhatsAppView
 
@@ -67,6 +68,11 @@ urlpatterns = [
         "reports/<uuid:report_id>/history/",
         ReportHistoryView.as_view(),
         name="v1-report-history",
+    ),
+    path(
+        "reports/<uuid:report_id>/timeline/",
+        ReportTimelineView.as_view(),
+        name="v1-report-timeline",
     ),
     path(
         "delivery-logs/<uuid:log_id>/retry/",
