@@ -272,12 +272,22 @@ def _build_prescription_header(consultation: Consultation) -> dict[str, Any]:
             "is_cancelled": False,
             "cancelled_at": None,
         }
-    return {
+    header = {
+        "prescription_id": str(active.id),
         "pnr": active.prescription_pnr,
         "status": active.status,
         "is_cancelled": active.status == "cancelled",
         "cancelled_at": _iso_datetime(active.cancelled_at),
     }
+    try:
+        from notifications.services.presentation.whatsapp_status import get_prescription_whatsapp_status
+
+        whatsapp = get_prescription_whatsapp_status(active.id)
+        if whatsapp:
+            header["whatsapp"] = whatsapp
+    except Exception:
+        pass
+    return header
 
 
 def _build_clinic(encounter) -> dict[str, Any]:

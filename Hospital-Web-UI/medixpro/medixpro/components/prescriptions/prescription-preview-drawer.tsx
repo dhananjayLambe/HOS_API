@@ -14,11 +14,14 @@ import { PrescriptionPreview } from "@/components/prescriptions/prescription-pre
 import { PrescriptionDrawerSkeleton } from "@/components/prescriptions/prescriptions-skeletons";
 import type { PrescriptionSummaryPayload } from "@/components/prescriptions/types";
 
+import { WhatsAppDeliveryCard } from "@/components/prescriptions/whatsapp-delivery-card";
 import {
   cancelPrescription,
   downloadPrescriptionPdf,
   fetchPrescriptionPreviewHtml,
   fetchPrescriptionSummary,
+  resendWhatsAppDelivery,
+  retryWhatsAppDelivery,
   type PrescriptionListItem,
 } from "@/lib/api/prescriptions";
 import { useToastNotification } from "@/hooks/use-toast-notification";
@@ -50,8 +53,11 @@ export function PrescriptionPreviewDrawer({
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [locallyCancelled, setLocallyCancelled] = useState(false);
+  const [whatsappRetrying, setWhatsappRetrying] = useState(false);
+  const [whatsappResending, setWhatsappResending] = useState(false);
 
   const consultationId = row?.consultation_id || "";
+  const whatsappDelivery = summary?.prescription?.whatsapp || row?.whatsapp;
   const isCancelled = Boolean(row?.is_cancelled) || locallyCancelled;
 
   // Reset internal state whenever the drawer is opened against a different row.
@@ -179,6 +185,46 @@ export function PrescriptionPreviewDrawer({
     [consultationId, onCancelled, toast]
   );
 
+  const refreshSummary = async () => {
+    if (!consultationId) return;
+    const refreshed = await fetchPrescriptionSummary(consultationId);
+    setSummary(refreshed.data);
+  };
+
+  const handleWhatsAppRetry = async () => {
+    const messageId = whatsappDelivery?.message_id;
+    if (!messageId) return;
+    setWhatsappRetrying(true);
+    try {
+      await retryWhatsAppDelivery(messageId);
+      toast.success("WhatsApp delivery retry queued.");
+      await refreshSummary();
+    } catch (error: any) {
+      const message =
+        error?.response?.data?.detail || error?.message || "Unable to retry WhatsApp delivery.";
+      toast.error(message);
+    } finally {
+      setWhatsappRetrying(false);
+    }
+  };
+
+  const handleWhatsAppResend = async () => {
+    const prescriptionId = summary?.prescription?.prescription_id || row?.prescription_id;
+    if (!prescriptionId) return;
+    setWhatsappResending(true);
+    try {
+      await resendWhatsAppDelivery(prescriptionId);
+      toast.success("WhatsApp delivery resend queued.");
+      await refreshSummary();
+    } catch (error: any) {
+      const message =
+        error?.response?.data?.detail || error?.message || "Unable to resend WhatsApp delivery.";
+      toast.error(message);
+    } finally {
+      setWhatsappResending(false);
+    }
+  };
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
@@ -209,6 +255,18 @@ export function PrescriptionPreviewDrawer({
         </div>
 
         <div className="flex-1 overflow-y-auto bg-slate-50 px-4 py-4 sm:px-5">
+          <WhatsAppDeliveryCard
+            className="mb-4"
+            delivery={whatsappDelivery}
+            retrying={whatsappRetrying}
+            resending={whatsappResending}
+            onRetry={whatsappDelivery?.can_retry ? () => void handleWhatsAppRetry() : undefined}
+            onResend={
+              whatsappDelivery?.can_resend || summary?.prescription?.prescription_id
+                ? () => void handleWhatsAppResend()
+                : undefined
+            }
+          />
           {loading ? (
             <PrescriptionDrawerSkeleton />
           ) : loadError ? (

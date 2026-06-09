@@ -28,7 +28,7 @@ export function PrescriptionActionsSidebar({
   const shouldDisableActions = actionsDisabled || isCancelled;
 
   return (
-    <div className="space-y-4 lg:sticky lg:top-28">
+    <div className="space-y-4">
       <Card className="rounded-2xl shadow-sm">
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Actions</CardTitle>

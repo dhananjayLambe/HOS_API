@@ -31,6 +31,7 @@ import {
   type PrescriptionListItem,
   type PrescriptionListResponse,
   type PrescriptionStatusFilter,
+  type WhatsAppStatusFilter,
 } from "@/lib/api/prescriptions";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useToastNotification } from "@/hooks/use-toast-notification";
@@ -39,6 +40,13 @@ const PAGE_SIZE = 20;
 
 const isStatusFilter = (value: string | null): value is PrescriptionStatusFilter =>
   value === "all" || value === "active" || value === "cancelled";
+
+const isWhatsAppStatusFilter = (value: string | null): value is WhatsAppStatusFilter =>
+  value === "all" ||
+  value === "delivered" ||
+  value === "failed" ||
+  value === "pending" ||
+  value === "skipped";
 
 const isPreset = (value: string | null): value is DatePresetId =>
   value === "today" || value === "7d" || value === "30d" || value === "custom";
@@ -55,6 +63,10 @@ const filtersFromUrl = (params: URLSearchParams): { filters: PrescriptionsFilter
 
   const statusParam = params.get("status");
   const status: PrescriptionStatusFilter = isStatusFilter(statusParam) ? statusParam : "all";
+  const whatsappParam = params.get("whatsapp_status");
+  const whatsapp_status: WhatsAppStatusFilter = isWhatsAppStatusFilter(whatsappParam)
+    ? whatsappParam
+    : "all";
 
   const pageParam = Number(params.get("page") || "1");
   const page = Number.isFinite(pageParam) && pageParam > 0 ? Math.floor(pageParam) : 1;
@@ -63,6 +75,7 @@ const filtersFromUrl = (params: URLSearchParams): { filters: PrescriptionsFilter
     filters: {
       search: params.get("q") || "",
       status,
+      whatsapp_status,
       preset,
       date_from: dateRange.from,
       date_to: dateRange.to,
@@ -75,6 +88,7 @@ const buildSearchString = (filters: PrescriptionsFilterValues, page: number): st
   const params = new URLSearchParams();
   if (filters.search.trim()) params.set("q", filters.search.trim());
   if (filters.status !== "all") params.set("status", filters.status);
+  if (filters.whatsapp_status !== "all") params.set("whatsapp_status", filters.whatsapp_status);
   if (filters.preset !== "today") params.set("preset", filters.preset);
   if (filters.preset === "custom") {
     params.set("date_from", filters.date_from);
@@ -128,7 +142,7 @@ export default function PrescriptionsPage() {
   // Reset page to 1 whenever filters (other than page itself) change.
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, filters.status, filters.preset, filters.date_from, filters.date_to]);
+  }, [debouncedSearch, filters.status, filters.whatsapp_status, filters.preset, filters.date_from, filters.date_to]);
 
   // Fetch list whenever effective query changes.
   useEffect(() => {
@@ -143,6 +157,7 @@ export default function PrescriptionsPage() {
           {
             search: debouncedSearch,
             status: filters.status,
+            whatsapp_status: filters.whatsapp_status,
             date_from: filters.date_from,
             date_to: filters.date_to,
             page,
@@ -176,7 +191,7 @@ export default function PrescriptionsPage() {
     })();
 
     return () => controller.abort();
-  }, [debouncedSearch, filters.status, filters.date_from, filters.date_to, page]);
+  }, [debouncedSearch, filters.status, filters.whatsapp_status, filters.date_from, filters.date_to, page]);
 
   const handleResetFilters = useCallback(() => {
     setFilters(DEFAULT_FILTERS);

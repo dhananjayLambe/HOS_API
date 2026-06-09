@@ -12,7 +12,13 @@ import { CancelPrescriptionModal } from "@/components/prescriptions/cancel-presc
 import { PrescriptionActionsSidebar } from "@/components/prescriptions/prescription-actions-sidebar";
 import { PrescriptionSuccessHeader } from "@/components/prescriptions/prescription-success-header";
 import { StartNextConsultationSection } from "@/components/prescriptions/start-next-consultation-section";
+import { WhatsAppDeliveryCard } from "@/components/prescriptions/whatsapp-delivery-card";
 import type { CancelState, PrescriptionSummaryPayload } from "@/components/prescriptions/types";
+import {
+  fetchPrescriptionSummary,
+  resendWhatsAppDelivery,
+  retryWhatsAppDelivery,
+} from "@/lib/api/prescriptions";
 
 type EncounterLookupResponse = {
   id: string;
@@ -32,6 +38,15 @@ type CompletionState = {
 const completionKey = (encounterId: string) => `rx-completion:${encounterId}`;
 const cancelKey = (encounterId: string) => `rx-cancel:${encounterId}`;
 const downloadedKey = (encounterId: string) => `rx-pdf-downloaded:${encounterId}`;
+
+const WHATSAPP_TERMINAL_STATUSES = new Set(["sent", "delivered", "read", "failed", "skipped"]);
+const WHATSAPP_POLL_INTERVAL_MS = 4000;
+const WHATSAPP_POLL_MAX_MS = 30000;
+
+function isWhatsAppPollingComplete(status?: string | null) {
+  const normalized = (status || "").toLowerCase();
+  return WHATSAPP_TERMINAL_STATUSES.has(normalized);
+}
 
 const formatDateTime = (value?: string | null) => {
   if (!value) return "-";
@@ -72,6 +87,10 @@ export default function CompletedPrescriptionPage() {
   const [isCancellingPrescription, setIsCancellingPrescription] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
   const [isPdfDownloading, setIsPdfDownloading] = useState(false);
+  const [whatsappPolling, setWhatsappPolling] = useState(false);
+  const [whatsappPollTimedOut, setWhatsappPollTimedOut] = useState(false);
+  const [whatsappRetrying, setWhatsappRetrying] = useState(false);
+  const [whatsappResending, setWhatsappResending] = useState(false);
 
   const completionData: CompletionState | null = useMemo(() => {
     if (!encounterId || typeof window === "undefined") return null;
@@ -224,6 +243,93 @@ export default function CompletedPrescriptionPage() {
     };
   }, [completionData, encounterId]);
 
+  const refreshSummary = useCallback(async () => {
+    if (!consultationId) return null;
+    const summaryRes = await fetchPrescriptionSummary(consultationId);
+    setSummary(summaryRes.data);
+    const nextStatus = summaryRes.data?.prescription?.whatsapp?.status;
+    if (nextStatus) {
+      setWhatsappPollTimedOut(false);
+    }
+    return summaryRes.data;
+  }, [consultationId]);
+
+  useEffect(() => {
+    if (!consultationId || loading || lookupFailed || cancelState) return;
+
+    const whatsappStatus = summary?.prescription?.whatsapp?.status;
+    if (isWhatsAppPollingComplete(whatsappStatus)) {
+      setWhatsappPolling(false);
+      setWhatsappPollTimedOut(false);
+      return;
+    }
+
+    setWhatsappPollTimedOut(false);
+    setWhatsappPolling(true);
+    const startedAt = Date.now();
+    const intervalId = window.setInterval(() => {
+      void refreshSummary().then((nextSummary) => {
+        const nextStatus = nextSummary?.prescription?.whatsapp?.status;
+        if (isWhatsAppPollingComplete(nextStatus)) {
+          window.clearInterval(intervalId);
+          setWhatsappPolling(false);
+          setWhatsappPollTimedOut(false);
+        }
+      });
+      if (Date.now() - startedAt >= WHATSAPP_POLL_MAX_MS) {
+        window.clearInterval(intervalId);
+        setWhatsappPolling(false);
+        void refreshSummary().then((nextSummary) => {
+          if (!nextSummary?.prescription?.whatsapp?.status) {
+            setWhatsappPollTimedOut(true);
+          }
+        });
+      }
+    }, WHATSAPP_POLL_INTERVAL_MS);
+
+    return () => {
+      window.clearInterval(intervalId);
+      setWhatsappPolling(false);
+    };
+  }, [cancelState, consultationId, loading, lookupFailed, refreshSummary, summary?.prescription?.whatsapp?.status]);
+
+  const handleWhatsAppRetry = useCallback(async () => {
+    const messageId = summary?.prescription?.whatsapp?.message_id;
+    if (!messageId) return;
+    setWhatsappRetrying(true);
+    try {
+      await retryWhatsAppDelivery(messageId);
+      toast.success("WhatsApp delivery retry queued.");
+      await refreshSummary();
+    } catch (error: any) {
+      const message =
+        error?.response?.data?.detail || error?.message || "Unable to retry WhatsApp delivery.";
+      if (error?.response?.status === 400) {
+        await refreshSummary();
+      }
+      toast.error(message);
+    } finally {
+      setWhatsappRetrying(false);
+    }
+  }, [refreshSummary, summary?.prescription?.whatsapp?.message_id, toast]);
+
+  const handleWhatsAppResend = useCallback(async () => {
+    const prescriptionId = summary?.prescription?.prescription_id;
+    if (!prescriptionId) return;
+    setWhatsappResending(true);
+    try {
+      await resendWhatsAppDelivery(prescriptionId);
+      toast.success("WhatsApp delivery resend queued.");
+      await refreshSummary();
+    } catch (error: any) {
+      const message =
+        error?.response?.data?.detail || error?.message || "Unable to resend WhatsApp delivery.";
+      toast.error(message);
+    } finally {
+      setWhatsappResending(false);
+    }
+  }, [refreshSummary, summary?.prescription?.prescription_id, toast]);
+
   useEffect(() => {
     if (!encounterId || !consultationId || loading || lookupFailed) return;
     if (cancelState) return;
@@ -370,15 +476,36 @@ export default function CompletedPrescriptionPage() {
         </div>
 
         <div className="lg:col-span-1">
-          <PrescriptionActionsSidebar
-            generatedAt={generatedAt}
-            generatedBy={generatedBy}
-            isCancelled={Boolean(cancelState)}
-            cancelState={cancelState}
-            onPrint={handlePrint}
-            onDownload={() => downloadPdf(false)}
-            actionsDisabled={isPdfDownloading}
-          />
+          <div className="space-y-4 lg:sticky lg:top-28">
+            <WhatsAppDeliveryCard
+              delivery={summary?.prescription?.whatsapp}
+              loading={whatsappPolling && !summary?.prescription?.whatsapp?.status}
+              statusTimedOut={whatsappPollTimedOut && !summary?.prescription?.whatsapp?.status}
+              retrying={whatsappRetrying}
+              resending={whatsappResending}
+              onRefreshStatus={() => void refreshSummary()}
+              onRetry={
+                summary?.prescription?.whatsapp?.can_retry
+                  ? () => void handleWhatsAppRetry()
+                  : undefined
+              }
+              onResend={
+                summary?.prescription?.whatsapp?.can_resend ||
+                (whatsappPollTimedOut && summary?.prescription?.prescription_id)
+                  ? () => void handleWhatsAppResend()
+                  : undefined
+              }
+            />
+            <PrescriptionActionsSidebar
+              generatedAt={generatedAt}
+              generatedBy={generatedBy}
+              isCancelled={Boolean(cancelState)}
+              cancelState={cancelState}
+              onPrint={handlePrint}
+              onDownload={() => downloadPdf(false)}
+              actionsDisabled={isPdfDownloading}
+            />
+          </div>
         </div>
       </div>
 

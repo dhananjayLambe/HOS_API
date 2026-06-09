@@ -4,6 +4,25 @@ import { backendAxiosClient } from "@/lib/axiosClient";
 import type { PrescriptionSummaryPayload } from "@/components/prescriptions/types";
 
 export type PrescriptionStatusFilter = "all" | "active" | "cancelled";
+export type WhatsAppDeliveryStatus =
+  | "queued"
+  | "sent"
+  | "delivered"
+  | "read"
+  | "failed"
+  | "skipped";
+export type WhatsAppStatusFilter = "all" | "delivered" | "failed" | "pending" | "skipped";
+
+export interface PrescriptionWhatsAppStatus {
+  message_id?: string;
+  status?: WhatsAppDeliveryStatus | null;
+  sent_at?: string | null;
+  delivered_at?: string | null;
+  read_at?: string | null;
+  failure_reason?: string | null;
+  can_retry?: boolean;
+  can_resend?: boolean;
+}
 
 export interface PrescriptionListItem {
   consultation_id: string;
@@ -22,6 +41,7 @@ export interface PrescriptionListItem {
   consultation_date?: string | null;
   is_cancelled: boolean;
   cancelled_at?: string | null;
+  whatsapp?: PrescriptionWhatsAppStatus | null;
 }
 
 export interface PrescriptionListResponse {
@@ -34,6 +54,7 @@ export interface PrescriptionListResponse {
 export interface ListPrescriptionsParams {
   search?: string;
   status?: PrescriptionStatusFilter;
+  whatsapp_status?: WhatsAppStatusFilter;
   date_from?: string;
   date_to?: string;
   page?: number;
@@ -51,6 +72,9 @@ export async function listPrescriptions(
   const query: Record<string, string> = {};
   if (params.search && params.search.trim()) query.search = params.search.trim();
   if (params.status && params.status !== "all") query.status = params.status;
+  if (params.whatsapp_status && params.whatsapp_status !== "all") {
+    query.whatsapp_status = params.whatsapp_status;
+  }
   if (params.date_from) query.date_from = params.date_from;
   if (params.date_to) query.date_to = params.date_to;
   if (params.page) query.page = String(params.page);
@@ -161,4 +185,18 @@ export async function downloadPrescriptionPdf(
   anchor.click();
   anchor.remove();
   URL.revokeObjectURL(url);
+}
+
+/** POST /api/v1/notifications/whatsapp/retry/{message_id}/ */
+export async function retryWhatsAppDelivery(messageId: string) {
+  return backendAxiosClient.post<{ status: string; message: PrescriptionWhatsAppStatus }>(
+    `/v1/notifications/whatsapp/retry/${encodeURIComponent(messageId)}/`
+  );
+}
+
+/** POST /api/v1/notifications/whatsapp/resend/{prescription_id}/ */
+export async function resendWhatsAppDelivery(prescriptionId: string) {
+  return backendAxiosClient.post<{ status: string; message: PrescriptionWhatsAppStatus }>(
+    `/v1/notifications/whatsapp/resend/${encodeURIComponent(prescriptionId)}/`
+  );
 }

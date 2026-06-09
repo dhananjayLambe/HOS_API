@@ -35,11 +35,25 @@ export interface PrescriptionSummaryVisit {
   type?: string;
 }
 
+export interface PrescriptionWhatsAppDelivery {
+  message_id?: string;
+  status?: string;
+  sent_at?: string | null;
+  delivered_at?: string | null;
+  read_at?: string | null;
+  failure_reason?: string | null;
+  recipient_mobile_number?: string | null;
+  can_retry?: boolean;
+  can_resend?: boolean;
+}
+
 export interface PrescriptionSummaryHeader {
+  prescription_id?: string;
   pnr?: string;
   status?: string;
   is_cancelled?: boolean;
   cancelled_at?: string | null;
+  whatsapp?: PrescriptionWhatsAppDelivery | null;
 }
 
 export interface PrescriptionSummaryVitals {

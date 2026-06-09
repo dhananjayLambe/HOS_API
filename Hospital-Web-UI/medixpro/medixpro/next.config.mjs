@@ -1,5 +1,5 @@
 /** @type {import('next').NextConfig} */
-/** Django origin for proxying `/api/consultations|diagnostics|medicines/*` when the browser uses same-origin `/api` (see axiosClient backendAxiosClient). */
+/** Django origin for proxying `/api/consultations|diagnostics|medicines|v1/notifications/*` when the browser uses same-origin `/api` (see axiosClient backendAxiosClient). */
 const backendProxyTarget = process.env.BACKEND_PROXY_TARGET || "http://127.0.0.1:8000";
 
 const nextConfig = {
@@ -51,6 +51,14 @@ const nextConfig = {
         {
           source: "/api/v1/diagnostics/:path*",
           destination: `${backendProxyTarget}/api/v1/diagnostics/:path*/`,
+        },
+        {
+          source: "/api/v1/notifications/:path*",
+          destination: `${backendProxyTarget}/api/v1/notifications/:path*/`,
+        },
+        {
+          source: "/api/v1/prescriptions/:path*",
+          destination: `${backendProxyTarget}/api/v1/prescriptions/:path*/`,
         },
         {
           source: "/api/medicines/:path*",

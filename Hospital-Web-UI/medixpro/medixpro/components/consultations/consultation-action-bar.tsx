@@ -709,7 +709,12 @@ export function ConsultationActionBar() {
         completed_at: new Date().toISOString(),
       })
     );
-    toast.success("Consultation completed successfully");
+    const patientMobile = (selectedPatient?.mobile || "").trim();
+    toast.success(
+      patientMobile
+        ? "Consultation completed. Prescription will be sent via WhatsApp."
+        : "Consultation completed. WhatsApp delivery skipped — no patient mobile on file."
+    );
     setTimeout(() => {
       useConsultationStore.getState().reset();
       router.replace(`/prescriptions/completed/${encodeURIComponent(encounterId)}`);
@@ -1253,6 +1258,7 @@ export function ConsultationActionBar() {
         isEndingConsultation={isEndingConsultation}
         data={endConsultationReviewData}
         hasFollowUp={isFollowUpSet(useConsultationStore.getState())}
+        hasPatientMobile={Boolean((selectedPatient?.mobile || "").trim())}
       />
 
       <SaveTemplateModal open={showSaveTemplateModal} onOpenChange={setShowSaveTemplateModal} />

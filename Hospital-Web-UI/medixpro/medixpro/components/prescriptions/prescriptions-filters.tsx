@@ -11,13 +11,14 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
-import type { PrescriptionStatusFilter } from "@/lib/api/prescriptions";
+import type { PrescriptionStatusFilter, WhatsAppStatusFilter } from "@/lib/api/prescriptions";
 
 export type DatePresetId = "today" | "7d" | "30d" | "custom";
 
 export interface PrescriptionsFilterValues {
   search: string;
   status: PrescriptionStatusFilter;
+  whatsapp_status: WhatsAppStatusFilter;
   preset: DatePresetId;
   /** ISO YYYY-MM-DD inclusive lower bound. */
   date_from: string;
@@ -36,6 +37,14 @@ const STATUS_OPTIONS: { id: PrescriptionStatusFilter; label: string; activeClass
   { id: "all", label: "All", activeClass: "bg-primary text-primary-foreground hover:bg-primary/90" },
   { id: "active", label: "Active", activeClass: "bg-green-600 text-white hover:bg-green-600/90" },
   { id: "cancelled", label: "Cancelled", activeClass: "bg-red-600 text-white hover:bg-red-600/90" },
+];
+
+const WHATSAPP_STATUS_OPTIONS: { id: WhatsAppStatusFilter; label: string; activeClass: string }[] = [
+  { id: "all", label: "All WhatsApp", activeClass: "bg-slate-700 text-white hover:bg-slate-700/90" },
+  { id: "delivered", label: "Delivered", activeClass: "bg-emerald-600 text-white hover:bg-emerald-600/90" },
+  { id: "pending", label: "Pending", activeClass: "bg-amber-500 text-white hover:bg-amber-500/90" },
+  { id: "failed", label: "Failed", activeClass: "bg-red-600 text-white hover:bg-red-600/90" },
+  { id: "skipped", label: "Skipped", activeClass: "bg-slate-500 text-white hover:bg-slate-500/90" },
 ];
 
 const PRESET_OPTIONS: { id: DatePresetId; label: string }[] = [
@@ -77,6 +86,7 @@ export const DEFAULT_FILTERS: PrescriptionsFilterValues = (() => {
   return {
     search: "",
     status: "all",
+    whatsapp_status: "all",
     preset: "today",
     date_from: r.from,
     date_to: r.to,
@@ -118,6 +128,7 @@ export function PrescriptionsFilters({
     return (
       values.search.trim() !== "" ||
       values.status !== "all" ||
+      values.whatsapp_status !== "all" ||
       values.preset !== "today" ||
       values.date_from !== DEFAULT_FILTERS.date_from ||
       values.date_to !== DEFAULT_FILTERS.date_to
@@ -127,6 +138,11 @@ export function PrescriptionsFilters({
   const handleStatusChange = (status: PrescriptionStatusFilter) => {
     if (status === values.status) return;
     onChange({ ...values, status });
+  };
+
+  const handleWhatsAppStatusChange = (whatsapp_status: WhatsAppStatusFilter) => {
+    if (whatsapp_status === values.whatsapp_status) return;
+    onChange({ ...values, whatsapp_status });
   };
 
   const handlePresetChange = (preset: DatePresetId) => {
@@ -189,6 +205,33 @@ export function PrescriptionsFilters({
                   role="radio"
                   aria-checked={isActive}
                   onClick={() => handleStatusChange(option.id)}
+                  className={cn(
+                    "min-h-9 rounded-full px-3 text-sm font-medium transition-colors",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    isActive
+                      ? option.activeClass
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+          <div
+            role="radiogroup"
+            aria-label="Filter by WhatsApp delivery status"
+            className="inline-flex items-center rounded-full border bg-muted/60 p-1"
+          >
+            {WHATSAPP_STATUS_OPTIONS.map((option) => {
+              const isActive = values.whatsapp_status === option.id;
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={isActive}
+                  onClick={() => handleWhatsAppStatusChange(option.id)}
                   className={cn(
                     "min-h-9 rounded-full px-3 text-sm font-medium transition-colors",
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",

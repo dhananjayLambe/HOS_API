@@ -518,8 +518,34 @@ class DoctorPrescriptionsListAPIView(APIView):
         if date_to:
             queryset = queryset.filter(created_at__date__lte=date_to)
 
+        from notifications.services.presentation.whatsapp_status import (
+            prescription_ids_for_whatsapp_filter,
+            serialize_whatsapp_message,
+        )
+
+        whatsapp_filter = str(request.query_params.get("whatsapp_status") or "").strip().lower()
+        whatsapp_prescription_ids = prescription_ids_for_whatsapp_filter(whatsapp_filter)
+        if whatsapp_prescription_ids is not None:
+            queryset = queryset.filter(id__in=whatsapp_prescription_ids)
+
         paginator = self.pagination_class()
         page = paginator.paginate_queryset(queryset, request, view=self)
+
+        page_prescription_ids = [item.id for item in page] if page else []
+        whatsapp_by_prescription: dict = {}
+        if page_prescription_ids:
+            from notifications.models.whatsapp_notifications import WhatsAppMessage
+
+            for msg in (
+                WhatsAppMessage.objects.filter(
+                    prescription_id__in=page_prescription_ids,
+                    is_deleted=False,
+                )
+                .order_by("prescription_id", "-created_at")
+            ):
+                if msg.prescription_id not in whatsapp_by_prescription:
+                    whatsapp_by_prescription[msg.prescription_id] = serialize_whatsapp_message(msg)
+
         results = []
         for prescription in page:
             encounter = prescription.consultation.encounter
@@ -564,6 +590,7 @@ class DoctorPrescriptionsListAPIView(APIView):
                     "consultation_date": prescription.created_at.isoformat() if prescription.created_at else None,
                     "is_cancelled": prescription.status == PrescriptionStatus.CANCELLED,
                     "cancelled_at": prescription.cancelled_at.isoformat() if prescription.cancelled_at else None,
+                    "whatsapp": whatsapp_by_prescription.get(prescription.id),
                 }
             )
 

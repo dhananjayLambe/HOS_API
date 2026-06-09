@@ -12,9 +12,14 @@ https://docs.djangoproject.com/en/3.0/ref/settings/
 
 import os
 from datetime import datetime, timedelta
+from pathlib import Path
+
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+load_dotenv(Path(BASE_DIR) / ".env")
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/3.0/howto/deployment/checklist/
@@ -115,6 +120,44 @@ ENABLE_CONSULTATION_SUMMARY_CACHE = os.getenv("ENABLE_CONSULTATION_SUMMARY_CACHE
 CONSULTATION_SUMMARY_CACHE_TTL_SECONDS = int(os.getenv("CONSULTATION_SUMMARY_CACHE_TTL_SECONDS", "900"))
 PRESCRIPTION_TIMING_SLOT_MAX = int(os.getenv("PRESCRIPTION_TIMING_SLOT_MAX", "2"))
 
+# WhatsApp prescription delivery (Phase 1)
+WHATSAPP_ACCESS_TOKEN = os.getenv("WHATSAPP_ACCESS_TOKEN", "").strip()
+WHATSAPP_PHONE_NUMBER_ID = os.getenv("WHATSAPP_PHONE_NUMBER_ID", "").strip()
+WHATSAPP_BUSINESS_ID = os.getenv("WHATSAPP_BUSINESS_ID", "").strip()
+WHATSAPP_WEBHOOK_VERIFY_TOKEN = os.getenv("WHATSAPP_WEBHOOK_VERIFY_TOKEN", "").strip()
+WHATSAPP_PRESCRIPTION_TEMPLATE_NAME = os.getenv(
+    "WHATSAPP_PRESCRIPTION_TEMPLATE_NAME",
+    "prescription_ready_v1",
+).strip()
+# Meta language code on the approved template (hello_world uses en_US; many custom templates use en or en_US).
+WHATSAPP_TEMPLATE_LANGUAGE_CODE = os.getenv("WHATSAPP_TEMPLATE_LANGUAGE_CODE", "en_US").strip() or "en_US"
+# Comma-separated body variable keys sent to Meta. Leave empty for templates with no body params (e.g. hello_world).
+WHATSAPP_TEMPLATE_BODY_PARAM_KEYS = os.getenv(
+    "WHATSAPP_TEMPLATE_BODY_PARAM_KEYS",
+    "patient_name,doctor_name,medicine_block,test_block,prescription_url",
+).strip()
+WHATSAPP_API_BASE_URL = os.getenv("WHATSAPP_API_BASE_URL", "https://graph.facebook.com/v21.0").rstrip("/")
+PRESCRIPTION_DOWNLOAD_BASE_URL = os.getenv(
+    "PRESCRIPTION_DOWNLOAD_BASE_URL",
+    "https://doctorprocare.com",
+).rstrip("/")
+PRESCRIPTION_WHATSAPP_ASYNC = os.getenv("PRESCRIPTION_WHATSAPP_ASYNC", "true").lower() in (
+    "1",
+    "true",
+    "yes",
+    "on",
+)
+WHATSAPP_SUMMARY_MAX_MEDICINES = int(os.getenv("WHATSAPP_SUMMARY_MAX_MEDICINES", "5"))
+WHATSAPP_SUMMARY_MAX_TESTS = int(os.getenv("WHATSAPP_SUMMARY_MAX_TESTS", "5"))
+WHATSAPP_USE_SIMULATED_PROVIDER = os.getenv("WHATSAPP_USE_SIMULATED_PROVIDER", "").lower() in (
+    "1",
+    "true",
+    "yes",
+    "on",
+) or not WHATSAPP_ACCESS_TOKEN
+# India (+91): prepended to 10-digit local numbers for Meta Cloud API (E.164 without +).
+WHATSAPP_DEFAULT_COUNTRY_CODE = os.getenv("WHATSAPP_DEFAULT_COUNTRY_CODE", "91").strip() or "91"
+
 # Appointment booking: max days from today that a slot can be booked (create API).
 MAX_BOOKING_DAYS = int(os.getenv("MAX_BOOKING_DAYS", "30"))
 # Minimum lead time before slot start for same-day booking (slots API + create validation).
@@ -156,6 +199,7 @@ INSTALLED_APPS = [
     'medicines.apps.MedicinesConfig',
     'analytics.apps.AnalyticsConfig',
     'diagnostics_engine.apps.DiagnosticsEngineConfig',
+    'notifications.apps.NotificationsConfig',
     # rest_framework
     'rest_framework',
     'rest_framework.authtoken',
@@ -356,6 +400,13 @@ CELERY_BROKER_URL = REDIS_URL
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_BACKEND = 'django-db'
+CELERY_TASK_ALWAYS_EAGER = os.getenv("CELERY_TASK_ALWAYS_EAGER", "").lower() in (
+    "1",
+    "true",
+    "yes",
+    "on",
+)
+CELERY_TASK_EAGER_PROPAGATES = CELERY_TASK_ALWAYS_EAGER
 
 LAB_ASSIGNMENT_AUTO_REJECT_MINUTES = int(
     os.environ.get("LAB_ASSIGNMENT_AUTO_REJECT_MINUTES", "60"),

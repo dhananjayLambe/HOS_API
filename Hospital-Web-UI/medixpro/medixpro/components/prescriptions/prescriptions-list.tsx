@@ -15,7 +15,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
-import type { PrescriptionListItem } from "@/lib/api/prescriptions";
+import type { PrescriptionListItem, PrescriptionWhatsAppStatus } from "@/lib/api/prescriptions";
 
 export interface PrescriptionRowAction {
   type: "view" | "print" | "download" | "cancel";
@@ -65,6 +65,26 @@ const compactPnr = (pnr: string) => {
   if (pnr.length <= 16) return pnr;
   return `${pnr.slice(0, 9)}...${pnr.slice(-3)}`;
 };
+
+function WhatsAppStatusBadge({ whatsapp }: { whatsapp?: PrescriptionWhatsAppStatus | null }) {
+  const status = (whatsapp?.status || "").toLowerCase();
+  if (!status) {
+    return <span className="text-xs text-muted-foreground">—</span>;
+  }
+  const styles: Record<string, string> = {
+    queued: "bg-amber-100 text-amber-800",
+    sent: "bg-blue-100 text-blue-800",
+    delivered: "bg-emerald-100 text-emerald-800",
+    read: "bg-emerald-600 text-white",
+    failed: "bg-red-100 text-red-800",
+    skipped: "bg-slate-200 text-slate-700",
+  };
+  return (
+    <Badge className={cn("tracking-wide capitalize", styles[status] || "bg-muted text-foreground")}>
+      {status}
+    </Badge>
+  );
+}
 
 function StatusBadge({ isCancelled }: { isCancelled: boolean }) {
   if (isCancelled) {
@@ -154,7 +174,7 @@ const DesktopRow = memo(function DesktopRow({ row, onRowOpen, onAction, busy }: 
         </TooltipProvider>
       </div>
 
-      <div className="col-span-2 min-w-0">
+      <div className="col-span-1 min-w-0">
         <p className="truncate" title={medicines}>
           {medicines}
         </p>
@@ -169,6 +189,10 @@ const DesktopRow = memo(function DesktopRow({ row, onRowOpen, onAction, busy }: 
 
       <div className="col-span-1">
         <StatusBadge isCancelled={row.is_cancelled} />
+      </div>
+
+      <div className="col-span-1">
+        <WhatsAppStatusBadge whatsapp={row.whatsapp} />
       </div>
 
       <div
@@ -277,6 +301,9 @@ const MobileCard = memo(function MobileCard({ row, onRowOpen, onAction, busy }: 
           {dateParts.date}
           {dateParts.time ? ` · ${dateParts.time}` : ""}
         </p>
+        <div className="pt-1">
+          <WhatsAppStatusBadge whatsapp={row.whatsapp} />
+        </div>
       </div>
 
       <div
@@ -359,9 +386,10 @@ export function PrescriptionsList({
           <div className="col-span-3">Patient</div>
           <div className="col-span-2">PNR</div>
           <div className="col-span-2">Diagnosis</div>
-          <div className="col-span-2">Medicines</div>
+          <div className="col-span-1">Medicines</div>
           <div className="col-span-1">Date</div>
           <div className="col-span-1">Status</div>
+          <div className="col-span-1">WhatsApp</div>
           <div className="col-span-1 text-right">Actions</div>
         </div>
         <div role="rowgroup">

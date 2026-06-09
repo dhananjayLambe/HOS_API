@@ -1,6 +1,7 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
+import { AlertTriangle, Loader2 } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -36,6 +37,7 @@ interface EndConsultationReviewModalProps {
   isEndingConsultation: boolean;
   data: EndConsultationReviewData | null;
   hasFollowUp: boolean;
+  hasPatientMobile?: boolean;
 }
 
 const EMPTY_REVIEW_DATA: EndConsultationReviewData = {
@@ -55,6 +57,7 @@ export function EndConsultationReviewModal({
   isEndingConsultation,
   data,
   hasFollowUp,
+  hasPatientMobile = true,
 }: EndConsultationReviewModalProps) {
   const reviewData = data ?? EMPTY_REVIEW_DATA;
   const warnings = getWarnings(reviewData);
@@ -73,6 +76,21 @@ export function EndConsultationReviewModal({
         <ClinicalSummarySection data={reviewData} />
 
         <WarningsSection warnings={warnings} />
+
+        {!hasPatientMobile ? (
+          <Alert className="border-amber-200 bg-amber-50 text-amber-900">
+            <AlertTriangle className="h-4 w-4 text-amber-600" />
+            <AlertDescription>
+              No mobile number on file. The prescription will not be sent via WhatsApp until a valid
+              number is added to the patient profile.
+            </AlertDescription>
+          </Alert>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            The prescription will be sent to the patient&apos;s WhatsApp automatically after you end
+            this consultation.
+          </p>
+        )}
 
         <AlertDialogFooter>
           <AlertDialogCancel disabled={isEndingConsultation} onClick={onStay}>
