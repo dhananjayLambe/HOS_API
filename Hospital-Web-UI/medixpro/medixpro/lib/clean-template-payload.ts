@@ -1,4 +1,5 @@
 import { buildEndConsultationPayload } from "@/lib/consultation-payload-builder";
+import { hasFollowUpDisplayContent } from "@/lib/template-display-formatters";
 
 export type EndConsultationPayload = ReturnType<typeof buildEndConsultationPayload>;
 
@@ -8,7 +9,7 @@ export interface ClinicalTemplateData {
   medicines: unknown[];
   investigations: Record<string, unknown>[];
   advice: string;
-  follow_up: string;
+  follow_up: string | Record<string, unknown>;
 }
 
 function stripEncounterIdsFromInvestigations(
@@ -54,6 +55,6 @@ export function hasTemplateClinicalContent(data: ClinicalTemplateData): boolean 
     data.medicines.length > 0 ||
     data.investigations.length > 0;
   const hasText =
-    data.advice.length > 0 || data.follow_up.length > 0;
+    data.advice.length > 0 || hasFollowUpDisplayContent(data.follow_up);
   return hasItems || hasText;
 }

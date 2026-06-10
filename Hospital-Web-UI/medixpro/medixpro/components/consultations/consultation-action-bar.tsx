@@ -63,6 +63,7 @@ import {
   getClinicalTemplates,
   type ClinicalTemplateListItem,
 } from "@/services/clinical-template.service";
+import { recordTemplateUse } from "@/services/template-management.service";
 import { ViewPreDrawer } from "./view-pre-drawer";
 import { ConsultationAutosaveIndicator } from "./consultation-autosave-indicator";
 import { buildEndConsultationPayload } from "@/lib/consultation-payload-builder";
@@ -458,6 +459,11 @@ export function ConsultationActionBar() {
         return;
       }
       if (!result.applied) return;
+
+      void recordTemplateUse(t.id).catch(() => {
+        // Non-blocking: apply succeeded locally; usage count syncs on next list load.
+      });
+
       if (result.typeMismatch) {
         toast.warning(
           `Template is for ${t.consultation_type}, current is ${consultationType ?? "FULL"}`

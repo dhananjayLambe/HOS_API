@@ -30,6 +30,8 @@ class ClinicalTemplate(models.Model):
     # Optional future use
     is_active = models.BooleanField(default=True)
 
+    usage_count = models.PositiveIntegerField(default=0)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

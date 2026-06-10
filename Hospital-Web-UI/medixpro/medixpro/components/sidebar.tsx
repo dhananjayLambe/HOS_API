@@ -132,8 +132,8 @@ export function Sidebar({ isOpen, setIsOpen, alignBelowHeader }: SidebarProps) {
       icon: Pill,
       submenu: [
         { title: "All Prescriptions", href: "/prescriptions" },
+        { title: "Templates", href: "/doctor/templates" },
         //{ title: "Create Prescription", href: "/prescriptions/create" },
-        //{ title: "Medicine Templates", href: "/prescriptions/templates" },
       ],
     },
     {
