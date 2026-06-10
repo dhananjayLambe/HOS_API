@@ -63,7 +63,7 @@ def build_template_components(summary: dict) -> dict[str, str]:
     """Map summary fields to Meta template variable slots (prescription_template)."""
     medicine_lines: list[str] = []
     for index, med in enumerate(summary.get("medicine_summary") or [], start=1):
-        name = (med.get("name") or "").strip()
+        name = (med.get("name") or "").strip() 
         dose = (med.get("dose_display") or "").strip()
         timing = (med.get("timing_display") or "").strip()
         duration = (med.get("duration_display") or "").strip()
