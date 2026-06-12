@@ -28,6 +28,7 @@ from notifications.models.whatsapp_notifications import (
 )
 from notifications.services.delivery.whatsapp_service import WhatsAppService
 from patient_account.models import PatientAccount, PatientProfile
+from tests.helpers.media_root import IsolatedMediaRootMixin
 from tests.helpers.medicine_masters import ensure_autofill_route_and_dose_masters
 from tests.helpers.payloads import end_consultation_payload
 
@@ -48,7 +49,7 @@ def _doctor_client():
     return client, u
 
 
-class WhatsAppServiceTests(TestCase):
+class WhatsAppServiceTests(IsolatedMediaRootMixin, TestCase):
     def setUp(self):
         ensure_autofill_route_and_dose_masters()
         self.client, self.doctor_user = _doctor_client()

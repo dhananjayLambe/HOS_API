@@ -22,6 +22,7 @@ from notifications.models.whatsapp_notifications import WhatsAppMessage, WhatsAp
 from notifications.services.delivery.prescription_whatsapp_orchestrator import run_prepare_and_enqueue
 from notifications.tasks import prepare_prescription_whatsapp
 from patient_account.models import PatientAccount, PatientProfile
+from tests.helpers.media_root import IsolatedMediaRootMixin
 from tests.helpers.medicine_masters import ensure_autofill_route_and_dose_masters
 from tests.helpers.payloads import end_consultation_payload
 
@@ -40,7 +41,7 @@ def _doctor_client():
     return client, u
 
 
-class PreparePrescriptionOrchestratorTests(TestCase):
+class PreparePrescriptionOrchestratorTests(IsolatedMediaRootMixin, TestCase):
     def setUp(self):
         ensure_autofill_route_and_dose_masters()
         self.client, self.doctor_user = _doctor_client()
@@ -136,7 +137,7 @@ class PreparePrescriptionOrchestratorTests(TestCase):
         self.assertTrue(mock_send_delay.called)
 
 
-class EndConsultationNonBlockingTests(TestCase):
+class EndConsultationNonBlockingTests(IsolatedMediaRootMixin, TestCase):
     def setUp(self):
         ensure_autofill_route_and_dose_masters()
         self.client, self.doctor_user = _doctor_client()

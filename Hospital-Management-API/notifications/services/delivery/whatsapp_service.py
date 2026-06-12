@@ -195,7 +195,6 @@ class WhatsAppService:
                 prescription.id,
                 base_url=payload.get("_download_base_url"),
             )
-        components = self._resolve_template_components(payload)
         template_name = self._current_template_name()
         if not template_name:
             return self._mark_failed(
@@ -207,6 +206,7 @@ class WhatsAppService:
             message.template_name = template_name
             message.save(update_fields=["template_name", "updated_at"])
 
+        components = self._resolve_template_components(payload)
         client = MetaWhatsAppClient()
         try:
             result = client.send_prescription_template(

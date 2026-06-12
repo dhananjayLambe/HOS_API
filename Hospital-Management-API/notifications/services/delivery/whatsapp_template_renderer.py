@@ -2,6 +2,63 @@
 
 from __future__ import annotations
 
+import re
+
+WHATSAPP_ITEM_SEPARATOR = " • "
+_TIMING_PATTERN_RE = re.compile(r"\b(\d-\d-\d)\b")
+
+
+def _resolve_timing_pattern(med: dict) -> str:
+    pattern = (med.get("timing_pattern") or "").strip()
+    if pattern:
+        return pattern
+    dose_display = (med.get("dose_display") or "").strip()
+    match = _TIMING_PATTERN_RE.search(dose_display)
+    if match:
+        return match.group(1)
+    return "-"
+
+
+def format_whatsapp_medicine_block(
+    medicines: list[dict],
+    *,
+    truncated_count: int = 0,
+) -> str:
+    """Meta-safe compact medicine list for template variable {{3}}."""
+    entries: list[str] = []
+    for med in medicines:
+        name = (med.get("name") or "").strip()
+        if not name:
+            continue
+        frequency = _resolve_timing_pattern(med)
+        duration = (med.get("duration_display") or "").strip() or "-"
+        entries.append(f"• {name} ({frequency}, {duration})")
+
+    if truncated_count > 0:
+        label = "medicine" if truncated_count == 1 else "medicines"
+        entries.append(f"• + {truncated_count} more {label}")
+
+    return " ".join(entries)
+
+
+def format_whatsapp_test_block(
+    tests: list[dict],
+    *,
+    truncated_count: int = 0,
+) -> str:
+    """Compact test list for template variable {{4}}."""
+    entries: list[str] = []
+    for test in tests:
+        name = str(test.get("name") or "").strip()
+        if name:
+            entries.append(name)
+
+    if truncated_count > 0:
+        label = "test" if truncated_count == 1 else "tests"
+        entries.append(f"+ {truncated_count} more {label}")
+
+    return WHATSAPP_ITEM_SEPARATOR.join(entries)
+
 
 def render_prescription_whatsapp_body(summary: dict) -> str:
     """Build the patient-facing WhatsApp message body."""
@@ -15,34 +72,27 @@ def render_prescription_whatsapp_body(summary: dict) -> str:
     ]
 
     medicine_summary = summary.get("medicine_summary") or []
-    if medicine_summary:
+    med_truncated = int(summary.get("medicine_truncated_count") or 0)
+    if medicine_summary or med_truncated > 0:
         lines.append("Medicines Prescribed:")
-        for index, med in enumerate(medicine_summary, start=1):
-            name = (med.get("name") or "").strip()
-            dose = (med.get("dose_display") or "").strip()
-            timing = (med.get("timing_display") or "").strip()
-            duration = (med.get("duration_display") or "").strip()
-            detail_parts = [p for p in (dose, timing, duration) if p]
-            lines.append(f"{index}. {name}")
-            if detail_parts:
-                lines.append(f"   {' · '.join(detail_parts)}")
-        truncated = int(summary.get("medicine_truncated_count") or 0)
-        if truncated > 0:
-            label = "medicine" if truncated == 1 else "medicines"
-            lines.append(f"+ {truncated} more {label}")
+        medicine_text = format_whatsapp_medicine_block(
+            medicine_summary,
+            truncated_count=med_truncated,
+        )
+        if medicine_text:
+            lines.append(medicine_text)
         lines.append("")
 
     test_summary = summary.get("test_summary") or []
-    if test_summary:
+    test_truncated = int(summary.get("test_truncated_count") or 0)
+    if test_summary or test_truncated > 0:
         lines.append("Tests Recommended:")
-        for test in test_summary:
-            name = (test.get("name") or "").strip()
-            if name:
-                lines.append(f"• {name}")
-        truncated = int(summary.get("test_truncated_count") or 0)
-        if truncated > 0:
-            label = "test" if truncated == 1 else "tests"
-            lines.append(f"+ {truncated} more {label}")
+        test_text = format_whatsapp_test_block(
+            test_summary,
+            truncated_count=test_truncated,
+        )
+        if test_text:
+            lines.append(test_text)
         lines.append("")
 
     prescription_url = (summary.get("prescription_url") or "").strip()
@@ -60,34 +110,15 @@ def render_prescription_whatsapp_body(summary: dict) -> str:
 
 
 def build_template_components(summary: dict) -> dict[str, str]:
-    """Map summary fields to Meta template variable slots (prescription_template)."""
-    medicine_lines: list[str] = []
-    for index, med in enumerate(summary.get("medicine_summary") or [], start=1):
-        name = (med.get("name") or "").strip() 
-        dose = (med.get("dose_display") or "").strip()
-        timing = (med.get("timing_display") or "").strip()
-        duration = (med.get("duration_display") or "").strip()
-        detail_parts = [p for p in (dose, timing, duration) if p]
-        line = f"{index}. {name}"
-        if detail_parts:
-            line = f"{line} {' '.join(detail_parts)}"
-        medicine_lines.append(line)
-    truncated_meds = int(summary.get("medicine_truncated_count") or 0)
-    if truncated_meds > 0:
-        label = "medicine" if truncated_meds == 1 else "medicines"
-        medicine_lines.append(f"+ {truncated_meds} more {label}")
-
-    test_lines = []
-    for test in summary.get("test_summary") or []:
-        name = (test.get("name") or "").strip()
-        if name:
-            test_lines.append(name)
-    truncated_tests = int(summary.get("test_truncated_count") or 0)
-    if truncated_tests > 0:
-        label = "test" if truncated_tests == 1 else "tests"
-        test_lines.append(f"+ {truncated_tests} more {label}")
-
-    # Meta templates use static "View prescription: {{5}}" — variable is URL only.
+    """Map summary fields to Meta template variable slots."""
+    medicine_text = format_whatsapp_medicine_block(
+        summary.get("medicine_summary") or [],
+        truncated_count=int(summary.get("medicine_truncated_count") or 0),
+    )
+    test_text = format_whatsapp_test_block(
+        summary.get("test_summary") or [],
+        truncated_count=int(summary.get("test_truncated_count") or 0),
+    )
     prescription_link = (summary.get("prescription_url") or "").strip()
 
     from notifications.services.delivery.meta_client import sanitize_template_parameter
@@ -95,8 +126,8 @@ def build_template_components(summary: dict) -> dict[str, str]:
     components = {
         "patient_name": (summary.get("patient_name") or "Patient").strip(),
         "doctor_name": (summary.get("doctor_name") or "Doctor").strip(),
-        "medicine_block": " | ".join(medicine_lines) if medicine_lines else "",
-        "test_block": ", ".join(test_lines) if test_lines else "",
+        "medicine_block": medicine_text,
+        "test_block": test_text,
         "prescription_url": prescription_link,
     }
     return {

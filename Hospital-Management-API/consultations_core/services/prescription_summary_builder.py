@@ -87,6 +87,7 @@ class PrescriptionSummaryBuilder:
                     "name": name,
                     "dose_display": dose_display,
                     "timing_display": timing_display,
+                    "timing_pattern": (line_data.get("timing_pattern") or "").strip(),
                     "duration_display": duration_display,
                     "line_text": line_text,
                 }
