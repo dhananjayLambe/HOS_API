@@ -420,8 +420,8 @@ class AppointmentRescheduleSerializer(serializers.Serializer):
 
 
 class DoctorAppointmentSerializer(serializers.ModelSerializer):
-    patient_name = serializers.CharField(source="patient.full_name", read_only=True)
-    patient_profile_id = serializers.UUIDField(source="patient.id", read_only=True)
+    patient_name = serializers.SerializerMethodField()
+    patient_profile_id = serializers.UUIDField(source="patient_profile_id", read_only=True)
     clinic_name = serializers.CharField(source="clinic.name", read_only=True)
 
     class Meta:
@@ -435,11 +435,15 @@ class DoctorAppointmentSerializer(serializers.ModelSerializer):
             "slot_start_time",
             "slot_end_time",
             "consultation_mode",
+            "appointment_type",
             "booking_source",
             "status",
             "payment_mode",
             "payment_status",
         ]
+
+    def get_patient_name(self, obj):
+        return obj.patient_profile.get_full_name()
 
 
 class DoctorAppointmentFilterSerializer(serializers.Serializer):

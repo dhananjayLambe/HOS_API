@@ -1,6 +1,7 @@
 "use client";
 
 import { Calendar, CheckCircle2, Circle, Users, XCircle, type LucideIcon } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 export type ScheduleMetrics = {
@@ -59,9 +60,20 @@ const METRIC_CHIPS: MetricChip[] = [
 
 type DoctorScheduleMetricsStripProps = {
   metrics: ScheduleMetrics;
+  loading?: boolean;
 };
 
-export function DoctorScheduleMetricsStrip({ metrics }: DoctorScheduleMetricsStripProps) {
+export function DoctorScheduleMetricsStrip({ metrics, loading }: DoctorScheduleMetricsStripProps) {
+  if (loading) {
+    return (
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+        {METRIC_CHIPS.map(({ key }) => (
+          <Skeleton key={key} className="h-10 rounded-lg" />
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
       {METRIC_CHIPS.map(({ key, label, icon: Icon, className, iconClassName }) => (

@@ -601,7 +601,9 @@ class DoctorAppointmentsView(generics.GenericAPIView):
         page = filters.get("page", 1)
         page_size = filters.get("page_size", 10)
 
-        queryset = Appointment.objects.filter(doctor_id=doctor_id)
+        queryset = Appointment.objects.select_related("patient_profile", "clinic").filter(
+            doctor_id=doctor_id
+        )
 
         if clinic_id:
             queryset = queryset.filter(clinic_id=clinic_id)

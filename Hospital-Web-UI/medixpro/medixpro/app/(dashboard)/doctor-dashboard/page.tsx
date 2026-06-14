@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { Calendar, FileText, Stethoscope, Users } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -7,9 +8,6 @@ import {
   type DoctorDashboardMetric,
 } from "@/components/doctor/doctor-dashboard-summary-cards";
 import { DoctorScheduleTab } from "@/components/doctor/doctor-schedule-tab";
-import type { ScheduleAppointmentRow } from "@/components/doctor/doctor-schedule-appointments-list";
-import type { ScheduleMetrics } from "@/components/doctor/doctor-schedule-metrics-strip";
-import type { ScheduleQueueSnapshot, ScheduleQueueTokenRow } from "@/components/doctor/doctor-schedule-queue-panel";
 import { DoctorPatientsTab } from "@/components/doctor/doctor-patients-tab";
 import type { RecentPatientRow } from "@/components/doctor/doctor-patients-recent-table";
 import type { PatientInsightMetrics } from "@/components/doctor/doctor-patient-insights-panel";
@@ -24,15 +22,9 @@ import type { ConsultationMix } from "@/components/doctor/doctor-consultation-mi
 import type { PracticeSummary } from "@/components/doctor/doctor-practice-summary";
 import type { ConsultationOverview } from "@/components/doctor/doctor-consultation-overview";
 import { useAuth } from "@/lib/authContext";
+import { useDoctorScheduleTab } from "@/hooks/useDoctorScheduleTab";
 
-const MOCK_DASHBOARD_METRICS: DoctorDashboardMetric[] = [
-  {
-    title: "Today's Appointments",
-    value: 12,
-    supportingText: "Scheduled today",
-    icon: Calendar,
-    accent: "blue",
-  },
+const MOCK_DASHBOARD_STATIC_METRICS: DoctorDashboardMetric[] = [
   {
     title: "Patients Waiting",
     value: 5,
@@ -54,37 +46,6 @@ const MOCK_DASHBOARD_METRICS: DoctorDashboardMetric[] = [
     icon: Stethoscope,
     accent: "purple",
   },
-];
-
-const MOCK_SCHEDULE_METRICS: ScheduleMetrics = {
-  scheduled: 12,
-  completed: 4,
-  waiting: 5,
-  cancelled: 1,
-  noShow: 0,
-};
-
-const MOCK_SCHEDULE_APPOINTMENTS: ScheduleAppointmentRow[] = [
-  { id: "1", time: "09:00 AM", patientName: "Amit Patil", type: "Follow-up", status: "Completed" },
-  { id: "2", time: "10:00 AM", patientName: "Rachana Lambe", type: "New", status: "Waiting" },
-  { id: "3", time: "10:30 AM", patientName: "Priya Sharma", type: "Consultation", status: "In Progress" },
-  { id: "4", time: "11:00 AM", patientName: "Ramesh Patil", type: "Follow-up", status: "Scheduled" },
-  { id: "5", time: "11:30 AM", patientName: "Sneha Desai", type: "New", status: "Scheduled" },
-  { id: "6", time: "02:00 PM", patientName: "Vikram Singh", type: "Consultation", status: "Scheduled" },
-];
-
-const MOCK_QUEUE_SNAPSHOT: ScheduleQueueSnapshot = {
-  waiting: 5,
-  vitalsDone: 2,
-  readyForConsultation: 1,
-};
-
-const MOCK_QUEUE_TOKENS: ScheduleQueueTokenRow[] = [
-  { id: "q1", token: "Token 1", patientName: "Rachana Lambe", status: "vitals_done" },
-  { id: "q2", token: "Token 2", patientName: "Amit Patil", status: "waiting" },
-  { id: "q3", token: "Token 3", patientName: "Priya Sharma", status: "waiting" },
-  { id: "q4", token: "Token 4", patientName: "Sneha Desai", status: "waiting" },
-  { id: "q5", token: "Token 5", patientName: "Vikram Singh", status: "waiting" },
 ];
 
 const MOCK_RECENT_PATIENTS: RecentPatientRow[] = [
@@ -160,6 +121,22 @@ const MOCK_CONSULTATION_OVERVIEW: ConsultationOverview = {
 
 export default function DoctorDashboardPage() {
   const { user } = useAuth();
+  const schedule = useDoctorScheduleTab();
+
+  const dashboardMetrics = useMemo<DoctorDashboardMetric[]>(
+    () => [
+      {
+        title: "Today's Appointments",
+        value: schedule.error ? 0 : schedule.totalAppointments,
+        supportingText: "Scheduled today",
+        icon: Calendar,
+        accent: "blue",
+        loading: schedule.loading,
+      },
+      ...MOCK_DASHBOARD_STATIC_METRICS,
+    ],
+    [schedule.totalAppointments, schedule.loading, schedule.error]
+  );
 
   const todayLabel = new Intl.DateTimeFormat("en-US", {
     weekday: "long",
@@ -188,7 +165,7 @@ export default function DoctorDashboardPage() {
           <p className="text-sm text-muted-foreground/80">{todayLabel}</p>
         </div>
 
-        <DoctorDashboardSummaryCards metrics={MOCK_DASHBOARD_METRICS} />
+        <DoctorDashboardSummaryCards metrics={dashboardMetrics} />
 
         <Tabs defaultValue="schedule" className="space-y-6">
           <TabsList className="grid h-auto grid-cols-4 gap-1 rounded-xl bg-muted/40 p-1.5 md:w-[520px]">
@@ -220,10 +197,14 @@ export default function DoctorDashboardPage() {
 
           <TabsContent value="schedule" className="space-y-6">
             <DoctorScheduleTab
-              metrics={MOCK_SCHEDULE_METRICS}
-              appointments={MOCK_SCHEDULE_APPOINTMENTS}
-              queueSnapshot={MOCK_QUEUE_SNAPSHOT}
-              queueTokens={MOCK_QUEUE_TOKENS}
+              metrics={schedule.metrics}
+              appointments={schedule.appointments}
+              queueSnapshot={schedule.queueSnapshot}
+              queueTokens={schedule.queueTokens}
+              totalAppointments={schedule.totalAppointments}
+              loading={schedule.loading}
+              error={schedule.error}
+              onRetry={schedule.refetch}
             />
           </TabsContent>
 

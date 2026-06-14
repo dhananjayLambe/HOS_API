@@ -1,6 +1,7 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 export type DoctorDashboardMetricAccent = "blue" | "orange" | "green" | "purple";
@@ -11,6 +12,7 @@ export type DoctorDashboardMetric = {
   supportingText: string;
   icon: LucideIcon;
   accent: DoctorDashboardMetricAccent;
+  loading?: boolean;
 };
 
 const accentStyles: Record<
@@ -65,9 +67,13 @@ export function DoctorDashboardSummaryCards({ metrics }: DoctorDashboardSummaryC
           >
             <Icon className={cn("absolute right-5 top-5 h-5 w-5 opacity-50", styles.iconText)} aria-hidden />
             <p className="pr-8 text-sm font-medium text-foreground/90">{metric.title}</p>
-            <p className="mt-3 text-4xl font-bold tracking-tight tabular-nums text-foreground">
-              {metric.value}
-            </p>
+            {metric.loading ? (
+              <Skeleton className="mt-3 h-10 w-16" />
+            ) : (
+              <p className="mt-3 text-4xl font-bold tracking-tight tabular-nums text-foreground">
+                {metric.value}
+              </p>
+            )}
             <p className="mt-1.5 text-xs text-muted-foreground">{metric.supportingText}</p>
           </div>
         );
