@@ -1,4 +1,4 @@
-.PHONY: test test-fast test-parallel test-cov test-app test-fresh test-transactional test-doctor-dashboard
+.PHONY: test test-fast test-parallel test-cov test-app test-fresh test-transactional test-doctor-dashboard test-doctor-reports-dashboard test-doctor-dashboard-all
 
 test:
 	pytest
@@ -23,3 +23,9 @@ test-fresh:
 
 test-doctor-dashboard:
 	DJANGO_SETTINGS_MODULE=main.settings_test python -m pytest doctor/tests/test_patients_dashboard.py -v
+
+test-doctor-reports-dashboard:
+	DJANGO_SETTINGS_MODULE=main.settings_test python -m pytest doctor/tests/test_reports_dashboard.py -v
+
+test-doctor-dashboard-all:
+	DJANGO_SETTINGS_MODULE=main.settings_test python -m pytest doctor/tests/test_patients_dashboard.py doctor/tests/test_reports_dashboard.py -v

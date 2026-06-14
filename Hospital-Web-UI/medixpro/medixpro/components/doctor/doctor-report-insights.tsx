@@ -1,6 +1,7 @@
 "use client";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 export type ReportInsightMetrics = {
@@ -41,9 +42,10 @@ const METRIC_CHIPS: MetricChip[] = [
 
 type DoctorReportInsightsProps = {
   insights: ReportInsightMetrics;
+  loading?: boolean;
 };
 
-export function DoctorReportInsights({ insights }: DoctorReportInsightsProps) {
+export function DoctorReportInsights({ insights, loading }: DoctorReportInsightsProps) {
   return (
     <Card>
       <CardHeader>
@@ -51,6 +53,13 @@ export function DoctorReportInsights({ insights }: DoctorReportInsightsProps) {
         <CardDescription>Current report workload</CardDescription>
       </CardHeader>
       <CardContent>
+        {loading ? (
+          <div className="grid grid-cols-2 gap-3">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <Skeleton key={index} className="h-16 w-full rounded-lg" />
+            ))}
+          </div>
+        ) : (
         <div className="grid grid-cols-2 gap-3">
           {METRIC_CHIPS.map(({ key, label, className }) => (
             <div key={key} className={cn("rounded-lg border px-3 py-3", className)}>
@@ -59,6 +68,7 @@ export function DoctorReportInsights({ insights }: DoctorReportInsightsProps) {
             </div>
           ))}
         </div>
+        )}
       </CardContent>
     </Card>
   );

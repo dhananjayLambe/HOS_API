@@ -2,31 +2,45 @@
 
 from __future__ import annotations
 
-from django.db.models import Exists, OuterRef
+from django.utils import timezone
 
-from diagnostics_engine.models.choices import ReportLifecycleStatus
-from diagnostics_engine.models.reports import DiagnosticReportArtifact, DiagnosticTestReport
+from doctor.api.services.dashboard_report_queries import (
+    get_pending_upload_queryset,
+    get_primary_artifact_uploaded_today_filter,
+    get_ready_reports_queryset,
+    get_scoped_reports_queryset,
+)
 
 
 def count_pending_doctor_reports(*, doctor_id, clinic_id) -> int:
     """
     READY reports awaiting doctor review with at least one uploaded artifact.
-    Excludes draft-only rows without files.
+    Single source of truth for pending / ready-for-review counts.
     """
-    has_uploaded_artifact = DiagnosticReportArtifact.objects.filter(
-        report_id=OuterRef("pk"),
-    ).exclude(file="")
+    return get_ready_reports_queryset(doctor_id=doctor_id, clinic_id=clinic_id).count()
 
+
+def count_ready_for_review(*, doctor_id, clinic_id) -> int:
+    return count_pending_doctor_reports(doctor_id=doctor_id, clinic_id=clinic_id)
+
+
+def count_reviewed_today(*, doctor_id, clinic_id) -> int:
+    today = timezone.localdate()
     return (
-        DiagnosticTestReport.objects.filter(
-            status=ReportLifecycleStatus.READY,
-            reviewed_at__isnull=True,
-            deleted_at__isnull=True,
-            order_test_line__order__encounter__doctor_id=doctor_id,
-            order_test_line__order__encounter__clinic_id=clinic_id,
-        )
-        .annotate(_has_artifact=Exists(has_uploaded_artifact))
-        .filter(_has_artifact=True)
-        .distinct()
+        get_scoped_reports_queryset(doctor_id=doctor_id, clinic_id=clinic_id)
+        .filter(reviewed_at__date=today)
         .count()
     )
+
+
+def count_reports_received_today(*, doctor_id, clinic_id) -> int:
+    return (
+        get_scoped_reports_queryset(doctor_id=doctor_id, clinic_id=clinic_id)
+        .annotate(_artifact_uploaded_today=get_primary_artifact_uploaded_today_filter())
+        .filter(_artifact_uploaded_today=True)
+        .count()
+    )
+
+
+def count_pending_upload(*, doctor_id, clinic_id) -> int:
+    return get_pending_upload_queryset(doctor_id=doctor_id, clinic_id=clinic_id).count()

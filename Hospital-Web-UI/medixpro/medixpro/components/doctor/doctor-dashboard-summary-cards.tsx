@@ -8,11 +8,12 @@ export type DoctorDashboardMetricAccent = "blue" | "orange" | "green" | "purple"
 
 export type DoctorDashboardMetric = {
   title: string;
-  value: number;
+  value: number | string;
   supportingText: string;
   icon: LucideIcon;
   accent: DoctorDashboardMetricAccent;
   loading?: boolean;
+  unavailable?: boolean;
 };
 
 const accentStyles: Record<
@@ -70,7 +71,12 @@ export function DoctorDashboardSummaryCards({ metrics }: DoctorDashboardSummaryC
             {metric.loading ? (
               <Skeleton className="mt-3 h-10 w-16" />
             ) : (
-              <p className="mt-3 text-4xl font-bold tracking-tight tabular-nums text-foreground">
+              <p
+                className={cn(
+                  "mt-3 text-4xl font-bold tracking-tight tabular-nums text-foreground",
+                  metric.unavailable && "text-2xl text-muted-foreground"
+                )}
+              >
                 {metric.value}
               </p>
             )}

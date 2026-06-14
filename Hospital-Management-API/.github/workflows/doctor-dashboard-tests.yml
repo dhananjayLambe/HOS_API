@@ -1,25 +1,29 @@
-name: Doctor Patients Dashboard Tests
+name: Doctor Dashboard Tests
 
 on:
   push:
     paths:
       - "doctor/**"
       - "diagnostics_engine/api/services/doctor_report_counts.py"
+      - "diagnostics_engine/api/views/reports/doctor_summary.py"
+      - "diagnostics_engine/tests/test_doctor_report_summary.py"
       - "main/settings_test.py"
       - "pytest.ini"
       - "requirements*.txt"
-      - ".github/workflows/doctor-patients-dashboard.yml"
+      - ".github/workflows/doctor-dashboard-tests.yml"
   pull_request:
     paths:
       - "doctor/**"
       - "diagnostics_engine/api/services/doctor_report_counts.py"
+      - "diagnostics_engine/api/views/reports/doctor_summary.py"
+      - "diagnostics_engine/tests/test_doctor_report_summary.py"
       - "main/settings_test.py"
       - "pytest.ini"
       - "requirements*.txt"
-      - ".github/workflows/doctor-patients-dashboard.yml"
+      - ".github/workflows/doctor-dashboard-tests.yml"
 
 jobs:
-  test-doctor-patients-dashboard:
+  test-doctor-dashboard:
     runs-on: ubuntu-latest
 
     services:
@@ -57,7 +61,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
 
-      - name: Run doctor patients dashboard tests
+      - name: Run doctor dashboard tests
         env:
           DJANGO_SETTINGS_MODULE: main.settings_test
           DB_NAME: demo5_db
@@ -66,4 +70,4 @@ jobs:
           DB_HOST: localhost
           DB_PORT: 5432
           TEST_DB_NAME: test_demo5_db
-        run: make test-doctor-dashboard
+        run: make test-doctor-dashboard-all

@@ -20,6 +20,7 @@ export function useDoctorPendingReports(): UseDoctorPendingReportsResult {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const contextRef = useRef<{ doctorId: string; clinicId: string } | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const refetch = useCallback(async () => {
     if (!sessionChecked || !isAuthenticated) return;
@@ -39,14 +40,26 @@ export function useDoctorPendingReports(): UseDoctorPendingReportsResult {
       clinicId = ctx.clinicId;
     }
 
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     try {
-      const count = await fetchDoctorPendingReportsCount({ doctorId, clinicId });
+      const count = await fetchDoctorPendingReportsCount({
+        doctorId,
+        clinicId,
+        signal: controller.signal,
+      });
+      if (controller.signal.aborted) return;
       setPendingReports(count);
       setError(null);
     } catch (err) {
+      if (controller.signal.aborted) return;
       setError(err instanceof Error ? err.message : "Unable to load pending reports.");
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) {
+        setLoading(false);
+      }
     }
   }, [sessionChecked, isAuthenticated]);
 
@@ -58,10 +71,15 @@ export function useDoctorPendingReports(): UseDoctorPendingReportsResult {
 
     void refetch();
     const intervalId = window.setInterval(() => {
-      void refetch();
+      if (document.visibilityState === "visible") {
+        void refetch();
+      }
     }, POLL_INTERVAL_MS);
 
-    return () => window.clearInterval(intervalId);
+    return () => {
+      window.clearInterval(intervalId);
+      abortRef.current?.abort();
+    };
   }, [sessionChecked, isAuthenticated, refetch]);
 
   return { pendingReports, loading, error };

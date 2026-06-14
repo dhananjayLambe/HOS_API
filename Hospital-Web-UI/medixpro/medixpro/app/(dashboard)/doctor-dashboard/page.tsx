@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Calendar, FileText, Stethoscope, Users } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -14,40 +14,20 @@ import type { RecentPatientRow } from "@/components/doctor/doctor-patients-recen
 import type { FollowUpPatientRow } from "@/components/doctor/doctor-patients-follow-up-list";
 import { DoctorReportsTab } from "@/components/doctor/doctor-reports-tab";
 import type { DoctorReportRow } from "@/components/doctor/doctor-reports-table";
-import type { ReportInsightMetrics } from "@/components/doctor/doctor-report-insights";
-import type { ReportActivityItem } from "@/components/doctor/doctor-recent-report-activity";
 import { DoctorPracticeOverviewTab } from "@/components/doctor/doctor-practice-overview-tab";
 import type { PracticeMetrics } from "@/components/doctor/doctor-practice-overview-metrics";
 import type { ConsultationMix } from "@/components/doctor/doctor-consultation-mix";
 import type { PracticeSummary } from "@/components/doctor/doctor-practice-summary";
 import type { ConsultationOverview } from "@/components/doctor/doctor-consultation-overview";
+import { useToastNotification } from "@/hooks/use-toast-notification";
 import { useAuth } from "@/lib/authContext";
 import { useDoctorPatientsTab } from "@/hooks/useDoctorPatientsTab";
 import { useDoctorPendingReports } from "@/hooks/useDoctorPendingReports";
+import { useDoctorReportsTab } from "@/hooks/useDoctorReportsTab";
 import { useDoctorScheduleTab } from "@/hooks/useDoctorScheduleTab";
+import { downloadDoctorReport } from "@/lib/doctor/downloadDoctorReport";
 import { usePatient } from "@/lib/patientContext";
 
-
-const MOCK_REPORTS: DoctorReportRow[] = [
-  { id: "r1", patientName: "Rachana Lambe", reportType: "CBC Report", uploaded: "Today", reviewStatus: "Ready For Review" },
-  { id: "r2", patientName: "Amit Patil", reportType: "Lipid Profile", uploaded: "Today", reviewStatus: "Reviewed" },
-  { id: "r3", patientName: "Priya Sharma", reportType: "Thyroid Profile", uploaded: "Yesterday", reviewStatus: "Ready For Review" },
-  { id: "r4", patientName: "Ramesh Patil", reportType: "Chest X-Ray", uploaded: "Yesterday", reviewStatus: "Pending Upload" },
-];
-
-const MOCK_REPORT_INSIGHTS: ReportInsightMetrics = {
-  readyForReview: 7,
-  reviewedToday: 12,
-  pendingUpload: 3,
-  reportsReceivedToday: 15,
-};
-
-const MOCK_REPORT_ACTIVITY: ReportActivityItem[] = [
-  { id: "a1", description: "CBC Report uploaded", patientName: "Rachana Lambe", timestamp: "09:30 AM" },
-  { id: "a2", description: "Thyroid Profile reviewed", patientName: "Priya Sharma", timestamp: "10:15 AM" },
-  { id: "a3", description: "Chest X-Ray pending", patientName: "Ramesh Patil", timestamp: "Yesterday" },
-  { id: "a4", description: "Lipid Profile reviewed", patientName: "Amit Patil", timestamp: "08:45 AM" },
-];
 
 const MOCK_PRACTICE_METRICS: PracticeMetrics = {
   patientsToday: 12,
@@ -81,11 +61,15 @@ const MOCK_CONSULTATION_OVERVIEW: ConsultationOverview = {
 
 export default function DoctorDashboardPage() {
   const router = useRouter();
+  const toast = useToastNotification();
   const { setSelectedPatient } = usePatient();
   const { user } = useAuth();
+  const [activeTab, setActiveTab] = useState("schedule");
+  const [downloadingReportId, setDownloadingReportId] = useState<string | null>(null);
   const schedule = useDoctorScheduleTab();
   const pendingReports = useDoctorPendingReports();
-  const patientsTab = useDoctorPatientsTab();
+  const patientsTab = useDoctorPatientsTab({ enabled: activeTab === "patients" });
+  const reportsTab = useDoctorReportsTab({ enabled: activeTab === "reports" });
 
   const selectPatientFromRow = useCallback(
     (row: RecentPatientRow) => {
@@ -141,6 +125,60 @@ export default function DoctorDashboardPage() {
     [router, setSelectedPatient]
   );
 
+  const selectPatientFromReportRow = useCallback(
+    (row: DoctorReportRow) => {
+      const [firstName = "", ...rest] = row.patientName.split(" ");
+      setSelectedPatient({
+        id: row.patientId,
+        first_name: firstName,
+        last_name: rest.join(" "),
+        full_name: row.patientName,
+        relation: "self",
+      });
+    },
+    [setSelectedPatient]
+  );
+
+  const handleOpenReportPatient = useCallback(
+    (row: DoctorReportRow) => {
+      selectPatientFromReportRow(row);
+      router.push(`/patients/${row.patientId}`);
+    },
+    [router, selectPatientFromReportRow]
+  );
+
+  const handleOpenReport = useCallback(
+    (row: DoctorReportRow) => {
+      if (!row.reportId) return;
+      selectPatientFromReportRow(row);
+      router.push(`/patients/${row.patientId}?tab=labs`);
+    },
+    [router, selectPatientFromReportRow]
+  );
+
+  const handleDownloadReport = useCallback(
+    async (row: DoctorReportRow) => {
+      if (!row.reportId) {
+        toast.warning("This report is not available for download yet.");
+        return;
+      }
+
+      setDownloadingReportId(row.reportId);
+      try {
+        await downloadDoctorReport(row.reportId, {
+          fileName: `${row.reportType}.pdf`,
+        });
+      } catch (err) {
+        toast.error(
+          err instanceof Error ? err.message : "Unable to download report. Please try again."
+        );
+      } finally {
+        setDownloadingReportId(null);
+      }
+    },
+    [toast]
+  );
+
   const dashboardMetrics = useMemo<DoctorDashboardMetric[]>(
     () => [
       {
@@ -161,11 +199,12 @@ export default function DoctorDashboardPage() {
       },
       {
         title: "Pending Reports",
-        value: pendingReports.error ? 0 : pendingReports.pendingReports,
-        supportingText: "Awaiting review",
+        value: pendingReports.error ? "—" : pendingReports.pendingReports,
+        supportingText: pendingReports.error ? "Unavailable" : "Awaiting review",
         icon: FileText,
         accent: "green",
         loading: pendingReports.loading,
+        unavailable: Boolean(pendingReports.error),
       },
       {
         title: "Completed Consultations",
@@ -217,7 +256,7 @@ export default function DoctorDashboardPage() {
 
         <DoctorDashboardSummaryCards metrics={dashboardMetrics} />
 
-        <Tabs defaultValue="schedule" className="space-y-6">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="grid h-auto grid-cols-4 gap-1 rounded-xl bg-muted/40 p-1.5 md:w-[520px]">
             <TabsTrigger
               value="schedule"
@@ -282,9 +321,23 @@ export default function DoctorDashboardPage() {
 
           <TabsContent value="reports" className="space-y-6">
             <DoctorReportsTab
-              reports={MOCK_REPORTS}
-              insights={MOCK_REPORT_INSIGHTS}
-              activity={MOCK_REPORT_ACTIVITY}
+              reports={reportsTab.reports}
+              insights={reportsTab.insights}
+              activity={reportsTab.activity}
+              loading={reportsTab.loading}
+              isRefreshing={reportsTab.isRefreshing}
+              downloadingReportId={downloadingReportId}
+              error={reportsTab.error}
+              page={reportsTab.page}
+              pageSize={reportsTab.pageSize}
+              totalCount={reportsTab.totalCount}
+              pageSizeOptions={reportsTab.pageSizeOptions}
+              onPageChange={reportsTab.setPage}
+              onPageSizeChange={reportsTab.setPageSize}
+              onRetry={reportsTab.refetch}
+              onOpenPatient={handleOpenReportPatient}
+              onOpenReport={handleOpenReport}
+              onDownloadReport={handleDownloadReport}
             />
           </TabsContent>
 

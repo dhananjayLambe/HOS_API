@@ -1,6 +1,7 @@
 "use client";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export type ReportActivityItem = {
   id: string;
@@ -11,9 +12,10 @@ export type ReportActivityItem = {
 
 type DoctorRecentReportActivityProps = {
   activity: ReportActivityItem[];
+  loading?: boolean;
 };
 
-export function DoctorRecentReportActivity({ activity }: DoctorRecentReportActivityProps) {
+export function DoctorRecentReportActivity({ activity, loading }: DoctorRecentReportActivityProps) {
   const items = activity.slice(0, 5);
 
   return (
@@ -23,6 +25,15 @@ export function DoctorRecentReportActivity({ activity }: DoctorRecentReportActiv
         <CardDescription>Latest report events for your patients</CardDescription>
       </CardHeader>
       <CardContent>
+        {loading ? (
+          <div className="space-y-3">
+            {Array.from({ length: 3 }).map((_, index) => (
+              <Skeleton key={index} className="h-14 w-full rounded-md" />
+            ))}
+          </div>
+        ) : items.length === 0 ? (
+          <p className="py-4 text-center text-sm text-muted-foreground">No recent report activity.</p>
+        ) : (
         <ul className="space-y-3">
           {items.map((item) => (
             <li key={item.id} className="rounded-md border px-3 py-2">
@@ -33,6 +44,7 @@ export function DoctorRecentReportActivity({ activity }: DoctorRecentReportActiv
             </li>
           ))}
         </ul>
+        )}
       </CardContent>
     </Card>
   );
