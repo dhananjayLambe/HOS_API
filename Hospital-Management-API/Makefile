@@ -1,4 +1,4 @@
-.PHONY: test test-fast test-parallel test-cov test-app test-fresh test-transactional
+.PHONY: test test-fast test-parallel test-cov test-app test-fresh test-transactional test-doctor-dashboard
 
 test:
 	pytest
@@ -20,3 +20,6 @@ test-app:
 
 test-fresh:
 	pytest --create-db
+
+test-doctor-dashboard:
+	DJANGO_SETTINGS_MODULE=main.settings_test python -m pytest doctor/tests/test_patients_dashboard.py -v

@@ -1,26 +1,28 @@
 "use client";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 export type PatientInsightMetrics = {
   patientsSeenToday: number;
   followUpDue: number;
   treatmentOngoing: number;
+  pendingReports: number;
 };
 
 type MetricRow = {
   label: string;
-  value: number | null;
-  placeholder?: string;
+  value: number;
   className?: string;
 };
 
 type DoctorPatientInsightsPanelProps = {
   insights: PatientInsightMetrics;
+  loading?: boolean;
 };
 
-export function DoctorPatientInsightsPanel({ insights }: DoctorPatientInsightsPanelProps) {
+export function DoctorPatientInsightsPanel({ insights, loading }: DoctorPatientInsightsPanelProps) {
   const metricRows: MetricRow[] = [
     {
       label: "Patients Seen Today",
@@ -39,8 +41,8 @@ export function DoctorPatientInsightsPanel({ insights }: DoctorPatientInsightsPa
     },
     {
       label: "Pending Reports",
-      value: null,
-      placeholder: "Coming Soon",
+      value: insights.pendingReports,
+      className: "text-violet-600 dark:text-violet-400",
     },
   ];
 
@@ -51,16 +53,21 @@ export function DoctorPatientInsightsPanel({ insights }: DoctorPatientInsightsPa
         <CardDescription>Summary of your patient relationships</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
-        {metricRows.map((row) => (
-          <div key={row.label} className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">{row.label}</span>
-            {row.placeholder ? (
-              <span className="text-xs font-medium text-muted-foreground">{row.placeholder}</span>
-            ) : (
-              <span className={cn("text-lg font-semibold tabular-nums", row.className)}>{row.value}</span>
-            )}
-          </div>
-        ))}
+        {loading
+          ? Array.from({ length: 4 }).map((_, index) => (
+              <div key={index} className="flex items-center justify-between">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-6 w-10" />
+              </div>
+            ))
+          : metricRows.map((row) => (
+              <div key={row.label} className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">{row.label}</span>
+                <span className={cn("text-lg font-semibold tabular-nums", row.className)}>
+                  {row.value}
+                </span>
+              </div>
+            ))}
       </CardContent>
     </Card>
   );

@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { Calendar, FileText, Stethoscope, Users } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -10,7 +11,6 @@ import {
 import { DoctorScheduleTab } from "@/components/doctor/doctor-schedule-tab";
 import { DoctorPatientsTab } from "@/components/doctor/doctor-patients-tab";
 import type { RecentPatientRow } from "@/components/doctor/doctor-patients-recent-table";
-import type { PatientInsightMetrics } from "@/components/doctor/doctor-patient-insights-panel";
 import type { FollowUpPatientRow } from "@/components/doctor/doctor-patients-follow-up-list";
 import { DoctorReportsTab } from "@/components/doctor/doctor-reports-tab";
 import type { DoctorReportRow } from "@/components/doctor/doctor-reports-table";
@@ -22,29 +22,11 @@ import type { ConsultationMix } from "@/components/doctor/doctor-consultation-mi
 import type { PracticeSummary } from "@/components/doctor/doctor-practice-summary";
 import type { ConsultationOverview } from "@/components/doctor/doctor-consultation-overview";
 import { useAuth } from "@/lib/authContext";
+import { useDoctorPatientsTab } from "@/hooks/useDoctorPatientsTab";
 import { useDoctorPendingReports } from "@/hooks/useDoctorPendingReports";
 import { useDoctorScheduleTab } from "@/hooks/useDoctorScheduleTab";
+import { usePatient } from "@/lib/patientContext";
 
-
-const MOCK_RECENT_PATIENTS: RecentPatientRow[] = [
-  { id: "p1", patientName: "Rachana Lambe", lastVisit: "Today", diagnosis: "Viral Fever", status: "Active" },
-  { id: "p2", patientName: "Amit Patil", lastVisit: "Yesterday", diagnosis: "Diabetes", status: "Follow-up Due" },
-  { id: "p3", patientName: "Priya Sharma", lastVisit: "2 Days Ago", diagnosis: "Hypertension", status: "Stable" },
-  { id: "p4", patientName: "Ramesh Patil", lastVisit: "3 Days Ago", diagnosis: "Asthma", status: "Treatment Ongoing" },
-  { id: "p5", patientName: "Sneha Desai", lastVisit: "5 Days Ago", diagnosis: "Migraine", status: "Stable" },
-];
-
-const MOCK_PATIENT_INSIGHTS: PatientInsightMetrics = {
-  patientsSeenToday: 12,
-  followUpDue: 8,
-  treatmentOngoing: 15,
-};
-
-const MOCK_FOLLOW_UP_PATIENTS: FollowUpPatientRow[] = [
-  { id: "f1", patientName: "Amit Patil", lastVisitAgo: "15 days ago" },
-  { id: "f2", patientName: "Priya Sharma", lastVisitAgo: "30 days ago" },
-  { id: "f3", patientName: "Ramesh Patil", lastVisitAgo: "45 days ago" },
-];
 
 const MOCK_REPORTS: DoctorReportRow[] = [
   { id: "r1", patientName: "Rachana Lambe", reportType: "CBC Report", uploaded: "Today", reviewStatus: "Ready For Review" },
@@ -98,9 +80,66 @@ const MOCK_CONSULTATION_OVERVIEW: ConsultationOverview = {
 };
 
 export default function DoctorDashboardPage() {
+  const router = useRouter();
+  const { setSelectedPatient } = usePatient();
   const { user } = useAuth();
   const schedule = useDoctorScheduleTab();
   const pendingReports = useDoctorPendingReports();
+  const patientsTab = useDoctorPatientsTab();
+
+  const selectPatientFromRow = useCallback(
+    (row: RecentPatientRow) => {
+      const [firstName = "", ...rest] = row.patientName.split(" ");
+      setSelectedPatient({
+        id: row.id,
+        first_name: firstName,
+        last_name: rest.join(" "),
+        full_name: row.patientName,
+        mobile: row.mobile,
+        relation: "self",
+      });
+    },
+    [setSelectedPatient]
+  );
+
+  const handleViewPatient = useCallback(
+    (row: RecentPatientRow) => {
+      selectPatientFromRow(row);
+      router.push(`/patients/${row.id}`);
+    },
+    [router, selectPatientFromRow]
+  );
+
+  const handleViewVisitHistory = useCallback(
+    (row: RecentPatientRow) => {
+      selectPatientFromRow(row);
+      router.push(`/patients/${row.id}?tab=visits`);
+    },
+    [router, selectPatientFromRow]
+  );
+
+  const handleStartConsultation = useCallback(
+    (row: RecentPatientRow) => {
+      selectPatientFromRow(row);
+      router.push("/consultations/start-consultation");
+    },
+    [router, selectPatientFromRow]
+  );
+
+  const handleFollowUpPatientView = useCallback(
+    (row: FollowUpPatientRow) => {
+      const [firstName = "", ...rest] = row.patientName.split(" ");
+      setSelectedPatient({
+        id: row.id,
+        first_name: firstName,
+        last_name: rest.join(" "),
+        full_name: row.patientName,
+        relation: "self",
+      });
+      router.push(`/patients/${row.id}`);
+    },
+    [router, setSelectedPatient]
+  );
 
   const dashboardMetrics = useMemo<DoctorDashboardMetric[]>(
     () => [
@@ -222,9 +261,22 @@ export default function DoctorDashboardPage() {
 
           <TabsContent value="patients" className="space-y-6">
             <DoctorPatientsTab
-              patients={MOCK_RECENT_PATIENTS}
-              insights={MOCK_PATIENT_INSIGHTS}
-              followUpPatients={MOCK_FOLLOW_UP_PATIENTS}
+              patients={patientsTab.patients}
+              insights={patientsTab.insights}
+              followUpPatients={patientsTab.followUpPatients}
+              loading={patientsTab.loading}
+              error={patientsTab.error}
+              page={patientsTab.page}
+              pageSize={patientsTab.pageSize}
+              totalCount={patientsTab.totalCount}
+              pageSizeOptions={patientsTab.pageSizeOptions}
+              onPageChange={patientsTab.setPage}
+              onPageSizeChange={patientsTab.setPageSize}
+              onRetry={patientsTab.refetch}
+              onViewPatient={handleViewPatient}
+              onViewVisitHistory={handleViewVisitHistory}
+              onStartConsultation={handleStartConsultation}
+              onFollowUpPatientView={handleFollowUpPatientView}
             />
           </TabsContent>
 

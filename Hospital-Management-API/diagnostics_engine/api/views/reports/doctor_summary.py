@@ -8,8 +8,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
-from diagnostics_engine.models.choices import ReportLifecycleStatus
-from diagnostics_engine.models.reports import DiagnosticTestReport
+from diagnostics_engine.api.services.doctor_report_counts import count_pending_doctor_reports
 
 
 class DoctorReportDashboardSummaryView(APIView):
@@ -28,16 +27,9 @@ class DoctorReportDashboardSummaryView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        pending_review = (
-            DiagnosticTestReport.objects.filter(
-                status=ReportLifecycleStatus.READY,
-                reviewed_at__isnull=True,
-                deleted_at__isnull=True,
-                order_test_line__order__encounter__doctor_id=doctor_id,
-                order_test_line__order__encounter__clinic_id=clinic_id,
-            )
-            .distinct()
-            .count()
+        pending_review = count_pending_doctor_reports(
+            doctor_id=doctor_id,
+            clinic_id=clinic_id,
         )
 
         return Response(

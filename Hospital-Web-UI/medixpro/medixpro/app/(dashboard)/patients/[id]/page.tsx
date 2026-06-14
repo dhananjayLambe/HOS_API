@@ -3,7 +3,7 @@
 import { isCancel } from "axios";
 import { useEffect, useState } from "react";
 import { use } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { PatientClinicalOverview } from "@/components/patients/patient-summary/patient-clinical-overview";
 import { PatientSummaryHeader } from "@/components/patients/patient-summary/patient-summary-header";
 import { PatientSummarySidebar, type PatientSummarySection } from "@/components/patients/patient-summary/patient-summary-sidebar";
@@ -20,14 +20,35 @@ type PageProps = {
   params: Promise<{ id: string }>;
 };
 
+function resolveSectionFromTab(tab: string | null): PatientSummarySection | null {
+  if (!tab) return null;
+  const normalized = tab.trim().toLowerCase();
+  if (normalized === "visits" || normalized === "visit-history" || normalized === "timeline") {
+    return "timeline";
+  }
+  if (normalized === "consultations") return "consultations";
+  if (normalized === "prescriptions") return "prescriptions";
+  if (normalized === "labs" || normalized === "lab-reports") return "labs";
+  if (normalized === "overview") return "overview";
+  return null;
+}
+
 export default function PatientSummaryPage({ params }: PageProps) {
   const { id } = use(params);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const isMobile = useMobile();
   const [activeSection, setActiveSection] = useState<PatientSummarySection>("overview");
   const [payload, setPayload] = useState<PatientSummaryPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const section = resolveSectionFromTab(searchParams.get("tab"));
+    if (section) {
+      setActiveSection(section);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     let cancelled = false;
