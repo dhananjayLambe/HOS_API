@@ -7,6 +7,7 @@ Mounted at ``api/v1/diagnostics/`` from project ``main.urls``
 
 from django.urls import path
 
+from diagnostics_engine.api.views.reports.doctor_summary import DoctorReportDashboardSummaryView
 from diagnostics_engine.api.views.reports.encounter_reports import EncounterReportsView
 from diagnostics_engine.api.views.reports.mark_ready import MarkReadyView
 from diagnostics_engine.api.views.reports.operational_metrics import ReportOperationalMetricsView
@@ -24,6 +25,11 @@ from diagnostics_engine.api.views.reports.retry_delivery import RetryDeliveryVie
 from diagnostics_engine.api.views.reports.send_whatsapp import SendWhatsAppView
 
 urlpatterns = [
+    path(
+        "reports/doctor-summary/",
+        DoctorReportDashboardSummaryView.as_view(),
+        name="v1-doctor-report-dashboard-summary",
+    ),
     path(
         "reports/operational-metrics/",
         ReportOperationalMetricsView.as_view(),

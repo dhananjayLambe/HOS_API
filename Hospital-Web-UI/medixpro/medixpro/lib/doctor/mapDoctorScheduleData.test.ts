@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   aggregateScheduleMetrics,
+  buildScheduleMetricsFromBackend,
   countInConsultation,
   mapDoctorAppointmentToRow,
   mapDoctorAppointmentsResponse,
@@ -90,14 +91,63 @@ describe("mapDoctorScheduleData", () => {
         { id: "q1", patient_name: "Rachana", status: "vitals_done", position: 1 },
         { id: "q2", patient_name: "Amit", status: "waiting", position: 2 },
       ],
-      [
-        { id: "a1", patient_name: "Priya", patient_profile_id: "p", appointment_date: "d", slot_start_time: "10:00:00", status: "in_consultation" },
-      ]
+      { completed: 3, cancelled: 1, noShow: 2 }
     );
 
-    expect(snapshot).toEqual({ waiting: 1, vitalsDone: 1, inConsultation: 1 });
+    expect(snapshot).toEqual({ waiting: 1, completed: 3, cancelled: 1, noShow: 2 });
     expect(tokens).toHaveLength(2);
     expect(tokens[0]?.patientName).toBe("Rachana");
+  });
+
+  it("uses backend metrics for completed and cancelled counts", () => {
+    const mapped = mapDoctorAppointmentsResponse(
+      [
+        { id: "1", patient_name: "A", patient_profile_id: "p1", appointment_date: "d", slot_start_time: "09:00:00", status: "scheduled" },
+      ],
+      [],
+      1,
+      {
+        date: "2026-06-14",
+        scheduled: 1,
+        waiting: 0,
+        completed: 4,
+        cancelled: 2,
+        no_show: 1,
+      }
+    );
+
+    expect(mapped.metrics).toEqual({
+      scheduled: 1,
+      completed: 4,
+      waiting: 0,
+      cancelled: 2,
+      noShow: 1,
+    });
+    expect(mapped.queueSnapshot).toEqual({
+      waiting: 0,
+      completed: 4,
+      cancelled: 2,
+      noShow: 1,
+    });
+  });
+
+  it("adds queue-only walk-ins to backend waiting count", () => {
+    const metrics = buildScheduleMetricsFromBackend(
+      {
+        date: "2026-06-14",
+        scheduled: 2,
+        waiting: 1,
+        completed: 3,
+        cancelled: 1,
+        no_show: 0,
+      },
+      [],
+      [{ id: "q1", patient_name: "Walk-in", patient_profile_id: "p9", status: "waiting", position: 1 }]
+    );
+
+    expect(metrics.waiting).toBe(2);
+    expect(metrics.completed).toBe(3);
+    expect(metrics.cancelled).toBe(1);
   });
 
   it("increments total appointments when queue-only walk-ins are merged", () => {

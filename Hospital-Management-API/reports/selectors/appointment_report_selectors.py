@@ -31,18 +31,25 @@ def _encounter_terminal_completed_exists():
     )
 
 
+def _encounter_cancelled_exists():
+    """Linked encounter cancelled while appointment row may still be scheduled/checked_in."""
+    return ClinicalEncounter.objects.filter(appointment_id=OuterRef("pk"), status="cancelled")
+
+
 def annotate_reporting_status(queryset):
     """
     Derive a single reporting status per appointment row for KPIs and charts.
-    ClinicalEncounter is source of truth for no-show and completed when appointment row lags.
+    ClinicalEncounter is source of truth for terminal states when appointment row lags.
     """
     ns = _encounter_no_show_exists()
+    enc_cancelled = _encounter_cancelled_exists()
     enc_done = _encounter_terminal_completed_exists()
     return queryset.annotate(
         reporting_status=Case(
             When(status__in=("completed", "cancelled"), then=F("status")),
             When(status="in_consultation", then=Value("completed")),
             When(Exists(ns), then=Value("no_show")),
+            When(Exists(enc_cancelled), then=Value("cancelled")),
             When(Exists(enc_done), then=Value("completed")),
             default=F("status"),
             output_field=CharField(),

@@ -33,6 +33,7 @@ from appointments.api.list_scope import (
     secondary_section_q,
 )
 from appointments.api.pagination import AppointmentCursorPagination
+from appointments.api.services.today_metrics import build_doctor_clinic_today_metrics
 from appointments.api.serializers import (
     AppointmentCancelRequestSerializer,
     AppointmentCreatedResponseSerializer,
@@ -1131,29 +1132,12 @@ class AppointmentTodayMetricsView(APIView):
         now_ist = localtime().astimezone(IST)
         today_ist = now_ist.date()
 
-        cache_key = f"appointment_metrics:{doctor_id}:{clinic_id}:{today_ist}"
-        cached_metrics = cache.get(cache_key)
-        if cached_metrics:
-            return Response(
-                {
-                    "status": "success",
-                    "message": "Today's appointment metrics retrieved from cache",
-                    "timestamp": now_ist.strftime("%Y-%m-%d %H:%M:%S"),
-                    "data": cached_metrics,
-                },
-                status=status.HTTP_200_OK,
-            )
+        metrics = build_doctor_clinic_today_metrics(
+            doctor_id=doctor_id,
+            clinic_id=clinic_id,
+            today=today_ist,
+        )
 
-        qs = Appointment.objects.filter(doctor_id=doctor_id, clinic_id=clinic_id, appointment_date=today_ist)
-        metrics = {
-            "date": str(today_ist),
-            "scheduled": qs.filter(status="scheduled").count(),
-            "completed": qs.filter(status="completed").count(),
-            "cancelled": qs.filter(status="cancelled").count(),
-            "no_show": qs.filter(status="no_show").count(),
-        }
-
-        cache.set(cache_key, metrics, timeout=CACHE_TIMEOUT)
         return Response(
             {
                 "status": "success",

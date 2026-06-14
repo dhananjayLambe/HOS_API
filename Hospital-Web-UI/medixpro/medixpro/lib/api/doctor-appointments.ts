@@ -29,6 +29,51 @@ export type FetchDoctorAppointmentsTodayInput = {
   signal?: AbortSignal;
 };
 
+export type DoctorScheduleMetricsApi = {
+  date: string;
+  scheduled: number;
+  waiting: number;
+  completed: number;
+  cancelled: number;
+  no_show: number;
+};
+
+export type DoctorScheduleMetricsResponse = {
+  status: string;
+  message?: string;
+  data: DoctorScheduleMetricsApi;
+};
+
+export async function fetchDoctorScheduleMetricsToday({
+  doctorId,
+  clinicId,
+  signal,
+}: FetchDoctorAppointmentsTodayInput): Promise<DoctorScheduleMetricsApi> {
+  const response = await axiosClient.get<DoctorScheduleMetricsResponse>(
+    "/appointments/metrics/today/",
+    {
+      params: { doctor_id: doctorId, clinic_id: clinicId },
+      validateStatus: () => true,
+      signal,
+    }
+  );
+
+  if (response.status >= 400) {
+    const detail =
+      (response.data as { error?: string; message?: string })?.error ??
+      (response.data as { message?: string })?.message ??
+      `Failed to load schedule metrics (${response.status})`;
+    throw new Error(detail);
+  }
+
+  const data = (response.data as DoctorScheduleMetricsResponse)?.data;
+  if (!data) {
+    throw new Error("Invalid schedule metrics response");
+  }
+
+  return data;
+}
+
 export async function fetchDoctorAppointmentsToday({
   doctorId,
   clinicId,

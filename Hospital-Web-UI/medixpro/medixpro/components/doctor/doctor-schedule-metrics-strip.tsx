@@ -29,18 +29,18 @@ const METRIC_CHIPS: MetricChip[] = [
     iconClassName: "text-blue-500 dark:text-blue-400",
   },
   {
-    key: "completed",
-    label: "Completed",
-    icon: CheckCircle2,
-    className: "border-emerald-100 bg-emerald-50/80 dark:border-emerald-900/60 dark:bg-emerald-950/40",
-    iconClassName: "text-emerald-500 dark:text-emerald-400",
-  },
-  {
     key: "waiting",
     label: "Waiting",
     icon: Users,
     className: "border-amber-100 bg-amber-50/80 dark:border-amber-900/60 dark:bg-amber-950/40",
     iconClassName: "text-amber-500 dark:text-amber-400",
+  },
+  {
+    key: "completed",
+    label: "Completed",
+    icon: CheckCircle2,
+    className: "border-emerald-100 bg-emerald-50/80 dark:border-emerald-900/60 dark:bg-emerald-950/40",
+    iconClassName: "text-emerald-500 dark:text-emerald-400",
   },
   {
     key: "cancelled",

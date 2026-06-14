@@ -6,7 +6,7 @@ import type {
   ScheduleQueueSnapshot,
   ScheduleQueueTokenRow,
 } from "@/components/doctor/doctor-schedule-queue-panel";
-import type { DoctorAppointmentApiRow, DoctorQueueApiRow } from "@/lib/api/doctor-appointments";
+import type { DoctorAppointmentApiRow, DoctorQueueApiRow, DoctorScheduleMetricsApi } from "@/lib/api/doctor-appointments";
 
 const STATUS_LABEL: Record<string, string> = {
   scheduled: "Scheduled",
@@ -99,6 +99,42 @@ export function mapDoctorAppointmentToRow(row: DoctorAppointmentApiRow): Schedul
   };
 }
 
+export function countQueueOnlyWaiting(
+  appointments: DoctorAppointmentApiRow[],
+  queueRows: DoctorQueueApiRow[]
+): number {
+  const linkedProfileIds = new Set(
+    appointments
+      .map((row) => row.patient_profile_id)
+      .filter((id): id is string => Boolean(id))
+  );
+
+  let count = 0;
+  for (const queueRow of queueRows) {
+    if (queueRow.status !== "waiting") continue;
+    const profileId = queueRow.patient_profile_id;
+    if (profileId && linkedProfileIds.has(profileId)) continue;
+    count += 1;
+    if (profileId) linkedProfileIds.add(profileId);
+  }
+
+  return count;
+}
+
+export function buildScheduleMetricsFromBackend(
+  backendMetrics: DoctorScheduleMetricsApi,
+  appointments: DoctorAppointmentApiRow[],
+  queueRows: DoctorQueueApiRow[]
+): ScheduleMetrics {
+  return {
+    scheduled: backendMetrics.scheduled ?? 0,
+    completed: backendMetrics.completed ?? 0,
+    cancelled: backendMetrics.cancelled ?? 0,
+    noShow: backendMetrics.no_show ?? 0,
+    waiting: (backendMetrics.waiting ?? 0) + countQueueOnlyWaiting(appointments, queueRows),
+  };
+}
+
 export function aggregateScheduleMetrics(
   rows: DoctorAppointmentApiRow[],
   queueRows: DoctorQueueApiRow[] = []
@@ -159,11 +195,9 @@ export function countInConsultation(rows: DoctorAppointmentApiRow[]): number {
 
 export function mapDoctorQueueToPanel(
   queueRows: DoctorQueueApiRow[],
-  appointmentRows: DoctorAppointmentApiRow[]
+  metrics: Pick<ScheduleMetrics, "completed" | "cancelled" | "noShow">
 ): { snapshot: ScheduleQueueSnapshot; tokens: ScheduleQueueTokenRow[] } {
   const waiting = queueRows.filter((row) => row.status === "waiting").length;
-  const vitalsDone = queueRows.filter((row) => row.status === "vitals_done").length;
-  const inConsultation = countInConsultation(appointmentRows);
 
   const tokens: ScheduleQueueTokenRow[] = [...queueRows]
     .sort((a, b) => a.position - b.position)
@@ -175,7 +209,12 @@ export function mapDoctorQueueToPanel(
     }));
 
   return {
-    snapshot: { waiting, vitalsDone, inConsultation },
+    snapshot: {
+      waiting,
+      completed: metrics.completed,
+      cancelled: metrics.cancelled,
+      noShow: metrics.noShow,
+    },
     tokens,
   };
 }
@@ -183,12 +222,15 @@ export function mapDoctorQueueToPanel(
 export function mapDoctorAppointmentsResponse(
   appointments: DoctorAppointmentApiRow[],
   queueRows: DoctorQueueApiRow[],
-  totalAppointmentsFromApi: number
+  totalAppointmentsFromApi: number,
+  backendMetrics?: DoctorScheduleMetricsApi | null
 ) {
   const mergedAppointments = mergeQueueWalkInsIntoAppointments(appointments, queueRows);
-  const metrics = aggregateScheduleMetrics(mergedAppointments, queueRows);
+  const metrics = backendMetrics
+    ? buildScheduleMetricsFromBackend(backendMetrics, appointments, queueRows)
+    : aggregateScheduleMetrics(mergedAppointments, queueRows);
   const appointmentRows = mergedAppointments.map(mapDoctorAppointmentToRow);
-  const { snapshot, tokens } = mapDoctorQueueToPanel(queueRows, mergedAppointments);
+  const { snapshot, tokens } = mapDoctorQueueToPanel(queueRows, metrics);
   const queueOnlyCount = mergedAppointments.length - appointments.length;
   const totalAppointments = totalAppointmentsFromApi + queueOnlyCount;
 

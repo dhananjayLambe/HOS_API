@@ -421,7 +421,6 @@ class AppointmentRescheduleSerializer(serializers.Serializer):
 
 class DoctorAppointmentSerializer(serializers.ModelSerializer):
     patient_name = serializers.SerializerMethodField()
-    patient_profile_id = serializers.UUIDField(source="patient_profile_id", read_only=True)
     clinic_name = serializers.CharField(source="clinic.name", read_only=True)
 
     class Meta:

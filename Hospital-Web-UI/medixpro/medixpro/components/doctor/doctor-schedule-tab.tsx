@@ -17,6 +17,7 @@ export type DoctorScheduleTabProps = {
   totalAppointments?: number;
   loading?: boolean;
   error?: string | null;
+  metricsError?: string | null;
   onRetry?: () => void;
 };
 
@@ -28,6 +29,7 @@ export function DoctorScheduleTab({
   totalAppointments,
   loading,
   error,
+  metricsError,
   onRetry,
 }: DoctorScheduleTabProps) {
   if (error && !loading) {
@@ -45,6 +47,11 @@ export function DoctorScheduleTab({
 
   return (
     <div className="space-y-6">
+      {metricsError ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
+          Schedule summary counts may be incomplete: {metricsError}
+        </div>
+      ) : null}
       <div>
         <h3 className="mb-3 text-2xl font-semibold tracking-tight">Schedule Summary</h3>
         <DoctorScheduleMetricsStrip metrics={metrics} loading={loading} />

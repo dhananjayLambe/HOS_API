@@ -11,6 +11,7 @@ import type {
 import {
   fetchDoctorAppointmentsToday,
   fetchDoctorQueueToday,
+  fetchDoctorScheduleMetricsToday,
 } from "@/lib/api/doctor-appointments";
 import { mapDoctorAppointmentsResponse } from "@/lib/doctor/mapDoctorScheduleData";
 import { resolveDoctorContext } from "@/lib/doctor/resolveDoctorContext";
@@ -28,8 +29,9 @@ const EMPTY_METRICS: ScheduleMetrics = {
 
 const EMPTY_SNAPSHOT: ScheduleQueueSnapshot = {
   waiting: 0,
-  vitalsDone: 0,
-  inConsultation: 0,
+  completed: 0,
+  cancelled: 0,
+  noShow: 0,
 };
 
 export type UseDoctorScheduleTabResult = {
@@ -40,6 +42,7 @@ export type UseDoctorScheduleTabResult = {
   totalAppointments: number;
   loading: boolean;
   error: string | null;
+  metricsError: string | null;
   refetch: () => Promise<void>;
 };
 
@@ -52,6 +55,7 @@ export function useDoctorScheduleTab(): UseDoctorScheduleTabResult {
   const [totalAppointments, setTotalAppointments] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [metricsError, setMetricsError] = useState<string | null>(null);
   const hasLoadedOnceRef = useRef(false);
 
   const contextRef = useRef<{ doctorId: string; clinicId: string } | null>(null);
@@ -84,15 +88,21 @@ export function useDoctorScheduleTab(): UseDoctorScheduleTabResult {
       setLoading(true);
     }
     setError(null);
+    setMetricsError(null);
 
     try {
-      const [appointmentsResult, queueResult] = await Promise.allSettled([
+      const [appointmentsResult, queueResult, metricsResult] = await Promise.allSettled([
         fetchDoctorAppointmentsToday({
           doctorId: doctorId!,
           clinicId: clinicId!,
           signal: controller.signal,
         }),
         fetchDoctorQueueToday({
+          doctorId: doctorId!,
+          clinicId: clinicId!,
+          signal: controller.signal,
+        }),
+        fetchDoctorScheduleMetricsToday({
           doctorId: doctorId!,
           clinicId: clinicId!,
           signal: controller.signal,
@@ -108,11 +118,21 @@ export function useDoctorScheduleTab(): UseDoctorScheduleTabResult {
       const appointmentsRes = appointmentsResult.value;
       const queueRows =
         queueResult.status === "fulfilled" ? queueResult.value : [];
+      const backendMetrics =
+        metricsResult.status === "fulfilled" ? metricsResult.value : null;
+
+      if (metricsResult.status === "rejected") {
+        const reason = metricsResult.reason;
+        setMetricsError(
+          reason instanceof Error ? reason.message : "Schedule summary metrics unavailable."
+        );
+      }
 
       const mapped = mapDoctorAppointmentsResponse(
         appointmentsRes.appointments ?? [],
         queueRows,
-        appointmentsRes.total_appointments ?? 0
+        appointmentsRes.total_appointments ?? 0,
+        backendMetrics
       );
 
       setMetrics(mapped.metrics);
@@ -157,6 +177,7 @@ export function useDoctorScheduleTab(): UseDoctorScheduleTabResult {
     totalAppointments,
     loading,
     error,
+    metricsError,
     refetch: () => refetch({ showLoading: true }),
   };
 }

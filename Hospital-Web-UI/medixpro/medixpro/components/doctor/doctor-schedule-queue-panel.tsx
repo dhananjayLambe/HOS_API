@@ -7,8 +7,9 @@ import { cn } from "@/lib/utils";
 
 export type ScheduleQueueSnapshot = {
   waiting: number;
-  vitalsDone: number;
-  inConsultation: number;
+  completed: number;
+  cancelled: number;
+  noShow: number;
 };
 
 export type ScheduleQueueTokenRow = {
@@ -44,22 +45,28 @@ type DoctorScheduleQueuePanelProps = {
 export function DoctorScheduleQueuePanel({ snapshot, tokens, loading }: DoctorScheduleQueuePanelProps) {
   const kpiPills: QueueKpiPill[] = [
     {
-      label: "Waiting",
+      label: "In Queue",
       value: snapshot.waiting,
       valueClassName: "text-amber-600 dark:text-amber-400",
       pillClassName: "border-amber-100 bg-amber-50/80 dark:border-amber-900/40 dark:bg-amber-950/30",
     },
     {
-      label: "Vitals Done",
-      value: snapshot.vitalsDone,
-      valueClassName: "text-sky-600 dark:text-sky-400",
-      pillClassName: "border-sky-100 bg-sky-50/80 dark:border-sky-900/40 dark:bg-sky-950/30",
-    },
-    {
-      label: "In Consultation",
-      value: snapshot.inConsultation,
+      label: "Completed",
+      value: snapshot.completed,
       valueClassName: "text-emerald-600 dark:text-emerald-400",
       pillClassName: "border-emerald-100 bg-emerald-50/80 dark:border-emerald-900/40 dark:bg-emerald-950/30",
+    },
+    {
+      label: "Cancelled",
+      value: snapshot.cancelled,
+      valueClassName: "text-slate-600 dark:text-slate-400",
+      pillClassName: "border-slate-200 bg-muted/40 dark:border-slate-800",
+    },
+    {
+      label: "No Show",
+      value: snapshot.noShow,
+      valueClassName: "text-rose-600 dark:text-rose-400",
+      pillClassName: "border-rose-100 bg-rose-50/80 dark:border-rose-900/40 dark:bg-rose-950/30",
     },
   ];
 
@@ -70,9 +77,9 @@ export function DoctorScheduleQueuePanel({ snapshot, tokens, loading }: DoctorSc
         <CardDescription className="text-sm">Today&apos;s operational queue</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6 p-6 pt-0">
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {loading
-            ? Array.from({ length: 3 }).map((_, index) => (
+            ? Array.from({ length: 4 }).map((_, index) => (
                 <Skeleton key={index} className="h-20 rounded-xl" />
               ))
             : kpiPills.map((pill) => (

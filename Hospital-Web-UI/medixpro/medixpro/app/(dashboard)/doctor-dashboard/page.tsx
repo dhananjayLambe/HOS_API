@@ -22,31 +22,9 @@ import type { ConsultationMix } from "@/components/doctor/doctor-consultation-mi
 import type { PracticeSummary } from "@/components/doctor/doctor-practice-summary";
 import type { ConsultationOverview } from "@/components/doctor/doctor-consultation-overview";
 import { useAuth } from "@/lib/authContext";
+import { useDoctorPendingReports } from "@/hooks/useDoctorPendingReports";
 import { useDoctorScheduleTab } from "@/hooks/useDoctorScheduleTab";
 
-const MOCK_DASHBOARD_STATIC_METRICS: DoctorDashboardMetric[] = [
-  {
-    title: "Patients Waiting",
-    value: 5,
-    supportingText: "Awaiting consultation",
-    icon: Users,
-    accent: "orange",
-  },
-  {
-    title: "Pending Reports",
-    value: 7,
-    supportingText: "Awaiting review",
-    icon: FileText,
-    accent: "green",
-  },
-  {
-    title: "Completed Consultations",
-    value: 18,
-    supportingText: "Completed today",
-    icon: Stethoscope,
-    accent: "purple",
-  },
-];
 
 const MOCK_RECENT_PATIENTS: RecentPatientRow[] = [
   { id: "p1", patientName: "Rachana Lambe", lastVisit: "Today", diagnosis: "Viral Fever", status: "Active" },
@@ -122,6 +100,7 @@ const MOCK_CONSULTATION_OVERVIEW: ConsultationOverview = {
 export default function DoctorDashboardPage() {
   const { user } = useAuth();
   const schedule = useDoctorScheduleTab();
+  const pendingReports = useDoctorPendingReports();
 
   const dashboardMetrics = useMemo<DoctorDashboardMetric[]>(
     () => [
@@ -133,9 +112,41 @@ export default function DoctorDashboardPage() {
         accent: "blue",
         loading: schedule.loading,
       },
-      ...MOCK_DASHBOARD_STATIC_METRICS,
+      {
+        title: "Patients Waiting",
+        value: schedule.error ? 0 : schedule.metrics.waiting,
+        supportingText: "Checked in today",
+        icon: Users,
+        accent: "orange",
+        loading: schedule.loading,
+      },
+      {
+        title: "Pending Reports",
+        value: pendingReports.error ? 0 : pendingReports.pendingReports,
+        supportingText: "Awaiting review",
+        icon: FileText,
+        accent: "green",
+        loading: pendingReports.loading,
+      },
+      {
+        title: "Completed Consultations",
+        value: schedule.error ? 0 : schedule.metrics.completed,
+        supportingText: "Completed today",
+        icon: Stethoscope,
+        accent: "purple",
+        loading: schedule.loading,
+      },
     ],
-    [schedule.totalAppointments, schedule.loading, schedule.error]
+    [
+      schedule.totalAppointments,
+      schedule.metrics.waiting,
+      schedule.metrics.completed,
+      schedule.loading,
+      schedule.error,
+      pendingReports.pendingReports,
+      pendingReports.loading,
+      pendingReports.error,
+    ]
   );
 
   const todayLabel = new Intl.DateTimeFormat("en-US", {
@@ -204,6 +215,7 @@ export default function DoctorDashboardPage() {
               totalAppointments={schedule.totalAppointments}
               loading={schedule.loading}
               error={schedule.error}
+              metricsError={schedule.metricsError}
               onRetry={schedule.refetch}
             />
           </TabsContent>
