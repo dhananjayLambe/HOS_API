@@ -269,6 +269,39 @@ class AppointmentListAPITests(TestCase):
         ids = {row["id"] for row in self._rows(r)}
         self.assertIn(str(self.appt_future.id), ids)
 
+    def test_archive_section_includes_encounter_completed_when_appt_still_checked_in(self):
+        appt = Appointment.objects.create(
+            patient_account=self.account,
+            patient_profile=self.profile,
+            doctor=self.doctor,
+            clinic=self.clinic,
+            appointment_date=self.yesterday,
+            slot_start_time=self.slot_a,
+            slot_end_time=time(10, 30),
+            status="checked_in",
+        )
+        from consultations_core.services.encounter_service import EncounterService
+
+        enc, _ = EncounterService.get_or_create_encounter(
+            clinic=self.clinic,
+            patient_account=self.account,
+            patient_profile=self.profile,
+            doctor=self.doctor,
+            appointment=appt,
+            encounter_type="appointment",
+            entry_mode="helpdesk",
+            created_by=self.helpdesk_user,
+            consultation_type="FULL",
+        )
+        enc.status = "consultation_completed"
+        enc.is_active = False
+        enc.save(update_fields=["status", "is_active"])
+
+        r = self.client.get(self.url, {"section": "archive"})
+        self.assertEqual(r.status_code, status.HTTP_200_OK)
+        ids = {row["id"] for row in self._rows(r)}
+        self.assertIn(str(appt.id), ids)
+
     def test_filter_by_doctor(self):
         r = self.client.get(
             self.url,

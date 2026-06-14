@@ -63,6 +63,10 @@ def _sync_queue_for_encounter_terminal(encounter, kind: str) -> None:
                 mark_queue_rows_for_encounter_no_show,
             )
             mark_queue_rows_for_encounter_no_show(eid)
+        from queue_management.services.queue_encounter_sync import (
+            sync_appointment_for_encounter_terminal,
+        )
+        sync_appointment_for_encounter_terminal(encounter)
     except Exception as exc:
         logger.warning(
             "encounter.lifecycle.queue_sync_failed kind=%s encounter_id=%s err=%s",

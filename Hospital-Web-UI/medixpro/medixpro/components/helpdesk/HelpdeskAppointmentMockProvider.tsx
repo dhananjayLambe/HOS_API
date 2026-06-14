@@ -111,11 +111,22 @@ export function HelpdeskAppointmentMockProvider({ children }: { children: ReactN
     const params: GetAppointmentsParams = { section: listSection };
     if (clinicId?.trim()) params.clinic_id = clinicId.trim();
     if (listDoctorId.trim()) params.doctor_id = listDoctorId.trim();
-    if (listDate.trim()) params.date = listDate.trim();
+    // Date filter applies only to Today (ops); it hides upcoming/archive rows.
+    if (listSection === "primary" && listDate.trim()) params.date = listDate.trim();
     if (debouncedSearch) params.search = debouncedSearch;
     if (listStatus.trim()) params.status = listStatus.trim();
     return params;
   }, [listSection, clinicId, listDoctorId, listDate, debouncedSearch, listStatus]);
+
+  const setListSectionWithDefaults = useCallback((section: HelpdeskAppointmentSection) => {
+    setListSection(section);
+    if (section !== "primary") {
+      setListDate("");
+    }
+    if (section === "secondary") {
+      setListStatus((prev) => (prev && prev !== "scheduled" ? "" : prev));
+    }
+  }, []);
 
   const loadInitial = useCallback(async () => {
     if (doctorsLoading) return;
@@ -386,7 +397,7 @@ export function HelpdeskAppointmentMockProvider({ children }: { children: ReactN
       doctorsLoading,
       clinicId,
       listSection,
-      setListSection,
+      setListSection: setListSectionWithDefaults,
       listDoctorId,
       setListDoctorId,
       listDate,
@@ -414,6 +425,7 @@ export function HelpdeskAppointmentMockProvider({ children }: { children: ReactN
       doctorsLoading,
       clinicId,
       listSection,
+      setListSectionWithDefaults,
       listDoctorId,
       listDate,
       listSearch,

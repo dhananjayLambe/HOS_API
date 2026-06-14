@@ -9,7 +9,7 @@ export type StaffRole = "helpdesk"
 export interface StaffMember {
   id: string
   name: string
-  /** Full mobile as stored (username); UI may mask for display */
+  /** Full mobile as stored (username) */
   mobile: string
   role: StaffRole
   status: "active"
@@ -144,11 +144,9 @@ export function normalizeMobileDigits(input: string): string {
   return input.replace(/\D/g, "").slice(0, 15)
 }
 
-/** Mask mobile for display e.g. +91 98XXXXXX12 */
+/** Format mobile for display alongside a +91 prefix */
 export function formatMobileDisplay(mobileDigits: string): string {
   const d = normalizeMobileDigits(mobileDigits)
-  if (d.length <= 4) return d
-  const last2 = d.slice(-2)
-  const prefix = d.slice(0, 2)
-  return `${prefix}XXXXXX${last2}`
+  if (d.length === 12 && d.startsWith("91")) return d.slice(2)
+  return d
 }

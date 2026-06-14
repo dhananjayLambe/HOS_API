@@ -61,6 +61,7 @@ export async function fetchDoctorAppointmentsToday({
 export type DoctorQueueApiRow = {
   id: string;
   patient_name: string;
+  patient_profile_id?: string | null;
   status: "waiting" | "vitals_done";
   position: number;
   token?: string | null;

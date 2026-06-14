@@ -7,7 +7,15 @@ Keeps datetime edge cases (e.g. +2h crossing midnight) explicit.
 import re
 from datetime import timedelta
 
-from django.db.models import Q
+from django.db.models import Exists, OuterRef, Q
+
+from consultations_core.models.encounter import ClinicalEncounter
+
+ENCOUNTER_TERMINAL_COMPLETED_STATUSES = (
+    "consultation_completed",
+    "closed",
+    "completed",  # legacy encounter status
+)
 
 
 def normalize_search(raw: str | None) -> str:
@@ -35,6 +43,34 @@ def build_appointment_search_q(term: str) -> Q:
     if len(digits_only) >= 4:
         q |= Q(patient_account__user__username__endswith=digits_only[-4:])
     return q
+
+
+def encounter_terminal_completed_exists():
+    """Consultation finished in EMR while Appointment.status may still be checked_in."""
+    return Exists(
+        ClinicalEncounter.objects.filter(
+            appointment_id=OuterRef("pk"),
+            status__in=ENCOUNTER_TERMINAL_COMPLETED_STATUSES,
+        ),
+    )
+
+
+def encounter_no_show_exists():
+    return Exists(
+        ClinicalEncounter.objects.filter(
+            appointment_id=OuterRef("pk"),
+            status="no_show",
+        ),
+    )
+
+
+def completed_appointment_q() -> Q:
+    """Appointment row or linked encounter indicates a finished visit."""
+    return (
+        Q(status="completed")
+        | Q(status="in_consultation")
+        | encounter_terminal_completed_exists()
+    )
 
 
 def primary_section_q(today, now_dt) -> Q:
@@ -73,4 +109,7 @@ def secondary_section_q(today, now_dt) -> Q:
 
 def archive_section_q(today) -> Q:
     start = today - timedelta(days=7)
-    return Q(status__in=("completed", "cancelled", "no_show")) & Q(appointment_date__gte=start)
+    terminal = Q(status__in=("completed", "cancelled", "no_show"))
+    encounter_done = encounter_terminal_completed_exists()
+    encounter_ns = encounter_no_show_exists()
+    return Q(appointment_date__gte=start) & (terminal | encounter_done | encounter_ns)

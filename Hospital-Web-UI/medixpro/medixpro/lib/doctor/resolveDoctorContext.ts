@@ -10,7 +10,9 @@ export type DoctorContext = {
 function extractDoctorId(profileResponse: unknown): string | null {
   const data = profileResponse as Record<string, unknown>;
   const doctorProfile =
-    (data?.doctor_profile as Record<string, unknown> | undefined) ?? data;
+    (data?.doctor_profile as Record<string, unknown> | undefined) ??
+    (data?.data as Record<string, unknown> | undefined) ??
+    data;
   const personalInfo = doctorProfile?.personal_info as Record<string, unknown> | undefined;
   const fromProfile =
     personalInfo?.id ?? doctorProfile?.id ?? doctorProfile?.doctor_id ?? data?.id;
@@ -19,7 +21,7 @@ function extractDoctorId(profileResponse: unknown): string | null {
 
 /**
  * Resolves doctor + clinic scope for dashboard tabs.
- * Shared by Schedule, Patients, Reports, and Practice Overview.
+ * Matches SmartQueue: doctor_profile.personal_info.id + loadStaffClinicSelection().
  */
 export async function resolveDoctorContext(): Promise<DoctorContext> {
   let doctorId = "";

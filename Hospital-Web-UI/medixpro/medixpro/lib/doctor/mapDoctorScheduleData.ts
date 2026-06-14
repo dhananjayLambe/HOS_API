@@ -22,6 +22,18 @@ const TYPE_LABEL: Record<string, string> = {
   follow_up: "Follow-up",
 };
 
+function normalizeStatus(raw: string | undefined): string {
+  return (raw ?? "scheduled").toLowerCase().trim();
+}
+
+function resolveAppointmentTypeLabel(row: DoctorAppointmentApiRow): string {
+  if ((row.booking_source ?? "").toLowerCase() === "walk_in") {
+    return "Walk-in";
+  }
+  const typeKey = (row.appointment_type ?? "new").toLowerCase();
+  return TYPE_LABEL[typeKey] ?? "New";
+}
+
 function formatSlotTime(slotStartTime: string): string {
   const raw = slotStartTime?.trim() ?? "";
   if (!raw) return "—";
@@ -34,19 +46,63 @@ function formatSlotTime(slotStartTime: string): string {
   }
 }
 
+function queueStatusToAppointmentStatus(status: DoctorQueueApiRow["status"]): string {
+  return status === "vitals_done" ? "checked_in" : "checked_in";
+}
+
+/**
+ * Helpdesk walk-in check-in can add patients to queue without an Appointment row.
+ * Synthesize appointment-shaped rows so Schedule Summary and Today's list stay aligned.
+ */
+export function mergeQueueWalkInsIntoAppointments(
+  appointments: DoctorAppointmentApiRow[],
+  queueRows: DoctorQueueApiRow[]
+): DoctorAppointmentApiRow[] {
+  const linkedProfileIds = new Set(
+    appointments
+      .map((row) => row.patient_profile_id)
+      .filter((id): id is string => Boolean(id))
+  );
+
+  const today = format(new Date(), "yyyy-MM-dd");
+  const synthetic: DoctorAppointmentApiRow[] = [];
+
+  for (const queueRow of queueRows) {
+    const profileId = queueRow.patient_profile_id;
+    if (profileId && linkedProfileIds.has(profileId)) continue;
+
+    synthetic.push({
+      id: `queue-${queueRow.id}`,
+      patient_name: queueRow.patient_name,
+      patient_profile_id: profileId ?? queueRow.id,
+      appointment_date: today,
+      slot_start_time: "00:00:00",
+      status: queueStatusToAppointmentStatus(queueRow.status),
+      appointment_type: "new",
+      booking_source: "walk_in",
+    });
+
+    if (profileId) linkedProfileIds.add(profileId);
+  }
+
+  return [...appointments, ...synthetic];
+}
+
 export function mapDoctorAppointmentToRow(row: DoctorAppointmentApiRow): ScheduleAppointmentRow {
-  const typeKey = (row.appointment_type ?? "new").toLowerCase();
-  const statusKey = (row.status ?? "scheduled").toLowerCase();
+  const statusKey = normalizeStatus(row.status);
   return {
     id: String(row.id),
     time: formatSlotTime(row.slot_start_time),
     patientName: (row.patient_name ?? "").trim() || "Patient",
-    type: TYPE_LABEL[typeKey] ?? "New",
+    type: resolveAppointmentTypeLabel(row),
     status: STATUS_LABEL[statusKey] ?? "Scheduled",
   };
 }
 
-export function aggregateScheduleMetrics(rows: DoctorAppointmentApiRow[]): ScheduleMetrics {
+export function aggregateScheduleMetrics(
+  rows: DoctorAppointmentApiRow[],
+  queueRows: DoctorQueueApiRow[] = []
+): ScheduleMetrics {
   const counts = {
     scheduled: 0,
     completed: 0,
@@ -55,8 +111,13 @@ export function aggregateScheduleMetrics(rows: DoctorAppointmentApiRow[]): Sched
     noShow: 0,
   };
 
+  const countedProfileIds = new Set<string>();
+
   for (const row of rows) {
-    switch ((row.status ?? "").toLowerCase()) {
+    const status = normalizeStatus(row.status);
+    if (row.patient_profile_id) countedProfileIds.add(row.patient_profile_id);
+
+    switch (status) {
       case "scheduled":
         counts.scheduled += 1;
         break;
@@ -72,16 +133,28 @@ export function aggregateScheduleMetrics(rows: DoctorAppointmentApiRow[]): Sched
       case "no_show":
         counts.noShow += 1;
         break;
+      case "in_consultation":
+        // Active consultations are tracked in Live Queue KPI; not a summary chip.
+        break;
       default:
         break;
     }
+  }
+
+  // Queue-only walk-ins (no appointment row) still count toward Waiting.
+  for (const queueRow of queueRows) {
+    if (queueRow.status !== "waiting") continue;
+    const profileId = queueRow.patient_profile_id;
+    if (profileId && countedProfileIds.has(profileId)) continue;
+    counts.waiting += 1;
+    if (profileId) countedProfileIds.add(profileId);
   }
 
   return counts;
 }
 
 export function countInConsultation(rows: DoctorAppointmentApiRow[]): number {
-  return rows.filter((row) => (row.status ?? "").toLowerCase() === "in_consultation").length;
+  return rows.filter((row) => normalizeStatus(row.status) === "in_consultation").length;
 }
 
 export function mapDoctorQueueToPanel(
@@ -110,11 +183,14 @@ export function mapDoctorQueueToPanel(
 export function mapDoctorAppointmentsResponse(
   appointments: DoctorAppointmentApiRow[],
   queueRows: DoctorQueueApiRow[],
-  totalAppointments: number
+  totalAppointmentsFromApi: number
 ) {
-  const metrics = aggregateScheduleMetrics(appointments);
-  const appointmentRows = appointments.map(mapDoctorAppointmentToRow);
-  const { snapshot, tokens } = mapDoctorQueueToPanel(queueRows, appointments);
+  const mergedAppointments = mergeQueueWalkInsIntoAppointments(appointments, queueRows);
+  const metrics = aggregateScheduleMetrics(mergedAppointments, queueRows);
+  const appointmentRows = mergedAppointments.map(mapDoctorAppointmentToRow);
+  const { snapshot, tokens } = mapDoctorQueueToPanel(queueRows, mergedAppointments);
+  const queueOnlyCount = mergedAppointments.length - appointments.length;
+  const totalAppointments = totalAppointmentsFromApi + queueOnlyCount;
 
   return {
     metrics,

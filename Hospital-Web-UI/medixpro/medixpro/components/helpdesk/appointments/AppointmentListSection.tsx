@@ -127,6 +127,8 @@ export function AppointmentListSection({
               className="h-11"
               value={listDate}
               onChange={(e) => onListDateChange(e.target.value)}
+              disabled={listSection !== "primary"}
+              title={listSection !== "primary" ? "Date filter applies to Today (ops) only" : undefined}
             />
           </div>
         </div>

@@ -18,6 +18,7 @@ class ReportActorRole(str, Enum):
     DOCTOR = "doctor"
     PATIENT = "patient"
     ADMIN = "admin"
+    HELPDESK = "helpdesk"
 
 
 @dataclass(frozen=True)
@@ -59,11 +60,25 @@ def resolve_patient_profile_access(request, patient_id) -> ReportListAccess | No
     return None
 
 
+def _helpdesk_has_clinic_access(user, clinic) -> bool:
+    if not user or not getattr(user, "is_authenticated", False):
+        return False
+    if not user.groups.filter(name="helpdesk").exists():
+        return False
+    hp = getattr(user, "helpdesk_profile", None)
+    if hp is None or clinic is None:
+        return False
+    return hp.clinic_id == clinic.id
+
+
 def resolve_encounter_access(request, encounter_id) -> ReportListAccess | None:
     encounter = get_object_or_404(ClinicalEncounter, pk=encounter_id)
 
     if request.user.is_superuser:
         return ReportListAccess(role=ReportActorRole.ADMIN, encounter=encounter)
+
+    if _helpdesk_has_clinic_access(request.user, encounter.clinic):
+        return ReportListAccess(role=ReportActorRole.HELPDESK, encounter=encounter)
 
     doctor_user_id = getattr(getattr(encounter, "doctor", None), "user_id", None)
     if doctor_user_id and doctor_user_id == request.user.id:

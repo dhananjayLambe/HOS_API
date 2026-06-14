@@ -86,7 +86,7 @@ export function useDoctorScheduleTab(): UseDoctorScheduleTabResult {
     setError(null);
 
     try {
-      const [appointmentsRes, queueRows] = await Promise.all([
+      const [appointmentsResult, queueResult] = await Promise.allSettled([
         fetchDoctorAppointmentsToday({
           doctorId: doctorId!,
           clinicId: clinicId!,
@@ -98,6 +98,16 @@ export function useDoctorScheduleTab(): UseDoctorScheduleTabResult {
           signal: controller.signal,
         }),
       ]);
+
+      if (controller.signal.aborted) return;
+
+      if (appointmentsResult.status === "rejected") {
+        throw appointmentsResult.reason;
+      }
+
+      const appointmentsRes = appointmentsResult.value;
+      const queueRows =
+        queueResult.status === "fulfilled" ? queueResult.value : [];
 
       const mapped = mapDoctorAppointmentsResponse(
         appointmentsRes.appointments ?? [],

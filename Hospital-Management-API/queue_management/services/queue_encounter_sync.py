@@ -67,6 +67,41 @@ def mark_queue_rows_for_encounter_no_show(encounter_id: Any) -> int:
     return n
 
 
+def sync_appointment_for_encounter_terminal(encounter) -> int:
+    """
+    Align Appointment.status when the linked encounter reaches a terminal state.
+    Idempotent: skips rows already cancelled / no_show / completed.
+    """
+    appointment_id = getattr(encounter, "appointment_id", None)
+    if not appointment_id:
+        return 0
+
+    from appointments.models import Appointment
+
+    enc_status = (getattr(encounter, "status", None) or "").strip()
+    if enc_status in ("consultation_completed", "closed", "completed"):
+        appt_status = "completed"
+    elif enc_status == "cancelled":
+        appt_status = "cancelled"
+    elif enc_status == "no_show":
+        appt_status = "no_show"
+    else:
+        return 0
+
+    n = Appointment.objects.filter(pk=appointment_id).exclude(
+        status__in=("cancelled", "no_show", "completed"),
+    ).update(status=appt_status, updated_at=timezone.now())
+    if n:
+        logger.info(
+            "appointment_encounter_sync encounter_id=%s appointment_id=%s status=%s updated=%s",
+            getattr(encounter, "id", None),
+            appointment_id,
+            appt_status,
+            n,
+        )
+    return n
+
+
 def _as_uuid(value: Any) -> uuid.UUID | None:
     if value is None:
         return None

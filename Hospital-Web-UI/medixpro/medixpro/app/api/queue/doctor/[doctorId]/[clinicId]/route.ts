@@ -1,6 +1,10 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { getDjangoApiBase } from "@/lib/get-django-api-base";
 
-const DJANGO_API_URL = process.env.DJANGO_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/";
+function djangoDoctorQueueUrl(doctorId: string, clinicId: string): string {
+  const base = getDjangoApiBase().replace(/\/+$/, "");
+  return `${base}/queue/doctor/${doctorId}/${clinicId}/`;
+}
 
 // GET - Get today's queue for a doctor at a clinic
 export async function GET(
@@ -18,21 +22,18 @@ export async function GET(
       );
     }
 
-    const url = `${DJANGO_API_URL}queue/doctor/${doctorId}/${clinicId}/`;
-
-    const response = await fetch(url, {
+    const response = await fetch(djangoDoctorQueueUrl(doctorId, clinicId), {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
         ...(authHeader && { Authorization: authHeader }),
       },
-      credentials: "include",
     });
 
-    let data;
+    let data: unknown;
     try {
       data = await response.json();
-    } catch (e) {
+    } catch {
       return NextResponse.json(
         { error: "Invalid response from server", detail: response.statusText },
         { status: response.status }
@@ -42,21 +43,21 @@ export async function GET(
     if (!response.ok) {
       return NextResponse.json(
         {
-          error: data.message || data.detail || "Failed to fetch queue",
-          detail: data.detail || data.message,
-          ...data,
+          error:
+            (data as { message?: string })?.message ??
+            (data as { detail?: string })?.detail ??
+            "Failed to fetch queue",
+          detail: (data as { detail?: string })?.detail,
+          ...(typeof data === "object" && data !== null ? data : {}),
         },
         { status: response.status }
       );
     }
 
     return NextResponse.json(data, { status: response.status });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal server error";
     console.error("[API] Queue fetch error:", error);
-    return NextResponse.json(
-      { error: error.message || "Internal server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
-

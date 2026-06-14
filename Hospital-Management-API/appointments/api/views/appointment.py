@@ -26,6 +26,8 @@ from account.permissions import (
 from appointments.api.list_scope import (
     archive_section_q,
     build_appointment_search_q,
+    completed_appointment_q,
+    encounter_no_show_exists,
     normalize_search,
     primary_section_q,
     secondary_section_q,
@@ -148,7 +150,7 @@ class AppointmentListView(generics.ListCreateAPIView):
             elif tab == "upcoming":
                 qs = qs.filter(appointment_date__gt=today).filter(non_cancelled)
             elif tab == "completed":
-                qs = qs.filter(status="completed")
+                qs = qs.filter(completed_appointment_q())
             elif tab == "cancelled":
                 qs = qs.filter(status__in=CANCELLED_LIKE_STATUSES)
 
@@ -170,7 +172,12 @@ class AppointmentListView(generics.ListCreateAPIView):
 
         status_override = request.query_params.get("status")
         if status_override:
-            qs = qs.filter(status=status_override)
+            if status_override == "completed":
+                qs = qs.filter(completed_appointment_q())
+            elif status_override == "no_show":
+                qs = qs.filter(Q(status="no_show") | encounter_no_show_exists())
+            else:
+                qs = qs.filter(status=status_override)
 
         search_raw = request.query_params.get("search")
         term = normalize_search(search_raw)
@@ -405,11 +412,14 @@ class AppointmentCheckInView(APIView):
             )
 
         today = timezone.localdate()
+        # Helpdesk may check in early (appointment scheduled for a future date).
         if appointment.appointment_date > today:
-            return self._error_all(
-                "INVALID_DATE",
-                "Cannot check in for a future-dated appointment",
-                status.HTTP_400_BAD_REQUEST,
+            logger.info(
+                "Check-in early arrival appointment_id=%s scheduled_date=%s today=%s user_id=%s",
+                appointment.id,
+                appointment.appointment_date,
+                today,
+                getattr(request.user, "id", None),
             )
 
         if appointment.status not in ("scheduled", "checked_in"):

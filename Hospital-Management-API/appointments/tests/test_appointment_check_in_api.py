@@ -261,10 +261,13 @@ class AppointmentCheckInAPITests(TestCase):
         self.assertEqual(r.data["all"]["code"], "CONFLICT")
         self.assertEqual(r.data["all"]["message"], "Encounter missing for checked-in appointment")
 
-    def test_check_in_future_date_invalid(self):
+    def test_check_in_future_date_allowed_for_early_arrival(self):
         r = self.client.post(self._url(self.appt_future_scheduled), {}, format="json")
-        self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(r.data["all"]["code"], "INVALID_DATE")
+        self.assertEqual(r.status_code, status.HTTP_200_OK)
+        self.assertEqual(r.data["status"], "checked_in")
+        self.assertIn("queue_position", r.data)
+        self.appt_future_scheduled.refresh_from_db()
+        self.assertEqual(self.appt_future_scheduled.status, "checked_in")
 
     def test_check_in_past_date_allowed(self):
         r = self.client.post(self._url(self.appt_past_scheduled), {}, format="json")

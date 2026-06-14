@@ -66,6 +66,7 @@ urlpatterns = [
     path('api/v1/notifications/', include('notifications.api.delivery_urls')),
     path('api/v1/prescriptions/', include('consultations_core.api.prescription_urls')),
     path('api/v1/templates/', include('consultations_core.api.template_urls')),
+    path('api/v1/visits/', include('consultations_core.api.visit_urls')),
     #Swagger API
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
     path('redoc/', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),
