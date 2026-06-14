@@ -1,9 +1,11 @@
 "use client";
 
-import { ArrowUpRight, CalendarClock, ClipboardList, FileText, Users } from "lucide-react";
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
+import { Calendar, FileText, Stethoscope, Users } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  DoctorDashboardSummaryCards,
+  type DoctorDashboardMetric,
+} from "@/components/doctor/doctor-dashboard-summary-cards";
 import { DoctorScheduleTab } from "@/components/doctor/doctor-schedule-tab";
 import type { ScheduleAppointmentRow } from "@/components/doctor/doctor-schedule-appointments-list";
 import type { ScheduleMetrics } from "@/components/doctor/doctor-schedule-metrics-strip";
@@ -22,6 +24,37 @@ import type { ConsultationMix } from "@/components/doctor/doctor-consultation-mi
 import type { PracticeSummary } from "@/components/doctor/doctor-practice-summary";
 import type { ConsultationOverview } from "@/components/doctor/doctor-consultation-overview";
 import { useAuth } from "@/lib/authContext";
+
+const MOCK_DASHBOARD_METRICS: DoctorDashboardMetric[] = [
+  {
+    title: "Today's Appointments",
+    value: 12,
+    supportingText: "Scheduled today",
+    icon: Calendar,
+    accent: "blue",
+  },
+  {
+    title: "Patients Waiting",
+    value: 5,
+    supportingText: "Awaiting consultation",
+    icon: Users,
+    accent: "orange",
+  },
+  {
+    title: "Pending Reports",
+    value: 7,
+    supportingText: "Awaiting review",
+    icon: FileText,
+    accent: "green",
+  },
+  {
+    title: "Completed Consultations",
+    value: 18,
+    supportingText: "Completed today",
+    icon: Stethoscope,
+    accent: "purple",
+  },
+];
 
 const MOCK_SCHEDULE_METRICS: ScheduleMetrics = {
   scheduled: 12,
@@ -127,6 +160,13 @@ const MOCK_CONSULTATION_OVERVIEW: ConsultationOverview = {
 
 export default function DoctorDashboardPage() {
   const { user } = useAuth();
+
+  const todayLabel = new Intl.DateTimeFormat("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date());
   
   // Build welcome message with user's name
   const getWelcomeMessage = () => {
@@ -141,131 +181,44 @@ export default function DoctorDashboardPage() {
 
   return (
     <div className="flex min-h-screen w-full flex-col">
-      <main className="flex-1 space-y-6">
-        <div className="flex flex-col space-y-2">
-          <h2 className="text-2xl lg:text-3xl font-bold tracking-tight">{getWelcomeMessage()}</h2>
-          <p className="text-muted-foreground">Here's what's happening with your patients today.</p>
+      <main className="flex-1 space-y-8">
+        <div className="flex flex-col space-y-1">
+          <h2 className="text-3xl font-bold tracking-tight lg:text-4xl">{getWelcomeMessage()}</h2>
+          <p className="text-muted-foreground">Here&apos;s what&apos;s happening with your patients today.</p>
+          <p className="text-sm text-muted-foreground/80">{todayLabel}</p>
         </div>
 
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-      {/* Appointments Card */}
-      <div className="bg-card rounded-lg overflow-hidden border border-blue-100 dark:border-blue-900/60">
-        <div className="p-5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <div className="bg-blue-100 dark:bg-blue-900/50 p-2 rounded-lg">
-                <CalendarClock className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-              </div>
-              <span className="font-medium text-slate-600 dark:text-slate-300">Appointments</span>
-            </div>
-            <span className="text-sm text-red-500 font-medium">3 urgent</span>
-          </div>
-          
-          <div className="mt-4">
-            <div className="text-3xl font-bold text-slate-800 dark:text-white">12</div>
-            <p className="text-xs text-slate-500 dark:text-slate-400">Today's consultations</p>
-          </div>
-          
-          <div className="mt-6">
-            <button className="flex items-center justify-between w-full text-sm text-blue-600 dark:text-blue-400 font-medium hover:underline">
-              <span>View Schedule</span>
-              <ArrowUpRight className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      </div>
-      
-      {/* Reports Card */}
-      <div className="bg-card rounded-lg overflow-hidden border border-emerald-100 dark:border-emerald-900/60">
-        <div className="p-5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <div className="bg-emerald-100 dark:bg-emerald-900/50 p-2 rounded-lg">
-                <FileText className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-              </div>
-              <span className="font-medium text-slate-600 dark:text-slate-300">Pending Reports</span>
-            </div>
-            <span className="text-sm text-emerald-500 font-medium">2 ready</span>
-          </div>
-          
-          <div className="mt-4">
-            <div className="text-3xl font-bold text-slate-800 dark:text-white">7</div>
-            <p className="text-xs text-slate-500 dark:text-slate-400">Lab results awaiting review</p>
-          </div>
-          
-          <div className="mt-6">
-            <button className="flex items-center justify-between w-full text-sm text-emerald-600 dark:text-emerald-400 font-medium hover:underline">
-              <span>Review Reports</span>
-              <ArrowUpRight className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      </div>
-      
-      {/* Patients Card */}
-      <div className="bg-card rounded-lg overflow-hidden border border-amber-100 dark:border-amber-900/60">
-        <div className="p-5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <div className="bg-amber-100 dark:bg-amber-900/50 p-2 rounded-lg">
-                <Users className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-              </div>
-              <span className="font-medium text-slate-600 dark:text-slate-300">Active Patients</span>
-            </div>
-            <span className="text-sm text-amber-500 font-medium">8 new</span>
-          </div>
-          
-          <div className="mt-4">
-            <div className="text-3xl font-bold text-slate-800 dark:text-white">143</div>
-            <p className="text-xs text-slate-500 dark:text-slate-400">Total patient count this week</p>
-          </div>
-          
-          <div className="mt-6">
-            <button className="flex items-center justify-between w-full text-sm text-amber-600 dark:text-amber-400 font-medium hover:underline">
-              <span>Patient Records</span>
-              <ArrowUpRight className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      </div>
-      
-      {/* Tasks Card */}
-      <div className="bg-card rounded-lg overflow-hidden border border-rose-100 dark:border-rose-900/60">
-        <div className="p-5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <div className="bg-rose-100 dark:bg-rose-900/50 p-2 rounded-lg">
-                <ClipboardList className="h-5 w-5 text-rose-600 dark:text-rose-400" />
-              </div>
-              <span className="font-medium text-slate-600 dark:text-slate-300">Pending Tasks</span>
-            </div>
-            <span className="text-sm text-rose-500 font-medium">2 high priority</span>
-          </div>
-          
-          <div className="mt-4">
-            <div className="text-3xl font-bold text-slate-800 dark:text-white">5</div>
-            <p className="text-xs text-slate-500 dark:text-slate-400">Tasks requiring attention</p>
-          </div>
-          
-          <div className="mt-6">
-            <button className="flex items-center justify-between w-full text-sm text-rose-600 dark:text-rose-400 font-medium hover:underline">
-              <span>View Tasks</span>
-              <ArrowUpRight className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+        <DoctorDashboardSummaryCards metrics={MOCK_DASHBOARD_METRICS} />
 
-        <Tabs defaultValue="schedule" className="space-y-4">
-          <TabsList className="grid grid-cols-4 md:w-[480px]">
-            <TabsTrigger value="schedule">Schedule</TabsTrigger>
-            <TabsTrigger value="patients">Patients</TabsTrigger>
-            <TabsTrigger value="reports">Reports</TabsTrigger>
-            <TabsTrigger value="practice-overview">Practice Overview</TabsTrigger>
+        <Tabs defaultValue="schedule" className="space-y-6">
+          <TabsList className="grid h-auto grid-cols-4 gap-1 rounded-xl bg-muted/40 p-1.5 md:w-[520px]">
+            <TabsTrigger
+              value="schedule"
+              className="h-11 rounded-xl font-medium data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm hover:bg-muted/60"
+            >
+              Schedule
+            </TabsTrigger>
+            <TabsTrigger
+              value="patients"
+              className="h-11 rounded-xl font-medium data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm hover:bg-muted/60"
+            >
+              Patients
+            </TabsTrigger>
+            <TabsTrigger
+              value="reports"
+              className="h-11 rounded-xl font-medium data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm hover:bg-muted/60"
+            >
+              Reports
+            </TabsTrigger>
+            <TabsTrigger
+              value="practice-overview"
+              className="h-11 rounded-xl font-medium data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm hover:bg-muted/60"
+            >
+              Practice Overview
+            </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="schedule" className="space-y-4">
+          <TabsContent value="schedule" className="space-y-6">
             <DoctorScheduleTab
               metrics={MOCK_SCHEDULE_METRICS}
               appointments={MOCK_SCHEDULE_APPOINTMENTS}
@@ -274,7 +227,7 @@ export default function DoctorDashboardPage() {
             />
           </TabsContent>
 
-          <TabsContent value="patients" className="space-y-4">
+          <TabsContent value="patients" className="space-y-6">
             <DoctorPatientsTab
               patients={MOCK_RECENT_PATIENTS}
               insights={MOCK_PATIENT_INSIGHTS}
@@ -282,7 +235,7 @@ export default function DoctorDashboardPage() {
             />
           </TabsContent>
 
-          <TabsContent value="reports" className="space-y-4">
+          <TabsContent value="reports" className="space-y-6">
             <DoctorReportsTab
               reports={MOCK_REPORTS}
               insights={MOCK_REPORT_INSIGHTS}
@@ -290,7 +243,7 @@ export default function DoctorDashboardPage() {
             />
           </TabsContent>
 
-          <TabsContent value="practice-overview" className="space-y-4">
+          <TabsContent value="practice-overview" className="space-y-6">
             <DoctorPracticeOverviewTab
               metrics={MOCK_PRACTICE_METRICS}
               consultationMix={MOCK_CONSULTATION_MIX}

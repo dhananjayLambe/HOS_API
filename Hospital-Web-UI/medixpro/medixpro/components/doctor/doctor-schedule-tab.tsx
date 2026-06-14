@@ -22,15 +22,18 @@ export function DoctorScheduleTab({
   queueTokens,
 }: DoctorScheduleTabProps) {
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div>
-        <h3 className="mb-3 text-sm font-medium text-muted-foreground">Schedule Summary</h3>
+        <h3 className="mb-3 text-2xl font-semibold tracking-tight">Schedule Summary</h3>
         <DoctorScheduleMetricsStrip metrics={metrics} />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-10">
+      <div className="grid gap-6 lg:grid-cols-10">
         <div className="lg:col-span-7">
-          <DoctorScheduleAppointmentsList appointments={appointments} />
+          <DoctorScheduleAppointmentsList
+            appointments={appointments}
+            scheduledCount={metrics.scheduled}
+          />
         </div>
         <div className="lg:col-span-3">
           <DoctorScheduleQueuePanel snapshot={queueSnapshot} tokens={queueTokens} />

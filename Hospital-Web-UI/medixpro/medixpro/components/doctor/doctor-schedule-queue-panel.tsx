@@ -1,5 +1,6 @@
 "use client";
 
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
@@ -16,10 +17,21 @@ export type ScheduleQueueTokenRow = {
   status?: "waiting" | "vitals_done";
 };
 
-type QueueCountRow = {
+type QueueKpiPill = {
   label: string;
   value: number;
-  className?: string;
+  valueClassName: string;
+  pillClassName: string;
+};
+
+const queueStatusBadge: Record<NonNullable<ScheduleQueueTokenRow["status"]>, string> = {
+  waiting: "bg-amber-500/15 text-amber-900 dark:text-amber-100",
+  vitals_done: "bg-sky-500/15 text-sky-900 dark:text-sky-100",
+};
+
+const queueStatusLabel: Record<NonNullable<ScheduleQueueTokenRow["status"]>, string> = {
+  waiting: "Waiting",
+  vitals_done: "Vitals Done",
 };
 
 type DoctorScheduleQueuePanelProps = {
@@ -28,28 +40,47 @@ type DoctorScheduleQueuePanelProps = {
 };
 
 export function DoctorScheduleQueuePanel({ snapshot, tokens }: DoctorScheduleQueuePanelProps) {
-  const countRows: QueueCountRow[] = [
-    { label: "Waiting", value: snapshot.waiting, className: "text-amber-600 dark:text-amber-400" },
-    { label: "Vitals Done", value: snapshot.vitalsDone, className: "text-sky-600 dark:text-sky-400" },
+  const kpiPills: QueueKpiPill[] = [
     {
-      label: "Ready For Consultation",
+      label: "Waiting",
+      value: snapshot.waiting,
+      valueClassName: "text-amber-600 dark:text-amber-400",
+      pillClassName: "border-amber-100 bg-amber-50/80 dark:border-amber-900/40 dark:bg-amber-950/30",
+    },
+    {
+      label: "Vitals Done",
+      value: snapshot.vitalsDone,
+      valueClassName: "text-sky-600 dark:text-sky-400",
+      pillClassName: "border-sky-100 bg-sky-50/80 dark:border-sky-900/40 dark:bg-sky-950/30",
+    },
+    {
+      label: "Ready",
       value: snapshot.readyForConsultation,
-      className: "text-emerald-600 dark:text-emerald-400",
+      valueClassName: "text-emerald-600 dark:text-emerald-400",
+      pillClassName: "border-emerald-100 bg-emerald-50/80 dark:border-emerald-900/40 dark:bg-emerald-950/30",
     },
   ];
 
   return (
-    <Card className="h-full">
-      <CardHeader>
-        <CardTitle>Queue Overview</CardTitle>
-        <CardDescription>Full operational view of today&apos;s queue</CardDescription>
+    <Card className="h-full border shadow-sm">
+      <CardHeader className="p-6 pb-4">
+        <CardTitle className="text-2xl font-semibold">Live Queue</CardTitle>
+        <CardDescription className="text-sm">Today&apos;s operational queue</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="space-y-3">
-          {countRows.map((row) => (
-            <div key={row.label} className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">{row.label}</span>
-              <span className={cn("text-lg font-semibold tabular-nums", row.className)}>{row.value}</span>
+      <CardContent className="space-y-6 p-6 pt-0">
+        <div className="grid grid-cols-3 gap-2">
+          {kpiPills.map((pill) => (
+            <div
+              key={pill.label}
+              className={cn(
+                "flex flex-col items-center rounded-xl border px-2 py-3 text-center",
+                pill.pillClassName
+              )}
+            >
+              <span className={cn("text-2xl font-bold tabular-nums", pill.valueClassName)}>{pill.value}</span>
+              <span className="mt-1 text-[10px] font-medium leading-tight text-muted-foreground">
+                {pill.label}
+              </span>
             </div>
           ))}
         </div>
@@ -59,13 +90,23 @@ export function DoctorScheduleQueuePanel({ snapshot, tokens }: DoctorScheduleQue
             Queue order
           </p>
           <ul className="space-y-2">
-            {tokens.map((token) => (
+            {tokens.map((token, index) => (
               <li
                 key={token.id}
-                className="flex items-center justify-between rounded-md border px-3 py-2 text-sm"
+                className="flex items-center justify-between gap-2 rounded-lg border bg-card px-3 py-2.5 text-sm"
               >
-                <span className="font-medium">{token.token}</span>
-                <span className="text-muted-foreground">{token.patientName}</span>
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="font-semibold tabular-nums text-foreground">#{index + 1}</span>
+                  <span className="truncate font-medium">{token.patientName}</span>
+                </div>
+                {token.status ? (
+                  <Badge
+                    variant="secondary"
+                    className={cn("shrink-0 text-[10px] font-normal", queueStatusBadge[token.status])}
+                  >
+                    {queueStatusLabel[token.status]}
+                  </Badge>
+                ) : null}
               </li>
             ))}
           </ul>
