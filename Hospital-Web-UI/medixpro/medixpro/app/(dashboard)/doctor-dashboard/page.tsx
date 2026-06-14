@@ -3,17 +3,24 @@
 import { ArrowUpRight, CalendarClock, ClipboardList, FileText, Users } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DoctorScheduleTab } from "@/components/doctor/doctor-schedule-tab";
 import type { ScheduleAppointmentRow } from "@/components/doctor/doctor-schedule-appointments-list";
 import type { ScheduleMetrics } from "@/components/doctor/doctor-schedule-metrics-strip";
 import type { ScheduleQueueSnapshot, ScheduleQueueTokenRow } from "@/components/doctor/doctor-schedule-queue-panel";
-import { DoctorPatients } from "@/components/doctor/doctor-patients";
-import { DoctorTasks } from "@/components/doctor/doctor-tasks";
-import { PatientNotes } from "@/components/doctor/patient-notes";
-import { RecentPrescriptions } from "@/components/doctor/recent-prescriptions";
-import { DoctorStats } from "@/components/doctor/doctor-stats";
+import { DoctorPatientsTab } from "@/components/doctor/doctor-patients-tab";
+import type { RecentPatientRow } from "@/components/doctor/doctor-patients-recent-table";
+import type { PatientInsightMetrics } from "@/components/doctor/doctor-patient-insights-panel";
+import type { FollowUpPatientRow } from "@/components/doctor/doctor-patients-follow-up-list";
+import { DoctorReportsTab } from "@/components/doctor/doctor-reports-tab";
+import type { DoctorReportRow } from "@/components/doctor/doctor-reports-table";
+import type { ReportInsightMetrics } from "@/components/doctor/doctor-report-insights";
+import type { ReportActivityItem } from "@/components/doctor/doctor-recent-report-activity";
+import { DoctorPracticeOverviewTab } from "@/components/doctor/doctor-practice-overview-tab";
+import type { PracticeMetrics } from "@/components/doctor/doctor-practice-overview-metrics";
+import type { ConsultationMix } from "@/components/doctor/doctor-consultation-mix";
+import type { PracticeSummary } from "@/components/doctor/doctor-practice-summary";
+import type { ConsultationOverview } from "@/components/doctor/doctor-consultation-overview";
 import { useAuth } from "@/lib/authContext";
 
 const MOCK_SCHEDULE_METRICS: ScheduleMetrics = {
@@ -46,6 +53,77 @@ const MOCK_QUEUE_TOKENS: ScheduleQueueTokenRow[] = [
   { id: "q4", token: "Token 4", patientName: "Sneha Desai", status: "waiting" },
   { id: "q5", token: "Token 5", patientName: "Vikram Singh", status: "waiting" },
 ];
+
+const MOCK_RECENT_PATIENTS: RecentPatientRow[] = [
+  { id: "p1", patientName: "Rachana Lambe", lastVisit: "Today", diagnosis: "Viral Fever", status: "Active" },
+  { id: "p2", patientName: "Amit Patil", lastVisit: "Yesterday", diagnosis: "Diabetes", status: "Follow-up Due" },
+  { id: "p3", patientName: "Priya Sharma", lastVisit: "2 Days Ago", diagnosis: "Hypertension", status: "Stable" },
+  { id: "p4", patientName: "Ramesh Patil", lastVisit: "3 Days Ago", diagnosis: "Asthma", status: "Treatment Ongoing" },
+  { id: "p5", patientName: "Sneha Desai", lastVisit: "5 Days Ago", diagnosis: "Migraine", status: "Stable" },
+];
+
+const MOCK_PATIENT_INSIGHTS: PatientInsightMetrics = {
+  patientsSeenToday: 12,
+  followUpDue: 8,
+  treatmentOngoing: 15,
+};
+
+const MOCK_FOLLOW_UP_PATIENTS: FollowUpPatientRow[] = [
+  { id: "f1", patientName: "Amit Patil", lastVisitAgo: "15 days ago" },
+  { id: "f2", patientName: "Priya Sharma", lastVisitAgo: "30 days ago" },
+  { id: "f3", patientName: "Ramesh Patil", lastVisitAgo: "45 days ago" },
+];
+
+const MOCK_REPORTS: DoctorReportRow[] = [
+  { id: "r1", patientName: "Rachana Lambe", reportType: "CBC Report", uploaded: "Today", reviewStatus: "Ready For Review" },
+  { id: "r2", patientName: "Amit Patil", reportType: "Lipid Profile", uploaded: "Today", reviewStatus: "Reviewed" },
+  { id: "r3", patientName: "Priya Sharma", reportType: "Thyroid Profile", uploaded: "Yesterday", reviewStatus: "Ready For Review" },
+  { id: "r4", patientName: "Ramesh Patil", reportType: "Chest X-Ray", uploaded: "Yesterday", reviewStatus: "Pending Upload" },
+];
+
+const MOCK_REPORT_INSIGHTS: ReportInsightMetrics = {
+  readyForReview: 7,
+  reviewedToday: 12,
+  pendingUpload: 3,
+  reportsReceivedToday: 15,
+};
+
+const MOCK_REPORT_ACTIVITY: ReportActivityItem[] = [
+  { id: "a1", description: "CBC Report uploaded", patientName: "Rachana Lambe", timestamp: "09:30 AM" },
+  { id: "a2", description: "Thyroid Profile reviewed", patientName: "Priya Sharma", timestamp: "10:15 AM" },
+  { id: "a3", description: "Chest X-Ray pending", patientName: "Ramesh Patil", timestamp: "Yesterday" },
+  { id: "a4", description: "Lipid Profile reviewed", patientName: "Amit Patil", timestamp: "08:45 AM" },
+];
+
+const MOCK_PRACTICE_METRICS: PracticeMetrics = {
+  patientsToday: 12,
+  patientsThisWeek: 68,
+  patientVisitsThisMonth: 284,
+  followUpsCompleted: 24,
+  consultationsCompleted: 18,
+};
+
+const MOCK_CONSULTATION_MIX: ConsultationMix = {
+  newConsultations: 10,
+  followUpConsultations: 8,
+  cancelled: 1,
+  noShow: 0,
+};
+
+const MOCK_PRACTICE_SUMMARY: PracticeSummary = {
+  newPatients: 15,
+  returningPatients: 269,
+  activeTreatments: 42,
+  patientsUnderTreatment: 42,
+};
+
+const MOCK_CONSULTATION_OVERVIEW: ConsultationOverview = {
+  completed: 18,
+  followUp: 8,
+  newConsultations: 10,
+  cancelled: 1,
+  noShow: 0,
+};
 
 export default function DoctorDashboardPage() {
   const { user } = useAuth();
@@ -180,11 +258,11 @@ export default function DoctorDashboardPage() {
     </div>
 
         <Tabs defaultValue="schedule" className="space-y-4">
-          <TabsList className="grid grid-cols-4 md:w-[400px]">
+          <TabsList className="grid grid-cols-4 md:w-[480px]">
             <TabsTrigger value="schedule">Schedule</TabsTrigger>
             <TabsTrigger value="patients">Patients</TabsTrigger>
-            <TabsTrigger value="tasks">Tasks</TabsTrigger>
-            <TabsTrigger value="stats">Stats</TabsTrigger>
+            <TabsTrigger value="reports">Reports</TabsTrigger>
+            <TabsTrigger value="practice-overview">Practice Overview</TabsTrigger>
           </TabsList>
 
           <TabsContent value="schedule" className="space-y-4">
@@ -197,63 +275,28 @@ export default function DoctorDashboardPage() {
           </TabsContent>
 
           <TabsContent value="patients" className="space-y-4">
-            <div className="md:grid max-md:space-y-4 gap-4 md:grid-cols-2 lg:grid-cols-7">
-              <Card className="col-span-4">
-                <CardHeader>
-                  <CardTitle>Today's Patients</CardTitle>
-                  <CardDescription>Patients you're seeing today</CardDescription>
-                </CardHeader>
-                <CardContent className="!pt-0">
-                  <DoctorPatients />
-                </CardContent>
-              </Card>
-
-              <Card className="col-span-3">
-                <CardHeader>
-                  <CardTitle>Recent Patient Notes</CardTitle>
-                  <CardDescription>Your latest clinical notes</CardDescription>
-                </CardHeader>
-                <CardContent className="!pt-0">
-                  <PatientNotes />
-                </CardContent>
-              </Card>
-            </div>
+            <DoctorPatientsTab
+              patients={MOCK_RECENT_PATIENTS}
+              insights={MOCK_PATIENT_INSIGHTS}
+              followUpPatients={MOCK_FOLLOW_UP_PATIENTS}
+            />
           </TabsContent>
 
-          <TabsContent value="tasks" className="space-y-4">
-            <div className="md:grid max-md:space-y-4 gap-4 md:grid-cols-2 lg:grid-cols-7">
-              <Card className="col-span-4">
-                <CardHeader>
-                  <CardTitle>Pending Tasks</CardTitle>
-                  <CardDescription>Tasks requiring your attention</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <DoctorTasks />
-                </CardContent>
-              </Card>
-
-              <Card className="col-span-3">
-                <CardHeader>
-                  <CardTitle>Recent Prescriptions</CardTitle>
-                  <CardDescription>Prescriptions you've written recently</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <RecentPrescriptions />
-                </CardContent>
-              </Card>
-            </div>
+          <TabsContent value="reports" className="space-y-4">
+            <DoctorReportsTab
+              reports={MOCK_REPORTS}
+              insights={MOCK_REPORT_INSIGHTS}
+              activity={MOCK_REPORT_ACTIVITY}
+            />
           </TabsContent>
 
-          <TabsContent value="stats" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Performance Metrics</CardTitle>
-                <CardDescription>Your clinical performance and patient outcomes</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <DoctorStats />
-              </CardContent>
-            </Card>
+          <TabsContent value="practice-overview" className="space-y-4">
+            <DoctorPracticeOverviewTab
+              metrics={MOCK_PRACTICE_METRICS}
+              consultationMix={MOCK_CONSULTATION_MIX}
+              summary={MOCK_PRACTICE_SUMMARY}
+              consultations={MOCK_CONSULTATION_OVERVIEW}
+            />
           </TabsContent>
         </Tabs>
       </main>
