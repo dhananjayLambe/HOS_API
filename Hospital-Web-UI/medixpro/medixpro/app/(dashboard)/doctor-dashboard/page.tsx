@@ -5,14 +5,47 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { DoctorAppointments } from "@/components/doctor/doctor-appointments";
-import { DoctorCalendar } from "@/components/doctor/doctor-upcoming";
+import { DoctorScheduleTab } from "@/components/doctor/doctor-schedule-tab";
+import type { ScheduleAppointmentRow } from "@/components/doctor/doctor-schedule-appointments-list";
+import type { ScheduleMetrics } from "@/components/doctor/doctor-schedule-metrics-strip";
+import type { ScheduleQueueSnapshot, ScheduleQueueTokenRow } from "@/components/doctor/doctor-schedule-queue-panel";
 import { DoctorPatients } from "@/components/doctor/doctor-patients";
 import { DoctorTasks } from "@/components/doctor/doctor-tasks";
 import { PatientNotes } from "@/components/doctor/patient-notes";
 import { RecentPrescriptions } from "@/components/doctor/recent-prescriptions";
 import { DoctorStats } from "@/components/doctor/doctor-stats";
 import { useAuth } from "@/lib/authContext";
+
+const MOCK_SCHEDULE_METRICS: ScheduleMetrics = {
+  scheduled: 12,
+  completed: 4,
+  waiting: 5,
+  cancelled: 1,
+  noShow: 0,
+};
+
+const MOCK_SCHEDULE_APPOINTMENTS: ScheduleAppointmentRow[] = [
+  { id: "1", time: "09:00 AM", patientName: "Amit Patil", type: "Follow-up", status: "Completed" },
+  { id: "2", time: "10:00 AM", patientName: "Rachana Lambe", type: "New", status: "Waiting" },
+  { id: "3", time: "10:30 AM", patientName: "Priya Sharma", type: "Consultation", status: "In Progress" },
+  { id: "4", time: "11:00 AM", patientName: "Ramesh Patil", type: "Follow-up", status: "Scheduled" },
+  { id: "5", time: "11:30 AM", patientName: "Sneha Desai", type: "New", status: "Scheduled" },
+  { id: "6", time: "02:00 PM", patientName: "Vikram Singh", type: "Consultation", status: "Scheduled" },
+];
+
+const MOCK_QUEUE_SNAPSHOT: ScheduleQueueSnapshot = {
+  waiting: 5,
+  vitalsDone: 2,
+  readyForConsultation: 1,
+};
+
+const MOCK_QUEUE_TOKENS: ScheduleQueueTokenRow[] = [
+  { id: "q1", token: "Token 1", patientName: "Rachana Lambe", status: "vitals_done" },
+  { id: "q2", token: "Token 2", patientName: "Amit Patil", status: "waiting" },
+  { id: "q3", token: "Token 3", patientName: "Priya Sharma", status: "waiting" },
+  { id: "q4", token: "Token 4", patientName: "Sneha Desai", status: "waiting" },
+  { id: "q5", token: "Token 5", patientName: "Vikram Singh", status: "waiting" },
+];
 
 export default function DoctorDashboardPage() {
   const { user } = useAuth();
@@ -155,27 +188,12 @@ export default function DoctorDashboardPage() {
           </TabsList>
 
           <TabsContent value="schedule" className="space-y-4">
-            <div className="md:grid max-md:space-y-4 gap-4 md:grid-cols-2 lg:grid-cols-7">
-              <Card className="col-span-4">
-                <CardHeader>
-                  <CardTitle>Today's Schedule</CardTitle>
-                  <CardDescription>You have 12 appointments scheduled for today</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <DoctorAppointments />
-                </CardContent>
-              </Card>
-
-              <Card className="col-span-3">
-                <CardHeader>
-                  <CardTitle>Upcoming Appointments</CardTitle>
-                  <CardDescription>Your upcoming appointments for the week</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <DoctorCalendar />
-                </CardContent>
-              </Card>
-            </div>
+            <DoctorScheduleTab
+              metrics={MOCK_SCHEDULE_METRICS}
+              appointments={MOCK_SCHEDULE_APPOINTMENTS}
+              queueSnapshot={MOCK_QUEUE_SNAPSHOT}
+              queueTokens={MOCK_QUEUE_TOKENS}
+            />
           </TabsContent>
 
           <TabsContent value="patients" className="space-y-4">
