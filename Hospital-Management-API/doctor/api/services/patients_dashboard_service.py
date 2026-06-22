@@ -11,8 +11,11 @@ from consultations_core.models.consultation import Consultation
 from consultations_core.models.diagnosis import ConsultationDiagnosis, CustomDiagnosis
 from consultations_core.models.encounter import ClinicalEncounter
 from consultations_core.models.follow_up import FollowUp
-from consultations_core.models.prescription import Prescription, PrescriptionStatus
 from diagnostics_engine.api.services.doctor_report_counts import count_pending_doctor_reports
+from doctor.api.services.dashboard_metrics_queries import (
+    EXCLUDED_ENCOUNTER_STATUSES,
+    get_active_treatment_patient_ids,
+)
 from patient_account.models import PatientProfile
 
 CACHE_TTL_SECONDS = 15
@@ -21,7 +24,6 @@ DEFAULT_PAGE_SIZE = 10
 MAX_PAGE_SIZE = 50
 ALLOWED_PAGE_SIZES = {5, 10, 25, 50}
 FOLLOWUP_WIDGET_LIMIT = 5
-EXCLUDED_ENCOUNTER_STATUSES = ["cancelled", "no_show"]
 OPEN_QUEUE_STATUSES = ["created", "pre_consultation_in_progress", "pre_consultation_completed"]
 OPEN_CONSULTATION_STATUSES = ["consultation_in_progress", "in_consultation"]
 
@@ -55,56 +57,6 @@ def _scoped_encounter_q(*, doctor_id, clinic_id):
         doctor_id=doctor_id,
         clinic_id=clinic_id,
     ).exclude(status__in=EXCLUDED_ENCOUNTER_STATUSES)
-
-
-def _duration_end_date(finalized_at, duration_value, duration_unit):
-    if not finalized_at or not duration_value or not duration_unit:
-        return None
-    base = finalized_at.date() if hasattr(finalized_at, "date") else finalized_at
-    if duration_unit == "days":
-        return base + timedelta(days=duration_value)
-    if duration_unit == "weeks":
-        return base + timedelta(weeks=duration_value)
-    if duration_unit == "months":
-        return base + timedelta(days=duration_value * 30)
-    return None
-
-
-def _prescription_treatment_ongoing(prescription, today: date) -> bool:
-    if prescription.status != PrescriptionStatus.FINALIZED or not prescription.is_active:
-        return False
-    if not prescription.finalized_at:
-        return False
-    lines = prescription.lines.filter(deleted_at__isnull=True)
-    for line in lines:
-        end = _duration_end_date(
-            prescription.finalized_at,
-            line.duration_value,
-            line.duration_unit,
-        )
-        if end and end >= today:
-            return True
-    return False
-
-
-def _collect_treatment_ongoing_patient_ids(*, doctor_id, clinic_id, today: date) -> set:
-    patient_ids: set = set()
-    prescriptions = (
-        Prescription.objects.filter(
-            status=PrescriptionStatus.FINALIZED,
-            is_active=True,
-            finalized_at__isnull=False,
-            consultation__encounter__doctor_id=doctor_id,
-            consultation__encounter__clinic_id=clinic_id,
-        )
-        .exclude(consultation__encounter__status__in=EXCLUDED_ENCOUNTER_STATUSES)
-        .select_related("consultation__encounter")
-        .prefetch_related("lines")
-    )
-    for prescription in prescriptions:
-        if _prescription_treatment_ongoing(prescription, today):
-            patient_ids.add(prescription.consultation.encounter.patient_profile_id)
-    return patient_ids
 
 
 def _collect_followup_due_patient_ids(*, doctor_id, clinic_id, today: date) -> set:
@@ -427,7 +379,7 @@ def build_doctor_patients_dashboard(
         clinic_id=clinic_id,
         today=today,
     )
-    treatment_ongoing_ids = _collect_treatment_ongoing_patient_ids(
+    treatment_ongoing_ids = get_active_treatment_patient_ids(
         doctor_id=doctor_id,
         clinic_id=clinic_id,
         today=today,

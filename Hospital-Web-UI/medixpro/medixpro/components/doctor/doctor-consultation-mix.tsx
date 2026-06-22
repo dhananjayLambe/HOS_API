@@ -1,6 +1,7 @@
 "use client";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 export type ConsultationMix = {
@@ -25,9 +26,10 @@ const MIX_ROWS: MixRow[] = [
 
 type DoctorConsultationMixProps = {
   mix: ConsultationMix;
+  loading?: boolean;
 };
 
-export function DoctorConsultationMix({ mix }: DoctorConsultationMixProps) {
+export function DoctorConsultationMix({ mix, loading }: DoctorConsultationMixProps) {
   return (
     <Card className="h-full">
       <CardHeader>
@@ -38,7 +40,11 @@ export function DoctorConsultationMix({ mix }: DoctorConsultationMixProps) {
         {MIX_ROWS.map(({ key, label, className }) => (
           <div key={key} className="flex items-center justify-between text-sm">
             <span className="text-muted-foreground">{label}</span>
-            <span className={cn("text-lg font-semibold tabular-nums", className)}>{mix[key]}</span>
+            {loading ? (
+              <Skeleton className="h-6 w-10" />
+            ) : (
+              <span className={cn("text-lg font-semibold tabular-nums", className)}>{mix[key]}</span>
+            )}
           </div>
         ))}
       </CardContent>

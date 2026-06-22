@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export type PracticeMetrics = {
   patientsToday: number;
@@ -46,9 +47,10 @@ const METRIC_CHIPS: MetricChip[] = [
 
 type DoctorPracticeOverviewMetricsProps = {
   metrics: PracticeMetrics;
+  loading?: boolean;
 };
 
-export function DoctorPracticeOverviewMetrics({ metrics }: DoctorPracticeOverviewMetricsProps) {
+export function DoctorPracticeOverviewMetrics({ metrics, loading }: DoctorPracticeOverviewMetricsProps) {
   return (
     <div>
       <h3 className="mb-3 text-sm font-medium text-muted-foreground">Practice Metrics</h3>
@@ -56,7 +58,11 @@ export function DoctorPracticeOverviewMetrics({ metrics }: DoctorPracticeOvervie
         {METRIC_CHIPS.map(({ key, label, className }) => (
           <div key={key} className={cn("rounded-lg border px-4 py-3", className)}>
             <p className="text-xs font-medium text-muted-foreground">{label}</p>
-            <p className="mt-1 text-2xl font-bold tracking-tight tabular-nums">{metrics[key]}</p>
+            {loading ? (
+              <Skeleton className="mt-1 h-8 w-12" />
+            ) : (
+              <p className="mt-1 text-2xl font-bold tracking-tight tabular-nums">{metrics[key]}</p>
+            )}
           </div>
         ))}
       </div>

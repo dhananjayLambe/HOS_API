@@ -1,6 +1,7 @@
 "use client";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 export type PracticeSummary = {
@@ -25,9 +26,10 @@ const SUMMARY_ROWS: SummaryRow[] = [
 
 type DoctorPracticeSummaryProps = {
   summary: PracticeSummary;
+  loading?: boolean;
 };
 
-export function DoctorPracticeSummary({ summary }: DoctorPracticeSummaryProps) {
+export function DoctorPracticeSummary({ summary, loading }: DoctorPracticeSummaryProps) {
   return (
     <Card className="h-full">
       <CardHeader>
@@ -38,7 +40,11 @@ export function DoctorPracticeSummary({ summary }: DoctorPracticeSummaryProps) {
         {SUMMARY_ROWS.map(({ key, label, className }) => (
           <div key={key} className="flex items-center justify-between text-sm">
             <span className="text-muted-foreground">{label}</span>
-            <span className={cn("text-lg font-semibold tabular-nums", className)}>{summary[key]}</span>
+            {loading ? (
+              <Skeleton className="h-6 w-10" />
+            ) : (
+              <span className={cn("text-lg font-semibold tabular-nums", className)}>{summary[key]}</span>
+            )}
           </div>
         ))}
       </CardContent>

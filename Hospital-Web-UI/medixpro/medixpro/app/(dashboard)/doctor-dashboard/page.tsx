@@ -15,49 +15,16 @@ import type { FollowUpPatientRow } from "@/components/doctor/doctor-patients-fol
 import { DoctorReportsTab } from "@/components/doctor/doctor-reports-tab";
 import type { DoctorReportRow } from "@/components/doctor/doctor-reports-table";
 import { DoctorPracticeOverviewTab } from "@/components/doctor/doctor-practice-overview-tab";
-import type { PracticeMetrics } from "@/components/doctor/doctor-practice-overview-metrics";
-import type { ConsultationMix } from "@/components/doctor/doctor-consultation-mix";
-import type { PracticeSummary } from "@/components/doctor/doctor-practice-summary";
-import type { ConsultationOverview } from "@/components/doctor/doctor-consultation-overview";
 import { useToastNotification } from "@/hooks/use-toast-notification";
 import { useAuth } from "@/lib/authContext";
 import { useDoctorPatientsTab } from "@/hooks/useDoctorPatientsTab";
 import { useDoctorPendingReports } from "@/hooks/useDoctorPendingReports";
+import { useDoctorPracticeOverviewTab } from "@/hooks/useDoctorPracticeOverviewTab";
 import { useDoctorReportsTab } from "@/hooks/useDoctorReportsTab";
 import { useDoctorScheduleTab } from "@/hooks/useDoctorScheduleTab";
 import { downloadDoctorReport } from "@/lib/doctor/downloadDoctorReport";
 import { usePatient } from "@/lib/patientContext";
 
-
-const MOCK_PRACTICE_METRICS: PracticeMetrics = {
-  patientsToday: 12,
-  patientsThisWeek: 68,
-  patientVisitsThisMonth: 284,
-  followUpsCompleted: 24,
-  consultationsCompleted: 18,
-};
-
-const MOCK_CONSULTATION_MIX: ConsultationMix = {
-  newConsultations: 10,
-  followUpConsultations: 8,
-  cancelled: 1,
-  noShow: 0,
-};
-
-const MOCK_PRACTICE_SUMMARY: PracticeSummary = {
-  newPatients: 15,
-  returningPatients: 269,
-  activeTreatments: 42,
-  patientsUnderTreatment: 42,
-};
-
-const MOCK_CONSULTATION_OVERVIEW: ConsultationOverview = {
-  completed: 18,
-  followUp: 8,
-  newConsultations: 10,
-  cancelled: 1,
-  noShow: 0,
-};
 
 export default function DoctorDashboardPage() {
   const router = useRouter();
@@ -70,6 +37,9 @@ export default function DoctorDashboardPage() {
   const pendingReports = useDoctorPendingReports();
   const patientsTab = useDoctorPatientsTab({ enabled: activeTab === "patients" });
   const reportsTab = useDoctorReportsTab({ enabled: activeTab === "reports" });
+  const practiceOverviewTab = useDoctorPracticeOverviewTab({
+    enabled: activeTab === "practice-overview",
+  });
 
   const selectPatientFromRow = useCallback(
     (row: RecentPatientRow) => {
@@ -343,10 +313,14 @@ export default function DoctorDashboardPage() {
 
           <TabsContent value="practice-overview" className="space-y-6">
             <DoctorPracticeOverviewTab
-              metrics={MOCK_PRACTICE_METRICS}
-              consultationMix={MOCK_CONSULTATION_MIX}
-              summary={MOCK_PRACTICE_SUMMARY}
-              consultations={MOCK_CONSULTATION_OVERVIEW}
+              metrics={practiceOverviewTab.metrics}
+              consultationMix={practiceOverviewTab.consultationMix}
+              summary={practiceOverviewTab.summary}
+              recentTrends={practiceOverviewTab.recentTrends}
+              generatedAt={practiceOverviewTab.generatedAt}
+              loading={practiceOverviewTab.loading}
+              error={practiceOverviewTab.error}
+              onRetry={practiceOverviewTab.refetch}
             />
           </TabsContent>
         </Tabs>
