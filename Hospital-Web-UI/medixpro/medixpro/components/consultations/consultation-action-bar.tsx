@@ -716,11 +716,15 @@ export function ConsultationActionBar() {
       })
     );
     const patientMobile = (selectedPatient?.mobile || "").trim();
-    toast.success(
-      patientMobile
-        ? "Consultation completed. Prescription will be sent via WhatsApp."
-        : "Consultation completed. WhatsApp delivery skipped — no patient mobile on file."
-    );
+    if (patientMobile) {
+      toast.success(
+        "Consultation completed. Summary will be sent via WhatsApp."
+      );
+    } else {
+      toast.success(
+        "Consultation completed. WhatsApp delivery skipped — no patient mobile on file."
+      );
+    }
     setTimeout(() => {
       useConsultationStore.getState().reset();
       router.replace(`/prescriptions/completed/${encodeURIComponent(encounterId)}`);

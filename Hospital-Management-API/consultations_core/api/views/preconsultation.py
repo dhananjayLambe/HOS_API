@@ -36,7 +36,6 @@ from consultations_core.services.encounter_service import EncounterService
 from consultations_core.services.encounter_state_machine import EncounterStateMachine
 from consultations_core.services.end_consultation_service import persist_consultation_end_state
 from consultations_core.models.prescription import Prescription, PrescriptionStatus
-from notifications.tasks import prepare_prescription_whatsapp
 from diagnostics_engine.domain.order_creation import DiagnosticOrderCreationService
 from consultations_core.domain.encounter_status import encounter_status_for_api, normalize_encounter_status
 from patient_account.models import PatientProfile
@@ -1435,21 +1434,21 @@ class EndConsultationAPIView(APIView):
         def _enqueue_prescription_whatsapp():
             try:
                 if not getattr(settings, "PRESCRIPTION_WHATSAPP_ASYNC", True):
-                    return
-                prescription = (
-                    Prescription.objects.filter(
-                        consultation_id=consultation_id,
-                        is_active=True,
-                        status=PrescriptionStatus.FINALIZED,
+                    logger.info(
+                        "prescription_whatsapp_enqueue_skipped consultation_id=%s reason=async_disabled",
+                        consultation_id,
                     )
-                    .first()
-                )
-                if prescription is None:
                     return
-                prepare_prescription_whatsapp.delay(
-                    str(prescription.id),
+                from notifications.tasks import prepare_consultation_whatsapp
+
+                prepare_consultation_whatsapp.delay(
+                    str(consultation_id),
                     str(initiated_by.pk) if initiated_by else None,
                     base_url,
+                )
+                logger.info(
+                    "consultation_whatsapp_enqueued consultation_id=%s",
+                    consultation_id,
                 )
             except Exception:
                 logger.exception(

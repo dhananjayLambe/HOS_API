@@ -127,14 +127,15 @@ WHATSAPP_BUSINESS_ID = os.getenv("WHATSAPP_BUSINESS_ID", "").strip()
 WHATSAPP_WEBHOOK_VERIFY_TOKEN = os.getenv("WHATSAPP_WEBHOOK_VERIFY_TOKEN", "").strip()
 WHATSAPP_PRESCRIPTION_TEMPLATE_NAME = os.getenv(
     "WHATSAPP_PRESCRIPTION_TEMPLATE_NAME",
-    "prescription_ready_v1",
+    "consultant_utlity",
 ).strip()
-# Meta language code on the approved template (hello_world uses en_US; many custom templates use en or en_US).
-WHATSAPP_TEMPLATE_LANGUAGE_CODE = os.getenv("WHATSAPP_TEMPLATE_LANGUAGE_CODE", "en_US").strip() or "en_US"
-# Comma-separated body variable keys sent to Meta. Leave empty for templates with no body params (e.g. hello_world).
+# Meta language code on the approved template (consultant_utlity uses en).
+WHATSAPP_TEMPLATE_LANGUAGE_CODE = os.getenv("WHATSAPP_TEMPLATE_LANGUAGE_CODE", "en").strip() or "en"
+# Comma-separated body variable keys sent to Meta (order must match {{1}}, {{2}}, … in template).
+# consultant_utlity: patient_name, doctor_name, medicine_block, test_block (no URL variable).
 WHATSAPP_TEMPLATE_BODY_PARAM_KEYS = os.getenv(
     "WHATSAPP_TEMPLATE_BODY_PARAM_KEYS",
-    "patient_name,doctor_name,medicine_block,test_block,prescription_url",
+    "patient_name,doctor_name,medicine_block,test_block",
 ).strip()
 WHATSAPP_API_BASE_URL = os.getenv("WHATSAPP_API_BASE_URL", "https://graph.facebook.com/v21.0").rstrip("/")
 PRESCRIPTION_DOWNLOAD_BASE_URL = os.getenv(

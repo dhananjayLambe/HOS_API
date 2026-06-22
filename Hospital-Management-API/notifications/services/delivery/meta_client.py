@@ -51,21 +51,29 @@ _DEFAULT_BODY_PARAM_KEYS = (
     "doctor_name",
     "medicine_block",
     "test_block",
-    "prescription_url",
 )
 
 
 def template_body_param_keys() -> list[str]:
-    if not hasattr(settings, "WHATSAPP_TEMPLATE_BODY_PARAM_KEYS"):
-        return list(_DEFAULT_BODY_PARAM_KEYS)
-    text = str(settings.WHATSAPP_TEMPLATE_BODY_PARAM_KEYS).strip()
+    text = _whatsapp_setting(
+        "WHATSAPP_TEMPLATE_BODY_PARAM_KEYS",
+        ",".join(_DEFAULT_BODY_PARAM_KEYS),
+    )
     if not text:
         return []
     return [key.strip() for key in text.split(",") if key.strip()]
 
 
 def template_language_code() -> str:
-    return (getattr(settings, "WHATSAPP_TEMPLATE_LANGUAGE_CODE", "en_US") or "en_US").strip() or "en_US"
+    return _whatsapp_setting("WHATSAPP_TEMPLATE_LANGUAGE_CODE", "en") or "en"
+
+
+def filter_template_components(components: dict[str, str]) -> dict[str, str]:
+    """Keep only keys configured for the active Meta template body variables."""
+    allowed = template_body_param_keys()
+    if not allowed:
+        return {}
+    return {key: components.get(key, "") for key in allowed}
 
 
 _META_TEMPLATE_PARAM_MAX_LEN = 1024
@@ -121,13 +129,21 @@ class MetaWhatsAppClient:
 
         url = f"{self.api_base_url}/{self.phone_number_id}/messages"
         param_keys = template_body_param_keys()
+        filtered = filter_template_components(components)
         body_components = [
             {
                 "type": "text",
-                "text": sanitize_template_parameter(components.get(key) or ""),
+                "text": sanitize_template_parameter(filtered.get(key) or ""),
             }
             for key in param_keys
         ]
+        logger.info(
+            "whatsapp_template_send template=%s language=%s param_count=%s keys=%s",
+            template_name,
+            template_language_code(),
+            len(body_components),
+            param_keys,
+        )
 
         template_payload: dict[str, Any] = {
             "name": template_name,

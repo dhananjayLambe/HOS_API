@@ -49,15 +49,47 @@ def build_consultation_summary(consultation_id, sections: Iterable[str] | None =
     if _is_cache_enabled():
         cached = cache.get(cache_key)
         if isinstance(cached, dict):
-            return cached
+            return attach_whatsapp_delivery_status(cached, consultation_id)
 
     consultation = _get_consultation_with_relations(consultation_id=consultation_id, sections=selected_sections)
     summary = _compose_summary(consultation=consultation, sections=selected_sections, profile=profile)
+    summary = attach_whatsapp_delivery_status(summary, consultation_id)
 
     if _is_cache_enabled() and summary.get("meta", {}).get("status") == "completed":
         ttl_seconds = int(getattr(settings, "CONSULTATION_SUMMARY_CACHE_TTL_SECONDS", 900))
-        cache.set(cache_key, summary, ttl_seconds)
+        cache.set(cache_key, _summary_without_whatsapp(summary), ttl_seconds)
     return summary
+
+
+def _summary_without_whatsapp(summary: dict[str, Any]) -> dict[str, Any]:
+    """Cache clinical payload without delivery status (always re-fetched live)."""
+    cached = dict(summary)
+    prescription = dict(cached.get("prescription") or {})
+    prescription.pop("whatsapp", None)
+    cached["prescription"] = prescription
+    return cached
+
+
+def attach_whatsapp_delivery_status(summary: dict[str, Any], consultation_id) -> dict[str, Any]:
+    """Always merge live WhatsApp delivery status (never rely on cached value)."""
+    if not isinstance(summary, dict):
+        return summary
+    try:
+        from notifications.services.presentation.whatsapp_status import get_consultation_delivery_whatsapp_status
+
+        whatsapp = get_consultation_delivery_whatsapp_status(consultation_id)
+    except Exception:
+        logger.exception("whatsapp_status_attach_failed consultation_id=%s", consultation_id)
+        return summary
+
+    payload = dict(summary)
+    prescription = dict(payload.get("prescription") or {})
+    if whatsapp:
+        prescription["whatsapp"] = whatsapp
+    else:
+        prescription.pop("whatsapp", None)
+    payload["prescription"] = prescription
+    return payload
 
 
 def _resolve_sections(sections: Iterable[str] | None, profile: str) -> set[str]:
@@ -266,27 +298,28 @@ def _compose_summary(consultation: Consultation, sections: set[str], profile: st
 def _build_prescription_header(consultation: Consultation) -> dict[str, Any]:
     active = next((item for item in consultation.prescriptions.all() if item.is_active), None)
     if not active:
-        return {
+        header: dict[str, Any] = {
             "pnr": "",
             "status": "",
             "is_cancelled": False,
             "cancelled_at": None,
         }
-    header = {
-        "prescription_id": str(active.id),
-        "pnr": active.prescription_pnr,
-        "status": active.status,
-        "is_cancelled": active.status == "cancelled",
-        "cancelled_at": _iso_datetime(active.cancelled_at),
-    }
+    else:
+        header = {
+            "prescription_id": str(active.id),
+            "pnr": active.prescription_pnr,
+            "status": active.status,
+            "is_cancelled": active.status == "cancelled",
+            "cancelled_at": _iso_datetime(active.cancelled_at),
+        }
     try:
-        from notifications.services.presentation.whatsapp_status import get_prescription_whatsapp_status
+        from notifications.services.presentation.whatsapp_status import get_consultation_delivery_whatsapp_status
 
-        whatsapp = get_prescription_whatsapp_status(active.id)
+        whatsapp = get_consultation_delivery_whatsapp_status(consultation)
         if whatsapp:
             header["whatsapp"] = whatsapp
     except Exception:
-        pass
+        logger.exception("whatsapp_status_header_failed consultation_id=%s", consultation.id)
     return header
 
 

@@ -32,6 +32,48 @@ def get_latest_prescription_whatsapp_message(prescription_id) -> WhatsAppMessage
     )
 
 
+def get_latest_consultation_whatsapp_message(
+    *,
+    consultation_id=None,
+    encounter_id=None,
+) -> WhatsAppMessage | None:
+    """Latest WhatsApp row for tests-only / no-prescription consultations."""
+    qs = WhatsAppMessage.objects.filter(
+        prescription__isnull=True,
+        is_deleted=False,
+        message_type="PRESCRIPTION",
+    )
+    if encounter_id is not None:
+        qs = qs.filter(encounter_id=encounter_id)
+    elif consultation_id is not None:
+        qs = qs.filter(encounter__consultation__id=consultation_id)
+    else:
+        return None
+    return qs.order_by("-created_at").first()
+
+
+def get_consultation_delivery_whatsapp_status(consultation) -> dict | None:
+    """WhatsApp status for a consultation (with or without a prescription record)."""
+    from consultations_core.models.consultation import Consultation
+
+    if not isinstance(consultation, Consultation):
+        consultation = Consultation.objects.select_related("encounter").get(pk=consultation)
+
+    active = next((item for item in consultation.prescriptions.all() if item.is_active), None)
+    if active is not None:
+        message = get_latest_prescription_whatsapp_message(active.id)
+        if message is not None:
+            return serialize_whatsapp_message(message)
+
+    message = get_latest_consultation_whatsapp_message(
+        consultation_id=consultation.id,
+        encounter_id=consultation.encounter_id,
+    )
+    if message is None:
+        return None
+    return serialize_whatsapp_message(message)
+
+
 def get_prescription_whatsapp_status(prescription_id) -> dict | None:
     message = get_latest_prescription_whatsapp_message(prescription_id)
     if message is None:

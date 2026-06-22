@@ -7,6 +7,10 @@ import re
 WHATSAPP_ITEM_SEPARATOR = " • "
 _TIMING_PATTERN_RE = re.compile(r"\b(\d-\d-\d)\b")
 
+# Meta template {{3}} / {{4}} — must be non-empty (Meta rejects blank variables).
+EMPTY_MEDICINE_BLOCK = "No medicines prescribed."
+EMPTY_TEST_BLOCK = "No tests advised"
+
 
 def _resolve_timing_pattern(med: dict) -> str:
     pattern = (med.get("timing_pattern") or "").strip()
@@ -60,6 +64,24 @@ def format_whatsapp_test_block(
     return WHATSAPP_ITEM_SEPARATOR.join(entries)
 
 
+def resolve_medicine_block_text(
+    medicines: list[dict],
+    *,
+    truncated_count: int = 0,
+) -> str:
+    text = format_whatsapp_medicine_block(medicines, truncated_count=truncated_count)
+    return text if text.strip() else EMPTY_MEDICINE_BLOCK
+
+
+def resolve_test_block_text(
+    tests: list[dict],
+    *,
+    truncated_count: int = 0,
+) -> str:
+    text = format_whatsapp_test_block(tests, truncated_count=truncated_count)
+    return text if text.strip() else EMPTY_TEST_BLOCK
+
+
 def render_prescription_whatsapp_body(summary: dict) -> str:
     """Build the patient-facing WhatsApp message body."""
     patient_name = (summary.get("patient_name") or "Patient").strip()
@@ -73,26 +95,17 @@ def render_prescription_whatsapp_body(summary: dict) -> str:
 
     medicine_summary = summary.get("medicine_summary") or []
     med_truncated = int(summary.get("medicine_truncated_count") or 0)
-    if medicine_summary or med_truncated > 0:
-        lines.append("Medicines Prescribed:")
-        medicine_text = format_whatsapp_medicine_block(
-            medicine_summary,
-            truncated_count=med_truncated,
-        )
-        if medicine_text:
-            lines.append(medicine_text)
-        lines.append("")
+    medicine_text = resolve_medicine_block_text(medicine_summary, truncated_count=med_truncated)
+    lines.append("Medicines Prescribed:")
+    lines.append(medicine_text)
+    lines.append("")
 
     test_summary = summary.get("test_summary") or []
     test_truncated = int(summary.get("test_truncated_count") or 0)
-    if test_summary or test_truncated > 0:
+    test_text = resolve_test_block_text(test_summary, truncated_count=test_truncated)
+    if test_text != EMPTY_TEST_BLOCK:
         lines.append("Tests Recommended:")
-        test_text = format_whatsapp_test_block(
-            test_summary,
-            truncated_count=test_truncated,
-        )
-        if test_text:
-            lines.append(test_text)
+        lines.append(test_text)
         lines.append("")
 
     prescription_url = (summary.get("prescription_url") or "").strip()
@@ -110,27 +123,31 @@ def render_prescription_whatsapp_body(summary: dict) -> str:
 
 
 def build_template_components(summary: dict) -> dict[str, str]:
-    """Map summary fields to Meta template variable slots."""
-    medicine_text = format_whatsapp_medicine_block(
+    """Map summary fields to Meta template variable slots (filtered to configured keys)."""
+    medicine_text = resolve_medicine_block_text(
         summary.get("medicine_summary") or [],
         truncated_count=int(summary.get("medicine_truncated_count") or 0),
     )
-    test_text = format_whatsapp_test_block(
+    test_text = resolve_test_block_text(
         summary.get("test_summary") or [],
         truncated_count=int(summary.get("test_truncated_count") or 0),
     )
     prescription_link = (summary.get("prescription_url") or "").strip()
 
-    from notifications.services.delivery.meta_client import sanitize_template_parameter
+    from notifications.services.delivery.meta_client import (
+        filter_template_components,
+        sanitize_template_parameter,
+    )
 
-    components = {
+    all_components = {
         "patient_name": (summary.get("patient_name") or "Patient").strip(),
         "doctor_name": (summary.get("doctor_name") or "Doctor").strip(),
         "medicine_block": medicine_text,
         "test_block": test_text,
-        "prescription_url": prescription_link,
+        "prescription_url": prescription_link or "-",
     }
-    return {
+    sanitized = {
         key: sanitize_template_parameter(value, empty_fallback="-")
-        for key, value in components.items()
+        for key, value in all_components.items()
     }
+    return filter_template_components(sanitized)

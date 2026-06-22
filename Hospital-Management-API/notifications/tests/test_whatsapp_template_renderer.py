@@ -3,10 +3,14 @@
 from django.test import TestCase
 
 from notifications.services.delivery.whatsapp_template_renderer import (
+    EMPTY_MEDICINE_BLOCK,
+    EMPTY_TEST_BLOCK,
     WHATSAPP_ITEM_SEPARATOR,
     build_template_components,
     format_whatsapp_medicine_block,
     format_whatsapp_test_block,
+    resolve_medicine_block_text,
+    resolve_test_block_text,
 )
 
 
@@ -102,8 +106,33 @@ class WhatsAppTemplateRendererTests(TestCase):
                 "test_summary": [],
             }
         )
-        self.assertEqual(components["medicine_block"], "-")
-        self.assertEqual(components["test_block"], "-")
+        self.assertEqual(components["medicine_block"], EMPTY_MEDICINE_BLOCK)
+        self.assertEqual(components["test_block"], EMPTY_TEST_BLOCK)
+
+    def test_render_body_shows_no_medicines_message(self):
+        from notifications.services.delivery.whatsapp_template_renderer import render_prescription_whatsapp_body
+
+        body = render_prescription_whatsapp_body(
+            {
+                "patient_name": "Ada",
+                "doctor_name": "Dr. Smith",
+                "medicine_summary": [],
+                "test_summary": [{"name": "CBC"}],
+            }
+        )
+        self.assertIn("Medicines Prescribed:", body)
+        self.assertIn(EMPTY_MEDICINE_BLOCK, body)
+        self.assertIn("Tests Recommended:", body)
+        self.assertIn("CBC", body)
+
+    def test_resolve_blocks_empty_sections(self):
+        self.assertEqual(resolve_medicine_block_text([]), EMPTY_MEDICINE_BLOCK)
+        self.assertEqual(resolve_test_block_text([]), EMPTY_TEST_BLOCK)
+        self.assertEqual(
+            resolve_medicine_block_text([{"name": "Dolo", "timing_pattern": "1-0-1", "duration_display": "5d"}]),
+            "• Dolo (1-0-1, 5d)",
+        )
+        self.assertEqual(resolve_test_block_text([{"name": "CBC"}]), "CBC")
 
     def test_build_template_components_compact_format(self):
         components = build_template_components(
@@ -119,5 +148,6 @@ class WhatsAppTemplateRendererTests(TestCase):
         )
         self.assertEqual(components["medicine_block"], "• Dolo 650 (1-0-1, 5 Days)")
         self.assertEqual(components["test_block"], "CBC")
+        self.assertNotIn("prescription_url", components)
         self.assertNotIn("|", components["medicine_block"])
         self.assertNotIn("\n", components["medicine_block"])

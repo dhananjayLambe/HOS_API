@@ -48,21 +48,55 @@ class WhatsAppService:
         base_url: str | None = None,
     ) -> WhatsAppMessage:
         prescription = self._load_prescription(prescription)
-        idempotency_key = f"prescription_{prescription.id}"
+        return self.prepare_consultation_delivery(
+            consultation=prescription.consultation,
+            prescription=prescription,
+            initiated_by=initiated_by,
+            force_resend=force_resend,
+            base_url=base_url,
+        )
+
+    def prepare_consultation_delivery(
+        self,
+        *,
+        consultation,
+        prescription=None,
+        initiated_by=None,
+        force_resend: bool = False,
+        base_url: str | None = None,
+    ) -> WhatsAppMessage:
+        """Queue WhatsApp template send; medicines and/or tests may be empty."""
+        consultation = self._load_consultation(consultation)
+        if prescription is not None:
+            prescription = self._load_prescription(prescription)
+            idempotency_key = f"prescription_{prescription.id}"
+            delivery_subject = prescription
+        else:
+            idempotency_key = f"consultation_{consultation.id}"
+            delivery_subject = None
 
         if force_resend:
-            if WhatsAppMessage.objects.filter(
-                prescription_id=prescription.id,
-                is_deleted=False,
-                status__in=_SUCCESS_STATUSES,
-            ).exists():
+            success_filter = {"is_deleted": False, "status__in": _SUCCESS_STATUSES}
+            if prescription is not None:
+                already = WhatsAppMessage.objects.filter(
+                    prescription_id=prescription.id,
+                    **success_filter,
+                ).exists()
+            else:
+                already = WhatsAppMessage.objects.filter(
+                    encounter_id=consultation.encounter_id,
+                    prescription__isnull=True,
+                    **success_filter,
+                ).exists()
+            if already:
                 return self._create_skipped_message(
+                    consultation=consultation,
                     prescription=prescription,
                     reason="Already delivered",
                     initiated_by=initiated_by,
                     skip_idempotency=True,
                 )
-            idempotency_key = f"prescription_{prescription.id}:resend:{uuid.uuid4().hex[:12]}"
+            idempotency_key = f"{idempotency_key}:resend:{uuid.uuid4().hex[:12]}"
         else:
             existing = (
                 WhatsAppMessage.objects.filter(idempotency_key=idempotency_key, is_deleted=False)
@@ -72,6 +106,7 @@ class WhatsAppService:
             if existing:
                 if existing.status in _SUCCESS_STATUSES and (existing.meta_message_id or "").strip():
                     return self._create_skipped_message(
+                        consultation=consultation,
                         prescription=prescription,
                         reason="Already delivered",
                         initiated_by=initiated_by,
@@ -88,32 +123,36 @@ class WhatsAppService:
                 ):
                     return self._requeue_existing_message(
                         existing,
+                        consultation=consultation,
                         prescription=prescription,
                         initiated_by=initiated_by,
                         base_url=base_url,
                     )
 
-        if prescription.status != PrescriptionStatus.FINALIZED or not prescription.is_active:
-            return self._create_skipped_message(
-                prescription=prescription,
-                reason="Prescription inactive",
-                initiated_by=initiated_by,
-                idempotency_key=idempotency_key,
-            )
+        if prescription is not None:
+            if prescription.status != PrescriptionStatus.FINALIZED or not prescription.is_active:
+                return self._create_skipped_message(
+                    consultation=consultation,
+                    prescription=prescription,
+                    reason="Prescription inactive",
+                    initiated_by=initiated_by,
+                    idempotency_key=idempotency_key,
+                )
+            if not prescription.pdf_file:
+                return self._create_skipped_message(
+                    consultation=consultation,
+                    prescription=prescription,
+                    reason="PDF not available",
+                    initiated_by=initiated_by,
+                    idempotency_key=idempotency_key,
+                )
 
-        if not prescription.pdf_file:
-            return self._create_skipped_message(
-                prescription=prescription,
-                reason="PDF not available",
-                initiated_by=initiated_by,
-                idempotency_key=idempotency_key,
-            )
-
-        encounter = prescription.consultation.encounter
+        encounter = consultation.encounter
         profile = encounter.patient_profile
         raw_phone = resolve_patient_mobile(encounter=encounter)
         if not raw_phone:
             return self._create_skipped_message(
+                consultation=consultation,
                 prescription=prescription,
                 reason="No mobile number",
                 initiated_by=initiated_by,
@@ -123,6 +162,7 @@ class WhatsAppService:
         normalized_phone = try_normalize_delivery_phone(raw_phone)
         if not normalized_phone:
             return self._create_skipped_message(
+                consultation=consultation,
                 prescription=prescription,
                 reason="Invalid mobile number",
                 initiated_by=initiated_by,
@@ -130,8 +170,11 @@ class WhatsAppService:
                 idempotency_key=idempotency_key,
             )
 
-        prescription_url = self._build_prescription_url(prescription.id, base_url=base_url)
-        summary = PrescriptionSummaryBuilder.build_whatsapp_summary(
+        prescription_url = ""
+        if prescription is not None:
+            prescription_url = self._build_prescription_url(prescription.id, base_url=base_url)
+        summary = PrescriptionSummaryBuilder.build_whatsapp_summary_from_consultation(
+            consultation=consultation,
             prescription=prescription,
             prescription_url=prescription_url,
         )
@@ -161,7 +204,7 @@ class WhatsAppService:
         safe_emit(
             emit_prescription_whatsapp_audit_event,
             action="PRESCRIPTION_WHATSAPP_QUEUED",
-            prescription=prescription,
+            prescription=delivery_subject,
             message=message,
             user=initiated_by,
         )
@@ -185,7 +228,7 @@ class WhatsAppService:
             message.save(update_fields=["recipient_mobile_number", "updated_at"])
 
         prescription = message.prescription
-        if prescription is None or not prescription.pdf_file:
+        if prescription is not None and not prescription.pdf_file:
             return self._mark_failed(message, code="MISSING_PDF", reason="PDF missing at send time")
 
         rendered_body = (payload.get("rendered_body") or "").strip()
@@ -274,16 +317,25 @@ class WhatsAppService:
             "prescription__consultation__encounter__patient_account__user",
             "prescription__consultation__encounter__clinic",
             "prescription__consultation__encounter__doctor",
+            "encounter",
+            "encounter__consultation",
+            "encounter__patient_profile",
+            "encounter__patient_account",
+            "encounter__patient_account__user",
+            "encounter__clinic",
+            "encounter__doctor",
         ).get(pk=message_id, is_deleted=False)
 
         if original.status != WhatsAppMessageStatus.FAILED:
             raise ValueError("Only failed messages can be retried.")
 
         prescription = original.prescription
-        if prescription is None:
-            raise ValueError("Message is not linked to a prescription.")
-
-        encounter = prescription.consultation.encounter
+        if prescription is not None:
+            encounter = prescription.consultation.encounter
+        else:
+            encounter = original.encounter
+        if encounter is None:
+            raise ValueError("Message is not linked to an encounter.")
         recipient_phone = self._resolve_recipient_phone(
             encounter=encounter,
             fallback=original.recipient_mobile_number,
@@ -294,6 +346,12 @@ class WhatsAppService:
         payload = dict(original.request_payload or {})
         if payload.get("patient_name") or payload.get("medicine_summary") is not None:
             payload["template_components"] = build_template_components(payload)
+        if prescription is not None:
+            retry_idempotency_key = f"prescription_{prescription.id}:retry:{uuid.uuid4().hex[:12]}"
+        else:
+            consultation_id = getattr(getattr(encounter, "consultation", None), "id", None) or encounter.pk
+            retry_idempotency_key = f"consultation_{consultation_id}:retry:{uuid.uuid4().hex[:12]}"
+
         retry_message = WhatsAppMessage(
             provider=original.provider,
             conversation_category=original.conversation_category,
@@ -302,7 +360,7 @@ class WhatsAppService:
             patient=original.patient,
             clinic=original.clinic,
             doctor=original.doctor,
-            encounter=original.encounter,
+            encounter=encounter,
             prescription=prescription,
             recipient_mobile_number=recipient_phone,
             recipient_name=original.recipient_name,
@@ -310,7 +368,7 @@ class WhatsAppService:
             request_payload=payload,
             retry_count=(original.retry_count or 0) + 1,
             last_retry_at=timezone.now(),
-            idempotency_key=f"prescription_{prescription.id}:retry:{uuid.uuid4().hex[:12]}",
+            idempotency_key=retry_idempotency_key,
             created_by=initiated_by,
         )
         retry_message.save()
@@ -363,18 +421,63 @@ class WhatsAppService:
         )
         return message
 
+    def resend_consultation_delivery(
+        self,
+        *,
+        consultation_id,
+        initiated_by=None,
+        base_url: str | None = None,
+    ) -> WhatsAppMessage:
+        """Re-prepare WhatsApp for tests-only consultations (no prescription record)."""
+        consultation = self._load_consultation(consultation_id)
+        encounter_id = consultation.encounter_id
+
+        if WhatsAppMessage.objects.filter(
+            encounter_id=encounter_id,
+            prescription__isnull=True,
+            is_deleted=False,
+            status__in=_SUCCESS_STATUSES,
+        ).exists():
+            raise ValueError("Consultation summary was already delivered via WhatsApp.")
+
+        latest = (
+            WhatsAppMessage.objects.filter(
+                encounter_id=encounter_id,
+                prescription__isnull=True,
+                is_deleted=False,
+            )
+            .order_by("-created_at")
+            .first()
+        )
+        if latest and latest.status == WhatsAppMessageStatus.QUEUED:
+            return latest
+
+        return self.prepare_consultation_delivery(
+            consultation=consultation,
+            prescription=None,
+            initiated_by=initiated_by,
+            force_resend=True,
+            base_url=base_url,
+        )
+
     def _create_skipped_message(
         self,
         *,
-        prescription,
+        consultation,
+        prescription=None,
         reason: str,
         initiated_by=None,
         recipient_name: str = "",
         skip_idempotency: bool = False,
         idempotency_key: str | None = None,
     ) -> WhatsAppMessage:
-        encounter = prescription.consultation.encounter
+        encounter = consultation.encounter
         profile = encounter.patient_profile
+        default_key = (
+            f"prescription_{prescription.id}:skipped:{uuid.uuid4().hex[:8]}"
+            if prescription is not None
+            else f"consultation_{consultation.id}:skipped:{uuid.uuid4().hex[:8]}"
+        )
         message = WhatsAppMessage(
             provider=WhatsAppProvider.META,
             conversation_category=WhatsAppConversationCategory.UTILITY,
@@ -391,7 +494,7 @@ class WhatsAppService:
             idempotency_key=(
                 None
                 if skip_idempotency
-                else idempotency_key or f"prescription_{prescription.id}:skipped:{uuid.uuid4().hex[:8]}"
+                else idempotency_key or default_key
             ),
             created_by=initiated_by,
         )
@@ -441,12 +544,13 @@ class WhatsAppService:
         self,
         message: WhatsAppMessage,
         *,
-        prescription,
+        consultation,
+        prescription=None,
         initiated_by=None,
         base_url: str | None = None,
     ) -> WhatsAppMessage:
         """Refresh snapshot and queue another send attempt (e.g. after a prior FAILED row)."""
-        encounter = prescription.consultation.encounter
+        encounter = consultation.encounter
         profile = encounter.patient_profile
         normalized_phone = self._resolve_recipient_phone(
             encounter=encounter,
@@ -460,11 +564,14 @@ class WhatsAppService:
 
         prior_payload = message.request_payload or {}
         resolved_base_url = base_url or prior_payload.get("_download_base_url")
-        prescription_url = self._build_prescription_url(
-            prescription.id,
-            base_url=resolved_base_url,
-        )
-        summary = PrescriptionSummaryBuilder.build_whatsapp_summary(
+        prescription_url = ""
+        if prescription is not None:
+            prescription_url = self._build_prescription_url(
+                prescription.id,
+                base_url=resolved_base_url,
+            )
+        summary = PrescriptionSummaryBuilder.build_whatsapp_summary_from_consultation(
+            consultation=consultation,
             prescription=prescription,
             prescription_url=prescription_url,
         )
@@ -495,9 +602,10 @@ class WhatsAppService:
             ]
         )
         logger.info(
-            "whatsapp_message_requeued message_id=%s prescription_id=%s",
+            "whatsapp_message_requeued message_id=%s consultation_id=%s prescription_id=%s",
             message.id,
-            prescription.id,
+            consultation.id,
+            prescription.id if prescription is not None else None,
         )
         return message
 
@@ -514,9 +622,16 @@ class WhatsAppService:
             return build_template_components(payload)
         legacy = payload.get("template_components") or {}
         if legacy:
-            from notifications.services.delivery.meta_client import sanitize_template_parameter
+            from notifications.services.delivery.meta_client import (
+                filter_template_components,
+                sanitize_template_parameter,
+            )
 
-            return {key: sanitize_template_parameter(value) for key, value in legacy.items()}
+            sanitized = {
+                key: sanitize_template_parameter(value)
+                for key, value in legacy.items()
+            }
+            return filter_template_components(sanitized)
         return build_template_components(payload)
 
     @staticmethod
@@ -529,6 +644,44 @@ class WhatsAppService:
         if raw_phone:
             return try_normalize_delivery_phone(raw_phone) or ""
         return try_normalize_delivery_phone(fallback or "") or ""
+
+    @staticmethod
+    def _load_consultation(consultation):
+        from consultations_core.models.consultation import Consultation
+
+        if isinstance(consultation, Consultation):
+            if hasattr(consultation, "encounter") and consultation.encounter is not None:
+                return consultation
+            return (
+                Consultation.objects.select_related(
+                    "encounter",
+                    "encounter__patient_profile",
+                    "encounter__patient_account",
+                    "encounter__patient_account__user",
+                    "encounter__clinic",
+                    "encounter__doctor",
+                )
+                .prefetch_related(
+                    "prescriptions__lines",
+                    "investigations__items",
+                )
+                .get(pk=consultation.pk)
+            )
+        return (
+            Consultation.objects.select_related(
+                "encounter",
+                "encounter__patient_profile",
+                "encounter__patient_account",
+                "encounter__patient_account__user",
+                "encounter__clinic",
+                "encounter__doctor",
+            )
+            .prefetch_related(
+                "prescriptions__lines",
+                "investigations__items",
+            )
+            .get(pk=consultation)
+        )
 
     @staticmethod
     def _load_prescription(prescription):

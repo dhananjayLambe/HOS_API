@@ -349,6 +349,31 @@ class ConsultationSummaryAPIView(_BaseConsultationSummaryAPIView):
 class ConsultationSummaryLiteAPIView(_BaseConsultationSummaryAPIView):
     summary_profile = "preview_pdf"
 
+    def get(self, request, consultation_id):
+        response = super().get(request, consultation_id)
+        if response.status_code != status.HTTP_200_OK:
+            return response
+        try:
+            from notifications.api.views.status import maybe_enqueue_consultation_whatsapp
+
+            consultation = Consultation.objects.filter(pk=consultation_id).only("id", "is_finalized").first()
+            if consultation and consultation.is_finalized:
+                maybe_enqueue_consultation_whatsapp(
+                    consultation_id=consultation_id,
+                    initiated_by_id=str(request.user.pk),
+                    base_url=request.build_absolute_uri("/"),
+                )
+                payload = response.data
+                if isinstance(payload, dict):
+                    from consultations_core.services.consultation_summary_service import (
+                        attach_whatsapp_delivery_status,
+                    )
+
+                    response.data = attach_whatsapp_delivery_status(payload, consultation_id)
+        except Exception:
+            logger.exception("summary_lite_whatsapp_enqueue_failed consultation_id=%s", consultation_id)
+        return response
+
 
 class ConsultationSummaryLiteHTMLAPIView(_BaseConsultationSummaryAPIView):
     summary_profile = "preview_pdf"

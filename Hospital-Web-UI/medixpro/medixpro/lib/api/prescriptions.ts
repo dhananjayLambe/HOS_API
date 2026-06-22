@@ -187,6 +187,20 @@ export async function downloadPrescriptionPdf(
   URL.revokeObjectURL(url);
 }
 
+/** GET /api/v1/notifications/whatsapp/status/consultation/{consultation_id}/ */
+export async function fetchWhatsAppConsultationStatus(
+  consultationId: string,
+  options?: { enqueue?: boolean; signal?: AbortSignal }
+) {
+  return backendAxiosClient.get<{
+    status: WhatsAppDeliveryStatus | null;
+    message: PrescriptionWhatsAppStatus | null;
+  }>(`/v1/notifications/whatsapp/status/consultation/${encodeURIComponent(consultationId)}/`, {
+    params: options?.enqueue ? { enqueue: "1" } : undefined,
+    signal: options?.signal,
+  });
+}
+
 /** POST /api/v1/notifications/whatsapp/retry/{message_id}/ */
 export async function retryWhatsAppDelivery(messageId: string) {
   return backendAxiosClient.post<{ status: string; message: PrescriptionWhatsAppStatus }>(
@@ -198,5 +212,12 @@ export async function retryWhatsAppDelivery(messageId: string) {
 export async function resendWhatsAppDelivery(prescriptionId: string) {
   return backendAxiosClient.post<{ status: string; message: PrescriptionWhatsAppStatus }>(
     `/v1/notifications/whatsapp/resend/${encodeURIComponent(prescriptionId)}/`
+  );
+}
+
+/** POST /api/v1/notifications/whatsapp/resend/consultation/{consultation_id}/ */
+export async function resendWhatsAppConsultationDelivery(consultationId: string) {
+  return backendAxiosClient.post<{ status: string; message: PrescriptionWhatsAppStatus }>(
+    `/v1/notifications/whatsapp/resend/consultation/${encodeURIComponent(consultationId)}/`
   );
 }

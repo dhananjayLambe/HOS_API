@@ -8,10 +8,35 @@ from celery import shared_task
 from django.core.exceptions import ObjectDoesNotExist
 
 from notifications.models.whatsapp_notifications import WhatsAppMessageStatus
-from notifications.services.delivery.prescription_whatsapp_orchestrator import run_prepare_and_enqueue
+from notifications.services.delivery.prescription_whatsapp_orchestrator import (
+    run_prepare_and_enqueue,
+    run_prepare_consultation_and_enqueue,
+)
 from notifications.services.delivery.whatsapp_service import WhatsAppService
 
 logger = logging.getLogger(__name__)
+
+
+@shared_task(bind=True, max_retries=2, default_retry_delay=15)
+def prepare_consultation_whatsapp(
+    self,
+    consultation_id: str,
+    initiated_by_id: str | None = None,
+    base_url: str = "/",
+) -> None:
+    """Background prepare: consultation summary WhatsApp (medicines/tests may be empty)."""
+    try:
+        message_id = run_prepare_consultation_and_enqueue(
+            consultation_id=consultation_id,
+            initiated_by_id=initiated_by_id,
+            base_url=base_url,
+        )
+        if message_id:
+            send_prescription_whatsapp.delay(message_id)
+    except Exception as exc:
+        logger.exception("prepare_consultation_whatsapp_task_error consultation_id=%s", consultation_id)
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=exc) from exc
 
 
 @shared_task(bind=True, max_retries=2, default_retry_delay=15)

@@ -9,6 +9,7 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from account.permissions import IsDoctor
+from consultations_core.models.consultation import Consultation
 from consultations_core.models.prescription import Prescription
 from notifications.models.whatsapp_notifications import WhatsAppMessageStatus
 from notifications.services.delivery.whatsapp_service import WhatsAppService
@@ -44,6 +45,50 @@ class WhatsAppResendAPIView(APIView):
             message = WhatsAppService().resend_prescription_delivery(
                 prescription_id=prescription_id,
                 initiated_by=request.user,
+            )
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        if message.status == WhatsAppMessageStatus.QUEUED:
+            send_prescription_whatsapp.delay(str(message.id))
+
+        return Response(
+            {
+                "status": (message.status or "").lower(),
+                "message": serialize_whatsapp_message(message),
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class WhatsAppConsultationResendAPIView(APIView):
+    """POST /api/v1/notifications/whatsapp/resend/consultation/<uuid:consultation_id>/"""
+
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsDoctor]
+
+    def post(self, request, consultation_id):
+        consultation = (
+            Consultation.objects.select_related(
+                "encounter",
+                "encounter__doctor",
+                "encounter__doctor__user",
+            )
+            .filter(pk=consultation_id)
+            .first()
+        )
+        if consultation is None:
+            return Response({"detail": "Consultation not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        doctor_user_id = consultation.encounter.doctor.user_id
+        if doctor_user_id != request.user.id:
+            return Response({"detail": "Not authorized to resend this delivery."}, status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            message = WhatsAppService().resend_consultation_delivery(
+                consultation_id=consultation_id,
+                initiated_by=request.user,
+                base_url=request.build_absolute_uri("/"),
             )
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)

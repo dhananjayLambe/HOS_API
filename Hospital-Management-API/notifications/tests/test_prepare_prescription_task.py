@@ -19,7 +19,10 @@ from medicines.models import DrugMaster
 from medicines.models.choices import DrugType
 from medicines.models.masters import FormulationMaster
 from notifications.models.whatsapp_notifications import WhatsAppMessage, WhatsAppMessageStatus
-from notifications.services.delivery.prescription_whatsapp_orchestrator import run_prepare_and_enqueue
+from notifications.services.delivery.prescription_whatsapp_orchestrator import (
+    run_prepare_and_enqueue,
+    run_prepare_consultation_and_enqueue,
+)
 from notifications.tasks import prepare_prescription_whatsapp
 from patient_account.models import PatientAccount, PatientProfile
 from tests.helpers.media_root import IsolatedMediaRootMixin
@@ -137,6 +140,108 @@ class PreparePrescriptionOrchestratorTests(IsolatedMediaRootMixin, TestCase):
         self.assertTrue(mock_send_delay.called)
 
 
+class PrepareConsultationOrchestratorTests(IsolatedMediaRootMixin, TestCase):
+    """WhatsApp when consultation ends without medicines (no prescription)."""
+
+    def setUp(self):
+        ensure_autofill_route_and_dose_masters()
+        self.client, self.doctor_user = _doctor_client()
+        self.clinic = Clinic.objects.create(name=f"Clinic {uuid.uuid4().hex[:6]}")
+        self.doc_profile, _ = DoctorModel.objects.get_or_create(
+            user=self.doctor_user,
+            defaults={"primary_specialization": "General"},
+        )
+        self.doc_profile.clinics.add(self.clinic)
+
+        self.patient_user = User.objects.create_user(
+            username="9876543299",
+            password="testpass123",
+        )
+        self.patient_account = PatientAccount.objects.create(user=self.patient_user)
+        self.patient_account.clinics.add(self.clinic)
+        self.patient_profile = PatientProfile.objects.create(
+            account=self.patient_account,
+            first_name="Empty",
+            last_name="Rx",
+            relation="self",
+            gender="male",
+            age_years=40,
+        )
+
+        encounter = EncounterService.create_encounter(
+            clinic=self.clinic,
+            patient_account=self.patient_account,
+            patient_profile=self.patient_profile,
+            doctor=self.doc_profile,
+            created_by=self.doctor_user,
+        )
+        self.consultation = Consultation.objects.create(encounter=encounter)
+        ClinicalEncounter.objects.filter(pk=encounter.pk).update(status="consultation_in_progress")
+        self.encounter = encounter
+
+        url = reverse("consultation-complete", kwargs={"encounter_id": encounter.id})
+        response = self.client.post(url, end_consultation_payload(), format="json")
+        self.assertEqual(response.status_code, 200, response.data)
+        self.consultation.refresh_from_db()
+
+    @override_settings(WHATSAPP_USE_SIMULATED_PROVIDER=True)
+    def test_orchestrator_queues_without_prescription(self):
+        self.assertFalse(
+            Prescription.objects.filter(
+                consultation_id=self.consultation.id,
+                status=PrescriptionStatus.FINALIZED,
+            ).exists()
+        )
+        message_id = run_prepare_consultation_and_enqueue(
+            consultation_id=str(self.consultation.id),
+            initiated_by_id=str(self.doctor_user.id),
+        )
+        self.assertIsNotNone(message_id)
+        message = WhatsAppMessage.objects.get(pk=message_id)
+        self.assertEqual(message.status, WhatsAppMessageStatus.QUEUED)
+        self.assertIsNone(message.prescription_id)
+        components = (message.request_payload or {}).get("template_components") or {}
+        self.assertEqual(components.get("medicine_block"), "No medicines prescribed.")
+        self.assertEqual(components.get("test_block"), "No tests advised")
+
+    @override_settings(WHATSAPP_USE_SIMULATED_PROVIDER=True)
+    def test_orchestrator_queues_tests_only_without_prescription(self):
+        from consultations_core.services.investigation_api_service import (
+            add_investigation_item,
+            get_or_create_investigations_container,
+        )
+        from consultations_core.models.investigation import InvestigationSource
+
+        container = get_or_create_investigations_container(self.consultation)
+        add_investigation_item(
+            container=container,
+            source=InvestigationSource.CUSTOM,
+            user=self.doctor_user,
+            adhoc_name="Complete Blood Count",
+            adhoc_type="lab",
+        )
+
+        message_id = run_prepare_consultation_and_enqueue(
+            consultation_id=str(self.consultation.id),
+            initiated_by_id=str(self.doctor_user.id),
+        )
+        self.assertIsNotNone(message_id)
+        message = WhatsAppMessage.objects.get(pk=message_id)
+        self.assertEqual(message.status, WhatsAppMessageStatus.QUEUED)
+        self.assertIsNone(message.prescription_id)
+        components = (message.request_payload or {}).get("template_components") or {}
+        self.assertEqual(components.get("medicine_block"), "No medicines prescribed.")
+        self.assertEqual(components.get("test_block"), "Complete Blood Count")
+
+        from notifications.services.presentation.whatsapp_status import (
+            get_consultation_delivery_whatsapp_status,
+        )
+
+        status_payload = get_consultation_delivery_whatsapp_status(self.consultation)
+        self.assertIsNotNone(status_payload)
+        self.assertEqual(status_payload["status"], "queued")
+
+
 class EndConsultationNonBlockingTests(IsolatedMediaRootMixin, TestCase):
     def setUp(self):
         ensure_autofill_route_and_dose_masters()
@@ -184,7 +289,7 @@ class EndConsultationNonBlockingTests(IsolatedMediaRootMixin, TestCase):
         ClinicalEncounter.objects.filter(pk=encounter.pk).update(status="consultation_in_progress")
         self.encounter = encounter
 
-    @patch("consultations_core.api.views.preconsultation.prepare_prescription_whatsapp.delay")
+    @patch("notifications.tasks.prepare_consultation_whatsapp.delay")
     def test_end_consultation_succeeds_when_prepare_enqueue_raises(self, mock_delay):
         mock_delay.side_effect = RuntimeError("broker down")
         url = reverse("consultation-complete", kwargs={"encounter_id": self.encounter.id})

@@ -16,7 +16,9 @@ import { WhatsAppDeliveryCard } from "@/components/prescriptions/whatsapp-delive
 import type { CancelState, PrescriptionSummaryPayload } from "@/components/prescriptions/types";
 import {
   fetchPrescriptionSummary,
+  fetchWhatsAppConsultationStatus,
   resendWhatsAppDelivery,
+  resendWhatsAppConsultationDelivery,
   retryWhatsAppDelivery,
 } from "@/lib/api/prescriptions";
 
@@ -39,9 +41,9 @@ const completionKey = (encounterId: string) => `rx-completion:${encounterId}`;
 const cancelKey = (encounterId: string) => `rx-cancel:${encounterId}`;
 const downloadedKey = (encounterId: string) => `rx-pdf-downloaded:${encounterId}`;
 
-const WHATSAPP_TERMINAL_STATUSES = new Set(["sent", "delivered", "read", "failed", "skipped"]);
-const WHATSAPP_POLL_INTERVAL_MS = 4000;
-const WHATSAPP_POLL_MAX_MS = 30000;
+const WHATSAPP_TERMINAL_STATUSES = new Set(["queued", "sent", "delivered", "read", "failed", "skipped"]);
+const WHATSAPP_POLL_INTERVAL_MS = 3000;
+const WHATSAPP_POLL_MAX_MS = 60000;
 
 function isWhatsAppPollingComplete(status?: string | null) {
   const normalized = (status || "").toLowerCase();
@@ -216,11 +218,26 @@ export default function CompletedPrescriptionPage() {
         }
 
         const cid = encodeURIComponent(resolvedConsultationId);
-        const [summaryRes, previewRes] = await Promise.all([
+        const [summaryRes, previewRes, whatsappRes] = await Promise.all([
           backendAxiosClient.get<PrescriptionSummaryPayload>(`/consultations/${cid}/summary-lite/`),
           backendAxiosClient.post<{ html?: string }>(`/consultations/${cid}/summary-lite/html/`, {}),
+          fetchWhatsAppConsultationStatus(resolvedConsultationId, { enqueue: true }),
         ]);
-        if (isMounted) setSummary(summaryRes.data);
+        const whatsapp =
+          whatsappRes.data?.message || summaryRes.data?.prescription?.whatsapp || undefined;
+        if (isMounted) {
+          setSummary(
+            summaryRes.data
+              ? {
+                  ...summaryRes.data,
+                  prescription: {
+                    ...(summaryRes.data.prescription || {}),
+                    ...(whatsapp ? { whatsapp } : {}),
+                  },
+                }
+              : null
+          );
+        }
         if (isMounted) setPreviewHtml((previewRes.data?.html || "").trim());
       } catch (error: any) {
         const message =
@@ -245,13 +262,49 @@ export default function CompletedPrescriptionPage() {
 
   const refreshSummary = useCallback(async () => {
     if (!consultationId) return null;
-    const summaryRes = await fetchPrescriptionSummary(consultationId);
-    setSummary(summaryRes.data);
-    const nextStatus = summaryRes.data?.prescription?.whatsapp?.status;
+    const [summaryRes, whatsappRes] = await Promise.all([
+      fetchPrescriptionSummary(consultationId),
+      fetchWhatsAppConsultationStatus(consultationId, { enqueue: true }),
+    ]);
+    const whatsapp = whatsappRes.data?.message || summaryRes.data?.prescription?.whatsapp;
+    const mergedSummary = summaryRes.data
+      ? {
+          ...summaryRes.data,
+          prescription: {
+            ...(summaryRes.data.prescription || {}),
+            ...(whatsapp ? { whatsapp } : {}),
+          },
+        }
+      : null;
+    if (mergedSummary) {
+      setSummary(mergedSummary);
+    }
+    const nextStatus = whatsapp?.status;
     if (nextStatus) {
       setWhatsappPollTimedOut(false);
     }
-    return summaryRes.data;
+    return mergedSummary;
+  }, [consultationId]);
+
+  const refreshWhatsAppStatus = useCallback(async () => {
+    if (!consultationId) return null;
+    const whatsappRes = await fetchWhatsAppConsultationStatus(consultationId, { enqueue: true });
+    const whatsapp = whatsappRes.data?.message;
+    if (whatsapp?.status) {
+      setSummary((prev) =>
+        prev
+          ? {
+              ...prev,
+              prescription: {
+                ...(prev.prescription || {}),
+                whatsapp,
+              },
+            }
+          : prev
+      );
+      setWhatsappPollTimedOut(false);
+    }
+    return whatsapp;
   }, [consultationId]);
 
   useEffect(() => {
@@ -268,8 +321,8 @@ export default function CompletedPrescriptionPage() {
     setWhatsappPolling(true);
     const startedAt = Date.now();
     const intervalId = window.setInterval(() => {
-      void refreshSummary().then((nextSummary) => {
-        const nextStatus = nextSummary?.prescription?.whatsapp?.status;
+      void refreshWhatsAppStatus().then((whatsapp) => {
+        const nextStatus = whatsapp?.status;
         if (isWhatsAppPollingComplete(nextStatus)) {
           window.clearInterval(intervalId);
           setWhatsappPolling(false);
@@ -279,8 +332,8 @@ export default function CompletedPrescriptionPage() {
       if (Date.now() - startedAt >= WHATSAPP_POLL_MAX_MS) {
         window.clearInterval(intervalId);
         setWhatsappPolling(false);
-        void refreshSummary().then((nextSummary) => {
-          if (!nextSummary?.prescription?.whatsapp?.status) {
+        void refreshWhatsAppStatus().then((whatsapp) => {
+          if (!whatsapp?.status) {
             setWhatsappPollTimedOut(true);
           }
         });
@@ -291,7 +344,7 @@ export default function CompletedPrescriptionPage() {
       window.clearInterval(intervalId);
       setWhatsappPolling(false);
     };
-  }, [cancelState, consultationId, loading, lookupFailed, refreshSummary, summary?.prescription?.whatsapp?.status]);
+  }, [cancelState, consultationId, loading, lookupFailed, refreshWhatsAppStatus, summary?.prescription?.whatsapp?.status]);
 
   const handleWhatsAppRetry = useCallback(async () => {
     const messageId = summary?.prescription?.whatsapp?.message_id;
@@ -315,10 +368,14 @@ export default function CompletedPrescriptionPage() {
 
   const handleWhatsAppResend = useCallback(async () => {
     const prescriptionId = summary?.prescription?.prescription_id;
-    if (!prescriptionId) return;
+    if (!prescriptionId && !consultationId) return;
     setWhatsappResending(true);
     try {
-      await resendWhatsAppDelivery(prescriptionId);
+      if (prescriptionId) {
+        await resendWhatsAppDelivery(prescriptionId);
+      } else {
+        await resendWhatsAppConsultationDelivery(consultationId);
+      }
       toast.success("WhatsApp delivery resend queued.");
       await refreshSummary();
     } catch (error: any) {
@@ -328,7 +385,7 @@ export default function CompletedPrescriptionPage() {
     } finally {
       setWhatsappResending(false);
     }
-  }, [refreshSummary, summary?.prescription?.prescription_id, toast]);
+  }, [consultationId, refreshSummary, summary?.prescription?.prescription_id, toast]);
 
   useEffect(() => {
     if (!encounterId || !consultationId || loading || lookupFailed) return;
@@ -491,7 +548,8 @@ export default function CompletedPrescriptionPage() {
               }
               onResend={
                 summary?.prescription?.whatsapp?.can_resend ||
-                (whatsappPollTimedOut && summary?.prescription?.prescription_id)
+                (whatsappPollTimedOut &&
+                  (summary?.prescription?.prescription_id || consultationId))
                   ? () => void handleWhatsAppResend()
                   : undefined
               }

@@ -26,7 +26,21 @@ class PrescriptionSummaryBuilder:
 
     @classmethod
     def build_whatsapp_summary(cls, *, prescription, prescription_url: str) -> dict[str, Any]:
-        consultation = prescription.consultation
+        return cls.build_whatsapp_summary_from_consultation(
+            consultation=prescription.consultation,
+            prescription=prescription,
+            prescription_url=prescription_url,
+        )
+
+    @classmethod
+    def build_whatsapp_summary_from_consultation(
+        cls,
+        *,
+        consultation,
+        prescription=None,
+        prescription_url: str = "",
+    ) -> dict[str, Any]:
+        """Build WhatsApp summary from consultation; medicines/tests may be empty."""
         encounter = consultation.encounter
         profile = encounter.patient_profile
         account = encounter.patient_account
@@ -51,7 +65,11 @@ class PrescriptionSummaryBuilder:
         med_truncated = max(0, len(medicine_rows) - len(shown_meds))
         test_truncated = max(0, len(test_rows) - len(shown_tests))
 
-        summary: dict[str, Any] = {
+        resolved_url = prescription_url
+        if prescription is not None and not resolved_url:
+            resolved_url = ""
+
+        return {
             "channel": "whatsapp",
             "patient_name": patient_name,
             "doctor_name": doctor_name,
@@ -62,9 +80,8 @@ class PrescriptionSummaryBuilder:
             "test_summary": shown_tests,
             "test_total_count": len(test_rows),
             "test_truncated_count": test_truncated,
-            "prescription_url": prescription_url,
+            "prescription_url": resolved_url,
         }
-        return summary
 
     @classmethod
     def _build_medicine_rows(cls, consultation) -> list[dict[str, Any]]:
@@ -100,7 +117,7 @@ class PrescriptionSummaryBuilder:
         if not investigations:
             return []
         rows = []
-        for item in investigations.items.all():
+        for item in investigations.items.filter(is_deleted=False):
             name = (item.name or "").strip()
             if name:
                 rows.append({"name": name})

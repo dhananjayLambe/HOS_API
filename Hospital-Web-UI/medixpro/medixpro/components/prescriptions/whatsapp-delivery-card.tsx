@@ -75,11 +75,14 @@ export function getWhatsAppFailureGuidance(
         : "Add the patient's number as full international digits (e.g. 919730789922, no +)";
       return `Recipient is not on your Meta app's test allow-list, or the number format does not match. ${numberHint} in Meta Developer Console → WhatsApp → API Setup → test recipients, then Retry.`;
     }
+    if (reason.includes("132000") || reason.toLowerCase().includes("number of parameters")) {
+      return "Meta template parameter count mismatch (error 132000). consultant_utlity expects 4 body variables: patient, doctor, medicines, tests. Ensure WHATSAPP_TEMPLATE_BODY_PARAM_KEYS=patient_name,doctor_name,medicine_block,test_block in .env, then restart Celery and Retry.";
+    }
     if (reason.includes("132018") || reason.toLowerCase().includes("parameters in your template")) {
       return "Meta rejected template variables (error 132018). Variables cannot contain line breaks; medicines/tests are sent as single lines. Retry after restarting Celery, or shorten medicine/test text if the message is very long.";
     }
     if (reason.includes("132001") || reason.toLowerCase().includes("template name does not exist")) {
-      return "Meta rejected the WhatsApp template. Set WHATSAPP_PRESCRIPTION_TEMPLATE_NAME and WHATSAPP_TEMPLATE_LANGUAGE_CODE in .env to an APPROVED template in Meta Business Manager (dev default: hello_world + en_US). For prescription summaries, create and approve a custom template with 5 body variables, then Retry after restarting Django and Celery.";
+      return "Meta rejected the WhatsApp template. Set WHATSAPP_PRESCRIPTION_TEMPLATE_NAME=consultant_utlity and WHATSAPP_TEMPLATE_LANGUAGE_CODE=en in .env to match your approved Meta template, then restart Django and Celery and Retry.";
     }
     return reason || "Delivery failed. Use Retry to queue another attempt.";
   }
@@ -119,9 +122,9 @@ export function WhatsAppDeliveryCard({
               <div className="space-y-1">
                 <p className="font-medium">WhatsApp status not loaded</p>
                 <p>
-                  Delivery may still be processing, or this prescription has no delivery record yet.
-                  Click Refresh Status. If delivery was attempted but failed, you may see
-                  &quot;Authentication Error&quot; — refresh your Meta token in .env and use Retry.
+                  Delivery may still be processing (ensure Celery is running), or no delivery was queued yet.
+                  Click <strong>Queue Delivery</strong> below, or Refresh Status. Tests-only consultations
+                  do not create a prescription record — WhatsApp is sent from the consultation summary.
                 </p>
               </div>
             </div>

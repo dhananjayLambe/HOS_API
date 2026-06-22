@@ -33,6 +33,9 @@ class WhatsAppRetryAPIView(APIView):
                 "prescription__consultation__encounter",
                 "prescription__consultation__encounter__doctor",
                 "prescription__consultation__encounter__doctor__user",
+                "encounter",
+                "encounter__doctor",
+                "encounter__doctor__user",
             )
             .filter(pk=message_id, is_deleted=False)
             .first()
@@ -40,10 +43,13 @@ class WhatsAppRetryAPIView(APIView):
         if message is None:
             return Response({"detail": "WhatsApp message not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        if message.prescription is None:
-            return Response({"detail": "Message is not linked to a prescription."}, status=status.HTTP_400_BAD_REQUEST)
+        if message.prescription is not None:
+            doctor_user_id = message.prescription.consultation.encounter.doctor.user_id
+        elif message.encounter is not None:
+            doctor_user_id = message.encounter.doctor.user_id
+        else:
+            return Response({"detail": "Message is not linked to a consultation."}, status=status.HTTP_400_BAD_REQUEST)
 
-        doctor_user_id = message.prescription.consultation.encounter.doctor.user_id
         if doctor_user_id != request.user.id:
             return Response({"detail": "Not authorized to retry this delivery."}, status=status.HTTP_403_FORBIDDEN)
 

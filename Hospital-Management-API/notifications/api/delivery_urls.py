@@ -1,7 +1,8 @@
 from django.urls import path
 
-from notifications.api.views.resend import WhatsAppResendAPIView
+from notifications.api.views.resend import WhatsAppConsultationResendAPIView, WhatsAppResendAPIView
 from notifications.api.views.retry import WhatsAppRetryAPIView
+from notifications.api.views.status import WhatsAppConsultationStatusAPIView
 from notifications.api.views.webhook import WhatsAppWebhookAPIView
 
 urlpatterns = [
@@ -9,6 +10,11 @@ urlpatterns = [
         "whatsapp/webhook/",
         WhatsAppWebhookAPIView.as_view(),
         name="whatsapp-webhook",
+    ),
+    path(
+        "whatsapp/status/consultation/<uuid:consultation_id>/",
+        WhatsAppConsultationStatusAPIView.as_view(),
+        name="whatsapp-consultation-status",
     ),
     path(
         "whatsapp/retry/<uuid:message_id>/",
@@ -19,5 +25,10 @@ urlpatterns = [
         "whatsapp/resend/<uuid:prescription_id>/",
         WhatsAppResendAPIView.as_view(),
         name="whatsapp-resend",
+    ),
+    path(
+        "whatsapp/resend/consultation/<uuid:consultation_id>/",
+        WhatsAppConsultationResendAPIView.as_view(),
+        name="whatsapp-resend-consultation",
     ),
 ]
