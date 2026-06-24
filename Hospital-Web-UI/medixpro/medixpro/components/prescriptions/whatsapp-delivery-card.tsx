@@ -11,6 +11,8 @@ import type { PrescriptionWhatsAppDelivery } from "@/components/prescriptions/ty
 export type WhatsAppDeliveryCardProps = {
   delivery?: PrescriptionWhatsAppDelivery | null;
   loading?: boolean;
+  /** True while polling for a fresher status (e.g. queued → sent → delivered). */
+  statusRefreshing?: boolean;
   /** True when polling finished but no whatsapp status was returned from the API. */
   statusTimedOut?: boolean;
   retrying?: boolean;
@@ -93,6 +95,7 @@ export function getWhatsAppFailureGuidance(
 export function WhatsAppDeliveryCard({
   delivery,
   loading = false,
+  statusRefreshing = false,
   statusTimedOut = false,
   retrying = false,
   resending = false,
@@ -175,6 +178,7 @@ export function WhatsAppDeliveryCard({
   }
 
   const status = (delivery.status || "").toLowerCase();
+  const statusLabel = status === "queued" && statusRefreshing ? "Sending…" : status;
   const guidance = getWhatsAppFailureGuidance(
     status,
     delivery.failure_reason,
@@ -187,10 +191,29 @@ export function WhatsAppDeliveryCard({
         <div>
           <p className="text-sm font-semibold">WhatsApp Delivery</p>
           <Badge className={cn("mt-2 capitalize", STATUS_STYLES[status] || "bg-muted text-foreground")}>
-            {status}
+            {statusRefreshing && status === "queued" ? (
+              <span className="inline-flex items-center gap-1.5">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                {statusLabel}
+              </span>
+            ) : (
+              statusLabel
+            )}
           </Badge>
         </div>
         <div className="flex flex-wrap gap-2">
+          {onRefreshStatus && (statusRefreshing || statusTimedOut) ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={retrying || resending}
+              onClick={() => void onRefreshStatus()}
+            >
+              <RefreshCw className="mr-1.5 h-4 w-4" />
+              Refresh Status
+            </Button>
+          ) : null}
           {delivery.can_retry && onRetry ? (
             <Button
               type="button"
@@ -232,6 +255,11 @@ export function WhatsAppDeliveryCard({
         {delivery.read_at ? <p>Read: {formatTimestamp(delivery.read_at)}</p> : null}
         {guidance ? (
           <p className={status === "failed" ? "text-red-700" : "text-slate-700"}>{guidance}</p>
+        ) : null}
+        {statusTimedOut && status === "queued" ? (
+          <p className="text-amber-800">
+            Send is taking longer than expected. Ensure Celery is running, then use Refresh Status.
+          </p>
         ) : null}
       </div>
     </div>
