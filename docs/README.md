@@ -1,5 +1,7 @@
 # Docs Folder Structure
 
+> **Living module documentation** for implemented features lives in `Hospital-Management-API/{app}/docs/` and `Hospital-Management-API/shared_docs/`. This folder holds **plans, checklists, and test reports**. Distill outcomes into in-app docs when features ship.
+
 Use this folder to store all planning and documentation files in a consistent way.
 
 ## Structure

@@ -1,17 +1,5 @@
+> **Superseded:** Content merged into [VALIDATIONS.md](VALIDATIONS.md) and [DECISIONS.md](DECISIONS.md) ADR-003.
+
 # Diagnostic fulfillment rules (STRICT)
 
-## Predicate
-
-For a branch to offer a **package version** at quote time:
-
-- Active `labs.BranchPackagePricing` exists for `(LabBranch, package)` with `is_available=True`.
-- For **each** `DiagnosticPackageItem` service, an active `labs.BranchServicePricing` row exists with `is_available=True` (STRICT: no silent partial catalog).
-- Optional **pincode**: if provided, the branch must have an active `labs.BranchServiceArea` row for that pincode.
-
-## Temporary unavailability
-
-Use `is_available=False` on pricing rows to block a SKU without deleting history.
-
-## Multi-provider split
-
-`fulfillment_mode=partial` is reserved; v1 only enforces STRICT end-to-end at one branch.
+See [VALIDATIONS.md](VALIDATIONS.md) for current rules.

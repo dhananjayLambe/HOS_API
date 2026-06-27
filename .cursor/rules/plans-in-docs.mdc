@@ -22,3 +22,13 @@ Rules:
   - `FEATURE_X_IMPLEMENTATION_PLAN.md`
   - `FEATURE_X_INTEGRATION_CHECKLIST.md`
   - `FEATURE_X_TEST_REPORT.md`
+
+## Living module documentation (Hospital-Management-API)
+
+After a plan is implemented, distill durable outcomes into:
+
+- `Hospital-Management-API/{app}/docs/` (BUSINESS_FLOW, API, MODELS, DECISIONS as ADR-NNN)
+- `Hospital-Management-API/shared_docs/` for cross-app registries
+
+Link from the ADR References field back to the original plan in `docs/backend/Hospital-Management-API/`.
+AI assistants should read `{app}/AI_CONTEXT.md` before editing app code.

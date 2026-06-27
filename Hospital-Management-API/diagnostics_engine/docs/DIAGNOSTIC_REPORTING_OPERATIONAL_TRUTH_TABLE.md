@@ -1,3 +1,5 @@
+> **Superseded:** Summary in [DECISIONS.md](DECISIONS.md) ADR-001 and [API.md](API.md). This file preserved as historical reference.
+
 # Diagnostic Reporting — Operational Truth Table
 
 **Status:** APPROVED (CTO signoff)  
@@ -56,9 +58,9 @@
 | GET | `api/v1/diagnostics/report-tasks/<task_id>/` | Assignment context + active reports (upload targets) |
 | POST | `api/v1/diagnostics/reports/<report_id>/artifacts/upload/` | **Only upload entry** |
 | GET | `api/v1/diagnostics/reports/<report_id>/` | Operational detail (active head only) |
-| GET | `api/v1/diagnostics/reports/<report_id>/download/` | Placeholder `{ download_url: null }` |
+| GET | `api/v1/diagnostics/reports/<report_id>/download/` | Presigned URL |
 | POST | `api/v1/diagnostics/reports/<report_id>/mark-ready/` | IN_PROGRESS → READY |
-| POST | `api/v1/diagnostics/reports/<report_id>/send-whatsapp/` | Prepare delivery + mark sent (Phase 1 simulate) |
+| POST | `api/v1/diagnostics/reports/<report_id>/send-whatsapp/` | Async delivery |
 | POST | `api/v1/diagnostics/delivery-logs/<log_id>/retry/` | Append-only retry (FAILED parent only) |
 | GET | `api/v1/diagnostics/reports/<report_id>/history/` | Operational active lineage (not audit) |
 | GET | `api/v1/diagnostics/patients/<patient_id>/reports/` | Patient-wide summaries (DESC `updated_at`) |
@@ -66,50 +68,8 @@
 
 Legacy: `api/diagnostics/...` (deprecated).
 
-## API package layout (matches `labs.api` / `diagnostics_engine.api`)
-
-```
-diagnostics_engine/api/
-├── views/reports/
-│   ├── mixins.py
-│   ├── legacy.py
-│   ├── operational.py
-│   ├── mark_ready.py
-│   ├── send_whatsapp.py
-│   ├── retry_delivery.py
-│   ├── report_history.py
-│   ├── patient_reports.py
-│   ├── encounter_reports.py
-│   └── __init__.py
-├── serializers/reports/
-├── report_urls.py
-├── urls.py
-├── responses.py
-├── error_codes.py
-└── pagination.py
-```
-
-## Assignment → reports grouping (no DB FK)
-
-`LabOrderAssignment.diagnostic_order` → `order.test_lines` → `get_active_report_for_line(line)` per line.
-
-Prefetch only in `ReportQueryService`.
-
 ## Ownership
 
 - One assignment → one order → many lines → many active report heads
 - Delivery unit = one `DiagnosticTestReport`
 - Patient sees latest active head; superseded download tokens invalid
-
-## Operational hardening (Tasks 55–60)
-
-| Area | Rule |
-|------|------|
-| Branch source of truth | `report.order_test_line.order.branch_id` via `access_control.py` |
-| Branch queryset filters | Only in `ReportQueryService` — views never `.filter(branch_id=...)` |
-| Request context | `request._report_context` (`lab_user`, `branch_id`, `request_id`) |
-| Permissions | `CanUploadReports`, `CanDeliverReports`, `CanViewReportDetail`, `CanCorrectReports`, `CanDownloadReports` + `REPORT_ACTION_PERMISSION_MAP` |
-| Upload rollback | Best-effort `default_storage.delete` on transaction failure; `exists()` check per path |
-| Monitoring | Logger namespace `diagnostics.reports`; events include `event_version`, `outcome`, `duration_ms` |
-| Correlation | `monitoring/request_context.py` — `get_request_id()` / `set_request_id()` |
-| Side effects | `safe_emit()` — audit/monitoring/metrics never raise into workflows |

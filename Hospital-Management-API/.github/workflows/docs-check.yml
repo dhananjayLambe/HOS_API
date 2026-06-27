@@ -1,0 +1,34 @@
+name: Documentation Check
+
+on:
+  pull_request:
+    paths:
+      - 'HOS_API/Hospital-Management-API/**'
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'HOS_API/Hospital-Management-API/**'
+
+jobs:
+  docs-check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: HOS_API/Hospital-Management-API
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run documentation structure check (warn-only)
+        run: python3 scripts/docs/docs_check.py
+        continue-on-error: true
+
+      - name: Note
+        run: |
+          echo "Documentation check runs warn-only. Flip to --strict after Tier-1 pilot stabilizes."

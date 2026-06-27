@@ -1,0 +1,27 @@
+---
+description: Documentation-first development for Hospital-Management-API
+globs:
+  - HOS_API/Hospital-Management-API/**
+alwaysApply: false
+---
+
+# Documentation First (DoctorProCare Backend)
+
+Before modifying code under `Hospital-Management-API/`:
+
+1. Read the target app's `AI_CONTEXT.md`
+2. Read `docs/BUSINESS_FLOW.md` and the relevant layer file (MODELS, API, WORKFLOWS)
+3. Check `shared_docs/status_registry.md` and `shared_docs/INVARIANTS.md`
+
+When changing code:
+
+- Update `{app}/docs/` in the same PR (see `docs/CONTRIBUTING.md`)
+- New status enums → `shared_docs/status_registry.md`
+- New feature flags → `shared_docs/CONFIGURATION.md`
+- Architectural decisions → `{app}/docs/DECISIONS.md` as ADR-NNN
+
+Do not duplicate glossary or status definitions in app docs — link to `shared_docs/`.
+
+Planning documents still go to `HOS_API/docs/`; distill outcomes into app docs when implemented.
+
+Read order: `AGENTS.md` → `shared_docs/glossary/` → `{app}/AI_CONTEXT.md` → `{app}/docs/`.
