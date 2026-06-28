@@ -1,5 +1,7 @@
 """Tests for WhatsApp template body formatting."""
 
+import uuid
+
 from django.test import TestCase
 
 from notifications.services.delivery.whatsapp_template_renderer import (
@@ -151,3 +153,96 @@ class WhatsAppTemplateRendererTests(TestCase):
         self.assertNotIn("prescription_url", components)
         self.assertNotIn("|", components["medicine_block"])
         self.assertNotIn("\n", components["medicine_block"])
+
+
+class RecommendationTemplateRendererTests(TestCase):
+    def _result(self, *, mrp="1000", quoted="800", savings="200"):
+        from decimal import Decimal
+
+        from diagnostics_engine.domain.recommendation import ExpandedTestLine, RecommendationResult
+
+        return RecommendationResult(
+            available=True,
+            failure_reason=None,
+            consultation_id=uuid.uuid4(),
+            recommended_lab=None,
+            recommended_branch=None,
+            collection_mode="lab",
+            expanded_tests=[
+                ExpandedTestLine(
+                    service_id="s1",
+                    code="CBC",
+                    name="Complete Blood Count",
+                    quantity=1,
+                    investigation_item_id="i1",
+                )
+            ],
+            quoted_price=Decimal(quoted),
+            mrp_total=Decimal(mrp),
+            savings=Decimal(savings),
+        )
+
+    def test_discount_mode_renders_mrp_and_savings(self):
+        from notifications.services.delivery.whatsapp_template_renderer import (
+            build_recommendation_template_components,
+            render_recommendation_whatsapp_body,
+            resolve_recommendation_pricing_display_mode,
+        )
+
+        result = self._result()
+        self.assertEqual(resolve_recommendation_pricing_display_mode(result), "discount")
+        body = render_recommendation_whatsapp_body(patient_name="Patient", result=result)
+        self.assertIn("MRP: ₹1000", body)
+        self.assertIn("You Save: ₹200", body)
+        components = build_recommendation_template_components(patient_name="Patient", result=result)
+        self.assertEqual(components["savings"], "200")
+
+    def test_zero_savings_uses_flat_price_display(self):
+        from notifications.services.delivery.whatsapp_template_renderer import (
+            render_recommendation_flat_price_body,
+            render_recommendation_whatsapp_body,
+            resolve_recommendation_pricing_display_mode,
+        )
+
+        result = self._result(mrp="800", quoted="800", savings="0")
+        self.assertEqual(resolve_recommendation_pricing_display_mode(result), "flat")
+        body = render_recommendation_whatsapp_body(patient_name="Patient", result=result)
+        self.assertIn("Price: ₹800", body)
+        self.assertNotIn("You Save", body)
+        self.assertNotIn("MRP:", body)
+        flat = render_recommendation_flat_price_body(patient_name="Patient", result=result)
+        self.assertIn("✔ Test Scheduling Support", flat)
+
+    def test_long_test_names_sanitized_for_meta(self):
+        from notifications.services.delivery.whatsapp_template_renderer import (
+            build_recommendation_template_components,
+        )
+
+        from decimal import Decimal
+        from diagnostics_engine.domain.recommendation import ExpandedTestLine, RecommendationResult
+
+        names = [f"Very Long Diagnostic Test Name Number {i}" for i in range(16)]
+        result = RecommendationResult(
+            available=True,
+            failure_reason=None,
+            consultation_id=uuid.uuid4(),
+            recommended_lab=None,
+            recommended_branch=None,
+            collection_mode="home",
+            expanded_tests=[
+                ExpandedTestLine(
+                    service_id=f"s{i}",
+                    code=f"T{i}",
+                    name=name,
+                    quantity=1,
+                    investigation_item_id=f"i{i}",
+                )
+                for i, name in enumerate(names)
+            ],
+            quoted_price=Decimal("99999"),
+            mrp_total=Decimal("99999"),
+            savings=Decimal("0"),
+        )
+        components = build_recommendation_template_components(patient_name="A" * 200, result=result)
+        self.assertLessEqual(len(components["test_names"]), 1024)
+        self.assertNotIn("\n", components["test_names"])

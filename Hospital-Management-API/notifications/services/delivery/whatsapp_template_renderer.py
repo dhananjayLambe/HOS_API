@@ -151,3 +151,146 @@ def build_template_components(summary: dict) -> dict[str, str]:
         for key, value in all_components.items()
     }
     return filter_template_components(sanitized)
+
+
+def format_whatsapp_price_amount(value) -> str:
+    """Numeric string for Meta template variables (₹ is static in template body)."""
+    if value is None:
+        return "0"
+    from decimal import Decimal
+
+    amount = Decimal(str(value))
+    if amount == amount.to_integral_value():
+        return str(int(amount))
+    return str(amount.quantize(Decimal("0.01")))
+
+
+def recommendation_has_discount(result) -> bool:
+    from decimal import Decimal
+
+    savings = getattr(result, "savings", None)
+    if savings is None:
+        return False
+    return Decimal(str(savings)) > Decimal("0")
+
+
+RECOMMENDATION_BOOKING_BENEFITS_LINES = (
+    "Included with Your Booking",
+    "✔ Test Scheduling Support",
+    "✔ Pay After Service",
+    "✔ Digital Reports",
+)
+
+
+def build_recommendation_test_names(result) -> str:
+    names: list[str] = []
+    for pkg in getattr(result, "packages", None) or []:
+        name = (getattr(pkg, "name", None) or "").strip()
+        if name:
+            names.append(name)
+    for test in getattr(result, "expanded_tests", None) or []:
+        if getattr(test, "package_id", None):
+            continue
+        name = (getattr(test, "name", None) or "").strip()
+        if name and name not in names:
+            names.append(name)
+    return ", ".join(names) if names else "-"
+
+
+def build_recommendation_template_components(*, patient_name: str, result) -> dict[str, str]:
+    from notifications.services.delivery.meta_client import (
+        filter_recommendation_template_components,
+        sanitize_template_parameter,
+    )
+
+    all_components = {
+        "patient_name": (patient_name or "Patient").strip(),
+        "test_names": build_recommendation_test_names(result),
+        "mrp": format_whatsapp_price_amount(getattr(result, "mrp_total", None)),
+        "quoted_price": format_whatsapp_price_amount(getattr(result, "quoted_price", None)),
+        "savings": format_whatsapp_price_amount(getattr(result, "savings", None)),
+    }
+    sanitized = {
+        key: sanitize_template_parameter(value, empty_fallback="-")
+        for key, value in all_components.items()
+    }
+    return filter_recommendation_template_components(sanitized)
+
+
+def build_recommendation_flat_template_components(*, patient_name: str, result) -> dict[str, str]:
+    from notifications.services.delivery.meta_client import (
+        filter_recommendation_flat_template_components,
+        sanitize_template_parameter,
+    )
+
+    all_components = {
+        "patient_name": (patient_name or "Patient").strip(),
+        "test_names": build_recommendation_test_names(result),
+        "quoted_price": format_whatsapp_price_amount(getattr(result, "quoted_price", None)),
+    }
+    sanitized = {
+        key: sanitize_template_parameter(value, empty_fallback="-")
+        for key, value in all_components.items()
+    }
+    return filter_recommendation_flat_template_components(sanitized)
+
+
+def resolve_recommendation_pricing_display_mode(result) -> str:
+    """discount = MRP + savings lines; flat = single price (no zero-savings UX)."""
+    return "discount" if recommendation_has_discount(result) else "flat"
+
+
+def render_recommendation_flat_price_body(*, patient_name: str, result) -> str:
+    components = build_recommendation_flat_template_components(patient_name=patient_name, result=result)
+    lines = [
+        "Doctor's Recommended Tests",
+        "",
+        f"Hello {components.get('patient_name', 'Patient')},",
+        "",
+        "Your doctor has recommended the following tests:",
+        components.get("test_names", "-"),
+        "",
+        f"Price: ₹{components.get('quoted_price', '0')}",
+        "",
+        *RECOMMENDATION_BOOKING_BENEFITS_LINES,
+        "",
+        "Tap below to book your test.",
+        "",
+        "Power By DoctorProCare.com",
+    ]
+    return "\n".join(lines)
+
+
+def render_recommendation_whatsapp_body(*, patient_name: str, result) -> str:
+    if resolve_recommendation_pricing_display_mode(result) == "flat":
+        return render_recommendation_flat_price_body(patient_name=patient_name, result=result)
+
+    components = build_recommendation_template_components(patient_name=patient_name, result=result)
+    lines = [
+        "Doctor's Recommended Tests",
+        "",
+        f"Hello {components.get('patient_name', 'Patient')},",
+        "",
+        "Your doctor has recommended the following tests:",
+        components.get("test_names", "-"),
+        "",
+        f"MRP: ₹{components.get('mrp', '0')}",
+        f"DoctorPro Price: ₹{components.get('quoted_price', '0')}",
+        f"You Save: ₹{components.get('savings', '0')}",
+        "",
+        *RECOMMENDATION_BOOKING_BENEFITS_LINES,
+        "",
+        "Tap below to book your test.",
+        "",
+        "Power By DoctorProCare.com",
+    ]
+    return "\n".join(lines)
+
+
+DIAGNOSTIC_RECOMMENDATION_UNAVAILABLE_BODY = (
+    "Sorry.\n\n"
+    "We are currently unable to arrange your diagnostic tests in your area.\n\n"
+    "No booking has been created.\n"
+    "No payment has been collected.\n\n"
+    "Thank you for choosing DoctorProCare."
+)

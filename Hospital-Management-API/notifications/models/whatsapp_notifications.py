@@ -359,8 +359,8 @@ class WhatsAppMessage(BaseModel):
                 _("Report messages require a diagnostic test report."),
             ),
             WhatsAppMessageType.TEST_BOOKING: (
-                self.diagnostic_order_id,
-                _("Test booking messages require a diagnostic order."),
+                self.encounter_id,
+                _("Test booking messages require an encounter."),
             ),
             WhatsAppMessageType.APPOINTMENT: (
                 self.appointment_id,

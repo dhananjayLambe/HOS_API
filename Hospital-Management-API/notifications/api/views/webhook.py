@@ -99,11 +99,28 @@ class WhatsAppWebhookAPIView(APIView):
         message.webhook_payload = raw_payload
         message.save(update_fields=["webhook_payload", "updated_at"])
 
+        if message.message_type == "TEST_BOOKING" and mapped == WhatsAppMessageStatus.DELIVERED:
+            payload = message.request_payload or {}
+            logger.info(
+                "recommendation.delivered consultation_id=%s recommendation_id=%s "
+                "whatsapp_message_id=%s template_name=%s",
+                payload.get("consultation_id"),
+                payload.get("recommendation_id"),
+                message.id,
+                message.template_name,
+            )
+
         audit_action = {
             WhatsAppMessageStatus.SENT: "PRESCRIPTION_WHATSAPP_SENT",
             WhatsAppMessageStatus.DELIVERED: "PRESCRIPTION_WHATSAPP_DELIVERED",
             WhatsAppMessageStatus.READ: "PRESCRIPTION_WHATSAPP_READ",
         }.get(mapped)
+        if message.message_type == "TEST_BOOKING":
+            audit_action = {
+                WhatsAppMessageStatus.SENT: "DIAGNOSTIC_RECOMMENDATION_WHATSAPP_SENT",
+                WhatsAppMessageStatus.DELIVERED: "DIAGNOSTIC_RECOMMENDATION_WHATSAPP_DELIVERED",
+                WhatsAppMessageStatus.READ: "DIAGNOSTIC_RECOMMENDATION_WHATSAPP_READ",
+            }.get(mapped, audit_action)
         if audit_action:
             safe_emit(
                 emit_prescription_whatsapp_audit_event,

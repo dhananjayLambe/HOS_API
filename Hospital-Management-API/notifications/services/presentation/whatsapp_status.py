@@ -52,6 +52,29 @@ def get_latest_consultation_whatsapp_message(
     return qs.order_by("-created_at").first()
 
 
+def get_latest_recommendation_whatsapp_message(consultation_id) -> WhatsAppMessage | None:
+    return (
+        WhatsAppMessage.objects.filter(
+            message_type="TEST_BOOKING",
+            is_deleted=False,
+            idempotency_key=f"diagnostic_recommendation_{consultation_id}",
+        )
+        .order_by("-created_at")
+        .first()
+    )
+
+
+def _attach_recommendation_status(consultation_id, payload: dict) -> dict:
+    recommendation = get_latest_recommendation_whatsapp_message(consultation_id)
+    if recommendation is not None:
+        from notifications.services.monitoring.recommendation_metrics import (
+            serialize_recommendation_message,
+        )
+
+        payload["recommendation"] = serialize_recommendation_message(recommendation)
+    return payload
+
+
 def get_consultation_delivery_whatsapp_status(consultation) -> dict | None:
     """WhatsApp status for a consultation (with or without a prescription record)."""
     from consultations_core.models.consultation import Consultation
@@ -63,15 +86,28 @@ def get_consultation_delivery_whatsapp_status(consultation) -> dict | None:
     if active is not None:
         message = get_latest_prescription_whatsapp_message(active.id)
         if message is not None:
-            return serialize_whatsapp_message(message)
+            return _attach_recommendation_status(
+                consultation.id,
+                serialize_whatsapp_message(message),
+            )
 
     message = get_latest_consultation_whatsapp_message(
         consultation_id=consultation.id,
         encounter_id=consultation.encounter_id,
     )
     if message is None:
-        return None
-    return serialize_whatsapp_message(message)
+        recommendation = get_latest_recommendation_whatsapp_message(consultation.id)
+        if recommendation is None:
+            return None
+        from notifications.services.monitoring.recommendation_metrics import (
+            serialize_recommendation_message,
+        )
+
+        return {
+            "status": (recommendation.status or "").lower(),
+            "recommendation": serialize_recommendation_message(recommendation),
+        }
+    return _attach_recommendation_status(consultation.id, serialize_whatsapp_message(message))
 
 
 def get_prescription_whatsapp_status(prescription_id) -> dict | None:

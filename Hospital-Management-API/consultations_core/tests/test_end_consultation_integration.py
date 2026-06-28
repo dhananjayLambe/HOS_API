@@ -310,6 +310,37 @@ class EndConsultationIntegrationTests(TestCase):
         self.assertEqual(items.count(), 1)
         self.assertEqual(items.first().source, InvestigationSource.CUSTOM)
 
+    def test_06d_stale_catalog_uuid_resolves_via_display_name(self):
+        """UI labels like 'Glycated Hemoglobin (HbA1c)' should bind to catalog when PK is stale."""
+        hba1c = DiagnosticServiceMaster.objects.create(
+            code=f"eci_hba1c_{uuid.uuid4().hex[:6]}",
+            name="HbA1c",
+            category=self.diag_cat,
+        )
+        missing_id = uuid.uuid4()
+        payload = _base_payload(
+            investigations=[
+                {
+                    "source": "catalog",
+                    "catalog_item_id": str(missing_id),
+                    "service_id": str(missing_id),
+                    "name": "Glycated Hemoglobin (HbA1c)",
+                    "is_custom": False,
+                    "label": "Glycated Hemoglobin (HbA1c)",
+                }
+            ],
+        )
+        r = self._post_complete(payload)
+        self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
+        items = InvestigationItem.objects.filter(
+            investigations__consultation=self.consultation,
+            is_deleted=False,
+        )
+        self.assertEqual(items.count(), 1)
+        item = items.first()
+        self.assertEqual(item.source, InvestigationSource.CATALOG)
+        self.assertEqual(item.catalog_item_id, hba1c.id)
+
     def test_06c_investigations_static_slug_persists_as_custom(self):
         payload = _base_payload(
             investigations=[

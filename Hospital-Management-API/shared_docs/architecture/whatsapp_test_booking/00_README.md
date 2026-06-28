@@ -2,7 +2,7 @@
 owner: platform-team
 module: whatsapp_test_booking
 version: 1.1
-last_updated: 2026-06-27
+last_updated: 2026-06-28
 reviewed_by: —
 status: approved
 milestone: M1
@@ -72,6 +72,7 @@ If implementation differs from documented **current state**, update these docume
 | [09_Future_Roadmap.md](09_Future_Roadmap.md) | Vision | Long-term marketplace evolution (not M1 analysis) |
 | [10_WhatsApp_Integration.md](10_WhatsApp_Integration.md) | M1 Analysis | Current WhatsApp prescription pipeline |
 | [11_Channel_Architecture.md](11_Channel_Architecture.md) | Golden Architecture | Channel-agnostic service layering |
+| [11_WhatsApp_Booking_Flow.md](11_WhatsApp_Booking_Flow.md) | M4 Standard | **Complete WhatsApp booking journey** (frozen before M4 code) |
 | [M1_Current_Feature_Matrix.md](M1_Current_Feature_Matrix.md) | M1 Summary | Feature status at a glance |
 | [M1_Marketplace_Gap_Analysis.md](M1_Marketplace_Gap_Analysis.md) | M1 Synthesis | All gaps → milestones, dependencies, priority |
 | [M1_Approval_Checklist.md](M1_Approval_Checklist.md) | M1 Exit | Sign-off before M2 |
@@ -99,7 +100,8 @@ Follow the business flow — easiest path for new developers:
 13. [DECISIONS.md](DECISIONS.md)
 14. [M1_Approval_Checklist.md](M1_Approval_Checklist.md) — sign-off before M2
 15. [11_Channel_Architecture.md](11_Channel_Architecture.md)
-16. [09_Future_Roadmap.md](09_Future_Roadmap.md)
+16. [11_WhatsApp_Booking_Flow.md](11_WhatsApp_Booking_Flow.md) — **before M4 implementation**
+17. [09_Future_Roadmap.md](09_Future_Roadmap.md)
 
 For **requirements and production rules**, read [doctor_pro_2.0.md](doctor_pro_2.0.md) and [DoctorProCare Diagnostics Marketplace.md](DoctorProCare%20Diagnostics%20Marketplace.md) first.
 
@@ -143,9 +145,9 @@ Future implementation detail lives **only** in [M1_Marketplace_Gap_Analysis.md](
 |---|---|---|
 | M0 | Existing Foundation | Complete |
 | **M1** | **Current State Analysis** | **Docs complete — pending approval** |
-| M2 | Laboratory Recommendation Engine | Planned |
-| M3 | Recommendation API | Planned |
-| M4 | WhatsApp Recommendation Flow | Planned |
+| M2 | Laboratory Recommendation Engine | Complete |
+| M3 | Marketplace Recommendation Platform API | Complete |
+| M4 | WhatsApp Booking Flow | Planned — see [11_WhatsApp_Booking_Flow.md](11_WhatsApp_Booking_Flow.md) |
 | M5 | Booking Flow | Planned |
 | M6 | Laboratory Assignment & Re-routing | Planned |
 | M7 | Report Delivery | Planned |

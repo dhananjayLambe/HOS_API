@@ -1,5 +1,9 @@
 from django.urls import path
 
+from notifications.api.views.recommendation_metrics import (
+    RecommendationConsultationStatusAPIView,
+    RecommendationWhatsAppMetricsAPIView,
+)
 from notifications.api.views.resend import WhatsAppConsultationResendAPIView, WhatsAppResendAPIView
 from notifications.api.views.retry import WhatsAppRetryAPIView
 from notifications.api.views.status import WhatsAppConsultationStatusAPIView
@@ -30,5 +34,15 @@ urlpatterns = [
         "whatsapp/resend/consultation/<uuid:consultation_id>/",
         WhatsAppConsultationResendAPIView.as_view(),
         name="whatsapp-resend-consultation",
+    ),
+    path(
+        "whatsapp/recommendations/metrics/",
+        RecommendationWhatsAppMetricsAPIView.as_view(),
+        name="whatsapp-recommendation-metrics",
+    ),
+    path(
+        "whatsapp/recommendations/consultation/<uuid:consultation_id>/",
+        RecommendationConsultationStatusAPIView.as_view(),
+        name="whatsapp-recommendation-consultation-status",
     ),
 ]

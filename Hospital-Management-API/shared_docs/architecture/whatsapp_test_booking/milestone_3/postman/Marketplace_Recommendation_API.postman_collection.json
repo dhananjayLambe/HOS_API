@@ -1,0 +1,57 @@
+{
+  "info": {
+    "name": "Marketplace Recommendation API",
+    "description": "DoctorProCare M3 — POST /api/v1/marketplace/diagnostics/recommendations/",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {"key": "base_url", "value": "http://localhost:8000"},
+    {"key": "jwt_token", "value": ""},
+    {"key": "consultation_id", "value": ""}
+  ],
+  "item": [
+    {
+      "name": "Recommend — success",
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Authorization", "value": "Bearer {{jwt_token}}"},
+          {"key": "Content-Type", "value": "application/json"},
+          {"key": "X-Request-ID", "value": "postman-success-1"}
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"consultation_id\": \"{{consultation_id}}\",\n  \"client_request_id\": \"postman-1\"\n}"
+        },
+        "url": "{{base_url}}/api/v1/marketplace/diagnostics/recommendations/"
+      }
+    },
+    {
+      "name": "Recommend — consultation not found",
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Authorization", "value": "Bearer {{jwt_token}}"},
+          {"key": "Content-Type", "value": "application/json"}
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"consultation_id\": \"00000000-0000-0000-0000-000000000099\"\n}"
+        },
+        "url": "{{base_url}}/api/v1/marketplace/diagnostics/recommendations/"
+      }
+    },
+    {
+      "name": "Recommend — unauthorized",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"consultation_id\": \"{{consultation_id}}\"\n}"
+        },
+        "url": "{{base_url}}/api/v1/marketplace/diagnostics/recommendations/"
+      }
+    }
+  ]
+}

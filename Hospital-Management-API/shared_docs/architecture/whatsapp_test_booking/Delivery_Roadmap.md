@@ -2,7 +2,7 @@
 owner: platform-team
 module: whatsapp_test_booking
 version: 1.0
-last_updated: 2026-06-27
+last_updated: 2026-06-28
 reviewed_by: —
 status: approved
 document_type: delivery_roadmap
@@ -38,11 +38,11 @@ Each milestone must produce a deployable feature.
 Overall Phase 1 Roadmap
 
 Milestone	Feature	Status
-0	Existing Foundation	✅ Completed
-1	Marketplace Architecture Analysis	📝 Docs Complete — Pending Approval
-2	Laboratory Recommendation Engine	Planned
-3	Recommendation API	Planned
-4	WhatsApp Recommendation Flow	Planned
+0	Existing Foundation	✅ Complete
+1	Marketplace Architecture Analysis	📝 Docs complete — pending approval
+2	Laboratory Recommendation Engine	✅ Complete
+3	Marketplace Recommendation Platform API	✅ Complete
+4	WhatsApp Booking Flow	Planned
 5	Booking Flow	Planned
 6	Laboratory Assignment & Re-routing	Planned
 7	Report Delivery	Planned
@@ -137,149 +137,153 @@ Do not start Milestone 2 until exit criteria met.
 
 Milestone 2 – Laboratory Recommendation Engine
 
-Objective
-
-Recommend the best laboratory before booking.
-
-Deliverables
-
-* LabRecommendationService
-* Package expansion reuse
-* Recommendation DTO
-* Total quotation
-* Home/Lab collection recommendation
-* Explainable recommendation metadata
-
-No booking.
-
-No order creation.
-
-Read-only implementation.
-
-Testing
-
-Scenario 1
-
-Single laboratory available
-
-Expected
-
-Recommendation returned.
-
-⸻
-
-Scenario 2
-
-No laboratory available
-
-Expected
-
-Failure reason returned.
-
-⸻
-
-Scenario 3
-
-Package recommendation
-
-Expected
-
-Package expanded correctly.
-
-⸻
-
-Scenario 4
-
-Home collection
-
-Expected
-
-Correct collection mode.
-
-⸻
-
-Exit Criteria
-
-Recommendation engine produces the same result as RoutingEngine.
-
-⸻
-
-Milestone 3 – Recommendation API
+Status: **Complete**
 
 Objective
 
-Expose recommendation to external channels.
+Recommend the best laboratory before booking (read-only — no order creation, no routing writes).
 
 Deliverables
 
-REST API
+* `LabRecommendationService` — `diagnostics_engine/domain/recommendation.py`
+* Shared investigation resolution — `diagnostics_engine/domain/investigation_resolution.py`
+* `RecommendationResult` DTO (dual pricing, expanded tests, ranking metadata)
+* Reuses `EligibilityEngine.evaluate_requirements`, `RankingEngine.rank`, `PricingQuoteService`
+* Structured logging (`recommendation.started|completed|failed`)
 
-Input
+Docs
 
-* Consultation
-* Location
-
-Output
-
-* Laboratory
-* Branch
-* Price
-* Collection Mode
-* Distance
-* TAT
-* Labels
+[milestone_2/](milestone_2/) — Engine Reuse Matrix, service design, acceptance checklist
 
 Testing
 
-Postman
+| Scenario | Expected |
+|----------|----------|
+| Single laboratory available | Recommendation returned |
+| No laboratory available | `failure_reason` returned |
+| Package recommendation | Package expanded in DTO |
+| Home collection | Correct `collection_mode` |
+| Parity with routing pipeline | Same branch, price, score, labels as post-order routing |
 
-Swagger
-
-Unit Tests
-
-API Tests
+```bash
+DJANGO_SETTINGS_MODULE=main.settings_test .venv/bin/python manage.py test \
+  diagnostics_engine.tests.test_lab_recommendation_service \
+  diagnostics_engine.tests.test_order_creation_service
+```
 
 Exit Criteria
 
-Recommendation available through API.
+* [x] Recommendation engine produces the same result as routing eligibility + ranking (parity test)
+* [x] No `DiagnosticOrder` or `RoutingRun` side effects on recommend
+* [x] Unit and integration tests green (9 tests in `test_lab_recommendation_service.py`)
 
 ⸻
 
-Milestone 4 – WhatsApp Recommendation Flow
+Milestone 3 – Marketplace Recommendation Platform API
+
+Status: **Complete**
+
+Depends on: Milestone 2 (`LabRecommendationService`)
 
 Objective
 
-Allow patients to start diagnostic booking through WhatsApp.
+Expose M2 as a versioned platform API for all future channels (WhatsApp, Mobile, Doctor Portal, Admin, Call Center, Partner APIs).
+
+Endpoint
+
+`POST /api/v1/marketplace/diagnostics/recommendations/`
 
 Deliverables
 
-New WhatsApp templates
+* Nested response envelope (`metadata`, `recommendation`, `tests`, `packages`, `error`)
+* `recommendation_id` + 15-minute TTL (`MARKETPLACE_RECOMMENDATION_TTL_SECONDS`, default 900)
+* Lab/branch enrichment, `home_collection_available` / `lab_visit_available`
+* Channel-ready fields: `branch_address`, `branch_contact_number`, `branch_working_hours`, `google_maps_url`, `available_slot_dates` (null until slot API)
+* Explainability: `primary_label`, `secondary_labels`, `why_recommended`
+* Failure UX: `error.next_action` (e.g. `CHANGE_LOCATION`, `TRY_AGAIN`)
+* JWT auth, consultation access, rate limit (20/min)
+* Audit model — `MarketplaceRecommendationApiAudit` (one row per call; no recommendation cache DB)
+* Swagger (`drf-yasg`), Postman collection
 
-* Laboratory recommendation
-* Book Test
-* Home Collection
-* Laboratory Visit
+Code
 
-Interactive buttons
+| Component | Path |
+|-----------|------|
+| View | `diagnostics_engine/api/views/marketplace_recommendation.py` |
+| Serializers | `diagnostics_engine/api/serializers/marketplace_recommendation.py` |
+| URLs | `diagnostics_engine/api/marketplace_urls.py` |
+| Access | `diagnostics_engine/services/recommendation_access.py` |
+| Audit | `diagnostics_engine/models/marketplace_recommendation_audit.py` |
+| Tests | `diagnostics_engine/tests/test_marketplace_recommendation_api.py` |
 
-Conversation flow
+Docs
 
-Booking confirmation
+[milestone_3/](milestone_3/) — [M3_API_Contract.md](milestone_3/M3_API_Contract.md), architecture, security, performance, acceptance checklists
 
 Testing
 
-Patient receives
+```bash
+DJANGO_SETTINGS_MODULE=main.settings_test .venv/bin/python manage.py migrate
+DJANGO_SETTINGS_MODULE=main.settings_test .venv/bin/python manage.py test \
+  diagnostics_engine.tests.test_marketplace_recommendation_api \
+  diagnostics_engine.tests.test_lab_recommendation_service
+```
 
-* Recommendation
-* Price
-* Collection Mode
-* Buttons
-
-Patient selects booking.
+Includes auth, authz, success/failure envelopes, chaos scenarios (inactive branch, missing location), parity smoke vs domain service.
 
 Exit Criteria
 
-Complete WhatsApp recommendation flow working.
+* [x] Recommendation available through versioned REST API with zero duplicated business logic
+* [x] No order/routing writes; audit insert only
+* [x] **25 tests green** (16 M3 API + 9 M2 regression) — verified locally 2026-06-28
+* [x] Migration `0017_marketplace_recommendation_api_audit` applied
+
+⸻
+
+Milestone 4 – WhatsApp Booking Flow
+
+Status: **In progress** — M4.3/4.4 recommendation orchestration **complete** (2026-06-28); Flow + confirm handoff remain open.
+
+Depends on: Milestone 3 (`POST /api/v1/marketplace/diagnostics/recommendations/`)
+
+Objective
+
+Deliver the **complete WhatsApp booking journey** from recommendation message through Flow data collection and booking confirmation handoff — not recommendation alone.
+
+Governing specification
+
+[11_WhatsApp_Booking_Flow.md](11_WhatsApp_Booking_Flow.md) — single source of truth for WhatsApp, mobile, web, and call center booking UX.
+
+### M4.3 & M4.4 — Recommendation WhatsApp orchestration (complete)
+
+* After prescription WhatsApp `SENT` → `LabRecommendationService.recommend()` (in-process)
+* Template `diagnostic_test_recommendation_v3` when `available=true` (Book Tests button + flow_action_data)
+* Plain-text Sorry when `available=false` (no investigations → skip entirely)
+* Idempotency: `diagnostic_recommendation_{consultation_id}`
+* Celery: `prepare_diagnostic_recommendation_whatsapp` / `send_diagnostic_recommendation_whatsapp`
+* Tests: `notifications/tests/test_diagnostic_recommendation_whatsapp.py`
+
+Deliverables (remaining in M4)
+* WhatsApp Flow — home collection path (address, location, date, slot)
+* WhatsApp Flow — lab visit path (date, slot only)
+* Review screen fed entirely from M3 API
+* Booking request handoff with `metadata.recommendation_id` (M5 persistence)
+
+Out of scope in M4
+
+* DiagnosticOrder creation, routing, payment, lab assignment (M5+)
+
+Testing
+
+* Prescription pipeline → recommendation message
+* Book Tests opens Flow; collection mode auto-selected
+* Home vs lab visit field requirements
+* Failure path when no eligible lab
+* Confirm handoff payload includes `recommendation_id`
+
+Exit Criteria
+
+All items in [11_WhatsApp_Booking_Flow.md §17](11_WhatsApp_Booking_Flow.md#17-success-criteria-m4-exit).
 
 ⸻
 
@@ -483,9 +487,10 @@ Engineering
 
 * Unit tests
 * Integration tests
-* API tests
+* API tests (M3 marketplace recommendation — 16 cases + M2 regression)
 * Logging
 * Monitoring
+* Marketplace recommendation audit (`MarketplaceRecommendationApiAudit`)
 
 ⸻
 
@@ -514,6 +519,8 @@ Test every scenario:
 
 ✓ Single test
 
+✓ Marketplace recommendation API (M3)
+
 ✓ First rejection
 
 ✓ Second rejection
@@ -532,7 +539,7 @@ Phase 1 Success Criteria
 
 Phase 1 is complete when:
 
-* Patients receive laboratory recommendations before booking.
+* Patients receive laboratory recommendations before booking (M2 engine + M3 API).
 * Booking begins only after recommendation acceptance.
 * Every order is fulfilled by one laboratory.
 * Automatic rerouting works for two attempts.

@@ -26,18 +26,18 @@ from consultations_core.models.encounter import ClinicalEncounter
 from consultations_core.models.investigation import (
     InvestigationItem,
     InvestigationSource,
-    InvestigationStatus,
     PrescriptionSource,
 )
-from consultations_core.services.investigation_api_service import get_or_create_investigations_container
+from diagnostics_engine.domain.investigation_resolution import (
+    load_convertible_investigation_items,
+    normalize_package_composition,
+)
 from diagnostics_engine.domain.order_numbers import allocate_diagnostic_order_number
 from diagnostics_engine.domain.package_orders import (
-    build_composition_snapshot,
     ensure_test_lines_for_test_items,
     expand_confirmed_order_packages,
 )
 from diagnostics_engine.domain.pricing import PricingQuoteService
-from diagnostics_engine.models.catalog import DiagnosticPackage, DiagnosticServiceMaster
 from diagnostics_engine.models.choices import OrderLineType, OrderStatus
 from diagnostics_engine.models.orders import DiagnosticOrder, DiagnosticOrderItem, DiagnosticOrderTestLine
 from labs.models import BranchPackagePricing, LabBranch
@@ -66,55 +66,6 @@ _PRESCRIPTION_TO_RECOMMENDATION = {
 def _recommendation_source(inv: InvestigationItem) -> str:
     ps = inv.prescription_source or PrescriptionSource.DOCTOR_SELECTED
     return _PRESCRIPTION_TO_RECOMMENDATION.get(ps, "manual")
-
-
-def _normalize_package_composition(inv: InvestigationItem) -> list[dict[str, Any]]:
-    """Build composition_snapshot rows for expansion; raises ValidationError if invalid."""
-    pkg = inv.diagnostic_package
-    if not pkg:
-        raise ValidationError("Package investigation is missing diagnostic_package.")
-
-    raw = inv.package_expansion_snapshot
-    if isinstance(raw, list) and len(raw) > 0:
-        out: list[dict[str, Any]] = []
-        for row in raw:
-            if not isinstance(row, dict):
-                raise ValidationError("Invalid package_expansion_snapshot row (expected object).")
-            if row.get("included") is False:
-                continue
-            sid = row.get("service_id")
-            if not sid:
-                raise ValidationError("package_expansion_snapshot row missing service_id.")
-            try:
-                svc = DiagnosticServiceMaster.objects.get(pk=sid)
-            except DiagnosticServiceMaster.DoesNotExist as exc:
-                raise ValidationError(f"Unknown service in package snapshot: {sid}.") from exc
-            if not svc.is_active or svc.deleted_at is not None:
-                raise ValidationError(f"Service {svc.code} is not active.")
-            out.append(
-                {
-                    "service_id": str(svc.id),
-                    "quantity": int(row.get("quantity", 1)),
-                    "is_mandatory": bool(row.get("is_mandatory", True)),
-                    "display_order": int(row.get("display_order", 0)),
-                }
-            )
-        if not out:
-            raise ValidationError("Package investigation has no included services in snapshot.")
-        return out
-
-    snap = build_composition_snapshot(pkg)
-    if not snap:
-        raise ValidationError(f"Package {pkg.name} has no active composition lines.")
-    for row in snap:
-        sid = row["service_id"]
-        try:
-            svc = DiagnosticServiceMaster.objects.get(pk=sid)
-        except DiagnosticServiceMaster.DoesNotExist as exc:
-            raise ValidationError(f"Unknown service in package composition: {sid}.") from exc
-        if not svc.is_active or svc.deleted_at is not None:
-            raise ValidationError(f"Service {svc.code} is not active.")
-    return snap
 
 
 def _schedule_diagnostic_routing_if_has_test_lines(*, order: DiagnosticOrder, created_by: Any) -> None:
@@ -210,7 +161,7 @@ class DiagnosticOrderCreationService:
                     idempotent=True,
                 )
 
-            convertible = cls._load_and_validate_convertible_items(consultation)
+            convertible = load_convertible_investigation_items(consultation)
 
             order = cls._create_order_record(
                 consultation=consultation,
@@ -270,54 +221,6 @@ class DiagnosticOrderCreationService:
         if not b.is_active_for_orders:
             raise ValidationError("Lab branch is not accepting orders.")
         return b
-
-    @staticmethod
-    def _load_and_validate_convertible_items(consultation: Consultation) -> list[InvestigationItem]:
-        container = get_or_create_investigations_container(consultation)
-        items = list(
-            InvestigationItem.objects.filter(
-                investigations=container,
-                is_deleted=False,
-            )
-            .exclude(status=InvestigationStatus.CANCELLED)
-            .select_related(
-                "catalog_item",
-                "catalog_item__category",
-                "diagnostic_package",
-                "diagnostic_package__category",
-                "custom_investigation",
-            )
-            .order_by("position", "created_at")
-        )
-
-        for inv in items:
-            if inv.source == InvestigationSource.CUSTOM or inv.is_custom:
-                raise ValidationError(
-                    "Consultation has custom investigations that cannot be converted to a diagnostic order. "
-                    "Remove or replace them before ordering."
-                )
-
-        convertible = [inv for inv in items if inv.source in (InvestigationSource.CATALOG, InvestigationSource.PACKAGE)]
-        if not convertible:
-            raise ValidationError("No active catalog or package investigations to order.")
-
-        for inv in convertible:
-            if inv.source == InvestigationSource.CATALOG:
-                if not inv.catalog_item_id:
-                    raise ValidationError("Catalog investigation is missing catalog_item.")
-                svc = inv.catalog_item
-                if not svc.is_active or svc.deleted_at is not None:
-                    raise ValidationError(f"Service {svc.code} is not active or is discontinued.")
-            elif inv.source == InvestigationSource.PACKAGE:
-                if not inv.diagnostic_package_id:
-                    raise ValidationError("Package investigation is missing diagnostic_package.")
-                if not inv.diagnostic_package.is_active:
-                    raise ValidationError(f"Package {inv.diagnostic_package.name} is not active.")
-                _normalize_package_composition(inv)
-            else:
-                raise ValidationError(f"Unsupported investigation source: {inv.source}.")
-
-        return convertible
 
     @classmethod
     def _create_order_record(
@@ -413,7 +316,7 @@ class DiagnosticOrderCreationService:
             else:
                 pkg = inv.diagnostic_package
                 assert pkg is not None
-                composition = _normalize_package_composition(inv)
+                composition = normalize_package_composition(inv)
                 line_type = OrderLineType.PACKAGE
                 if branch:
                     try:

@@ -35,8 +35,15 @@ def _whatsapp_setting(name: str, default: str = "") -> str:
 
 
 def _use_simulated_provider() -> bool:
+    # @override_settings(WHATSAPP_USE_SIMULATED_PROVIDER=True) must win over .env reload.
+    settings_flag = getattr(settings, "WHATSAPP_USE_SIMULATED_PROVIDER", None)
+    if settings_flag is True:
+        return True
     _reload_whatsapp_env()
-    explicit = (os.getenv("WHATSAPP_USE_SIMULATED_PROVIDER") or "").lower() in (
+    explicit_raw = os.getenv("WHATSAPP_USE_SIMULATED_PROVIDER")
+    if explicit_raw is None and settings_flag is not None:
+        explicit_raw = str(settings_flag)
+    explicit = (explicit_raw or "").lower() in (
         "1",
         "true",
         "yes",
@@ -66,6 +73,95 @@ def template_body_param_keys() -> list[str]:
 
 def template_language_code() -> str:
     return _whatsapp_setting("WHATSAPP_TEMPLATE_LANGUAGE_CODE", "en") or "en"
+
+
+_DEFAULT_RECOMMENDATION_BODY_PARAM_KEYS = (
+    "patient_name",
+    "test_names",
+    "mrp",
+    "quoted_price",
+    "savings",
+)
+
+
+def recommendation_template_body_param_keys() -> list[str]:
+    text = _whatsapp_setting(
+        "WHATSAPP_DIAGNOSTIC_RECOMMENDATION_TEMPLATE_BODY_PARAM_KEYS",
+        ",".join(_DEFAULT_RECOMMENDATION_BODY_PARAM_KEYS),
+    )
+    if not text:
+        return []
+    return [key.strip() for key in text.split(",") if key.strip()]
+
+
+def filter_recommendation_template_components(components: dict[str, str]) -> dict[str, str]:
+    allowed = recommendation_template_body_param_keys()
+    if not allowed:
+        return {}
+    return {key: components.get(key, "") for key in allowed}
+
+
+def recommendation_template_name() -> str:
+    return _whatsapp_setting(
+        "WHATSAPP_DIAGNOSTIC_RECOMMENDATION_TEMPLATE_NAME",
+        "diagnostic_test_recommendation_v3",
+    )
+
+
+_DEFAULT_FLAT_RECOMMENDATION_BODY_PARAM_KEYS = (
+    "patient_name",
+    "test_names",
+    "quoted_price",
+)
+
+
+def recommendation_flat_template_name() -> str:
+    return _whatsapp_setting("WHATSAPP_DIAGNOSTIC_RECOMMENDATION_FLAT_TEMPLATE_NAME")
+
+
+def recommendation_flat_template_body_param_keys() -> list[str]:
+    text = _whatsapp_setting(
+        "WHATSAPP_DIAGNOSTIC_RECOMMENDATION_FLAT_TEMPLATE_BODY_PARAM_KEYS",
+        ",".join(_DEFAULT_FLAT_RECOMMENDATION_BODY_PARAM_KEYS),
+    )
+    if not text:
+        return []
+    return [key.strip() for key in text.split(",") if key.strip()]
+
+
+def filter_recommendation_flat_template_components(components: dict[str, str]) -> dict[str, str]:
+    allowed = recommendation_flat_template_body_param_keys()
+    if not allowed:
+        return {}
+    return {key: components.get(key, "") for key in allowed}
+
+
+def recommendation_prefer_text_when_no_discount() -> bool:
+    return (os.getenv("WHATSAPP_DIAGNOSTIC_RECOMMENDATION_PREFER_TEXT_WHEN_NO_DISCOUNT") or "true").lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
+def diagnostic_booking_flow_id() -> str:
+    return _whatsapp_setting("WHATSAPP_DIAGNOSTIC_BOOKING_FLOW_ID")
+
+
+def recommendation_uses_flow_button() -> bool:
+    """
+    Attach Flow button params only when a real Meta Flow ID is configured.
+
+    Placeholder values (e.g. your_meta_flow_id) must not trigger Flow payloads —
+    diagnostic_test_recommendation_v3 uses a static Quick Reply button until M5.
+    """
+    flow_id = diagnostic_booking_flow_id()
+    if not flow_id:
+        return False
+    if flow_id.lower() in {"your_meta_flow_id", "placeholder", "changeme", "todo", "none"}:
+        return False
+    return flow_id.isdigit()
 
 
 def filter_template_components(components: dict[str, str]) -> dict[str, str]:
@@ -171,6 +267,125 @@ class MetaWhatsAppClient:
             "response": data,
             "rendered_body": rendered_body,
             "components": components,
+        }
+
+    def send_recommendation_template(
+        self,
+        *,
+        to: str,
+        template_name: str,
+        components: dict[str, str],
+        rendered_body: str,
+        flow_action_data: dict[str, str] | None = None,
+        flow_token: str | None = None,
+        flat_template: bool = False,
+    ) -> dict[str, Any]:
+        if self.use_simulated or not self.access_token or not self.phone_number_id:
+            message_id = f"sim-wa-{uuid.uuid4().hex[:12]}"
+            logger.info(
+                "whatsapp_simulated_recommendation_send to=%s template=%s msg_id=%s",
+                to,
+                template_name,
+                message_id,
+            )
+            return {
+                "meta_message_id": message_id,
+                "simulated": True,
+                "rendered_body": rendered_body,
+                "components": components,
+                "flow_action_data": flow_action_data or {},
+            }
+
+        url = f"{self.api_base_url}/{self.phone_number_id}/messages"
+        if flat_template:
+            param_keys = recommendation_flat_template_body_param_keys()
+            filtered = filter_recommendation_flat_template_components(components)
+        else:
+            param_keys = recommendation_template_body_param_keys()
+            filtered = filter_recommendation_template_components(components)
+        body_components = [
+            {
+                "type": "text",
+                "text": sanitize_template_parameter(filtered.get(key) or ""),
+            }
+            for key in param_keys
+        ]
+        template_components: list[dict[str, Any]] = []
+        if body_components:
+            template_components.append(
+                {
+                    "type": "body",
+                    "parameters": body_components,
+                }
+            )
+        # Approved template uses a static Quick Reply / URL "Book Tests" button — do not send
+        # Flow button params unless WHATSAPP_DIAGNOSTIC_BOOKING_FLOW_ID is set (Meta error 132018).
+        if flow_action_data is not None and recommendation_uses_flow_button():
+            template_components.append(
+                {
+                    "type": "button",
+                    "sub_type": "flow",
+                    "index": "0",
+                    "parameters": [
+                        {
+                            "type": "action",
+                            "action": {
+                                "flow_token": flow_token or uuid.uuid4().hex,
+                                "flow_action_data": flow_action_data,
+                            },
+                        }
+                    ],
+                }
+            )
+
+        template_payload: dict[str, Any] = {
+            "name": template_name,
+            "language": {"code": template_language_code()},
+        }
+        if template_components:
+            template_payload["components"] = template_components
+
+        payload = {
+            "messaging_product": "whatsapp",
+            "to": to.lstrip("+"),
+            "type": "template",
+            "template": template_payload,
+        }
+        data = self._post_json(url, payload)
+        messages = data.get("messages", []) if isinstance(data, dict) else []
+        meta_message_id = messages[0].get("id", "") if messages else ""
+        return {
+            "meta_message_id": meta_message_id,
+            "response": data,
+            "rendered_body": rendered_body,
+            "components": components,
+            "flow_action_data": flow_action_data or {},
+        }
+
+    def send_text_message(self, *, to: str, body: str) -> dict[str, Any]:
+        if self.use_simulated or not self.access_token or not self.phone_number_id:
+            message_id = f"sim-wa-{uuid.uuid4().hex[:12]}"
+            logger.info("whatsapp_simulated_text_send to=%s msg_id=%s", to, message_id)
+            return {
+                "meta_message_id": message_id,
+                "simulated": True,
+                "rendered_body": body,
+            }
+
+        url = f"{self.api_base_url}/{self.phone_number_id}/messages"
+        payload = {
+            "messaging_product": "whatsapp",
+            "to": to.lstrip("+"),
+            "type": "text",
+            "text": {"body": body},
+        }
+        data = self._post_json(url, payload)
+        messages = data.get("messages", []) if isinstance(data, dict) else []
+        meta_message_id = messages[0].get("id", "") if messages else ""
+        return {
+            "meta_message_id": meta_message_id,
+            "response": data,
+            "rendered_body": body,
         }
 
     def _post_json(self, url: str, payload: dict) -> dict:

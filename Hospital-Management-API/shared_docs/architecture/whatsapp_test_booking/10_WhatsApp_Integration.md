@@ -24,7 +24,7 @@ Document the **current** WhatsApp integration as implemented. This module is one
 - Prescription / consultation summary delivery (production Meta path)
 - Message builders, Celery, templates, token management
 - Report delivery path (separate, simulated)
-- Out of scope: Milestone 4 booking templates and conversation flow (see gap analysis)
+- Out of scope here: Milestone 4 booking templates and Flow — see [11_WhatsApp_Booking_Flow.md](11_WhatsApp_Booking_Flow.md)
 
 ---
 

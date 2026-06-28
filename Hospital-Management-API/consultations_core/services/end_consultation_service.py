@@ -1,5 +1,6 @@
 import datetime
 import logging
+import re
 import uuid
 
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -723,6 +724,46 @@ def _prepare_investigation_item_for_add_serializer(raw) -> dict | None:
     return d
 
 
+def _catalog_resolution_tokens(display_name: str) -> list[str]:
+    """Build lookup tokens from a UI investigation label (full name, parenthetical, prefix)."""
+    name = display_name.strip()
+    if not name:
+        return []
+    tokens = [name]
+    match = re.match(r"^(.+?)\s*\(([^)]+)\)\s*$", name)
+    if match:
+        tokens.append(match.group(2).strip())
+        tokens.append(match.group(1).strip())
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for token in tokens:
+        key = token.casefold()
+        if token and key not in seen:
+            seen.add(key)
+            ordered.append(token)
+    return ordered
+
+
+def _resolve_active_catalog_item(catalog_item_id, display_name=None):
+    """
+    Resolve an active catalog row by PK, then by display-name tokens when the UI sends a stale UUID.
+    """
+    base = DiagnosticServiceMaster.objects.filter(is_active=True, deleted_at__isnull=True)
+    if catalog_item_id:
+        catalog_item = base.filter(pk=catalog_item_id).first()
+        if catalog_item:
+            return catalog_item
+
+    from diagnostics_engine.services.routing.routing_debug import resolve_catalog_services
+
+    for token in _catalog_resolution_tokens(display_name or ""):
+        try:
+            return resolve_catalog_services([token])[0]
+        except ValueError:
+            continue
+    return None
+
+
 def _persist_investigations(consultation, user, raw_investigations):
     if not isinstance(raw_investigations, list) or not raw_investigations:
         return
@@ -746,13 +787,22 @@ def _persist_investigations(consultation, user, raw_investigations):
 
         try:
             if data["source"] == InvestigationSource.CATALOG:
-                catalog_item = (
-                    DiagnosticServiceMaster.objects.filter(is_active=True, deleted_at__isnull=True)
-                    .filter(pk=data["catalog_item_id"])
-                    .first()
+                adhoc_name = (data.get("name") or "").strip() or None
+                catalog_item = _resolve_active_catalog_item(
+                    data.get("catalog_item_id"),
+                    display_name=adhoc_name,
                 )
+                if catalog_item and str(catalog_item.pk) != str(data.get("catalog_item_id") or ""):
+                    logger.info(
+                        "EndConsultation: resolved stale catalog_item_id %s to %s (%s) "
+                        "via display name %r consultation=%s",
+                        data["catalog_item_id"],
+                        catalog_item.pk,
+                        catalog_item.code,
+                        adhoc_name,
+                        consultation.id,
+                    )
                 if not catalog_item:
-                    adhoc_name = (data.get("name") or "").strip() or None
                     if adhoc_name:
                         logger.warning(
                             "EndConsultation: catalog_item_id %s not found or inactive; "

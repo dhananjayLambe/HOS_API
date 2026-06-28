@@ -62,6 +62,7 @@ urlpatterns = [
     path('api/medicines/', include('medicines.api.urls')),
     path('api/diagnostics/', include('diagnostics_engine.api.urls')),
     path('api/v1/doctors/', include('doctor.api.dashboard_urls')),
+    path('api/v1/marketplace/diagnostics/', include('diagnostics_engine.api.marketplace_urls')),
     path('api/v1/diagnostics/', include('diagnostics_engine.api.report_urls')),
     path('api/notifications/', include('notifications.api.urls')),
     path('api/v1/notifications/', include('notifications.api.delivery_urls')),

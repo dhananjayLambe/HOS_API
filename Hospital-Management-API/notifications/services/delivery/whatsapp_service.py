@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 import uuid
 
 from django.conf import settings
@@ -306,6 +307,326 @@ class WhatsAppService:
         )
         return message
 
+    def prepare_recommendation_delivery(
+        self,
+        *,
+        consultation,
+        recommendation_result,
+        recommendation_id,
+        recommendation_metadata: dict,
+        prescription=None,
+        prescription_message_id: str | None = None,
+        initiated_by=None,
+    ) -> WhatsAppMessage:
+        """Queue diagnostic recommendation or unavailability WhatsApp."""
+        consultation = self._load_consultation(consultation)
+        if prescription is not None:
+            prescription = self._load_prescription(prescription)
+
+        idempotency_key = f"diagnostic_recommendation_{consultation.id}"
+        existing = (
+            WhatsAppMessage.objects.filter(idempotency_key=idempotency_key, is_deleted=False)
+            .order_by("-created_at")
+            .first()
+        )
+        if existing:
+            if existing.status in _SUCCESS_STATUSES and (existing.meta_message_id or "").strip():
+                logger.info(
+                    "recommendation.duplicate_skipped consultation_id=%s message_id=%s",
+                    consultation.id,
+                    existing.id,
+                )
+                return existing
+            if existing.status in {
+                WhatsAppMessageStatus.QUEUED,
+                WhatsAppMessageStatus.FAILED,
+            } or (
+                existing.status in _SUCCESS_STATUSES
+                and not (existing.meta_message_id or "").strip()
+            ):
+                return existing
+
+        encounter = consultation.encounter
+        profile = encounter.patient_profile
+        raw_phone = resolve_patient_mobile(encounter=encounter)
+        if not raw_phone:
+            return self._create_recommendation_skipped_message(
+                consultation=consultation,
+                prescription=prescription,
+                reason="No mobile number",
+                initiated_by=initiated_by,
+                idempotency_key=idempotency_key,
+            )
+
+        normalized_phone = try_normalize_delivery_phone(raw_phone)
+        if not normalized_phone:
+            return self._create_recommendation_skipped_message(
+                consultation=consultation,
+                prescription=prescription,
+                reason="Invalid mobile number",
+                initiated_by=initiated_by,
+                recipient_name=self._recipient_name(profile, encounter.patient_account.user),
+                idempotency_key=idempotency_key,
+            )
+
+        patient_name = self._recipient_name(profile, encounter.patient_account.user)
+        variant = "available" if recommendation_result.available else "unavailable"
+        from notifications.services.delivery.whatsapp_template_renderer import (
+            DIAGNOSTIC_RECOMMENDATION_UNAVAILABLE_BODY,
+            build_recommendation_template_components,
+            render_recommendation_whatsapp_body,
+            resolve_recommendation_pricing_display_mode,
+        )
+
+        payload: dict = {
+            "variant": variant,
+            "consultation_id": str(consultation.id),
+            "recommendation_id": str(recommendation_id),
+            "recommendation_metadata": recommendation_metadata,
+            "failure_reason": recommendation_result.failure_reason,
+            "collection_mode": recommendation_result.collection_mode,
+            "laboratory_id": str(recommendation_result.recommended_lab.pk)
+            if recommendation_result.recommended_lab
+            else None,
+            "branch_id": str(recommendation_result.recommended_branch.pk)
+            if recommendation_result.recommended_branch
+            else None,
+            "quoted_price": str(recommendation_result.quoted_price)
+            if recommendation_result.quoted_price is not None
+            else None,
+            "prescription_message_id": prescription_message_id,
+        }
+        if variant == "available":
+            pricing_display_mode = resolve_recommendation_pricing_display_mode(recommendation_result)
+            payload["pricing_display_mode"] = pricing_display_mode
+            payload["patient_name"] = patient_name
+            if pricing_display_mode == "flat":
+                from notifications.services.delivery.whatsapp_template_renderer import (
+                    build_recommendation_flat_template_components,
+                    render_recommendation_flat_price_body,
+                )
+
+                payload["template_components"] = build_recommendation_flat_template_components(
+                    patient_name=patient_name,
+                    result=recommendation_result,
+                )
+                payload["rendered_body"] = render_recommendation_flat_price_body(
+                    patient_name=patient_name,
+                    result=recommendation_result,
+                )
+            else:
+                payload["template_components"] = build_recommendation_template_components(
+                    patient_name=patient_name,
+                    result=recommendation_result,
+                )
+                payload["rendered_body"] = render_recommendation_whatsapp_body(
+                    patient_name=patient_name,
+                    result=recommendation_result,
+                )
+            payload["flow_action_data"] = {
+                "recommendation_id": str(recommendation_id),
+                "consultation_id": str(consultation.id),
+                "collection_mode": recommendation_result.collection_mode or "",
+            }
+        else:
+            payload["rendered_body"] = DIAGNOSTIC_RECOMMENDATION_UNAVAILABLE_BODY
+
+        from notifications.services.delivery.meta_client import recommendation_template_name
+
+        pricing_mode = (payload.get("pricing_display_mode") or "discount").strip()
+        if variant == "available" and pricing_mode == "flat":
+            from notifications.services.delivery.meta_client import (
+                recommendation_flat_template_name,
+                recommendation_prefer_text_when_no_discount,
+            )
+
+            flat_template = recommendation_flat_template_name()
+            if flat_template:
+                template_name = flat_template
+            elif recommendation_prefer_text_when_no_discount():
+                template_name = ""
+            else:
+                template_name = recommendation_template_name()
+        else:
+            template_name = recommendation_template_name() if variant == "available" else ""
+
+        message = WhatsAppMessage(
+            provider=WhatsAppProvider.META,
+            conversation_category=WhatsAppConversationCategory.MARKETING,
+            message_type=WhatsAppMessageType.TEST_BOOKING,
+            status=WhatsAppMessageStatus.QUEUED,
+            patient=profile,
+            clinic=encounter.clinic,
+            doctor=encounter.doctor,
+            encounter=encounter,
+            prescription=prescription,
+            recipient_mobile_number=normalized_phone,
+            recipient_name=patient_name,
+            idempotency_key=idempotency_key,
+            template_name=template_name,
+            request_payload=payload,
+            created_by=initiated_by,
+        )
+        message.save()
+        safe_emit(
+            emit_prescription_whatsapp_audit_event,
+            action="DIAGNOSTIC_RECOMMENDATION_WHATSAPP_QUEUED",
+            prescription=prescription,
+            message=message,
+            metadata={"variant": variant, "consultation_id": str(consultation.id)},
+        )
+        return message
+
+    def send_recommendation_message(self, *, message_id) -> WhatsAppMessage:
+        message = WhatsAppMessage.objects.select_related(
+            "prescription",
+            "encounter",
+        ).get(pk=message_id, is_deleted=False)
+        if message.status != WhatsAppMessageStatus.QUEUED:
+            logger.info(
+                "recommendation_send_skip message_id=%s status=%s",
+                message_id,
+                message.status,
+            )
+            return message
+
+        payload = message.request_payload or {}
+        to = self._normalize_recipient_snapshot(message.recipient_mobile_number)
+        if not to:
+            return self._mark_recommendation_failed(
+                message,
+                code="MISSING_PHONE",
+                reason="Recipient phone snapshot missing",
+            )
+
+        variant = (payload.get("variant") or "").strip()
+        client = MetaWhatsAppClient()
+        started = time.monotonic()
+
+        try:
+            if variant == "available":
+                from notifications.services.delivery.meta_client import (
+                    recommendation_flat_template_name,
+                    recommendation_prefer_text_when_no_discount,
+                    recommendation_template_name,
+                )
+
+                pricing_mode = (payload.get("pricing_display_mode") or "discount").strip()
+                flat_template = recommendation_flat_template_name()
+                use_flat_text = (
+                    pricing_mode == "flat"
+                    and not flat_template
+                    and recommendation_prefer_text_when_no_discount()
+                )
+                template_name = message.template_name or recommendation_template_name()
+                if pricing_mode == "flat" and flat_template:
+                    template_name = flat_template
+                if not template_name and not use_flat_text:
+                    return self._mark_recommendation_failed(
+                        message,
+                        code="MISSING_TEMPLATE",
+                        reason="WHATSAPP_DIAGNOSTIC_RECOMMENDATION_TEMPLATE_NAME is not configured.",
+                    )
+                rendered_body = (payload.get("rendered_body") or "").strip()
+                components = payload.get("template_components") or {}
+                from notifications.services.delivery.meta_client import recommendation_uses_flow_button
+
+                flow_action_data = payload.get("flow_action_data") or {}
+                if use_flat_text:
+                    result = client.send_text_message(to=to, body=rendered_body)
+                    message.template_name = ""
+                else:
+                    result = client.send_recommendation_template(
+                        to=to,
+                        template_name=template_name,
+                        components=components,
+                        rendered_body=rendered_body,
+                        flow_action_data=flow_action_data if recommendation_uses_flow_button() else None,
+                        flow_token=str(payload.get("recommendation_id") or ""),
+                        flat_template=pricing_mode == "flat" and bool(flat_template),
+                    )
+                    message.template_name = template_name
+            else:
+                from notifications.services.delivery.whatsapp_template_renderer import (
+                    DIAGNOSTIC_RECOMMENDATION_UNAVAILABLE_BODY,
+                )
+
+                body = (payload.get("rendered_body") or DIAGNOSTIC_RECOMMENDATION_UNAVAILABLE_BODY).strip()
+                result = client.send_text_message(to=to, body=body)
+                message.template_name = ""
+        except MetaWhatsAppError as exc:
+            return self._mark_recommendation_failed(
+                message,
+                code=exc.code,
+                reason=exc.message,
+                response=exc.payload,
+            )
+        except Exception as exc:
+            logger.exception("recommendation_send_unexpected message_id=%s", message_id)
+            return self._mark_recommendation_failed(
+                message,
+                code="SEND_ERROR",
+                reason=str(exc),
+            )
+
+        meta_message_id = (result.get("meta_message_id") or "").strip()
+        if not result.get("simulated") and not meta_message_id:
+            return self._mark_recommendation_failed(
+                message,
+                code="SEND_ERROR",
+                reason="Meta accepted the request but returned no message id.",
+                response=result if isinstance(result, dict) else None,
+            )
+
+        message.meta_message_id = meta_message_id
+        message.failure_reason = ""
+        message.error_code = ""
+        message.response_payload = result
+        message.request_payload = {
+            **payload,
+            "outbound": {
+                "to": to,
+                "variant": variant,
+                "template_name": message.template_name,
+                "rendered_body": result.get("rendered_body") or payload.get("rendered_body"),
+            },
+        }
+        message.mark_status(WhatsAppMessageStatus.SENT)
+        message.save(
+            update_fields=[
+                "meta_message_id",
+                "failure_reason",
+                "error_code",
+                "response_payload",
+                "request_payload",
+                "template_name",
+                "updated_at",
+            ]
+        )
+        execution_time_ms = int((time.monotonic() - started) * 1000)
+        logger.info(
+            "recommendation.sent consultation_id=%s recommendation_available=%s laboratory_id=%s "
+            "branch_id=%s quoted_price=%s collection_mode=%s template_name=%s "
+            "whatsapp_message_id=%s execution_time=%s",
+            payload.get("consultation_id"),
+            variant == "available",
+            payload.get("laboratory_id"),
+            payload.get("branch_id"),
+            payload.get("quoted_price"),
+            payload.get("collection_mode"),
+            message.template_name,
+            message.id,
+            execution_time_ms,
+        )
+        safe_emit(
+            emit_prescription_whatsapp_audit_event,
+            action="DIAGNOSTIC_RECOMMENDATION_WHATSAPP_SENT",
+            prescription=message.prescription,
+            message=message,
+            metadata={"variant": variant},
+        )
+        return message
+
     @transaction.atomic
     def retry_delivery(self, *, message_id, initiated_by=None) -> WhatsAppMessage:
         original = WhatsAppMessage.objects.select_related(
@@ -506,6 +827,83 @@ class WhatsAppService:
             message=message,
             user=initiated_by,
             metadata={"reason": reason},
+        )
+        return message
+
+    def _create_recommendation_skipped_message(
+        self,
+        *,
+        consultation,
+        prescription=None,
+        reason: str,
+        initiated_by=None,
+        recipient_name: str = "",
+        idempotency_key: str,
+    ) -> WhatsAppMessage:
+        encounter = consultation.encounter
+        profile = encounter.patient_profile
+        message = WhatsAppMessage(
+            provider=WhatsAppProvider.META,
+            conversation_category=WhatsAppConversationCategory.MARKETING,
+            message_type=WhatsAppMessageType.TEST_BOOKING,
+            status=WhatsAppMessageStatus.SKIPPED,
+            patient=profile,
+            clinic=encounter.clinic,
+            doctor=encounter.doctor,
+            encounter=encounter,
+            prescription=prescription,
+            recipient_mobile_number="",
+            recipient_name=recipient_name or self._recipient_name(profile, encounter.patient_account.user),
+            failure_reason=reason,
+            idempotency_key=idempotency_key,
+            created_by=initiated_by,
+        )
+        message.save()
+        return message
+
+    def _mark_recommendation_failed(
+        self,
+        message: WhatsAppMessage,
+        *,
+        code: str,
+        reason: str,
+        response: dict | None = None,
+    ) -> WhatsAppMessage:
+        message.status = WhatsAppMessageStatus.FAILED
+        message.error_code = str(code)[:100]
+        message.failure_reason = reason
+        if response is not None:
+            message.response_payload = response
+        message.save(
+            update_fields=[
+                "status",
+                "error_code",
+                "failure_reason",
+                "response_payload",
+                "updated_at",
+            ]
+        )
+        payload = message.request_payload or {}
+        logger.info(
+            "recommendation.failed consultation_id=%s recommendation_available=%s laboratory_id=%s "
+            "branch_id=%s quoted_price=%s collection_mode=%s template_name=%s "
+            "whatsapp_message_id=%s failure_reason=%s",
+            payload.get("consultation_id"),
+            (payload.get("variant") or "") == "available",
+            payload.get("laboratory_id"),
+            payload.get("branch_id"),
+            payload.get("quoted_price"),
+            payload.get("collection_mode"),
+            message.template_name,
+            message.id,
+            reason,
+        )
+        safe_emit(
+            emit_prescription_whatsapp_audit_event,
+            action="DIAGNOSTIC_RECOMMENDATION_WHATSAPP_FAILED",
+            prescription=message.prescription,
+            message=message,
+            metadata={"error_code": code, "reason": reason},
         )
         return message
 

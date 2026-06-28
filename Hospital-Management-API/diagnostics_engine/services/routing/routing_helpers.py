@@ -193,22 +193,24 @@ def resolve_patient_legacy_row(patient_profile: Any) -> Any:
     return PatientRow.objects.filter(user_id=user.pk).first()
 
 
-def resolve_routing_location(order: DiagnosticOrder) -> ResolvedRoutingLocation:
+def resolve_routing_location_for_context(
+    *,
+    encounter: Any,
+    patient_profile: Any,
+    collection_mode: str,
+) -> ResolvedRoutingLocation:
     """
-    India-focused fallback: patient → clinic.
+    India-focused fallback: patient → clinic (same rules as resolve_routing_location).
 
-    Home collection: pincode from patient address text, then clinic pincode.
-    Lab visit: patient pincode, clinic pincode, clinic coordinates, city-level.
+    Does not require a DiagnosticOrder.
     """
     from diagnostics_engine.choices.routing import (
         RecommendationConfidence,
         RoutingLocationSource,
     )
 
-    encounter = order.encounter
     clinic = encounter.clinic if encounter else None
-    profile = order.patient_profile
-    patient_row = resolve_patient_legacy_row(profile)
+    patient_row = resolve_patient_legacy_row(patient_profile)
 
     clinic_addr = None
     if clinic is not None:
@@ -228,7 +230,7 @@ def resolve_routing_location(order: DiagnosticOrder) -> ResolvedRoutingLocation:
     )
     patient_lat = patient_lon = None
 
-    mode = order.sample_collection_mode or "lab"
+    mode = collection_mode or "lab"
 
     if mode == "home":
         if patient_pin:
@@ -258,7 +260,6 @@ def resolve_routing_location(order: DiagnosticOrder) -> ResolvedRoutingLocation:
             confidence=RecommendationConfidence.LOW,
         )
 
-    # lab visit
     if patient_pin:
         return ResolvedRoutingLocation(
             source=RoutingLocationSource.PATIENT_PINCODE,
@@ -293,6 +294,23 @@ def resolve_routing_location(order: DiagnosticOrder) -> ResolvedRoutingLocation:
         longitude=None,
         city=clinic_city,
         confidence=RecommendationConfidence.LOW,
+    )
+
+
+def resolve_routing_location(order: DiagnosticOrder) -> ResolvedRoutingLocation:
+    """
+    India-focused fallback: patient → clinic.
+
+    Home collection: pincode from patient address text, then clinic pincode.
+    Lab visit: patient pincode, clinic pincode, clinic coordinates, city-level.
+    """
+    encounter = order.encounter
+    profile = order.patient_profile
+    mode = order.sample_collection_mode or "lab"
+    return resolve_routing_location_for_context(
+        encounter=encounter,
+        patient_profile=profile,
+        collection_mode=mode,
     )
 
 

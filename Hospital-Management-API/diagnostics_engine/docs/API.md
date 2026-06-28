@@ -25,6 +25,14 @@ Authentication: JWT unless noted. See [PERMISSIONS.md](PERMISSIONS.md).
 | GET | `/api/diagnostics/search/` | Investigation search | — |
 | GET | `/api/diagnostics/investigations/suggestions/` | AI/rule suggestions | `ENABLE_SUGGESTIONS` |
 
+## Marketplace (v1 platform)
+
+| Method | Path | Purpose | Side effects |
+|---|---|---|---|
+| POST | `/api/v1/marketplace/diagnostics/recommendations/` | Pre-booking lab recommendation | Audit row only |
+
+Nested envelope: `metadata`, `recommendation`, `tests`, `packages`, `error`. See `shared_docs/architecture/whatsapp_test_booking/milestone_3/M3_API_Contract.md`.
+
 ## Orders
 
 | Method | Path | Purpose | Side effects |

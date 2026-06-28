@@ -36,6 +36,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Diagnostics commerce: allow sum-of-service fallback when BranchPackagePricing missing (default off).
 DIAGNOSTICS_ALLOW_DERIVED_PACKAGE_PRICING = False
+MARKETPLACE_RECOMMENDATION_TTL_SECONDS = int(os.getenv("MARKETPLACE_RECOMMENDATION_TTL_SECONDS", "900"))
 
 # When routing finds no eligible lab, persist up to this many ineligible-branch snapshots
 # (is_eligible=False) for support / explainability (full evaluation can be huge).
@@ -156,6 +157,28 @@ WHATSAPP_USE_SIMULATED_PROVIDER = os.getenv("WHATSAPP_USE_SIMULATED_PROVIDER", "
     "yes",
     "on",
 ) or not WHATSAPP_ACCESS_TOKEN
+# Diagnostic test recommendation (M4.3/4.4) — after prescription WhatsApp succeeds.
+WHATSAPP_DIAGNOSTIC_RECOMMENDATION_ENABLED = os.getenv(
+    "WHATSAPP_DIAGNOSTIC_RECOMMENDATION_ENABLED",
+    "true",
+).lower() in ("1", "true", "yes", "on")
+WHATSAPP_DIAGNOSTIC_RECOMMENDATION_TEMPLATE_NAME = os.getenv(
+    "WHATSAPP_DIAGNOSTIC_RECOMMENDATION_TEMPLATE_NAME",
+    "diagnostic_test_recommendation_v3",
+).strip()
+WHATSAPP_DIAGNOSTIC_RECOMMENDATION_TEMPLATE_BODY_PARAM_KEYS = os.getenv(
+    "WHATSAPP_DIAGNOSTIC_RECOMMENDATION_TEMPLATE_BODY_PARAM_KEYS",
+    "patient_name,test_names,mrp,quoted_price,savings",
+).strip()
+WHATSAPP_DIAGNOSTIC_RECOMMENDATION_FLAT_TEMPLATE_NAME = os.getenv(
+    "WHATSAPP_DIAGNOSTIC_RECOMMENDATION_FLAT_TEMPLATE_NAME",
+    "",
+).strip()
+WHATSAPP_DIAGNOSTIC_RECOMMENDATION_FLAT_TEMPLATE_BODY_PARAM_KEYS = os.getenv(
+    "WHATSAPP_DIAGNOSTIC_RECOMMENDATION_FLAT_TEMPLATE_BODY_PARAM_KEYS",
+    "patient_name,test_names,quoted_price",
+).strip()
+WHATSAPP_DIAGNOSTIC_BOOKING_FLOW_ID = os.getenv("WHATSAPP_DIAGNOSTIC_BOOKING_FLOW_ID", "").strip()
 # India (+91): prepended to 10-digit local numbers for Meta Cloud API (E.164 without +).
 WHATSAPP_DEFAULT_COUNTRY_CODE = os.getenv("WHATSAPP_DEFAULT_COUNTRY_CODE", "91").strip() or "91"
 

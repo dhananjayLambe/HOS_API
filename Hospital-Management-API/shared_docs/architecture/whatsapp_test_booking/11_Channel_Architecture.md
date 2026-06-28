@@ -178,7 +178,7 @@ New (M4):   recommendation DTO → new template → WhatsAppService → Meta
 
 Reuse: `phone_utils`, `whatsapp_template_renderer`, Celery task pattern, `WhatsAppMessage` audit.
 
-Detail: [10_WhatsApp_Integration.md](10_WhatsApp_Integration.md)
+Detail: [10_WhatsApp_Integration.md](10_WhatsApp_Integration.md) (prescription pipeline) · [11_WhatsApp_Booking_Flow.md](11_WhatsApp_Booking_Flow.md) (complete booking journey — M4)
 
 ---
 
