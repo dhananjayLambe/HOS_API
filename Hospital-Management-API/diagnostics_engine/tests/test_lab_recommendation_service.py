@@ -268,8 +268,11 @@ class LabRecommendationServiceTests(TestCase):
         self.assertIsNotNone(result.routing_estimated_price)
         self.assertIsNotNone(result.quoted_price)
         self.assertIsNotNone(result.mrp_total)
-        self.assertEqual(result.mrp_total, result.quoted_price)
-        self.assertEqual(result.savings, Decimal("0"))
+        self.assertIsNotNone(result.savings)
+        self.assertGreater(result.mrp_total, result.quoted_price)
+        self.assertEqual(result.savings, result.mrp_total - result.quoted_price)
+        expected_mrp = (result.quoted_price * Decimal("1.15")).quantize(Decimal("0.01"))
+        self.assertEqual(result.mrp_total, expected_mrp)
         self.assertGreater(len(result.ranking_labels), 0)
 
     def test_no_eligible_lab_when_no_pricing(self):

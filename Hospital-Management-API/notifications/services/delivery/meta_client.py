@@ -151,11 +151,18 @@ def diagnostic_booking_flow_id() -> str:
 
 def recommendation_uses_flow_button() -> bool:
     """
-    Attach Flow button params only when a real Meta Flow ID is configured.
+    Attach Flow button params only when explicitly enabled for M5+ Flow templates.
 
-    Placeholder values (e.g. your_meta_flow_id) must not trigger Flow payloads —
-    diagnostic_test_recommendation_v3 uses a static Quick Reply button until M5.
+    diagnostic_test_recommendation_v3 uses a static Quick Reply button — sending Flow
+    params with that template causes Meta error 132018 (Button must be QuickReply).
+    WHATSAPP_DIAGNOSTIC_BOOKING_FLOW_ID may be set early for M5; keep flow button off
+    until WHATSAPP_DIAGNOSTIC_RECOMMENDATION_USE_FLOW_BUTTON=true and a Flow template is live.
     """
+    enabled = (os.getenv("WHATSAPP_DIAGNOSTIC_RECOMMENDATION_USE_FLOW_BUTTON") or "").lower()
+    if enabled not in {"1", "true", "yes", "on"}:
+        settings_flag = getattr(settings, "WHATSAPP_DIAGNOSTIC_RECOMMENDATION_USE_FLOW_BUTTON", False)
+        if not settings_flag:
+            return False
     flow_id = diagnostic_booking_flow_id()
     if not flow_id:
         return False

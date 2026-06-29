@@ -141,3 +141,37 @@ class MetaRecommendationSendTests(TestCase):
         from notifications.services.delivery.meta_client import recommendation_uses_flow_button
 
         self.assertFalse(recommendation_uses_flow_button())
+
+    @override_settings(
+        WHATSAPP_DIAGNOSTIC_BOOKING_FLOW_ID="4044933628970837",
+        WHATSAPP_DIAGNOSTIC_RECOMMENDATION_USE_FLOW_BUTTON=False,
+        DEBUG=False,
+    )
+    @patch.dict(
+        os.environ,
+        {
+            "WHATSAPP_DIAGNOSTIC_BOOKING_FLOW_ID": "4044933628970837",
+            "WHATSAPP_DIAGNOSTIC_RECOMMENDATION_USE_FLOW_BUTTON": "false",
+        },
+        clear=False,
+    )
+    @patch("notifications.services.delivery.meta_client.MetaWhatsAppClient._post_json")
+    def test_recommendation_send_omits_flow_button_until_m5_opt_in(self, mock_post):
+        mock_post.return_value = {"messages": [{"id": "wamid.test"}]}
+        from notifications.services.delivery.meta_client import (
+            MetaWhatsAppClient,
+            recommendation_uses_flow_button,
+        )
+
+        self.assertFalse(recommendation_uses_flow_button())
+        client = MetaWhatsAppClient()
+        client.send_recommendation_template(
+            to="919876543210",
+            template_name="diagnostic_test_recommendation_v3",
+            components={"patient_name": "Ada", "test_names": "HbA1c", "mrp": "920", "quoted_price": "800", "savings": "120"},
+            rendered_body="body",
+            flow_action_data={"consultation_id": "abc"},
+        )
+        components = mock_post.call_args[0][1]["template"]["components"]
+        self.assertEqual(len(components), 1)
+        self.assertEqual(components[0]["type"], "body")

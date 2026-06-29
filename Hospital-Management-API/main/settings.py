@@ -37,6 +37,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # Diagnostics commerce: allow sum-of-service fallback when BranchPackagePricing missing (default off).
 DIAGNOSTICS_ALLOW_DERIVED_PACKAGE_PRICING = False
 MARKETPLACE_RECOMMENDATION_TTL_SECONDS = int(os.getenv("MARKETPLACE_RECOMMENDATION_TTL_SECONDS", "900"))
+MARKETPLACE_DISPLAY_MRP_MARKUP_PERCENT = int(os.getenv("MARKETPLACE_DISPLAY_MRP_MARKUP_PERCENT", "15"))
 
 # When routing finds no eligible lab, persist up to this many ineligible-branch snapshots
 # (is_eligible=False) for support / explainability (full evaluation can be huge).
@@ -179,6 +180,11 @@ WHATSAPP_DIAGNOSTIC_RECOMMENDATION_FLAT_TEMPLATE_BODY_PARAM_KEYS = os.getenv(
     "patient_name,test_names,quoted_price",
 ).strip()
 WHATSAPP_DIAGNOSTIC_BOOKING_FLOW_ID = os.getenv("WHATSAPP_DIAGNOSTIC_BOOKING_FLOW_ID", "").strip()
+# M5 only: set true when recommendation template button is Meta Flow (not Quick Reply v3).
+WHATSAPP_DIAGNOSTIC_RECOMMENDATION_USE_FLOW_BUTTON = os.getenv(
+    "WHATSAPP_DIAGNOSTIC_RECOMMENDATION_USE_FLOW_BUTTON",
+    "false",
+).lower() in ("1", "true", "yes", "on")
 # India (+91): prepended to 10-digit local numbers for Meta Cloud API (E.164 without +).
 WHATSAPP_DEFAULT_COUNTRY_CODE = os.getenv("WHATSAPP_DEFAULT_COUNTRY_CODE", "91").strip() or "91"
 

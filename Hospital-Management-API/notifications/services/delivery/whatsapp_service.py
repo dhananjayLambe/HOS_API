@@ -337,14 +337,25 @@ class WhatsAppService:
                     existing.id,
                 )
                 return existing
-            if existing.status in {
-                WhatsAppMessageStatus.QUEUED,
-                WhatsAppMessageStatus.FAILED,
-            } or (
-                existing.status in _SUCCESS_STATUSES
-                and not (existing.meta_message_id or "").strip()
-            ):
+            if existing.status == WhatsAppMessageStatus.QUEUED:
                 return existing
+
+        retry_message = (
+            existing
+            if existing
+            and existing.status
+            in {
+                WhatsAppMessageStatus.FAILED,
+                WhatsAppMessageStatus.SKIPPED,
+            }
+            else None
+        )
+        if retry_message and existing.status == WhatsAppMessageStatus.FAILED:
+            logger.info(
+                "recommendation.retry_queue consultation_id=%s message_id=%s",
+                consultation.id,
+                existing.id,
+            )
 
         encounter = consultation.encounter
         profile = encounter.patient_profile
@@ -449,6 +460,39 @@ class WhatsAppService:
                 template_name = recommendation_template_name()
         else:
             template_name = recommendation_template_name() if variant == "available" else ""
+
+        if retry_message is not None:
+            retry_message.status = WhatsAppMessageStatus.QUEUED
+            retry_message.failure_reason = ""
+            retry_message.error_code = ""
+            retry_message.meta_message_id = ""
+            retry_message.template_name = template_name
+            retry_message.request_payload = payload
+            retry_message.recipient_mobile_number = normalized_phone
+            retry_message.recipient_name = patient_name
+            retry_message.prescription = prescription
+            retry_message.save(
+                update_fields=[
+                    "status",
+                    "failure_reason",
+                    "error_code",
+                    "meta_message_id",
+                    "template_name",
+                    "request_payload",
+                    "recipient_mobile_number",
+                    "recipient_name",
+                    "prescription",
+                    "updated_at",
+                ]
+            )
+            safe_emit(
+                emit_prescription_whatsapp_audit_event,
+                action="DIAGNOSTIC_RECOMMENDATION_WHATSAPP_QUEUED",
+                prescription=prescription,
+                message=retry_message,
+                metadata={"variant": variant, "consultation_id": str(consultation.id), "retry": True},
+            )
+            return retry_message
 
         message = WhatsAppMessage(
             provider=WhatsAppProvider.META,

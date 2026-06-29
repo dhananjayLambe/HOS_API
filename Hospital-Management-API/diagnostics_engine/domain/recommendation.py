@@ -10,6 +10,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 
@@ -165,6 +166,25 @@ def _location_is_missing(location: ResolvedRoutingLocation) -> bool:
     return not location.pincode and not location.city and location.latitude is None
 
 
+def _marketplace_mrp_markup_factor() -> Decimal:
+    """Display MRP markup over DoctorPro (selling) price — default 15%."""
+    pct = Decimal(str(getattr(settings, "MARKETPLACE_DISPLAY_MRP_MARKUP_PERCENT", 15)))
+    return Decimal("1") + (pct / Decimal("100"))
+
+
+def _line_display_mrp(*, selling_price: Decimal, catalog_mrp: Decimal | None = None) -> Decimal:
+    """
+    Patient-facing MRP for marketplace / WhatsApp.
+
+    DoctorPro Price = selling_price. When branch catalog has a higher package MRP, use it;
+    otherwise MRP = selling_price + markup (default 15%).
+    """
+    computed = (selling_price * _marketplace_mrp_markup_factor()).quantize(Decimal("0.01"))
+    if catalog_mrp is not None and catalog_mrp > selling_price:
+        return catalog_mrp.quantize(Decimal("0.01"))
+    return computed
+
+
 def _quote_investigations_at_branch(
     investigations: list,
     branch: LabBranch,
@@ -176,12 +196,17 @@ def _quote_investigations_at_branch(
     for inv in investigations:
         if inv.source == InvestigationSource.CATALOG:
             quote = PricingQuoteService.quote_service_line(branch, inv.catalog_item)
-            total += quote["selling_price"]
-            mrp_total += quote["selling_price"]
+            selling = quote["selling_price"]
+            total += selling
+            mrp_total += _line_display_mrp(selling_price=selling)
         elif inv.source == InvestigationSource.PACKAGE:
             quote = PricingQuoteService.quote_package_line(branch, inv.diagnostic_package)
-            total += quote["selling_price"]
-            mrp_total += quote["mrp"]
+            selling = quote["selling_price"]
+            total += selling
+            mrp_total += _line_display_mrp(
+                selling_price=selling,
+                catalog_mrp=quote.get("mrp"),
+            )
             if quote.get("branch_package_pricing_id"):
                 has_package_sku = True
             if quote.get("is_price_derived"):
