@@ -22,6 +22,11 @@ Related Documents
 * 07_Support_Trace_Index.md
 * 08_CloudWatch_Integration.md
 * 09_Monitoring_and_Alerts.md
+* 11_Exception_Framework.md
+* 12_Output_Handler_Framework.md
+* 13_Logging_Platform_Certification.md
+* 14_Correlation_ID_Framework.md
+* 15_Logger_Context_Integration.md
 
 ⸻
 
@@ -74,6 +79,9 @@ High-Level Implementation Architecture
             │                  │
             └──────────┬───────┘
                        │
+            Correlation Framework
+         (ID → Context → Middleware)
+                       │
                Shared Logger Framework
                        │
          ┌─────────────┼─────────────┐
@@ -122,20 +130,24 @@ Phase 2 — Correlation Framework
 
 Objective
 
-Trace every workflow.
+Trace every workflow end-to-end with automatic Correlation ID propagation.
 
-Tasks
+Milestones
 
-* Generate Correlation ID middleware
-* Generate Request ID
-* Store request context
-* Propagate IDs across services
-* Propagate IDs to Celery tasks
-* Include IDs in every log
+| Milestone | Scope | Status |
+|-----------|-------|--------|
+| **2.1** Correlation ID Foundation | `correlation.py` — generate, validate, parse, serialize | Complete |
+| **2.2** Request Context Framework | `context.py` — ContextVar lifecycle, `LogContext` wiring | Complete |
+| **2.3** Django Correlation Middleware | `middleware.py` — thin lifecycle orchestrator (delegates to M2.1/M2.2) | Complete |
+| **2.4** Logger Integration | `context_enricher.py` — auto-inject context via ContextEnricher | Complete |
+| **2.5** Celery Propagation | `celery_context.py` + `context_serializer.py` — signal-based restore/propagate | Complete |
+| **2.6** End-to-End Certification | Integration tests, golden traces, CloudWatch validation | Complete |
 
 Deliverable
 
-Complete end-to-end request tracing.
+Complete end-to-end request tracing with zero manual Correlation ID handling in application code.
+
+See [14_Correlation_ID_Framework.md](14_Correlation_ID_Framework.md), [15_Logger_Context_Integration.md](15_Logger_Context_Integration.md), [16_Celery_Context_Propagation.md](16_Celery_Context_Propagation.md), and [17_End_to_End_Correlation_Validation.md](17_End_to_End_Correlation_Validation.md).
 
 ⸻
 

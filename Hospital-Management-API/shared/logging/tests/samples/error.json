@@ -1,0 +1,1 @@
+{"schema_version":1,"timestamp":"2026-07-01T12:00:00.123456Z","level":"ERROR","module":"api","action":"api.failed","status":"FAILED","message":"API request failed","event_code":"DP1001","metadata":{}}

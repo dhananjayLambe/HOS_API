@@ -1,0 +1,1 @@
+{"schema_version":1,"timestamp":"2026-07-01T12:00:00.123456Z","level":"INFO","module":null,"action":"booking.submitted","status":"SUCCESS","message":"booking.submitted completed in 120.5ms","event_code":null,"metadata":{"event_type":"performance"},"duration_ms":120.5}

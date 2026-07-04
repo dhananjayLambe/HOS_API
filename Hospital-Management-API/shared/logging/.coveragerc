@@ -1,0 +1,16 @@
+[run]
+source = shared/logging
+omit =
+    */tests/*
+    */__pycache__/*
+    shared/logging/certification/*
+
+[report]
+show_missing = True
+exclude_lines =
+    pragma: no cover
+    if __name__ == .__main__.:
+    raise NotImplementedError
+
+[html]
+directory = htmlcov/logging

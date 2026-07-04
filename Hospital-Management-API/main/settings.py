@@ -287,6 +287,7 @@ SIMPLE_JWT = {
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'shared.logging.middleware.CorrelationMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -505,3 +506,36 @@ if _routing_journey_console_env:
         "level": "INFO",
         "propagate": False,
     }
+
+# DoctorProCare shared logging (M4): settings builds config only; factory creates handlers.
+from shared.logging.config import LoggingConfig, validate_logging_config
+from shared.logging.constants import Environment, LogLevel
+from shared.logging.factory import set_pending_logging_config
+
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development").lower()
+
+_LOGGING_HANDLER_PRESETS: dict[str, tuple[str, ...]] = {
+    "development": ("console",),
+    "test": ("console",),
+    "staging": ("console", "cloudwatch"),
+    "production": ("console", "cloudwatch"),
+}
+
+DOCTORPROCARE_LOGGING_CONFIG = validate_logging_config(
+    LoggingConfig(
+        environment=Environment(ENVIRONMENT),
+        service_name=os.getenv("SERVICE_NAME", "doctorprocare-api"),
+        application_version=os.getenv("APPLICATION_VERSION", "0.0.0"),
+        log_level=LogLevel(os.getenv("LOG_LEVEL", "INFO")),
+        handlers=_LOGGING_HANDLER_PRESETS.get(ENVIRONMENT, ("console",)),
+        json_pretty=ENVIRONMENT == "development",
+        cloudwatch_log_group=os.getenv("CLOUDWATCH_LOG_GROUP"),
+        cloudwatch_region=os.getenv("AWS_REGION", os.getenv("AWS_DEFAULT_REGION")),
+        cloudwatch_stream_name=os.getenv("CLOUDWATCH_LOG_STREAM"),
+        retention_days=int(os.getenv("LOG_RETENTION_DAYS", "90"))
+        if os.getenv("LOG_RETENTION_DAYS")
+        else None,
+    )
+)
+
+set_pending_logging_config(DOCTORPROCARE_LOGGING_CONFIG)

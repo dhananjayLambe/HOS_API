@@ -1,0 +1,1 @@
+{"schema_version":1,"timestamp":"2026-07-01T12:00:00.123456Z","booking_id":"BK123","level":"INFO","module":null,"action":"booking.submitted","status":"SUCCESS","message":"Audit event: booking.submitted","event_code":null,"metadata":{}}

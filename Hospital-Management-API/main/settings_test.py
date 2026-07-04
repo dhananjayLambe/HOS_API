@@ -44,6 +44,22 @@ MEDIA_ROOT = tempfile.mkdtemp(prefix="hos_test_media_")
 
 REST_FRAMEWORK = {**REST_FRAMEWORK, "DEFAULT_THROTTLE_CLASSES": []}  # noqa: F405
 
+from shared.logging.config import LoggingConfig, validate_logging_config
+from shared.logging.constants import Environment, LogLevel
+from shared.logging.factory import set_pending_logging_config
+
+DOCTORPROCARE_LOGGING_CONFIG = validate_logging_config(
+    LoggingConfig(
+        environment=Environment.TEST,
+        service_name="doctorprocare-api-test",
+        application_version="test",
+        log_level=LogLevel.INFO,
+        handlers=("console",),
+        json_pretty=False,
+    )
+)
+set_pending_logging_config(DOCTORPROCARE_LOGGING_CONFIG)
+
 
 def _ensure_pg_trgm_on_connect(sender, connection, **kwargs):
     """Medicines / search GIN indexes use gin_trgm_ops; extension must exist before migrations."""
