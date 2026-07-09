@@ -230,6 +230,7 @@ INSTALLED_APPS = [
     'analytics.apps.AnalyticsConfig',
     'diagnostics_engine.apps.DiagnosticsEngineConfig',
     'notifications.apps.NotificationsConfig',
+    'clinical_audit.apps.ClinicalAuditConfig',
     # rest_framework
     'rest_framework',
     'rest_framework.authtoken',

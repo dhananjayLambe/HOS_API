@@ -155,20 +155,25 @@ Phase 3 — Clinical Audit
 
 Objective
 
-Capture all patient-care events.
+Capture all patient-care events as a permanent, immutable EMR audit trail.
 
-Tasks
+Milestones
 
-* Create Clinical Audit model
-* Build Audit Service
-* Record consultation events
-* Record prescription events
-* Record diagnosis events
-* Record report events
+| Milestone | Scope | Status |
+|-----------|-------|--------|
+| **3.1** Clinical Audit Foundation | `clinical_audit` app — model, enums, migration, immutability | Complete |
+| **3.2** Clinical Audit Service | Builder + service write path (fail-open) | Complete |
+| **3.3** Logger integration | Dual-write to application logs / CloudWatch | Planned |
+| **3.4** Consultation / diagnosis / prescription events | Domain instrumentation | Planned |
+| **3.5** Report / investigation events | Domain instrumentation | Planned |
+| **3.6** Query / timeline APIs | Support read path | Planned |
+| **3.7** Certification | Golden clinical timeline validation | Planned |
 
 Deliverable
 
 Permanent EMR audit history.
+
+See [`clinical_audit/docs/README.md`](../../../clinical_audit/docs/README.md), [`clinical_audit/docs/SERVICE.md`](../../../clinical_audit/docs/SERVICE.md), and [05_Clinical_Audit.md](05_Clinical_Audit.md).
 
 ⸻
 
