@@ -12,6 +12,8 @@ Centralized, fail-open write path for immutable clinical audit records.
 
 Business modules must call **`ClinicalAuditService.record()`** only. They must never create `ClinicalAudit` rows directly.
 
+**New to this API?** See [HOW_TO_USE.md](HOW_TO_USE.md) for copy-paste examples, required fields, correlation IDs, and where to call from in your services.
+
 ## Architecture
 
 ```

@@ -20,6 +20,7 @@ Application logs (Phase 1–2) are operational and temporary. Clinical Audit rec
 
 | Document | Description |
 |---|---|
+| [HOW_TO_USE.md](HOW_TO_USE.md) | **Start here** — examples, required fields, correlation, integration patterns |
 | [MODELS.md](MODELS.md) | ClinicalAudit schema, enums, indexes, immutability |
 | [SERVICE.md](SERVICE.md) | Service API, validation, correlation, failure isolation |
 
@@ -51,11 +52,13 @@ clinical_audit/
 
 ## Usage (M3.2)
 
+Quick start — see **[HOW_TO_USE.md](HOW_TO_USE.md)** for the full guide.
+
 ```python
 from clinical_audit.services import ClinicalAuditService
 from clinical_audit.enums import AuditAction, AuditSource, ClinicalEntity
 
-ClinicalAuditService.record(
+result = ClinicalAuditService.record(
     action=AuditAction.CONSULTATION_STARTED,
     event="Consultation started",
     resource_type=ClinicalEntity.CONSULTATION,
@@ -63,10 +66,11 @@ ClinicalAuditService.record(
     source=AuditSource.DOCTOR,
     user_id=str(user_id),
     organization_id=str(clinic_id),
+    payload={"status": "started"},
 )
 ```
 
-See [SERVICE.md](SERVICE.md) for the full API, mapping table, and failure-isolation rules.
+See [SERVICE.md](SERVICE.md) for architecture and [HOW_TO_USE.md](HOW_TO_USE.md) for integration patterns, correlation IDs, and result handling.
 
 ## Coexistence with `consultations_core.ClinicalAuditLog`
 

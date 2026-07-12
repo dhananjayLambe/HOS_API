@@ -173,7 +173,7 @@ Deliverable
 
 Permanent EMR audit history.
 
-See [`clinical_audit/docs/README.md`](../../../clinical_audit/docs/README.md), [`clinical_audit/docs/SERVICE.md`](../../../clinical_audit/docs/SERVICE.md), and [05_Clinical_Audit.md](05_Clinical_Audit.md).
+See [`clinical_audit/docs/README.md`](../../../clinical_audit/docs/README.md), [`clinical_audit/docs/HOW_TO_USE.md`](../../../clinical_audit/docs/HOW_TO_USE.md), [`clinical_audit/docs/SERVICE.md`](../../../clinical_audit/docs/SERVICE.md), and [05_Clinical_Audit.md](05_Clinical_Audit.md).
 
 ⸻
 
