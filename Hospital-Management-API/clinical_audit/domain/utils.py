@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import socket
 from datetime import datetime
 from typing import Any
@@ -26,7 +27,45 @@ from clinical_audit.constants import (
     META_TIMEZONE,
     PAYLOAD_KEY,
 )
+from clinical_audit.enums import AuditAction
 from clinical_audit.exceptions import AuditSerializationError
+
+FORBIDDEN_PAYLOAD_KEYS = frozenset(
+    {
+        "password",
+        "passwd",
+        "secret",
+        "token",
+        "access_token",
+        "refresh_token",
+        "jwt",
+        "otp",
+        "authorization",
+        "api_key",
+        "session",
+        "cookie",
+        "attachment",
+        "attachment_data",
+        "file_content",
+        "pdf",
+        "pdf_data",
+        "image_data",
+        "dicom",
+        "ecg_data",
+        "binary",
+        "base64_data",
+    }
+)
+
+FORBIDDEN_PAYLOAD_PATTERNS = (
+    re.compile(r"^data:(application/pdf|image/|application/dicom)", re.I),
+    re.compile(r"^[A-Za-z0-9+/]{500,}={0,2}$"),  # large base64 blobs
+)
+
+
+def audit_event_label(action: AuditAction) -> str:
+    """Canonical display label from AuditAction — single source of truth."""
+    return action.label
 
 
 def is_valid_uuid(value: str) -> bool:
@@ -156,3 +195,45 @@ def validate_remarks(remarks: str | None) -> str | None:
     if len(remarks) > MAX_REMARKS_LENGTH:
         return truncate_if_needed(remarks, MAX_REMARKS_LENGTH)
     return remarks or None
+
+
+def _sanitize_value(key: str, value: Any) -> Any:
+    key_lower = key.lower()
+    if key_lower in FORBIDDEN_PAYLOAD_KEYS:
+        raise AuditSerializationError(f"Forbidden key in audit payload: {key}")
+    if isinstance(value, dict):
+        return sanitize_audit_payload(value)
+    if isinstance(value, list):
+        return [sanitize_audit_payload(item) if isinstance(item, dict) else item for item in value]
+    if isinstance(value, str):
+        for pattern in FORBIDDEN_PAYLOAD_PATTERNS:
+            if pattern.search(value):
+                raise AuditSerializationError(
+                    f"Forbidden content pattern in audit payload key: {key}"
+                )
+    return value
+
+
+def sanitize_audit_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Strip forbidden PHI/credentials/binary content from audit payloads."""
+    if not isinstance(payload, dict):
+        raise AuditSerializationError("payload must be a dict.")
+    sanitized: dict[str, Any] = {}
+    for key, value in payload.items():
+        sanitized[key] = _sanitize_value(key, value)
+    assert_json_serializable(sanitized, field_name="payload")
+    if json_byte_size(sanitized) > MAX_PAYLOAD_BYTES:
+        raise AuditSerializationError(
+            f"payload exceeds maximum size of {MAX_PAYLOAD_BYTES} bytes."
+        )
+    return sanitized
+
+
+def sanitize_audit_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Sanitize snapshot dict with snapshot size limit."""
+    sanitized = sanitize_audit_payload(snapshot)
+    if json_byte_size(sanitized) > MAX_SNAPSHOT_BYTES:
+        raise AuditSerializationError(
+            f"snapshot exceeds maximum size of {MAX_SNAPSHOT_BYTES} bytes."
+        )
+    return sanitized

@@ -1,0 +1,43 @@
+{
+  "correlation_id": "cert-00000000-0000-4000-8000-000000000001",
+  "expected_count": 13,
+  "patient_name": "Certification Patient",
+  "description": "Canonical 13-event clinical audit certification journey (M3.2–M3.6 wired events).",
+  "required_actions": [
+    "consultation.started",
+    "symptoms.recorded",
+    "vitals.recorded",
+    "diagnosis.added",
+    "prescription.created",
+    "prescription.signed",
+    "test.ordered",
+    "recommendation.sent",
+    "report.uploaded",
+    "report.viewed",
+    "report.downloaded",
+    "report.shared",
+    "consultation.completed"
+  ],
+  "timeline": [
+    {"time": "08:00", "action": "consultation.started", "label": "Consultation Started"},
+    {"time": "08:01", "action": "vitals.recorded", "label": "Vitals Recorded"},
+    {"time": "08:02", "action": "test.ordered", "label": "Test Ordered"},
+    {"time": "08:03", "action": "recommendation.sent", "label": "Recommendation Sent"},
+    {"time": "08:05", "action": "report.uploaded", "label": "Report Uploaded"},
+    {"time": "08:06", "action": "report.viewed", "label": "Report Viewed"},
+    {"time": "08:07", "action": "report.downloaded", "label": "Report Downloaded"},
+    {"time": "08:08", "action": "report.shared", "label": "Report Shared"},
+    {"time": "08:09", "action": "symptoms.recorded", "label": "Symptoms Recorded"},
+    {"time": "08:10", "action": "diagnosis.added", "label": "Diagnosis Added"},
+    {"time": "08:11", "action": "prescription.created", "label": "Prescription Created"},
+    {"time": "08:12", "action": "prescription.signed", "label": "Prescription Signed"},
+    {"time": "08:13", "action": "consultation.completed", "label": "Consultation Completed"}
+  ],
+  "deferred_events": [
+    {
+      "action": "patient.record_created",
+      "label": "Patient Record Created",
+      "status": "enum_defined_no_production_wiring"
+    }
+  ]
+}

@@ -231,6 +231,7 @@ INSTALLED_APPS = [
     'diagnostics_engine.apps.DiagnosticsEngineConfig',
     'notifications.apps.NotificationsConfig',
     'clinical_audit.apps.ClinicalAuditConfig',
+    'clinical_documentation.apps.ClinicalDocumentationConfig',
     # rest_framework
     'rest_framework',
     'rest_framework.authtoken',

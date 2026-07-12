@@ -24,6 +24,9 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 # Local App Imports
 from account.permissions import IsDiagnosticOrderOrchestrationActor, IsDoctor
+from consultations_core.audit import ConsultationAuditService, emit_after_commit
+from clinical_documentation.audit import schedule_allergy_audits, schedule_vitals_audit
+from consultations_core.domain.vitals_meaningful import vitals_data_is_meaningful
 from consultations_core.services.consultation_engine import ConsultationEngine
 from consultations_core.services.metadata_loader import MetadataLoader
 from consultations_core.services.preconsultation_service import (
@@ -830,6 +833,13 @@ class PreConsultationSectionAPIView(APIView):
         section_model = SECTION_MODEL_MAP[section_code]
         data = request.data.get("data", {})
 
+        prior_data = None
+        try:
+            prior_section = section_model.objects.get(pre_consultation=preconsultation)
+            prior_data = prior_section.data
+        except section_model.DoesNotExist:
+            prior_data = None
+
         try:
             section_obj = PreConsultationSectionService.upsert_section(
                 section_model=section_model,
@@ -838,6 +848,30 @@ class PreConsultationSectionAPIView(APIView):
                 user=request.user,
                 schema_version="v1"
             )
+
+            try:
+                consultation = encounter.consultation
+            except Consultation.DoesNotExist:
+                consultation = None
+
+            if section_code == "allergies":
+                schedule_allergy_audits(
+                    encounter=encounter,
+                    user=request.user,
+                    section_obj=section_obj,
+                    prior_data=prior_data,
+                    consultation=consultation,
+                    source="doctor",
+                )
+            elif section_code == "vitals" and vitals_data_is_meaningful(section_obj.data):
+                schedule_vitals_audit(
+                    encounter=encounter,
+                    user=request.user,
+                    section_obj=section_obj,
+                    prior_data=prior_data,
+                    consultation=consultation,
+                    source="doctor",
+                )
 
             return Response({
                 "status": True,
@@ -1427,6 +1461,14 @@ class EndConsultationAPIView(APIView):
             consultation.is_finalized = True
             consultation.save(update_fields=["is_finalized"])
 
+        emit_after_commit(
+            ConsultationAuditService.emit_completed,
+            encounter,
+            consultation,
+            request.user,
+            completion_source="doctor",
+        )
+
         consultation_id = consultation.id
         initiated_by = request.user
         base_url = request.build_absolute_uri("/")
@@ -1495,6 +1537,19 @@ class CancelEncounterAPIView(APIView):
         reason = str(request.data.get("reason") or "").strip() if isinstance(request.data, dict) else ""
         reason_text = str(request.data.get("reason_text") or "").strip() if isinstance(request.data, dict) else ""
         cancel_reason = " - ".join(part for part in [reason, reason_text] if part).strip() or None
+        consultation_for_audit = None
+        cancel_snapshot = None
+        try:
+            consultation_for_audit = encounter.consultation
+            cancel_snapshot = ConsultationAuditService.capture_snapshot(
+                encounter, consultation_for_audit
+            )
+        except Exception:
+            consultation_for_audit = Consultation.objects.filter(encounter_id=encounter.pk).first()
+            if consultation_for_audit is not None:
+                cancel_snapshot = ConsultationAuditService.capture_snapshot(
+                    encounter, consultation_for_audit
+                )
         try:
             # Required for state integrity: transition to cancelled and set cancelled_at, cancelled_by
             # so the encounter leaves consultation_in_progress and user can start a new visit.
@@ -1542,6 +1597,16 @@ class CancelEncounterAPIView(APIView):
                 exc,
                 exc_info=True,
             )
+        emit_after_commit(
+            ConsultationAuditService.emit_cancelled,
+            encounter,
+            request.user,
+            reason=cancel_reason,
+            prior_status=prior_normalized,
+            consultation=consultation_for_audit,
+            snapshot=cancel_snapshot,
+            source="doctor",
+        )
         return Response(
             {"detail": "Encounter cancelled.", "status": _status_for_api(encounter.status)},
             status=status.HTTP_200_OK,

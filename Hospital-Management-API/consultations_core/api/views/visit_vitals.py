@@ -28,6 +28,7 @@ from consultations_core.services.preconsultation_service import (
     PreConsultationService,
 )
 from consultations_core.services.encounter_state_machine import EncounterStateMachine
+from clinical_documentation.audit import schedule_vitals_audit
 from queue_management.models import Queue
 
 logger = logging.getLogger(__name__)
@@ -276,7 +277,7 @@ class VisitVitalsAPIView(APIView):
         merged = _merge_vitals_payload(existing, validated)
 
         try:
-            PreConsultationSectionService.upsert_section(
+            section_obj = PreConsultationSectionService.upsert_section(
                 section_model=PreConsultationVitals,
                 preconsultation=preconsultation,
                 data=merged,
@@ -286,6 +287,16 @@ class VisitVitalsAPIView(APIView):
         except DjangoValidationError as e:
             msg = getattr(e, "message", None) or str(e)
             return Response({"detail": msg}, status=status.HTTP_400_BAD_REQUEST)
+
+        if vitals_data_is_meaningful(merged):
+            schedule_vitals_audit(
+                encounter=encounter,
+                user=request.user,
+                section_obj=section_obj,
+                prior_data=existing,
+                consultation=None,
+                source="helpdesk",
+            )
 
         if vitals_data_is_meaningful(merged):
             today = localdate()

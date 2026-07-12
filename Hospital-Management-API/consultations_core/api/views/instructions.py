@@ -8,6 +8,7 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from account.permissions import IsDoctor
+from consultations_core.audit import ConsultationAuditService, emit_after_commit
 from consultations_core.models.consultation import Consultation
 from consultations_core.models.encounter import ClinicalEncounter
 from consultations_core.models.instruction import (
@@ -222,6 +223,10 @@ class EncounterInstructionUpdateDeleteAPIView(APIView):
                 {"detail": "Consultation is finalized; cannot update instructions."},
                 status=status.HTTP_403_FORBIDDEN,
             )
+        consultation = Consultation.objects.filter(encounter=ei.encounter).first()
+        snapshot = None
+        if consultation is not None:
+            snapshot = ConsultationAuditService.capture_snapshot(ei.encounter, consultation)
         payload = UpdateInstructionSerializer(data=request.data, partial=True)
         if not payload.is_valid():
             return Response(payload.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -231,6 +236,15 @@ class EncounterInstructionUpdateDeleteAPIView(APIView):
         if "custom_note" in data:
             ei.custom_note = data["custom_note"]
         ei.save()
+        if consultation is not None:
+            emit_after_commit(
+                ConsultationAuditService.emit_instructions_updated,
+                ei.encounter,
+                consultation,
+                request.user,
+                changed_fields=sorted(data.keys()),
+                snapshot=snapshot,
+            )
         serializer = EncounterInstructionSerializer(ei)
         return Response(serializer.data)
 

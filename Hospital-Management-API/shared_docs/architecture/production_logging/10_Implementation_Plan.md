@@ -163,17 +163,19 @@ Milestones
 |-----------|-------|--------|
 | **3.1** Clinical Audit Foundation | `clinical_audit` app — model, enums, migration, immutability | Complete |
 | **3.2** Clinical Audit Service | Builder + service write path (fail-open) | Complete |
-| **3.3** Logger integration | Dual-write to application logs / CloudWatch | Planned |
-| **3.4** Consultation / diagnosis / prescription events | Domain instrumentation | Planned |
-| **3.5** Report / investigation events | Domain instrumentation | Planned |
-| **3.6** Query / timeline APIs | Support read path | Planned |
-| **3.7** Certification | Golden clinical timeline validation | Planned |
+| **3.3** Consultation Audit Framework | `consultations_core/audit/` — lifecycle + section events, idempotency, on_commit | Complete |
+| **3.4** Clinical Documentation Audit | `clinical_documentation/audit/` — diagnosis, allergy, vitals, symptoms, fail-open, on_commit | Complete |
+| **3.5** Prescription & Recommendation Audit | `consultations_core/audit/prescription/` — created, signed, downloaded, recommendation generated, fail-open, on_commit | Complete |
+| **3.6** Diagnostic & Report Audit | `diagnostics_engine/audit/` — test ordered, recommendation sent, report uploaded/viewed/downloaded/shared, fail-open, on_commit | Complete |
+| **3.7** Certification | Golden clinical timeline validation, validators, E2E certification suite | Complete |
+| **3.8** Query / timeline APIs | Support read path | Planned |
+| **3.9** Logger integration | Dual-write to application logs / CloudWatch | Planned |
 
 Deliverable
 
 Permanent EMR audit history.
 
-See [`clinical_audit/docs/README.md`](../../../clinical_audit/docs/README.md), [`clinical_audit/docs/HOW_TO_USE.md`](../../../clinical_audit/docs/HOW_TO_USE.md), [`clinical_audit/docs/SERVICE.md`](../../../clinical_audit/docs/SERVICE.md), and [05_Clinical_Audit.md](05_Clinical_Audit.md).
+See [`clinical_audit/docs/README.md`](../../../clinical_audit/docs/README.md), [`clinical_audit/docs/HOW_TO_USE.md`](../../../clinical_audit/docs/HOW_TO_USE.md), [`clinical_audit/docs/AUDIT_EVENTS.md`](../../../clinical_audit/docs/AUDIT_EVENTS.md), [`clinical_audit/docs/CONSULTATION_AUDIT.md`](../../../clinical_audit/docs/CONSULTATION_AUDIT.md), [`clinical_audit/docs/CLINICAL_DOCUMENTATION_AUDIT.md`](../../../clinical_audit/docs/CLINICAL_DOCUMENTATION_AUDIT.md), [`clinical_audit/docs/PRESCRIPTION_AUDIT.md`](../../../clinical_audit/docs/PRESCRIPTION_AUDIT.md), [`clinical_audit/docs/DIAGNOSTIC_AUDIT.md`](../../../clinical_audit/docs/DIAGNOSTIC_AUDIT.md), [`clinical_audit/docs/CERTIFICATION.md`](../../../clinical_audit/docs/CERTIFICATION.md), [`clinical_audit/docs/CERTIFICATION_CHECKLIST.md`](../../../clinical_audit/docs/CERTIFICATION_CHECKLIST.md), [`clinical_audit/docs/SERVICE.md`](../../../clinical_audit/docs/SERVICE.md), and [05_Clinical_Audit.md](05_Clinical_Audit.md).
 
 ⸻
 

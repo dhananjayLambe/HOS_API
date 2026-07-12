@@ -12,6 +12,7 @@ from consultations_core.services.encounter_state_machine import EncounterStateMa
 from consultations_core.services.preconsultation_lifecycle import (
     get_or_create_preconsultation_for_start_safe,
 )
+from consultations_core.audit import ConsultationAuditService, emit_after_commit
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +89,14 @@ def start_consultation_for_encounter(*, encounter_id, user=None, source: str = "
             consultation.id,
             encounter.visit_pnr,
             source,
+        )
+        emit_after_commit(
+            ConsultationAuditService.emit_started,
+            encounter,
+            consultation,
+            user,
+            source=source,
+            already_started=False,
         )
         return StartConsultationResult(
             encounter=encounter,

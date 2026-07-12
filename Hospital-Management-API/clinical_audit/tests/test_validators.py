@@ -95,3 +95,66 @@ class AuditRequestValidatorTests(TestCase):
         )
         validated = AuditRequestValidator.validate(**kwargs)
         self.assertEqual(validated.organization_id, kwargs["organization_id"])
+
+    def test_clinical_documentation_actions_accepted(self) -> None:
+        for action, entity in (
+            (AuditAction.ALLERGY_ADDED, ClinicalEntity.ALLERGY),
+            (AuditAction.ALLERGY_UPDATED, ClinicalEntity.ALLERGY),
+            (AuditAction.CLINICAL_NOTES_UPDATED, ClinicalEntity.CLINICAL_NOTES),
+            (AuditAction.VITAL_SIGNS_RECORDED, ClinicalEntity.VITAL_SIGNS),
+            (AuditAction.SYMPTOMS_RECORDED, ClinicalEntity.SYMPTOMS),
+            (AuditAction.DIAGNOSIS_ADDED, ClinicalEntity.DIAGNOSIS),
+            (AuditAction.DIAGNOSIS_UPDATED, ClinicalEntity.DIAGNOSIS),
+        ):
+            with self.subTest(action=action, entity=entity):
+                validated = AuditRequestValidator.validate(
+                    **_base_kwargs(
+                        action=action,
+                        event=action.label,
+                        resource_type=entity,
+                        validate_references=False,
+                    )
+                )
+                self.assertEqual(validated.action, action)
+                self.assertEqual(validated.resource_type, entity)
+
+    def test_diagnostic_audit_actions_accepted(self) -> None:
+        for action, entity in (
+            (AuditAction.TEST_ORDERED, ClinicalEntity.DIAGNOSTIC_TEST),
+            (AuditAction.RECOMMENDATION_SENT, ClinicalEntity.RECOMMENDATION),
+            (AuditAction.REPORT_UPLOADED, ClinicalEntity.REPORT),
+            (AuditAction.REPORT_VIEWED, ClinicalEntity.REPORT),
+            (AuditAction.REPORT_DOWNLOADED, ClinicalEntity.REPORT),
+            (AuditAction.REPORT_SHARED, ClinicalEntity.REPORT),
+        ):
+            with self.subTest(action=action, entity=entity):
+                validated = AuditRequestValidator.validate(
+                    **_base_kwargs(
+                        action=action,
+                        event=action.label,
+                        resource_type=entity,
+                        validate_references=False,
+                    )
+                )
+                self.assertEqual(validated.action, action)
+                self.assertEqual(validated.resource_type, entity)
+
+    def test_prescription_audit_actions_accepted(self) -> None:
+        for action, entity in (
+            (AuditAction.PRESCRIPTION_CREATED, ClinicalEntity.PRESCRIPTION),
+            (AuditAction.PRESCRIPTION_SIGNED, ClinicalEntity.PRESCRIPTION),
+            (AuditAction.PRESCRIPTION_DOWNLOADED, ClinicalEntity.PRESCRIPTION),
+            (AuditAction.RECOMMENDATION_GENERATED, ClinicalEntity.RECOMMENDATION),
+            (AuditAction.RECOMMENDATION_ACCEPTED, ClinicalEntity.RECOMMENDATION),
+        ):
+            with self.subTest(action=action, entity=entity):
+                validated = AuditRequestValidator.validate(
+                    **_base_kwargs(
+                        action=action,
+                        event=action.label,
+                        resource_type=entity,
+                        validate_references=False,
+                    )
+                )
+                self.assertEqual(validated.action, action)
+                self.assertEqual(validated.resource_type, entity)

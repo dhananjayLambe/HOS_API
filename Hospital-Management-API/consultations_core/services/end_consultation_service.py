@@ -39,6 +39,11 @@ from consultations_core.models.symptoms import (
     CustomSymptom,
     SymptomMaster,
 )
+from clinical_documentation.audit import schedule_diagnosis_audit, schedule_symptom_audit
+from clinical_documentation.audit.clinical_documentation_audit_service import (
+    ClinicalDocumentationAuditService,
+)
+from consultations_core.audit import schedule_prescription_created, schedule_prescription_signed
 from consultations_core.services.finding_master_service import (
     get_or_create_finding_master_for_code,
 )
@@ -990,7 +995,18 @@ def _persist_medicines(consultation, user, raw_medicines):
         created_any_line = True
 
     if created_any_line:
+        schedule_prescription_created(
+            consultation=consultation,
+            user=user,
+            prescription=prescription,
+        )
         prescription.finalize()
+        prescription.refresh_from_db(fields=["status", "finalized_at"])
+        schedule_prescription_signed(
+            consultation=consultation,
+            user=user,
+            prescription=prescription,
+        )
     else:
         prescription.delete()
 
@@ -1000,6 +1016,7 @@ def _persist_symptoms(consultation, user, raw_symptoms):
         return
 
     seen_names = set()
+    recorded_names: list[str] = []
     existing_entries = {
         (entry.display_name or "").strip().lower(): entry
         for entry in consultation.symptoms.select_related("symptom", "custom_symptom").all()
@@ -1017,6 +1034,7 @@ def _persist_symptoms(consultation, user, raw_symptoms):
         if lowered_name in seen_names:
             continue
         seen_names.add(lowered_name)
+        recorded_names.append(name)
 
         detail = item.get("detail")
         detail_dict = detail if isinstance(detail, dict) else {}
@@ -1060,6 +1078,13 @@ def _persist_symptoms(consultation, user, raw_symptoms):
         symptom_entry.updated_by = user
         try:
             symptom_entry.save()
+            schedule_symptom_audit(
+                consultation=consultation,
+                user=user,
+                symptom_row=symptom_entry,
+                chief_complaint=recorded_names[0] if recorded_names else None,
+                symptom_names=recorded_names,
+            )
         except IntegrityError:
             if symptom_entry.symptom_id:
                 existing = ConsultationSymptom.objects.filter(
@@ -1071,6 +1096,13 @@ def _persist_symptoms(consultation, user, raw_symptoms):
                     existing.extra_data = detail_dict or None
                     existing.updated_by = user
                     existing.save()
+                    schedule_symptom_audit(
+                        consultation=consultation,
+                        user=user,
+                        symptom_row=existing,
+                        chief_complaint=recorded_names[0] if recorded_names else None,
+                        symptom_names=recorded_names,
+                    )
                     continue
             raise
 
@@ -1352,6 +1384,13 @@ def _persist_diagnoses(consultation, user, raw_diagnoses):
             )
             row.save()
             keeper_ids.add(row.id)
+            schedule_diagnosis_audit(
+                consultation=consultation,
+                user=user,
+                diagnosis_row=row,
+                prior_state=None,
+                is_create=True,
+            )
             continue
 
         master = DiagnosisMaster.objects.filter(
@@ -1402,6 +1441,10 @@ def _persist_diagnoses(consultation, user, raw_diagnoses):
             consultation=consultation,
             master=master,
         ).first()
+        prior_state = None
+        is_create = row is None
+        if row is not None:
+            prior_state = ClinicalDocumentationAuditService.capture_diagnosis_prior_state(row)
         if row is None:
             row = ConsultationDiagnosis(
                 consultation=consultation,
@@ -1420,6 +1463,13 @@ def _persist_diagnoses(consultation, user, raw_diagnoses):
         row.is_active = True
         row.save()
         keeper_ids.add(row.id)
+        schedule_diagnosis_audit(
+            consultation=consultation,
+            user=user,
+            diagnosis_row=row,
+            prior_state=prior_state,
+            is_create=is_create,
+        )
 
     stale_qs = ConsultationDiagnosis.objects.filter(
         consultation=consultation, is_active=True

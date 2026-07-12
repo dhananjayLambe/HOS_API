@@ -11,6 +11,7 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from account.permissions import IsDoctor
+from consultations_core.audit import ConsultationAuditService, emit_after_commit
 from consultations_core.api.serializers.findings import (
     ConsultationFindingSerializer,
     CreateConsultationFindingSerializer,
@@ -199,6 +200,9 @@ class ConsultationFindingUpdateDeleteAPIView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+        consultation = row.consultation
+        snapshot = ConsultationAuditService.capture_snapshot(encounter, consultation)
+
         ser = PatchConsultationFindingSerializer(data=request.data, partial=True)
         if not ser.is_valid():
             logger.warning(
@@ -214,6 +218,14 @@ class ConsultationFindingUpdateDeleteAPIView(APIView):
         except serializers.ValidationError as e:
             return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
         row.refresh_from_db()
+        emit_after_commit(
+            ConsultationAuditService.emit_findings_updated,
+            encounter,
+            consultation,
+            request.user,
+            changed_fields=sorted(ser.validated_data.keys()),
+            snapshot=snapshot,
+        )
         return Response(ConsultationFindingSerializer(row).data)
 
     def delete(self, request, pk):

@@ -1,0 +1,13 @@
+{
+  "upload_content_type": "application/pdf",
+  "upload_filename": "certification_report.pdf",
+  "share_recipient_phone": "9876543210",
+  "share_channel": "WHATSAPP",
+  "actors": {
+    "upload": "lab_admin",
+    "view": "lab_admin",
+    "download": "lab_admin",
+    "share": "lab_admin"
+  },
+  "notes": "Report lifecycle steps run after diagnostic order creation in certification workflow."
+}

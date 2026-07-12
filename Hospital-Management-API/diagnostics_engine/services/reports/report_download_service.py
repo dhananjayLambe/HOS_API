@@ -47,6 +47,9 @@ class ReportDownloadService:
             user=user,
             metadata={"artifact_id": str(artifact.id), "expires_in": expires_in},
         )
+        from diagnostics_engine.audit import schedule_report_downloaded
+
+        schedule_report_downloaded(report=report, user=user)
 
         return {
             "download_url": download_url,

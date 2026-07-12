@@ -28,6 +28,7 @@ from diagnostics_engine.services.marketplace_recommendation_audit import (
     emit_recommendation_metrics,
     record_marketplace_recommendation_audit,
 )
+from consultations_core.audit import schedule_recommendation_generated
 from diagnostics_engine.services.recommendation_access import resolve_consultation_access
 
 logger = logging.getLogger(__name__)
@@ -233,6 +234,12 @@ class MarketplaceRecommendationView(APIView):
                 consultation_id,
                 duration_ms,
                 branch_id,
+            )
+            schedule_recommendation_generated(
+                consultation=consultation,
+                user=request.user,
+                recommendation_id=recommendation_id,
+                result=result,
             )
         else:
             logger.info(

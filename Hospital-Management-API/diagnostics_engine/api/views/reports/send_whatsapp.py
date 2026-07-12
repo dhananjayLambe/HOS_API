@@ -66,6 +66,13 @@ class SendWhatsAppView(ReportIdempotencyMixin, LabReportOperationalMixin):
                 user=request.user,
                 metadata={"log_id": str(log.id), "channel": channel},
             )
+            from diagnostics_engine.audit import schedule_report_shared
+
+            schedule_report_shared(
+                report=report,
+                user=request.user,
+                channel=channel,
+            )
             if getattr(settings, "REPORT_DELIVERY_ASYNC", True):
                 from diagnostics_engine.tasks import deliver_report_whatsapp
 

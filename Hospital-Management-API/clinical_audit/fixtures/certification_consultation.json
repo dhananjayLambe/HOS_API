@@ -1,0 +1,8 @@
+{
+  "encounter_status_start": "pre_consultation_completed",
+  "encounter_status_active": "consultation_in_progress",
+  "specialty_code": "general",
+  "template_version": "v1",
+  "entry_mode": "doctor",
+  "notes": "Encounter must reach pre_consultation_completed before consultation start API."
+}

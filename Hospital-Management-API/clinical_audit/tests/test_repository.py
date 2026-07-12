@@ -107,6 +107,16 @@ class ClinicalAuditRepositoryTests(TestCase):
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0].id, saved.id)
 
+    def test_filter_by_consultation(self) -> None:
+        consultation_id = str(uuid.uuid4())
+        saved = self._create_record(
+            consultation_id=consultation_id,
+            validate_references=False,
+        )
+        results = self.repository.filter_by_consultation(consultation_id)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].id, saved.id)
+
     def test_saved_record_cannot_be_updated(self) -> None:
         saved = self._create_record()
         saved.event = "Changed"

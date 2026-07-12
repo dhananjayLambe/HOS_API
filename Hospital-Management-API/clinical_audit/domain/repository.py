@@ -59,3 +59,10 @@ class ClinicalAuditRepository:
                 patient_account_id=patient_account_id,
             ).order_by("-timestamp")
         )
+
+    def filter_by_consultation(self, consultation_id: str) -> list[ClinicalAudit]:
+        return list(
+            ClinicalAudit.objects.filter(
+                consultation_id=consultation_id,
+            ).order_by("timestamp")
+        )

@@ -189,6 +189,9 @@ class DiagnosticOrderCreationService:
             n_items = order.items.filter(deleted_at__isnull=True).count()
             n_lines = DiagnosticOrderTestLine.objects.filter(order_id=order.pk).count()
             _schedule_diagnostic_routing_if_has_test_lines(order=order, created_by=created_by)
+            from diagnostics_engine.audit import schedule_test_ordered
+
+            schedule_test_ordered(order=order, user=created_by, test_count=n_lines)
             return DiagnosticOrderCreationResult(
                 order=order,
                 items_created=n_items,

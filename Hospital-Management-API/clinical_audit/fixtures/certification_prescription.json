@@ -1,0 +1,22 @@
+{
+  "medicine": {
+    "dose_value": 1,
+    "dose_unit_id": "tablet",
+    "route_id": "oral",
+    "frequency_id": "BD",
+    "duration_value": 3,
+    "duration_unit": "days"
+  },
+  "symptoms": [
+    {"name": "Headache", "detail": {"duration": "2 days"}}
+  ],
+  "diagnosis": [
+    {
+      "label": "Certification Diagnosis",
+      "isCustom": true,
+      "is_custom": true,
+      "custom_name": "Certification Diagnosis"
+    }
+  ],
+  "notes": "Used by certification_workflow end-consultation payload."
+}

@@ -4,6 +4,7 @@ from django.http import FileResponse, Http404
 from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 
+from consultations_core.audit import schedule_prescription_downloaded
 from consultations_core.models.prescription import Prescription, PrescriptionStatus
 
 
@@ -24,6 +25,8 @@ class PrescriptionDownloadAPIView(APIView):
 
         if not prescription.pdf_file:
             raise Http404("Prescription PDF is not available.")
+
+        schedule_prescription_downloaded(prescription=prescription, request=request)
 
         filename = prescription.pdf_file.name.split("/")[-1] or f"prescription-{prescription_id}.pdf"
         return FileResponse(

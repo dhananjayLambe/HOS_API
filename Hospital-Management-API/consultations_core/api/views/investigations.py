@@ -9,6 +9,7 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from account.permissions import IsDoctor
+from consultations_core.audit import ConsultationAuditService, emit_after_commit
 from consultations_core.domain.locks import EncounterLockValidator
 from consultations_core.api.serializers.investigations import (
     AddInvestigationItemSerializer,
@@ -195,6 +196,7 @@ class ConsultationInvestigationItemDetailAPIView(APIView):
         if err:
             return err
 
+        snapshot = ConsultationAuditService.capture_snapshot(encounter, consultation)
         container = get_or_create_investigations_container(consultation)
         item = get_object_or_404(
             InvestigationItem.objects.filter(investigations=container, is_deleted=False),
@@ -228,6 +230,14 @@ class ConsultationInvestigationItemDetailAPIView(APIView):
                 item.save()
 
             item = InvestigationItem.objects.ui_ready().get(pk=item.pk)
+            emit_after_commit(
+                ConsultationAuditService.emit_investigations_updated,
+                encounter,
+                consultation,
+                request.user,
+                changed_fields=sorted(data.keys()),
+                snapshot=snapshot,
+            )
             return Response(investigation_item_to_dict(item))
         except DjangoValidationError as e:
             msg = "; ".join(e.messages) if hasattr(e, "messages") else str(e)

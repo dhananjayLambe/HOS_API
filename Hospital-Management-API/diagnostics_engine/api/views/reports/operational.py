@@ -370,6 +370,9 @@ class ReportOperationalDetailView(LabReportOperationalMixin):
             user=request.user,
             metadata={"report_id": str(report.id)},
         )
+        from diagnostics_engine.audit import schedule_report_viewed
+
+        schedule_report_viewed(report=report, user=request.user)
         return success_response(payload, request=request)
 
 

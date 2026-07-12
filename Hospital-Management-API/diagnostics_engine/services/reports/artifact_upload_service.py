@@ -163,6 +163,14 @@ class ArtifactUploadService:
             user=uploaded_by,
             metadata={"count": len(created), "artifact_ids": [str(a.pk) for a in created]},
         )
+        from diagnostics_engine.audit import schedule_report_uploaded
+
+        schedule_report_uploaded(
+            report=report,
+            user=uploaded_by,
+            artifacts=created,
+            report_count=len(created),
+        )
         return created
 
     @classmethod

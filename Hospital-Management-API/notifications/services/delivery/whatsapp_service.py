@@ -669,6 +669,9 @@ class WhatsAppService:
             message=message,
             metadata={"variant": variant},
         )
+        from diagnostics_engine.audit import schedule_test_recommendation_sent
+
+        schedule_test_recommendation_sent(message=message, user=None)
         return message
 
     @transaction.atomic
