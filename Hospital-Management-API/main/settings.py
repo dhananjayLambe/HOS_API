@@ -297,6 +297,24 @@ SIMPLE_JWT = {
     'BLACKLIST_ENABLED': True
 }
 
+# Swagger / OpenAPI (drf-yasg) — JWT Bearer auth for "Authorize" in Swagger UI
+SWAGGER_SETTINGS = {
+    'USE_SESSION_AUTH': False,
+    'SECURITY_DEFINITIONS': {
+        'Bearer': {
+            'type': 'apiKey',
+            'name': 'Authorization',
+            'in': 'header',
+            'description': (
+                'JWT token from a login endpoint. '
+                'Admin: POST /api/admin/login/ with {"username": "...", "password": "..."}. '
+                'Doctor: POST /api/doctor/login/. '
+                'Enter: Bearer <access_token>'
+            ),
+        },
+    },
+}
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'shared.logging.middleware.CorrelationMiddleware',
