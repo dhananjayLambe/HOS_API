@@ -41,6 +41,7 @@ from diagnostics_engine.domain.pricing import PricingQuoteService
 from diagnostics_engine.models.choices import OrderLineType, OrderStatus
 from diagnostics_engine.models.orders import DiagnosticOrder, DiagnosticOrderItem, DiagnosticOrderTestLine
 from labs.models import BranchPackagePricing, LabBranch
+from shared.logging.context import get_context_manager
 
 if TYPE_CHECKING:
     from account.models import User
@@ -192,6 +193,13 @@ class DiagnosticOrderCreationService:
             from diagnostics_engine.audit import schedule_test_ordered
 
             schedule_test_ordered(order=order, user=created_by, test_count=n_lines)
+            from business_audit.booking.hooks import (
+                schedule_booking_business_confirmed,
+                schedule_booking_business_created,
+            )
+
+            schedule_booking_business_created(order=order, user=created_by)
+            schedule_booking_business_confirmed(order=order, user=created_by)
             return DiagnosticOrderCreationResult(
                 order=order,
                 items_created=n_items,
@@ -237,6 +245,12 @@ class DiagnosticOrderCreationService:
         source: str,
         created_by: User | None,
     ) -> DiagnosticOrder:
+        ctx = get_context_manager().get()
+        operational_metadata: dict[str, Any] = {}
+        recommendation_id = ctx.parent_workflow_instance_id or ctx.recommendation_id
+        if recommendation_id:
+            operational_metadata["recommendation_id"] = recommendation_id
+
         last_error: IntegrityError | None = None
         for _ in range(12):
             order_number = allocate_diagnostic_order_number()
@@ -251,6 +265,7 @@ class DiagnosticOrderCreationService:
                 source=source,
                 created_by=created_by,
                 updated_by=created_by,
+                operational_metadata=operational_metadata,
             )
             try:
                 order.save()

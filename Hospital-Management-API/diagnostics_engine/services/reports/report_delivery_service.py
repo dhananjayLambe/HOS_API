@@ -15,6 +15,7 @@ Phase 1: ``metadata`` stores artifact_id, download_url, delivery_token, retry_of
 from __future__ import annotations
 
 import logging
+import time
 import uuid
 from typing import Any
 
@@ -79,6 +80,20 @@ class ReportDeliveryService:
             initiated_by=initiated_by,
         )
         cls.sync_report_delivery_status(report=report)
+        comm_runtime = None
+        try:
+            from business_audit.communication.report.hooks import schedule_delivery_requested
+
+            metadata["prepared_at_monotonic"] = time.monotonic()
+            log.metadata = metadata
+            log.save(update_fields=["metadata", "updated_at"])
+            comm_runtime = schedule_delivery_requested(
+                report=report,
+                delivery_log=log,
+                user=initiated_by,
+            )
+        except Exception:
+            logger.warning("communication_audit_prepare_hook_failed", exc_info=True)
         safe_emit(
             emit_report_audit_event,
             action="delivery_prepared",
@@ -101,6 +116,7 @@ class ReportDeliveryService:
             log.id,
             channel,
         )
+        log._communication_runtime = comm_runtime  # type: ignore[attr-defined]
         return log
 
     @classmethod
@@ -114,6 +130,7 @@ class ReportDeliveryService:
         from diagnostics_engine.services.reports.delivery_providers import get_delivery_provider
 
         report = delivery_log.diagnostic_test_report
+        send_started = time.monotonic()
         provider = get_delivery_provider(delivery_log.delivery_channel)
         message_id = provider.send(
             recipient=delivery_log.recipient,
@@ -131,7 +148,36 @@ class ReportDeliveryService:
             user=None,
             metadata={"log_id": str(delivery_log.id), "channel": delivery_log.delivery_channel},
         )
-        return cls.mark_delivery_delivered(delivery_log=delivery_log)
+        result = cls.mark_delivery_delivered(delivery_log=delivery_log)
+        try:
+            from business_audit.communication.report.hooks import (
+                ReportCommunicationRuntime,
+                schedule_channel_delivery_success,
+            )
+            from business_audit.communication.context import build_report_communication_context
+
+            meta = delivery_log.metadata or {}
+            prepared_at = meta.get("prepared_at_monotonic")
+            runtime = getattr(delivery_log, "_communication_runtime", None)
+            if runtime is None and prepared_at is not None:
+                ctx = build_report_communication_context(report, delivery_log=delivery_log)
+                runtime = ReportCommunicationRuntime(ctx=ctx, prepared_at=float(prepared_at))
+            runtime = runtime or ReportCommunicationRuntime(
+                ctx=build_report_communication_context(report, delivery_log=delivery_log),
+                prepared_at=prepared_at,
+            )
+            runtime.send_started_at = send_started
+            schedule_channel_delivery_success(
+                report=report,
+                delivery_log=delivery_log,
+                runtime=runtime,
+                external_message_id=external_message_id or message_id,
+                request_payload={"recipient": delivery_log.recipient},
+                response_payload={"message_id": external_message_id or message_id},
+            )
+        except Exception:
+            logger.warning("communication_audit_send_hook_failed", exc_info=True)
+        return result
 
     @classmethod
     @transaction.atomic
@@ -216,6 +262,16 @@ class ReportDeliveryService:
             failure_reason=reason or "",
         )
         cls.sync_report_delivery_status(report=report)
+        try:
+            from business_audit.communication.report.hooks import schedule_delivery_failed
+
+            schedule_delivery_failed(
+                report=report,
+                delivery_log=delivery_log,
+                reason=reason or "",
+            )
+        except Exception:
+            logger.warning("communication_audit_failed_hook_failed", exc_info=True)
         safe_emit(
             emit_report_event,
             "report_delivery_failed",
@@ -265,6 +321,17 @@ class ReportDeliveryService:
             retry_count=parent_retry + 1,
         )
         cls.sync_report_delivery_status(report=report)
+        try:
+            from business_audit.communication.report.hooks import schedule_delivery_retried
+
+            schedule_delivery_retried(
+                report=report,
+                parent_log=delivery_log,
+                new_log=new_log,
+                user=initiated_by,
+            )
+        except Exception:
+            logger.warning("communication_audit_retry_hook_failed", exc_info=True)
         safe_emit(
             emit_report_audit_event,
             action="delivery_retry",

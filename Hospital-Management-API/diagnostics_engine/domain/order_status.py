@@ -1,5 +1,6 @@
 """Aggregate diagnostic order status from test lines and per-line reports."""
 
+from business_audit.booking.hooks import schedule_booking_business_closed
 from diagnostics_engine.domain.reports import get_active_report_for_line
 from diagnostics_engine.models.orders import DiagnosticOrder
 from diagnostics_engine.models.choices import OrderStatus, OrderTestLineStatus, ReportLifecycleStatus
@@ -72,5 +73,7 @@ class OrderStatusAggregationService:
             return
         try:
             order.update_status(target, source="system")
+            if target == OrderStatus.COMPLETED:
+                schedule_booking_business_closed(order=order)
         except Exception:
             pass

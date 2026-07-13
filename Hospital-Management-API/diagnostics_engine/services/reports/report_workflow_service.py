@@ -67,6 +67,12 @@ class ReportWorkflowService:
             branch_id=get_report_branch_id(report),
             user_id=getattr(user, "pk", None),
         )
+        try:
+            from business_audit.communication.report.hooks import schedule_report_ready
+
+            schedule_report_ready(report=report, user=user)
+        except Exception:
+            pass
         return report
 
     @classmethod

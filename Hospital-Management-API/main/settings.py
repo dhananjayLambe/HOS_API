@@ -445,6 +445,9 @@ CELERY_TASK_EAGER_PROPAGATES = CELERY_TASK_ALWAYS_EAGER
 LAB_ASSIGNMENT_AUTO_REJECT_MINUTES = int(
     os.environ.get("LAB_ASSIGNMENT_AUTO_REJECT_MINUTES", "60"),
 )
+BOOKING_CONFIRMATION_TIMEOUT_MINUTES = int(
+    os.environ.get("BOOKING_CONFIRMATION_TIMEOUT_MINUTES", "1440"),
+)
 
 CELERY_BEAT_SCHEDULE = {
     "labs-auto-reject-stale-assignments": {
@@ -453,6 +456,10 @@ CELERY_BEAT_SCHEDULE = {
     },
     "expire-stale-recommendations": {
         "task": "notifications.tasks.expire_stale_recommendations",
+        "schedule": timedelta(minutes=5),
+    },
+    "expire-stale-bookings": {
+        "task": "diagnostics_engine.expire_stale_bookings",
         "schedule": timedelta(minutes=5),
     },
 }

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from collections import Counter
 from typing import Any
 
@@ -170,6 +171,15 @@ class RoutingService:
                 )
                 run_id = run.pk
 
+            from business_audit.decision.routing.hooks import schedule_routing_decision_started
+
+            pipeline_started = time.monotonic()
+            decision_ctx = schedule_routing_decision_started(
+                routing_run=run,
+                order=order,
+                user=triggered_by,
+            )
+
             routing_journey_info(
                 "[routing journey] Order %s: step 1/5 — RoutingRun %s started (event ROUTING_STARTED); "
                 "order.routing_status → ROUTING_IN_PROGRESS. Context: encounter=%s clinic=%s doctor=%s patient=%s.",
@@ -210,9 +220,24 @@ class RoutingService:
                 loc_human,
             )
 
+            eval_started = time.monotonic()
             all_evaluated = EligibilityEngine.evaluate_all(order, resolved)
+            decision_ctx.evaluation_time_ms = int((time.monotonic() - eval_started) * 1000)
             eligible = [c for c in all_evaluated if not c.ineligibility_reasons]
+            rank_started = time.monotonic()
             ranked = RankingEngine.rank(eligible)
+            decision_ctx.comparison_time_ms = int((time.monotonic() - rank_started) * 1000)
+            decision_ctx.all_evaluated = all_evaluated
+            decision_ctx.ranked = ranked
+            decision_ctx.confidence = resolved.confidence
+            decision_ctx.routing_time_ms = int((time.monotonic() - pipeline_started) * 1000)
+
+            from business_audit.decision.routing.hooks import schedule_routing_decision_evaluated
+
+            schedule_routing_decision_evaluated(
+                ctx=decision_ctx,
+                user=triggered_by,
+            )
 
             if not all_evaluated:
                 from diagnostics_engine.services.routing.routing_helpers import (
@@ -312,9 +337,12 @@ class RoutingService:
                 triggered_by=triggered_by,
                 recommendation_confidence=resolved.confidence,
                 all_evaluated=all_evaluated,
+                decision_ctx=decision_ctx,
             )
         except Exception:
             logger.exception("diagnostic routing failed order_id=%s", order_id)
+            from business_audit.decision.routing.hooks import schedule_routing_decision_pipeline_failed
+
             routing_journey_info(
                 "[routing journey] Order %s: pipeline aborted with exception — see diagnostics_engine routing "
                 "logger at ERROR for stack trace; order will be marked ROUTING_FAILED where cleanup succeeds.",
@@ -342,5 +370,11 @@ class RoutingService:
                         routing_status=DiagnosticOrderRoutingStatus.ROUTING_FAILED,
                         updated_at=timezone.now(),
                     )
+                schedule_routing_decision_pipeline_failed(
+                    routing_run=run,
+                    order=order,
+                    reason="routing_failed",
+                    user=triggered_by,
+                )
             except Exception:
                 logger.exception("diagnostic routing failure cleanup also failed order_id=%s", order_id)

@@ -2,6 +2,69 @@
 
 M4.1 provides the framework only. Production modules wire facades in M4.2–M4.8.
 
+## Reference pattern: Booking Audit (M4.3)
+
+M4.3 is the **canonical Business Workflow audit** implementation. Use it as the template for M4.4+ domains.
+
+Production modules integrate via hooks only — never `BusinessAuditService.record()` directly:
+
+```python
+from business_audit.booking.hooks import (
+    schedule_booking_business_created,
+    schedule_booking_business_confirmed,
+)
+
+# After DiagnosticOrder is persisted (inside a transaction):
+schedule_booking_business_created(order=order, user=request.user)
+schedule_booking_business_confirmed(order=order, user=request.user)
+```
+
+The facade (`BookingAuditService`) handles:
+
+- FSM `state_before` / `state_after` on every record
+- Payload and snapshot builders
+- Idempotency guards
+- `parent_workflow_instance_id` linkage to recommendation workflows
+
+See [BOOKING_AUDIT.md](BOOKING_AUDIT.md) and [BOOKING_STATE_MACHINE.md](BOOKING_STATE_MACHINE.md).
+
+## Decision Engine Audit (M4.4)
+
+M4.4 adds explainability for routing decisions. Production modules integrate via routing hooks only:
+
+```python
+from business_audit.decision.routing.hooks import (
+    schedule_routing_decision_started,
+    schedule_routing_business_manual_override,
+)
+```
+
+Post-booking routing is wired inside `RoutingService` / `AssignmentService`. Marketplace recommendations use `schedule_marketplace_routing_decision` from `LabRecommendationService`.
+
+See [DECISION_AUDIT.md](DECISION_AUDIT.md) and [ROUTING_AUDIT.md](ROUTING_AUDIT.md).
+
+## Communication Audit (M4.5)
+
+M4.5 adds explainability for patient communication (report delivery is Use Case #1). Production modules integrate via communication report hooks only:
+
+```python
+from business_audit.communication.report.hooks import (
+    schedule_report_ready,
+    schedule_delivery_requested,
+    schedule_channel_delivery_success,
+    schedule_delivery_failed,
+    schedule_delivery_retried,
+    schedule_report_portal_communication,      # extension point stub
+    schedule_communication_webhook_received,   # extension point stub
+)
+```
+
+Wired inside `ReportWorkflowService.mark_ready`, `ReportDeliveryService` (prepare/send/fail/retry), and Celery `deliver_report_whatsapp` failure path.
+
+`LabReportDeliveryLog.metadata` stores `communication_id`, `communication_attempt_id`, `attempt_number`.
+
+See [COMMUNICATION_AUDIT.md](COMMUNICATION_AUDIT.md) and [REPORT_DELIVERY_AUDIT.md](REPORT_DELIVERY_AUDIT.md).
+
 ## Module facade pattern (M4.2+)
 
 Each module should expose a thin audit facade that:

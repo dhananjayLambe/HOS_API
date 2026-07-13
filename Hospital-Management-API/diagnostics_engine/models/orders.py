@@ -146,6 +146,11 @@ class DiagnosticOrder(models.Model):
         related_name="diagnostic_orders_cancelled",
     )
     is_active = models.BooleanField(default=True)
+    operational_metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Operational workflow metadata (e.g. recommendation_id linkage for business audit).",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey(

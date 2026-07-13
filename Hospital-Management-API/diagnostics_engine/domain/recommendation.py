@@ -313,13 +313,31 @@ class LabRecommendationService:
                 packages=packages,
             )
 
+        eval_started = time.monotonic()
         candidates = EligibilityEngine.evaluate_requirements(
             service_ids=service_ids,
             location=location,
             mode=collection_mode,
         )
+        evaluation_time_ms = int((time.monotonic() - eval_started) * 1000)
         eligible = [c for c in candidates if not c.ineligibility_reasons]
         if not eligible:
+            from business_audit.decision.routing.hooks import schedule_marketplace_routing_decision
+
+            schedule_marketplace_routing_decision(
+                recommendation_id=str(consultation_id),
+                collection_mode=collection_mode,
+                all_evaluated=candidates,
+                ranked=[],
+                confidence=location.confidence,
+                assigned=False,
+                returned_count=len(candidates),
+                filtered_count=len(candidates),
+                evaluation_time_ms=evaluation_time_ms,
+                routing_time_ms=int((time.monotonic() - started) * 1000),
+                failure_reason=RecommendationFailureReason.NO_ELIGIBLE_LABORATORY,
+                organization_id=str(enc.clinic_id),
+            )
             return _failure(
                 consultation_id=consultation_id,
                 reason=RecommendationFailureReason.NO_ELIGIBLE_LABORATORY,
@@ -329,8 +347,27 @@ class LabRecommendationService:
                 packages=packages,
             )
 
+        rank_started = time.monotonic()
         ranked = RankingEngine.rank(eligible)
+        comparison_time_ms = int((time.monotonic() - rank_started) * 1000)
         if not ranked:
+            from business_audit.decision.routing.hooks import schedule_marketplace_routing_decision
+
+            schedule_marketplace_routing_decision(
+                recommendation_id=str(consultation_id),
+                collection_mode=collection_mode,
+                all_evaluated=candidates,
+                ranked=[],
+                confidence=location.confidence,
+                assigned=False,
+                returned_count=len(candidates),
+                filtered_count=len(candidates) - len(eligible),
+                evaluation_time_ms=evaluation_time_ms,
+                comparison_time_ms=comparison_time_ms,
+                routing_time_ms=int((time.monotonic() - started) * 1000),
+                failure_reason=RecommendationFailureReason.NO_ELIGIBLE_LABORATORY,
+                organization_id=str(enc.clinic_id),
+            )
             return _failure(
                 consultation_id=consultation_id,
                 reason=RecommendationFailureReason.NO_ELIGIBLE_LABORATORY,
@@ -359,6 +396,25 @@ class LabRecommendationService:
             )
 
         duration_ms = int((time.monotonic() - started) * 1000)
+        savings = _compute_savings(mrp_total=mrp_total, quoted_price=quoted_price)
+        from business_audit.decision.routing.hooks import schedule_marketplace_routing_decision
+
+        schedule_marketplace_routing_decision(
+            recommendation_id=str(consultation_id),
+            collection_mode=collection_mode,
+            all_evaluated=candidates,
+            ranked=ranked,
+            confidence=location.confidence,
+            assigned=True,
+            returned_count=len(candidates),
+            filtered_count=len(candidates) - len(eligible),
+            evaluation_time_ms=evaluation_time_ms,
+            comparison_time_ms=comparison_time_ms,
+            routing_time_ms=duration_ms,
+            discount_amount=savings,
+            savings=savings,
+            organization_id=str(enc.clinic_id),
+        )
         _log_completed(
             consultation_id,
             win_branch.pk,
@@ -379,7 +435,7 @@ class LabRecommendationService:
             routing_estimated_price=winner.candidate.estimated_price,
             quoted_price=quoted_price,
             mrp_total=mrp_total,
-            savings=_compute_savings(mrp_total=mrp_total, quoted_price=quoted_price),
+            savings=savings,
             pricing_source=pricing_source,
             estimated_tat_hours=winner.candidate.estimated_tat_hours,
             estimated_distance_km=winner.candidate.distance_km,

@@ -111,3 +111,75 @@ def on_report_finalized(report_id: str) -> None:
     """Fan-out after mark-ready."""
     notify_doctor_report_ready.delay(report_id)
 
+
+@shared_task(name="diagnostics_engine.expire_stale_bookings")
+def expire_stale_bookings() -> int:
+    """Emit booking.expired for diagnostic orders past confirmation or slot SLA."""
+    import logging
+    from datetime import timedelta
+
+    from django.conf import settings
+    from django.utils import timezone
+
+    from business_audit.booking.hooks import schedule_booking_business_expired
+    from diagnostics_engine.models.choices import OrderStatus
+    from diagnostics_engine.models.orders import DiagnosticOrder
+    from labs.choices.workflow import AppointmentStatus
+    from labs.models import LabVisitAppointment
+
+    logger = logging.getLogger(__name__)
+    now = timezone.now()
+    expired_count = 0
+
+    confirm_minutes = int(getattr(settings, "BOOKING_CONFIRMATION_TIMEOUT_MINUTES", 1440))
+    confirm_cutoff = now - timedelta(minutes=confirm_minutes)
+
+    stale_created = DiagnosticOrder.objects.filter(
+        status=OrderStatus.CREATED,
+        is_active=True,
+        created_at__lt=confirm_cutoff,
+    )
+    for order in stale_created.iterator():
+        schedule_booking_business_expired(
+            order=order,
+            expiration_reason="confirmation_timeout",
+            prior_status=order.status,
+        )
+        expired_count += 1
+        logger.info(
+            "booking.expired booking_id=%s reason=confirmation_timeout",
+            order.pk,
+        )
+
+    today = now.date()
+    pending_visits = LabVisitAppointment.objects.filter(
+        status=AppointmentStatus.PENDING,
+        appointment_date__lt=today,
+        is_deleted=False,
+    ).select_related("diagnostic_order")
+
+    seen_orders: set[str] = set()
+    for visit in pending_visits.iterator():
+        order = visit.diagnostic_order
+        if order is None or not order.is_active:
+            continue
+        if order.status != OrderStatus.CONFIRMED:
+            continue
+        booking_key = str(order.pk)
+        if booking_key in seen_orders:
+            continue
+        seen_orders.add(booking_key)
+        schedule_booking_business_expired(
+            order=order,
+            expiration_reason="slot_timeout",
+            prior_status=order.status,
+        )
+        expired_count += 1
+        logger.info(
+            "booking.expired booking_id=%s reason=slot_timeout visit_id=%s",
+            order.pk,
+            visit.pk,
+        )
+
+    return expired_count
+

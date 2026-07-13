@@ -189,9 +189,9 @@ Capture operational workflow events with workflow-centric execution tracing.
 |---|---|---|
 | M4.1 | Foundation — `shared/audit/` platform, `business_audit` app, immutable model, fail-open service, tests, docs | **Complete** |
 | M4.2 | Recommendation & marketplace audit — `RecommendationAuditService`, full lifecycle wiring, expiration job | **Complete** |
-| M4.3 | Booking workflow wiring | Planned |
-| M4.4 | Laboratory routing wiring | Planned |
-| M4.5 | Report delivery wiring | Planned |
+| M4.3 | Diagnostic booking audit — `BookingAuditService`, FSM lifecycle, expiration job | **Complete** |
+| M4.4 | Decision Engine Audit Framework — laboratory routing, decision snapshots, certification | **Complete** |
+| M4.5 | Communication Audit Framework — report delivery, channel/provider snapshots, certification | **Complete** |
 | M4.6 | Notification / WhatsApp wiring | Planned |
 | M4.7 | Payment workflow wiring | Planned |
 | M4.8 | Marketplace / home collection wiring | Planned |
@@ -215,7 +215,43 @@ M4.2 deliverables
 * 12 recommendation unit/integration tests; full suite 241 passed
 * Documentation — [`RECOMMENDATION_AUDIT.md`](../../../business_audit/docs/RECOMMENDATION_AUDIT.md), [`RECOMMENDATION_EVENTS.md`](../../../business_audit/docs/RECOMMENDATION_EVENTS.md), [`RECOMMENDATION_WORKFLOW.md`](../../../business_audit/docs/RECOMMENDATION_WORKFLOW.md)
 
-Tasks (M4.3+)
+M4.3 deliverables
+
+* `business_audit/booking/` — facade, payload/snapshot builders, repository, hooks (reference workflow audit pattern)
+* Domain actions: `booking.created`, `.confirmed`, `.modified`, `.cancelled`, `.expired`, `.closed`
+* FSM: every record captures `state_before` → `state_after`
+* Integrations: order creation, visit workflow, lab routing, cancellation, order completion
+* Celery beat: `expire_stale_bookings` (5-minute schedule)
+* `DiagnosticOrder.operational_metadata` for recommendation linkage
+* 35 booking unit/integration tests; full suite 276 passed
+* Documentation — [`BOOKING_AUDIT.md`](../../../business_audit/docs/BOOKING_AUDIT.md), [`BOOKING_EVENTS.md`](../../../business_audit/docs/BOOKING_EVENTS.md), [`BOOKING_WORKFLOW.md`](../../../business_audit/docs/BOOKING_WORKFLOW.md), [`BOOKING_STATE_MACHINE.md`](../../../business_audit/docs/BOOKING_STATE_MACHINE.md)
+
+M4.4 deliverables
+
+* `business_audit/decision/` — generic Decision Snapshot types, builder, constants
+* `business_audit/decision/routing/` — `RoutingAuditService`, payload builder, repository, hooks
+* `business_audit/decision/certification/` — routing decision certification validators
+* Domain actions: `routing.started`, `.rule_evaluated`, `.lab_matched`, `.price_compared`, `.discount_applied`, `.lab_assigned`, `.failed`, `.manual_override`
+* `DecisionStrategy` enum; `BusinessResourceType.DECISION`
+* Integrations: post-booking `RoutingService`/`AssignmentService`, marketplace `LabRecommendationService`, manual override hook
+* `RoutingRun.metadata` stores `decision_id` + `attempt_number`
+* 40 decision unit/integration/certification tests; full suite 316 passed
+* Documentation — [`DECISION_AUDIT.md`](../../../business_audit/docs/DECISION_AUDIT.md), [`ROUTING_AUDIT.md`](../../../business_audit/docs/ROUTING_AUDIT.md), companion ROUTING_* and DECISION_* docs
+
+M4.5 deliverables
+
+* `business_audit/communication/` — generic Communication enums, types, context, snapshot builder, provider registry
+* `business_audit/communication/report/` — `ReportCommunicationAuditService`, payload builder, repository, hooks
+* `business_audit/communication/certification/` — timeline, snapshot, correlation validators
+* Domain actions: `report.ready`, `.delivery_requested`, `.whatsapp_delivery`, `.email_delivery`, `.sms_delivery`, `.portal_delivery`, `.delivery_failed`, `.delivery_retried`, `communication.webhook_received` (stub)
+* `CommunicationChannel`, `CommunicationProvider`, `CommunicationStrategy`, `CommunicationStatus` enums; `BusinessResourceType.COMMUNICATION`
+* Integrations: `ReportWorkflowService.mark_ready`, `ReportDeliveryService` (prepare/send/fail/retry), portal + webhook extension stubs
+* `LabReportDeliveryLog.metadata` stores `communication_id`, `communication_attempt_id`, `attempt_number`
+* 38 communication unit/integration/certification tests; full suite 354 passed
+* Documentation — [`COMMUNICATION_AUDIT.md`](../../../business_audit/docs/COMMUNICATION_AUDIT.md), [`REPORT_DELIVERY_AUDIT.md`](../../../business_audit/docs/REPORT_DELIVERY_AUDIT.md), companion COMMUNICATION_* and REPORT_DELIVERY_* docs
+* Stub packages: `communication/prescription/`, `reminder/`, `otp/`, `invoice/` (M4.6+)
+
+Tasks (M4.6+)
 
 * Wire module facades for recommendations, bookings, routing, delivery, notifications, payments
 * Business Audit certification (M4.9)

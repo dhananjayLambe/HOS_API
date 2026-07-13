@@ -288,12 +288,21 @@ def confirm_visit(
             fields.append("confirmed_at")
         return fields, None
 
-    return _run_transition(
+    visit = _run_transition(
         visit_id=visit_id,
         lab_user=lab_user,
         target_status=AppointmentStatus.CONFIRMED,
         apply=apply,
     )
+    from business_audit.booking.constants import CONFIRMATION_SOURCE_VISIT
+    from business_audit.booking.hooks import schedule_booking_business_confirmed
+
+    schedule_booking_business_confirmed(
+        order=visit.diagnostic_order,
+        user=lab_user.user,
+        confirmation_source=CONFIRMATION_SOURCE_VISIT,
+    )
+    return visit
 
 
 def check_in_visit(
@@ -385,6 +394,11 @@ def reschedule_visit(
     appointment_date: date | None = None,
     appointment_slot: str | None = None,
 ) -> LabVisitAppointment:
+    visit_before = get_visit_for_lab_user(visit_id=visit_id, lab_user=lab_user)
+    old_date = visit_before.appointment_date
+    old_slot = visit_before.appointment_slot
+    order = visit_before.diagnostic_order
+
     now = timezone.now()
     slot = (appointment_slot or "").strip()
     event_extra: dict = {}
@@ -405,9 +419,24 @@ def reschedule_visit(
         extra = event_extra or None
         return fields, extra
 
-    return _run_transition(
+    visit = _run_transition(
         visit_id=visit_id,
         lab_user=lab_user,
         target_status=AppointmentStatus.RESCHEDULED,
         apply=apply,
     )
+
+    from business_audit.booking.hooks import schedule_booking_business_modified
+    from business_audit.booking.snapshot_builder import BookingSnapshotBuilder
+
+    schedule_booking_business_modified(
+        order=order,
+        user=lab_user.user,
+        modification_reason="slot_reschedule",
+        before_snapshot=BookingSnapshotBuilder.slot_snapshot(date=old_date, slot=old_slot),
+        after_snapshot=BookingSnapshotBuilder.slot_snapshot(
+            date=visit.appointment_date,
+            slot=visit.appointment_slot,
+        ),
+    )
+    return visit

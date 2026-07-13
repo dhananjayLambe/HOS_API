@@ -2,6 +2,7 @@
 
 from django.utils import timezone
 
+from business_audit.booking.hooks import schedule_booking_business_cancelled
 from diagnostics_engine.models.choices import OrderStatus, OrderTestLineStatus
 from diagnostics_engine.models.orders import DiagnosticOrder, DiagnosticOrderItem, DiagnosticOrderTestLine
 
@@ -9,6 +10,7 @@ from diagnostics_engine.models.orders import DiagnosticOrder, DiagnosticOrderIte
 class CancellationService:
     @staticmethod
     def cancel_order(order: DiagnosticOrder, user, reason: str = "") -> None:
+        prior_status = order.status
         order.cancelled_at = timezone.now()
         order.cancelled_by = user
         order.cancelled_reason = reason
@@ -17,6 +19,12 @@ class CancellationService:
         DiagnosticOrderTestLine.objects.filter(order=order).exclude(
             status=OrderTestLineStatus.COMPLETED
         ).update(status=OrderTestLineStatus.CANCELLED)
+        schedule_booking_business_cancelled(
+            order=order,
+            user=user,
+            cancellation_reason=reason,
+            prior_status=prior_status,
+        )
 
     @staticmethod
     def cancel_package_line_item(item: DiagnosticOrderItem, user, reason: str = "") -> None:

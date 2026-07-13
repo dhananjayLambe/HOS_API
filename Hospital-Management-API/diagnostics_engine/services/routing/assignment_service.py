@@ -63,6 +63,7 @@ class AssignmentService:
         triggered_by: User | None,
         recommendation_confidence: str,
         all_evaluated: list[EligibilityCandidate] | None = None,
+        decision_ctx=None,
     ) -> RoutingLabOrderAssignment | None:
         run = RoutingRun.objects.select_for_update().get(pk=routing_run.pk)
         encounter = order.encounter
@@ -186,6 +187,15 @@ class AssignmentService:
                 order.order_number,
                 describe_diagnostic_order_tests(order),
             )
+            if decision_ctx is not None:
+                from business_audit.decision.routing.hooks import schedule_routing_decision_outcome
+
+                schedule_routing_decision_outcome(
+                    ctx=decision_ctx,
+                    assigned=False,
+                    failure_reason="no_eligible_branches",
+                    user=triggered_by,
+                )
             return None
 
         snap_rows: list[EligibleLabSnapshot] = []
@@ -270,11 +280,22 @@ class AssignmentService:
             assigned_by=triggered_by,
         )
 
+        old_branch_id = order.branch_id
         DiagnosticOrder.objects.filter(pk=order.pk).update(
             branch_id=top_snap.branch_id,
             routing_status=DiagnosticOrderRoutingStatus.ASSIGNED,
             updated_at=timezone.now(),
         )
+        if old_branch_id != top_snap.branch_id:
+            from business_audit.booking.hooks import schedule_booking_business_modified_lab_reassignment
+
+            order.refresh_from_db()
+            schedule_booking_business_modified_lab_reassignment(
+                order=order,
+                user=triggered_by,
+                old_branch_id=old_branch_id,
+                new_branch_id=top_snap.branch_id,
+            )
 
         from labs.api.services.lab_assignment_provisioning import ensure_lab_order_assignment
 
@@ -350,4 +371,13 @@ class AssignmentService:
             describe_diagnostic_order_tests(order),
             price_human,
         )
+        if decision_ctx is not None:
+            from business_audit.decision.routing.hooks import schedule_routing_decision_outcome
+
+            schedule_routing_decision_outcome(
+                ctx=decision_ctx,
+                assigned=True,
+                discount_amount=getattr(order, "discount_amount", None),
+                user=triggered_by,
+            )
         return assignment
