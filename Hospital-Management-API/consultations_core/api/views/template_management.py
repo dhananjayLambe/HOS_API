@@ -9,6 +9,7 @@ from rest_framework.response import Response
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from account.permissions import IsDoctor
+from utils.utils import is_swagger_schema_generation
 from consultations_core.api.serializers.template_management import (
     CATEGORY_TO_CONSULTATION_TYPE,
     TemplateDetailSerializer,
@@ -47,6 +48,8 @@ class TemplateManagementViewSet(
     lookup_field = "pk"
 
     def get_queryset(self):
+        if is_swagger_schema_generation(self):
+            return ClinicalTemplate.objects.none()
         qs = ClinicalTemplate.objects.filter(
             doctor=self.request.user.doctor,
             is_active=True,

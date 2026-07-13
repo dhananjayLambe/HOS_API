@@ -62,6 +62,7 @@ from doctor.api.serializers import (
 from appointments.models import Appointment
 #from prescriptions.models import Prescription
 from account.permissions import IsDoctorOrHelpdesk,IsDoctorOrHelpdeskOrPatient
+from utils.utils import is_swagger_schema_generation
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import  filters
 from rest_framework.pagination import PageNumberPagination
@@ -473,6 +474,8 @@ class PendingHelpdeskRequestsView(generics.ListAPIView):
 
     def get_queryset(self):
         """Fetch clinics associated with the doctor and return pending helpdesk users"""
+        if is_swagger_schema_generation(self):
+            return HelpdeskClinicUser.objects.none()
         doctor = self.request.user.doctor  
         clinics = doctor.clinics.all()  # Get all clinics where doctor works
         return HelpdeskClinicUser.objects.filter(clinic__in=clinics, is_active=False)
@@ -850,6 +853,8 @@ class EducationViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, IsDoctor]
 
     def get_queryset(self):
+        if is_swagger_schema_generation(self):
+            return Education.objects.none()
         return Education.objects.filter(doctor=self.request.user.doctor)
 
     @transaction.atomic
@@ -931,6 +936,8 @@ class SpecializationViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, IsDoctor]
 
     def get_queryset(self):
+        if is_swagger_schema_generation(self):
+            return Specialization.objects.none()
         return Specialization.objects.filter(doctor=self.request.user.doctor).order_by('-created_at')
 
     def get_specialization_name(self, specialization_instance):
@@ -1297,6 +1304,8 @@ class DoctorServiceViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, IsDoctor]
 
     def get_queryset(self):
+        if is_swagger_schema_generation(self):
+            return DoctorService.objects.none()
         return DoctorService.objects.filter(doctor=self.request.user.doctor).order_by('-created_at')
 
     @transaction.atomic
@@ -1338,6 +1347,8 @@ class AwardViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, IsDoctor]
 
     def get_queryset(self):
+        if is_swagger_schema_generation(self):
+            return Award.objects.none()
         return Award.objects.filter(doctor=self.request.user.doctor).order_by('-date_awarded')
 
     @transaction.atomic
@@ -1378,6 +1389,8 @@ class CertificationViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, IsDoctor]
 
     def get_queryset(self):
+        if is_swagger_schema_generation(self):
+            return Certification.objects.none()
         return Certification.objects.filter(doctor=self.request.user.doctor).order_by('-date_of_issue')
 
     @transaction.atomic
@@ -1562,6 +1575,8 @@ class RegistrationViewSet(viewsets.ModelViewSet):
     http_method_names = ['get', 'post', 'put', 'patch', 'delete']  # restrict to allowed methods
 
     def get_queryset(self):
+        if is_swagger_schema_generation(self):
+            return Registration.objects.none()
         user = self.request.user
         if user.is_superuser:
             return Registration.objects.all()

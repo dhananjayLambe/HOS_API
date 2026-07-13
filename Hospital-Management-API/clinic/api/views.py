@@ -16,6 +16,7 @@ from rest_framework_simplejwt.views import (
 )
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from account.permissions import IsClinicAdmin, IsDoctorOrClinicAdminOrSuperuser, IsDoctorOrHelpdeskOrClinicAdminOrSuperuser
+from utils.utils import is_swagger_schema_generation
 
 from clinic.api.serializers import (
     ClinicAddressSerializer,
@@ -428,6 +429,8 @@ class ClinicServiceListViewSet(viewsets.ModelViewSet):
     serializer_class = ClinicServiceListSerializer
 
     def get_queryset(self):
+        if is_swagger_schema_generation(self):
+            return ClinicServiceList.objects.none()
         doctor = self.request.user.doctor  # OneToOneField from User
         return ClinicServiceList.objects.filter(clinic__in=doctor.clinics.all()).order_by('-updated_at')
 

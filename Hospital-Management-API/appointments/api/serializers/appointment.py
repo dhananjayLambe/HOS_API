@@ -491,6 +491,7 @@ class PatientAppointmentFilterSerializer(serializers.Serializer):
 
 class AppointmentHistorySerializer(serializers.ModelSerializer):
     changed_by = serializers.SerializerMethodField()
+    timestamp = serializers.DateTimeField(source="created_at", read_only=True)
 
     class Meta:
         model = AppointmentHistory
