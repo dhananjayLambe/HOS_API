@@ -84,11 +84,23 @@ class ClinicalAuditService:
             record = cls._builder.build(validated)
             correlation_for_log = record.correlation_id
             saved = cls._repository.save(record)
-            return AuditRecordResult(
+            result = AuditRecordResult(
                 success=True,
                 audit_id=saved.id,
                 correlation_id=saved.correlation_id,
             )
+            if result.audit_id:
+                try:
+                    from support_trace.workflow.hooks import (
+                        schedule_workflow_state_update_from_clinical_audit,
+                    )
+
+                    schedule_workflow_state_update_from_clinical_audit(
+                        audit_id=result.audit_id
+                    )
+                except Exception:
+                    pass
+            return result
         except ClinicalAuditError as exc:
             logger.warning(
                 "clinical_audit_record_failed",

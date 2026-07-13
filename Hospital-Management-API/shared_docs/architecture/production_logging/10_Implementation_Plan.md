@@ -268,20 +268,120 @@ Phase 5 — Support Trace Index
 
 Objective
 
-Enable rapid production investigation.
+Enable rapid production investigation via a mutable workflow projection rebuildable from immutable audit history.
 
-Tasks
+| Milestone | Scope | Status |
+|---|---|---|
+| M5.1 | Foundation — `support_trace` app, mutable projection model, full identifier index, sync metadata, `SupportTraceSyncEvent` contract, fail-open service, `trace_version` concurrency, tests, docs | **Complete** |
+| M5.2 | Workflow State Management — ProjectionEngine, WorkflowSyncService, per-workflow registries/FSMs, on_commit audit hooks, `current_snapshot`, split resolvers | **Complete** |
+| M5.3 | Identifier Resolution Framework — strategy registries, IdentifierSyncService, SearchPlanner, SupportTraceSearchRepository, RelationshipResolver, `lookup_any()`, identifier stats, tests, docs | **Complete** |
+| M5.4 | Timeline Aggregation Engine — source adapters, TimelineEvent DTO, TimelineGraph, TimelineService, certification validators | **Complete** |
+| M5.5 | Support Investigation Engine — InvestigationEngine, InvestigationPolicy, TraceLookupService, health/summary/report builders | **Complete** |
+| M5.6 | Support Investigation REST API Platform — facade, contracts, GET+POST search, investigation/timeline endpoints, export stubs | **Complete** |
+| M5.7 | Production Incident Reconstruction Engine — IncidentReconstructionService, analyzers, IncidentReport | **Complete** |
+| M5.8 | Observability Integration Framework — `runtime_metadata`, CloudWatch console URLs, Celery/Lambda/deployment refs | **Complete** |
+| M5.9 | Support Trace Platform Certification — orchestrated validators, golden E2E scenarios, production readiness | **Complete** |
 
-* Create Support Trace model
-* Maintain workflow state
-* Index business identifiers
-* Store Correlation ID
-* Build search APIs
-* Build trace lookup service
+**Phase 5 complete.**
+
+M5.1 deliverables
+
+* `support_trace` Django app — mutable `SupportTrace` projection model with `trace_version`, `projection_version`, `workflow_fingerprint`, `sync_status`, `workflow_health`, `search_vector`
+* Full identifier index — 16 business identifier columns with `find_by_identifier` / `find_all_by_identifier`
+* `SupportTraceSyncEvent` dataclass + `ProjectionEngine.project()` stub (M5.2 consumer contract)
+* `SupportTraceService.record()` — fail-open upsert with `duration_ms` and `workflow_health` derivation
+* `SupportTraceRepository.upsert()` — `select_for_update` + optimistic `trace_version`; no production `delete()`
+* Read-only Django admin with correlation/workflow/identifier/sync_status filters
+* 33 unit/integration tests; full suite 387 passed
+* Documentation — [`support_trace/docs/README.md`](../../../support_trace/docs/README.md) and companion PROJECTION_*, SYNC_EVENT_*, DATA_MODEL, WORKFLOW_MODEL, IDENTIFIER_INDEX, SERVICE, SEARCH_FOUNDATION, HOW_TO_USE docs
+
+M5.2 deliverables
+
+* `support_trace/workflow/` — WorkflowSyncService, WorkflowStateService, split resolvers, per-workflow registries, state machines, transition validator
+* Elevated `ProjectionEngine` — Audit → SyncEvent → Engine → WorkflowSyncService → SupportTrace
+* `current_snapshot` JSONField + migration `0002`; clinical deterministic workflow IDs (`clinical:consultation:…`)
+* on_commit hooks wired into `BusinessAuditService` and `ClinicalAuditService` (fail-open)
+* `bulk_upsert()` repository stub for M5.9 rebuild backfill
+* 60 support_trace tests; full suite **414 passed**
+* Documentation — WORKFLOW_STATE, STATE_MACHINE, STATE_REGISTRY, WORKFLOW_SYNC, TRANSITION_RULES, PROJECTION_MODEL
+
+M5.3 deliverables
+
+* `support_trace/identifiers/` — IdentifierStrategy protocol, split registries, SearchPlanner, SupportTraceSearchRepository, RelationshipResolver, LookupResultBuilder
+* `IdentifierSyncService` wired into `WorkflowSyncService` — accumulative merge, `first_seen_at` / `last_seen_at` / `identifier_count`
+* `IdentifierLookupService.lookup_any()` — universal identifier resolution with rich `IdentifierLookupResult` metadata
+* Migration `0003` — `order_id`, index coverage, identifier stats columns
+* 31 identifier tests; full suite **445 passed**
+* Documentation — IDENTIFIER_STRATEGY, IDENTIFIER_REGISTRY, IDENTIFIER_LOOKUP, SEARCH_PLANNER, SEARCH_INDEX, NORMALIZATION, RELATIONSHIP_RESOLVER
+
+M5.4 deliverables
+
+* `support_trace/timeline/` — read-only aggregation engine (no new tables, no writes)
+* Source adapters — `ClinicalAdapter`, `BusinessAdapter`, `SupportTraceAdapter`, `CloudWatchAdapter` (stub)
+* `TimelineEvent` DTO — stable `timeline_event_id` (UUID5), `severity`, `tags`, `timeline_sequence`
+* `TimelineGraph` — nodes + edges + `as_tree()` for M5.7 incident reconstruction
+* `TimelineRepository.fetch_bundle()` — batch read facade over clinical/business audits + SupportTrace
+* `TimelineEngine` pipeline — merge, sort, group, filter, snapshot, statistics
+* `TimelineService` public API — `build_correlation/patient/consultation/booking/workflow_timeline()`
+* `certification.py` — M5.9-ready timeline validators (fail-open)
+* 19 timeline tests; full suite **464 passed**
+* Documentation — TIMELINE_ENGINE, TIMELINE_EVENT, TIMELINE_ADAPTERS, TIMELINE_MERGING, TIMELINE_FILTERS, TIMELINE_PERFORMANCE, TIMELINE_EXAMPLES, EVENT_REGISTRY
+
+M5.5 deliverables
+
+* `support_trace/lookup/` — Support Investigation Engine (read-only orchestration, no new tables)
+* `InvestigationEngine` + `InvestigationContext` + `InvestigationPolicy` (depth, limits, masking)
+* `TraceLookupService` — `investigate()`, `lookup_any()`, all `lookup_by_*`, `lookup_many(parallel=True)`
+* Delegates to M5.3 `IdentifierLookupService` + M5.4 `TimelineEngine.build_from_bundle()`
+* `StructuredSummary` + `NarrativeSummary`, multi-dimension `HealthAssessment`, `InvestigationStatistics`
+* `InvestigationReportBuilder` — JSON / Markdown / Plain Text
+* 5 new M5.3 typed lookups (encounter, recommendation, routing, prescription, invoice)
+* `TimelineGraph` helpers — `root()`, `children()`, `parents()`, `find()`, `depth()`, `to_tree()`
+* 33 investigation tests; full suite **497 passed**
+* Documentation — INVESTIGATION_ENGINE, INVESTIGATION_POLICY, INVESTIGATION_RESULT, LOOKUP_APIS, SUPPORT_INVESTIGATION, TRACE_LOOKUP_EXAMPLES
+
+M5.6 deliverables
+
+* `support_trace/api/` — SupportInvestigationFacade, SupportInvestigationContext, immutable contracts, serializers/v1
+* REST endpoints at `/api/v1/support/` — search (GET+POST), investigation lookups, timeline, export stubs (501)
+* `investigation_id` in all response metadata; `expand=health` replaces dedicated health endpoint
+* Configurable throttling — `SUPPORT_SEARCH_RATE`, `SUPPORT_LOOKUP_RATE`, `SUPPORT_TIMELINE_RATE`
+* 18 API tests; full suite **515 passed**
+* Documentation — SUPPORT_API, SEARCH_API, WORKFLOW_API, TIMELINE_API, AUTHORIZATION, API_RESPONSES, API_CONTRACTS, API_FILTERS, ERROR_CODES, OPENAPI
+
+M5.7 deliverables
+
+* `support_trace/incident/` — IncidentReconstructionService, ReconstructionEngine, pluggable analyzers
+* `IncidentReport` canonical model — failure, retry, duration, impact, graph, narrative, recommendations
+* Typed `WorkflowGraph` — Patient → Consultation → … → WhatsApp journey
+* Deterministic template-based narrative and operational recommendations (no AI)
+* 83 incident tests; full suite **598 passed**
+* Documentation — INCIDENT_RECONSTRUCTION, INCIDENT_ENGINE, WORKFLOW_GRAPH, FAILURE_ANALYSIS, RETRY_ANALYSIS, IMPACT_ANALYSIS, RECONSTRUCTION_EXAMPLES
+
+M5.8 deliverables
+
+* `support_trace/runtime/` — RuntimeContext, RuntimeResolver, RuntimeBuilder, CloudWatchLinkBuilder, RuntimeIntegrationService
+* Migration `0004` — `runtime_metadata` JSONField on `SupportTrace`
+* Wired into `SupportTraceService.record()` — shallow merge, fail-open
+* Repository extensions — `update_runtime`, `get_by_request_id`, `get_by_celery_task`, etc.
+* REST `expand=logs` / `expand=runtime` on M5.6 investigation endpoints
+* 24 runtime tests; full suite **623 passed** (approx.)
+* Documentation — RUNTIME_CONTEXT, CLOUDWATCH_INTEGRATION, LOGGER_INTEGRATION, CELERY_CONTEXT, DEPLOYMENT_METADATA
+
+M5.9 deliverables
+
+* `support_trace/certification/` — `CertificationService.run()`, `SupportTraceCertificationReport`
+* Platform validators — workflow, identifier, timeline, lookup, incident, runtime, CloudWatch, API, integrity, performance
+* Delegates to per-engine certifications (timeline, investigation, incident)
+* Golden E2E scenarios — booking, failed WhatsApp, correlation multi-trace
+* 27 certification tests; full suite **649 passed**
+* Documentation — CERTIFICATION, CERTIFICATION_CHECKLIST, CERTIFICATION_REPORT, PERFORMANCE_TARGETS, PRODUCTION_READINESS, END_TO_END_VALIDATION
 
 Deliverable
 
-Single entry point for production support.
+Single entry point for production support — mutable index always rebuildable from Clinical + Business Audit.
+
+See [`support_trace/docs/README.md`](../../../support_trace/docs/README.md).
 
 ⸻
 

@@ -72,6 +72,11 @@ INV_SUGGEST_MAX_PER_CATEGORY = int(os.getenv("INV_SUGGEST_MAX_PER_CATEGORY", "3"
 INV_SUGGEST_MAX_PACKAGE_SIZE = int(os.getenv("INV_SUGGEST_MAX_PACKAGE_SIZE", "25"))
 INV_SUGGEST_CACHE_TTL_SECONDS = int(os.getenv("INV_SUGGEST_CACHE_TTL_SECONDS", "120"))
 
+# Support Investigation API throttling (M5.6)
+SUPPORT_SEARCH_RATE = os.getenv("SUPPORT_SEARCH_RATE", "60/min")
+SUPPORT_LOOKUP_RATE = os.getenv("SUPPORT_LOOKUP_RATE", "120/min")
+SUPPORT_TIMELINE_RATE = os.getenv("SUPPORT_TIMELINE_RATE", "120/min")
+
 # Diagnostic report artifact uploads (per-file and batch limits)
 MAX_REPORT_UPLOAD_SIZE_MB = int(os.getenv("MAX_REPORT_UPLOAD_SIZE_MB", "20"))
 MAX_REPORT_BATCH_UPLOAD_SIZE_MB = int(os.getenv("MAX_REPORT_BATCH_UPLOAD_SIZE_MB", "100"))
@@ -232,6 +237,7 @@ INSTALLED_APPS = [
     'notifications.apps.NotificationsConfig',
     'clinical_audit.apps.ClinicalAuditConfig',
     'business_audit.apps.BusinessAuditConfig',
+    'support_trace.apps.SupportTraceConfig',
     'clinical_documentation.apps.ClinicalDocumentationConfig',
     # rest_framework
     'rest_framework',
@@ -271,6 +277,9 @@ REST_FRAMEWORK={
         'user': '10000/day',   # Increased limit for development
         'anon': '1000/day',
         'appointment_slots': APPOINTMENT_SLOTS_THROTTLE,
+        'support_search': SUPPORT_SEARCH_RATE,
+        'support_lookup': SUPPORT_LOOKUP_RATE,
+        'support_timeline': SUPPORT_TIMELINE_RATE,
     },
      "DATETIME_FORMAT": "%Y-%m-%d %H:%M:%S",
 }

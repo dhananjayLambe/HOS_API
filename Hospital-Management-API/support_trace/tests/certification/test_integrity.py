@@ -1,0 +1,21 @@
+"""Integrity certification tests."""
+
+from __future__ import annotations
+
+from django.test import TestCase
+
+from support_trace.certification.integrity_validator import IntegrityValidator
+from support_trace.tests.support import record_trace_event, setup_trace_context
+
+
+class IntegrityCertificationTests(TestCase):
+    def tearDown(self) -> None:
+        from shared.logging.context import get_context_manager
+
+        get_context_manager().clear()
+
+    def test_validate_clean_data(self) -> None:
+        clinic, corr_id, wf_id = setup_trace_context()
+        record_trace_event(clinic, wf_id, correlation_id=corr_id)
+        warnings, score = IntegrityValidator.validate()
+        self.assertEqual(score, 1.0)

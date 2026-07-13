@@ -141,6 +141,17 @@ class BusinessAuditService(BaseAuditService):
             log_extra={"workflow_instance_id": workflow_instance_id},
         )
         if isinstance(result, BusinessAuditResult):
+            if result.success and result.audit_id:
+                try:
+                    from support_trace.workflow.hooks import (
+                        schedule_workflow_state_update_from_business_audit,
+                    )
+
+                    schedule_workflow_state_update_from_business_audit(
+                        audit_id=result.audit_id
+                    )
+                except Exception:
+                    pass
             return result
         return BusinessAuditResult(
             success=False,
