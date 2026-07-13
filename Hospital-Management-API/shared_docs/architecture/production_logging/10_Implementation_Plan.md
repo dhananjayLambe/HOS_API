@@ -183,21 +183,48 @@ Phase 4 — Business Audit
 
 Objective
 
-Capture operational workflow events.
+Capture operational workflow events with workflow-centric execution tracing.
 
-Tasks
+| Milestone | Scope | Status |
+|---|---|---|
+| M4.1 | Foundation — `shared/audit/` platform, `business_audit` app, immutable model, fail-open service, tests, docs | **Complete** |
+| M4.2 | Recommendation & marketplace audit — `RecommendationAuditService`, full lifecycle wiring, expiration job | **Complete** |
+| M4.3 | Booking workflow wiring | Planned |
+| M4.4 | Laboratory routing wiring | Planned |
+| M4.5 | Report delivery wiring | Planned |
+| M4.6 | Notification / WhatsApp wiring | Planned |
+| M4.7 | Payment workflow wiring | Planned |
+| M4.8 | Marketplace / home collection wiring | Planned |
+| M4.9 | Business Audit certification | Planned |
 
-* Create Business Audit model
-* Build Business Audit Service
-* Record recommendations
-* Record bookings
-* Record laboratory routing
-* Record report delivery
-* Record notification events
+M4.1 deliverables
+
+* `shared/audit/` — envelope, sanitization, immutability, base validator/builder/repository/service
+* `business_audit` Django app — workflow-centric model with `workflow_instance_id`, `parent_workflow_instance_id`, `sequence_no`, separated `status`/`outcome`, execution/provider/retry fields
+* Extended `LogContext` — workflow, tenant, environment, deployment fields
+* `BusinessAuditService.record()` — fail-open write path
+* 29 unit/integration tests; clinical regression (196 tests) unchanged
+* Documentation — [`business_audit/docs/README.md`](../../../business_audit/docs/README.md) and companion docs
+
+M4.2 deliverables
+
+* `business_audit/recommendation/` — facade, payload/snapshot builders, repository, hooks
+* Domain actions: `recommendation.generated`, `.sent`, `.delivered`, `.read`, `.failed`, `.retried`, `.expired`
+* Integrations: marketplace API, WhatsApp orchestrator, send/webhook/retry paths
+* Celery beat: `expire_stale_recommendations` (5-minute schedule)
+* 12 recommendation unit/integration tests; full suite 241 passed
+* Documentation — [`RECOMMENDATION_AUDIT.md`](../../../business_audit/docs/RECOMMENDATION_AUDIT.md), [`RECOMMENDATION_EVENTS.md`](../../../business_audit/docs/RECOMMENDATION_EVENTS.md), [`RECOMMENDATION_WORKFLOW.md`](../../../business_audit/docs/RECOMMENDATION_WORKFLOW.md)
+
+Tasks (M4.3+)
+
+* Wire module facades for recommendations, bookings, routing, delivery, notifications, payments
+* Business Audit certification (M4.9)
 
 Deliverable
 
-Permanent operational history.
+Permanent operational history with nested workflow reconstruction and correlation-linked patient journeys.
+
+See [`business_audit/docs/README.md`](../../../business_audit/docs/README.md) and [06_Business_Audit.md](06_Business_Audit.md).
 
 ⸻
 

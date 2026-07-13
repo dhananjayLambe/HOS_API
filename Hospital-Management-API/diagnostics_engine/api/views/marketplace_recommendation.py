@@ -28,6 +28,8 @@ from diagnostics_engine.services.marketplace_recommendation_audit import (
     emit_recommendation_metrics,
     record_marketplace_recommendation_audit,
 )
+from business_audit.domain.context import apply_workflow_context
+from business_audit.recommendation.hooks import schedule_recommendation_business_generated
 from consultations_core.audit import schedule_recommendation_generated
 from diagnostics_engine.services.recommendation_access import resolve_consultation_access
 
@@ -67,6 +69,7 @@ class MarketplaceRecommendationView(APIView):
     )
     def post(self, request):
         recommendation_id = uuid.uuid4()
+        apply_workflow_context(workflow_instance_id=str(recommendation_id))
         request_id = resolve_request_id(request.headers.get("X-Request-ID"))
         started = time.monotonic()
         client_request_id: str | None = None
@@ -221,6 +224,21 @@ class MarketplaceRecommendationView(APIView):
             client_request_id=client_request_id,
             duration_ms=duration_ms,
             generated_at=result.generated_at,
+        )
+
+        expires_at = (
+            payload.get("metadata", {}).get("expires_at")
+            if isinstance(payload.get("metadata"), dict)
+            else None
+        )
+        schedule_recommendation_business_generated(
+            consultation=consultation,
+            recommendation_id=recommendation_id,
+            result=result,
+            user=request.user,
+            source_path="marketplace_api",
+            expires_at=expires_at,
+            request_id=request_id,
         )
 
         branch_id = str(result.recommended_branch.pk) if result.recommended_branch else None

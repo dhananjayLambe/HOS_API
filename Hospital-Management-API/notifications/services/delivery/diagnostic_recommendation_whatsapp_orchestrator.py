@@ -11,6 +11,8 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 
+from business_audit.domain.context import apply_workflow_context
+from business_audit.recommendation.hooks import schedule_recommendation_business_generated
 from consultations_core.models.consultation import Consultation
 from consultations_core.models.prescription import Prescription, PrescriptionStatus
 from diagnostics_engine.domain.investigation_resolution import load_convertible_investigation_items
@@ -112,9 +114,19 @@ def run_prepare_and_enqueue(
 
         result = LabRecommendationService.recommend(consultation=consultation)
         recommendation_id = uuid.uuid4()
+        apply_workflow_context(workflow_instance_id=str(recommendation_id))
         now = timezone.now()
         ttl = _recommendation_ttl_seconds()
         expires_at = now + timedelta(seconds=ttl)
+
+        schedule_recommendation_business_generated(
+            consultation=consultation,
+            recommendation_id=recommendation_id,
+            result=result,
+            user=None,
+            source_path="whatsapp_orchestrator",
+            expires_at=expires_at.isoformat(),
+        )
 
         prescription = (
             Prescription.objects.filter(

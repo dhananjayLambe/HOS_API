@@ -11,6 +11,15 @@ from django.utils.dateparse import parse_datetime
 from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 
+from business_audit.enums import ActorType
+from business_audit.recommendation.hooks import (
+    schedule_recommendation_business_delivered,
+    schedule_recommendation_business_failed,
+    schedule_recommendation_business_read,
+)
+from business_audit.recommendation.recommendation_audit_service import (
+    RecommendationAuditService,
+)
 from notifications.models.whatsapp_notifications import WhatsAppMessage, WhatsAppMessageStatus
 from notifications.services.audit.prescription_whatsapp_audit import (
     emit_prescription_whatsapp_audit_event,
@@ -93,6 +102,13 @@ class WhatsAppWebhookAPIView(APIView):
                 message=message,
                 metadata={"provider_status": provider_status},
             )
+            if message.message_type == "TEST_BOOKING":
+                self._schedule_recommendation_business_webhook_event(
+                    message=message,
+                    meta_message_id=meta_message_id,
+                    mapped=mapped,
+                    provider_status=provider_status,
+                )
             return
 
         message.mark_status(mapped, at=at)
@@ -127,4 +143,51 @@ class WhatsAppWebhookAPIView(APIView):
                 action=audit_action,
                 message=message,
                 metadata={"provider_status": provider_status},
+            )
+        if message.message_type == "TEST_BOOKING":
+            self._schedule_recommendation_business_webhook_event(
+                message=message,
+                meta_message_id=meta_message_id,
+                mapped=mapped,
+                provider_status=provider_status,
+            )
+
+    def _schedule_recommendation_business_webhook_event(
+        self,
+        *,
+        message: WhatsAppMessage,
+        meta_message_id: str,
+        mapped: WhatsAppMessageStatus,
+        provider_status: str,
+    ) -> None:
+        payload = message.request_payload or {}
+        recommendation_id = (payload.get("recommendation_id") or "").strip()
+        consultation = RecommendationAuditService.resolve_consultation_from_message(message)
+        if consultation is None or not recommendation_id:
+            return
+
+        if mapped == WhatsAppMessageStatus.DELIVERED:
+            schedule_recommendation_business_delivered(
+                consultation=consultation,
+                recommendation_id=recommendation_id,
+                whatsapp_message=message,
+                meta_message_id=meta_message_id,
+            )
+        elif mapped == WhatsAppMessageStatus.READ:
+            schedule_recommendation_business_read(
+                consultation=consultation,
+                recommendation_id=recommendation_id,
+                whatsapp_message=message,
+                meta_message_id=meta_message_id,
+            )
+        elif mapped == WhatsAppMessageStatus.FAILED:
+            schedule_recommendation_business_failed(
+                consultation=consultation,
+                recommendation_id=recommendation_id,
+                whatsapp_message=message,
+                failure_reason=message.failure_reason or "Delivery failed",
+                provider_response_code=message.error_code or provider_status,
+                prior_status="Sent",
+                meta_message_id=meta_message_id,
+                actor_type=ActorType.WEBHOOK,
             )

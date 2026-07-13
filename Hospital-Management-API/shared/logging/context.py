@@ -35,6 +35,11 @@ class LogContext:
         laboratory_id: Laboratory identifier, if applicable.
         report_id: Report identifier, if applicable.
         whatsapp_message_id: WhatsApp message identifier, if applicable.
+        workflow_instance_id: Runtime workflow execution identifier, if applicable.
+        parent_workflow_instance_id: Parent workflow execution for nested workflows.
+        tenant: Tenant identifier for multi-tenant deployments.
+        environment: Deployment environment (e.g. production, staging).
+        deployment: Release or build identifier.
     """
 
     correlation_id: str | None = None
@@ -50,6 +55,11 @@ class LogContext:
     laboratory_id: str | None = None
     report_id: str | None = None
     whatsapp_message_id: str | None = None
+    workflow_instance_id: str | None = None
+    parent_workflow_instance_id: str | None = None
+    tenant: str | None = None
+    environment: str | None = None
+    deployment: str | None = None
 
 
 _EMPTY_LOG_CONTEXT = LogContext()

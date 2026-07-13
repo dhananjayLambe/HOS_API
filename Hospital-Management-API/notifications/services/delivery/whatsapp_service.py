@@ -10,6 +10,12 @@ from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
+from business_audit.recommendation.hooks import (
+    schedule_recommendation_business_failed,
+    schedule_recommendation_business_queued,
+    schedule_recommendation_business_retried,
+    schedule_recommendation_business_sent,
+)
 from consultations_core.models.prescription import PrescriptionStatus
 from consultations_core.services.prescription_summary_builder import PrescriptionSummaryBuilder
 from notifications.models.whatsapp_notifications import (
@@ -356,6 +362,15 @@ class WhatsAppService:
                 consultation.id,
                 existing.id,
             )
+            schedule_recommendation_business_retried(
+                consultation=consultation,
+                recommendation_id=recommendation_id,
+                whatsapp_message=existing,
+                retry_count=1,
+                retry_reason="In-service retry queue",
+                prior_status="Failed",
+                prior_retry_count=0,
+            )
 
         encounter = consultation.encounter
         profile = encounter.patient_profile
@@ -492,6 +507,11 @@ class WhatsAppService:
                 message=retry_message,
                 metadata={"variant": variant, "consultation_id": str(consultation.id), "retry": True},
             )
+            schedule_recommendation_business_queued(
+                consultation=consultation,
+                recommendation_id=recommendation_id,
+                whatsapp_message=retry_message,
+            )
             return retry_message
 
         message = WhatsAppMessage(
@@ -518,6 +538,11 @@ class WhatsAppService:
             prescription=prescription,
             message=message,
             metadata={"variant": variant, "consultation_id": str(consultation.id)},
+        )
+        schedule_recommendation_business_queued(
+            consultation=consultation,
+            recommendation_id=recommendation_id,
+            whatsapp_message=message,
         )
         return message
 
@@ -672,6 +697,16 @@ class WhatsAppService:
         from diagnostics_engine.audit import schedule_test_recommendation_sent
 
         schedule_test_recommendation_sent(message=message, user=None)
+        consultation = self._resolve_consultation_for_recommendation_message(message)
+        recommendation_id = (payload.get("recommendation_id") or "").strip()
+        if consultation is not None and recommendation_id:
+            schedule_recommendation_business_sent(
+                consultation=consultation,
+                recommendation_id=recommendation_id,
+                whatsapp_message=message,
+                meta_message_id=meta_message_id,
+                execution_time_ms=execution_time_ms,
+            )
         return message
 
     @transaction.atomic
@@ -952,6 +987,21 @@ class WhatsAppService:
             message=message,
             metadata={"error_code": code, "reason": reason},
         )
+        consultation = self._resolve_consultation_for_recommendation_message(message)
+        recommendation_id = (payload.get("recommendation_id") or "").strip()
+        if consultation is not None and recommendation_id:
+            from business_audit.enums import ActorType
+
+            schedule_recommendation_business_failed(
+                consultation=consultation,
+                recommendation_id=recommendation_id,
+                whatsapp_message=message,
+                failure_reason=reason,
+                provider_response_code=str(code),
+                prior_status="Queued",
+                meta_message_id=(message.meta_message_id or "").strip() or None,
+                actor_type=ActorType.CELERY,
+            )
         return message
 
     def _mark_failed(
@@ -1089,6 +1139,28 @@ class WhatsAppService:
         if raw_phone:
             return try_normalize_delivery_phone(raw_phone) or ""
         return try_normalize_delivery_phone(fallback or "") or ""
+
+    @staticmethod
+    def _resolve_consultation_for_recommendation_message(message: WhatsAppMessage):
+        from consultations_core.models.consultation import Consultation
+
+        if message.prescription is not None:
+            return message.prescription.consultation
+        if message.encounter_id:
+            return (
+                Consultation.objects.select_related("encounter")
+                .filter(encounter_id=message.encounter_id)
+                .first()
+            )
+        payload = message.request_payload or {}
+        consultation_id = payload.get("consultation_id")
+        if consultation_id:
+            return (
+                Consultation.objects.select_related("encounter")
+                .filter(pk=consultation_id)
+                .first()
+            )
+        return None
 
     @staticmethod
     def _load_consultation(consultation):

@@ -8,7 +8,12 @@ from celery import shared_task
 from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist
 
-from notifications.models.whatsapp_notifications import WhatsAppMessageStatus
+from business_audit.domain.context import apply_workflow_context
+from business_audit.recommendation.hooks import schedule_recommendation_business_retried
+from business_audit.recommendation.recommendation_audit_service import (
+    RecommendationAuditService,
+)
+from notifications.models.whatsapp_notifications import WhatsAppMessage, WhatsAppMessageStatus
 from notifications.services.delivery.diagnostic_recommendation_whatsapp_orchestrator import (
     run_prepare_and_enqueue as run_prepare_recommendation_and_enqueue,
 )
@@ -156,6 +161,41 @@ def prepare_diagnostic_recommendation_whatsapp(
             raise self.retry(exc=exc) from exc
 
 
+def _schedule_send_retry_audit(message_id: str, *, retry_count: int, retry_reason: str) -> None:
+    try:
+        message = WhatsAppMessage.objects.select_related(
+            "prescription",
+            "prescription__consultation",
+            "prescription__consultation__encounter",
+            "encounter",
+        ).filter(pk=message_id, is_deleted=False).first()
+        if message is None:
+            return
+        payload = message.request_payload or {}
+        recommendation_id = (payload.get("recommendation_id") or "").strip()
+        if recommendation_id:
+            apply_workflow_context(workflow_instance_id=recommendation_id)
+        consultation = RecommendationAuditService.resolve_consultation_from_message(message)
+        if consultation is None or not recommendation_id:
+            return
+        schedule_recommendation_business_retried(
+            consultation=consultation,
+            recommendation_id=recommendation_id,
+            whatsapp_message=message,
+            retry_count=retry_count,
+            retry_reason=retry_reason,
+            prior_status=str(message.status),
+            prior_retry_count=max(retry_count - 1, 0),
+            max_retry=3,
+        )
+    except Exception:
+        logger.warning(
+            "recommendation_business_retried_schedule_failed",
+            exc_info=True,
+            extra={"message_id": message_id},
+        )
+
+
 @shared_task(bind=True, max_retries=3, default_retry_delay=30)
 def send_diagnostic_recommendation_whatsapp(self, message_id: str) -> None:
     """Send a prepared diagnostic recommendation WhatsApp message."""
@@ -167,6 +207,11 @@ def send_diagnostic_recommendation_whatsapp(self, message_id: str) -> None:
     except Exception as exc:
         logger.exception("diagnostic_recommendation_whatsapp_task_error message_id=%s", message_id)
         logger.info("recommendation.retry whatsapp_message_id=%s", message_id)
+        _schedule_send_retry_audit(
+            message_id,
+            retry_count=self.request.retries + 1,
+            retry_reason=str(exc),
+        )
         if self.request.retries < self.max_retries:
             raise self.retry(exc=exc) from exc
         return
@@ -177,3 +222,63 @@ def send_diagnostic_recommendation_whatsapp(self, message_id: str) -> None:
             message_id,
             message.failure_reason,
         )
+
+
+@shared_task
+def expire_stale_recommendations() -> int:
+    """Emit recommendation.expired for TEST_BOOKING messages past TTL."""
+    from datetime import datetime, timezone
+
+    from business_audit.recommendation.hooks import schedule_recommendation_business_expired
+    from notifications.models.whatsapp_notifications import WhatsAppMessageType
+
+    now = datetime.now(timezone.utc)
+    expired_count = 0
+    terminal_statuses = {
+        WhatsAppMessageStatus.DELIVERED,
+        WhatsAppMessageStatus.READ,
+        WhatsAppMessageStatus.FAILED,
+    }
+    messages = WhatsAppMessage.objects.filter(
+        message_type=WhatsAppMessageType.TEST_BOOKING,
+        is_deleted=False,
+    ).exclude(status__in=terminal_statuses)
+
+    for message in messages.iterator():
+        payload = message.request_payload or {}
+        metadata = payload.get("recommendation_metadata") or {}
+        expires_at_raw = metadata.get("expires_at") or payload.get("expires_at")
+        recommendation_id = (payload.get("recommendation_id") or "").strip()
+        if not expires_at_raw or not recommendation_id:
+            continue
+
+        from django.utils.dateparse import parse_datetime
+
+        expires_at = parse_datetime(str(expires_at_raw))
+        if expires_at is None:
+            continue
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if expires_at > now:
+            continue
+
+        consultation = RecommendationAuditService.resolve_consultation_from_message(message)
+        if consultation is None:
+            continue
+
+        schedule_recommendation_business_expired(
+            consultation=consultation,
+            recommendation_id=recommendation_id,
+            expires_at=str(expires_at_raw),
+            whatsapp_message=message,
+            message_status=str(message.status),
+        )
+        expired_count += 1
+        logger.info(
+            "recommendation.expired recommendation_id=%s consultation_id=%s message_id=%s",
+            recommendation_id,
+            payload.get("consultation_id"),
+            message.id,
+        )
+
+    return expired_count

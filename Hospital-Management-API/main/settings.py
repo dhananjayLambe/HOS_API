@@ -231,6 +231,7 @@ INSTALLED_APPS = [
     'diagnostics_engine.apps.DiagnosticsEngineConfig',
     'notifications.apps.NotificationsConfig',
     'clinical_audit.apps.ClinicalAuditConfig',
+    'business_audit.apps.BusinessAuditConfig',
     'clinical_documentation.apps.ClinicalDocumentationConfig',
     # rest_framework
     'rest_framework',
@@ -449,6 +450,10 @@ CELERY_BEAT_SCHEDULE = {
     "labs-auto-reject-stale-assignments": {
         "task": "labs.auto_reject_stale_lab_assignments",
         "schedule": timedelta(minutes=2),
+    },
+    "expire-stale-recommendations": {
+        "task": "notifications.tasks.expire_stale_recommendations",
+        "schedule": timedelta(minutes=5),
     },
 }
 
