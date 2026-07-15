@@ -9,7 +9,7 @@ from diagnostics_engine.monitoring.request_context import resolve_request_id
 from diagnostics_engine.permissions.report_context import ReportRequestContext
 from diagnostics_engine.services.reports.access_control import report_belongs_to_branch
 from labs.api.permissions import IsLabAdminUser
-from labs.api.services.lab_session_resolver import LabSessionDenied, resolve_lab_user
+from labs.api.services.lab_session_resolver import LabSessionDenied, require_lab_operational_access
 
 
 class BranchScopedPermissionMixin:
@@ -19,7 +19,7 @@ class BranchScopedPermissionMixin:
         if hasattr(request, "_report_context") and request._report_context is not None:
             return request._report_context
 
-        resolved = resolve_lab_user(request)
+        resolved = require_lab_operational_access(request)
         if isinstance(resolved, LabSessionDenied):
             return resolved
 

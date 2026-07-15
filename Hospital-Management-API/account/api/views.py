@@ -416,78 +416,121 @@ class CheckUserStatusView(APIView):
                 .first()
             )
             org = lab_user.organization if lab_user else None
-            if org:
-                rs = org.registration_status
-                if rs in (
-                    RegistrationStatus.PENDING,
-                    RegistrationStatus.UNDER_REVIEW,
-                ):
-                    return Response(
-                        {
-                            "success": True,
-                            "exists": True,
-                            "mobile": phone_number,
-                            "role": roles,
-                            "status": "pending_approval",
-                            "message": "Your lab registration is pending admin approval.",
-                        },
-                        status=status.HTTP_200_OK,
-                    )
-                if rs == RegistrationStatus.REJECTED:
-                    return Response(
-                        {
-                            "success": False,
-                            "exists": True,
-                            "mobile": phone_number,
-                            "role": roles,
-                            "status": "rejected",
-                            "message": (
-                                "Your lab registration was rejected. Reason: "
-                                f"{org.rejection_reason or 'Not specified'}"
-                            ),
-                        },
-                        status=status.HTTP_403_FORBIDDEN,
-                    )
-                if rs in (
-                    RegistrationStatus.SUSPENDED,
-                    RegistrationStatus.BLOCKED,
-                    RegistrationStatus.INACTIVE,
-                ):
-                    return Response(
-                        {
-                            "success": False,
-                            "exists": True,
-                            "mobile": phone_number,
-                            "role": roles,
-                            "status": "rejected",
-                            "message": f"Your lab account is not active ({rs}). Please contact support.",
-                        },
-                        status=status.HTTP_403_FORBIDDEN,
-                    )
-                if rs == RegistrationStatus.APPROVED and user.is_active:
-                    return Response(
-                        {
-                            "success": True,
-                            "exists": True,
-                            "mobile": phone_number,
-                            "role": roles,
-                            "status": "approved",
-                            "message": "User exists and approved as lab admin.",
-                        },
-                        status=status.HTTP_200_OK,
-                    )
-                if rs == RegistrationStatus.APPROVED and not user.is_active:
-                    return Response(
-                        {
-                            "success": True,
-                            "exists": True,
-                            "mobile": phone_number,
-                            "role": roles,
-                            "status": "pending_approval",
-                            "message": "Your lab is approved; your login will be enabled shortly by admin.",
-                        },
-                        status=status.HTTP_200_OK,
-                    )
+            if lab_user is None or org is None:
+                return Response(
+                    {
+                        "success": False,
+                        "exists": True,
+                        "mobile": phone_number,
+                        "role": roles,
+                        "status": "registration_incomplete",
+                        "login_allowed": False,
+                        "onboarding_state": "REGISTRATION_INCOMPLETE",
+                        "message": (
+                            "Your labadmin account exists but lab registration is incomplete. "
+                            "Please complete lab registration."
+                        ),
+                    },
+                    status=status.HTTP_200_OK,
+                )
+            rs = org.registration_status
+            if rs == RegistrationStatus.PENDING:
+                return Response(
+                    {
+                        "success": True,
+                        "exists": True,
+                        "mobile": phone_number,
+                        "role": roles,
+                        "status": "pending_approval",
+                        "login_allowed": bool(user.is_active),
+                        "onboarding_state": "PENDING_APPROVAL",
+                        "registration_status": rs,
+                        "message": "Your lab registration is pending admin approval.",
+                    },
+                    status=status.HTTP_200_OK,
+                )
+            if rs == RegistrationStatus.UNDER_REVIEW:
+                return Response(
+                    {
+                        "success": True,
+                        "exists": True,
+                        "mobile": phone_number,
+                        "role": roles,
+                        "status": "pending_approval",
+                        "login_allowed": bool(user.is_active),
+                        "onboarding_state": "UNDER_REVIEW",
+                        "registration_status": rs,
+                        "message": "Your lab registration is under review.",
+                    },
+                    status=status.HTTP_200_OK,
+                )
+            if rs == RegistrationStatus.REJECTED:
+                return Response(
+                    {
+                        "success": False,
+                        "exists": True,
+                        "mobile": phone_number,
+                        "role": roles,
+                        "status": "rejected",
+                        "login_allowed": False,
+                        "onboarding_state": "REJECTED",
+                        "registration_status": rs,
+                        "message": (
+                            "Your lab registration was rejected. Reason: "
+                            f"{org.rejection_reason or 'Not specified'}"
+                        ),
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            if rs in (
+                RegistrationStatus.SUSPENDED,
+                RegistrationStatus.BLOCKED,
+                RegistrationStatus.INACTIVE,
+            ):
+                return Response(
+                    {
+                        "success": False,
+                        "exists": True,
+                        "mobile": phone_number,
+                        "role": roles,
+                        "status": "rejected",
+                        "login_allowed": False,
+                        "onboarding_state": "SUSPENDED",
+                        "registration_status": rs,
+                        "message": f"Your lab account is not active ({rs}). Please contact support.",
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            if rs == RegistrationStatus.APPROVED and user.is_active:
+                return Response(
+                    {
+                        "success": True,
+                        "exists": True,
+                        "mobile": phone_number,
+                        "role": roles,
+                        "status": "approved",
+                        "login_allowed": True,
+                        "onboarding_state": "APPROVED",
+                        "registration_status": rs,
+                        "message": "User exists and approved as lab admin.",
+                    },
+                    status=status.HTTP_200_OK,
+                )
+            if rs == RegistrationStatus.APPROVED and not user.is_active:
+                return Response(
+                    {
+                        "success": True,
+                        "exists": True,
+                        "mobile": phone_number,
+                        "role": roles,
+                        "status": "pending_approval",
+                        "login_allowed": False,
+                        "onboarding_state": "PENDING_APPROVAL",
+                        "registration_status": rs,
+                        "message": "Your lab is approved; your login will be enabled shortly by admin.",
+                    },
+                    status=status.HTTP_200_OK,
+                )
 
         # Non-doctor roles (helpdesk, labadmin, patient, superadmin)
         if not user.is_active:
@@ -553,8 +596,6 @@ class StaffSendOTPView(APIView):
                     "username": phone
                 }, status=status.HTTP_403_FORBIDDEN)
 
-            #NEED to change the condition for Admin Approval as we are using the the falg
-            #status = 
             # Admin approval check
             if not user.is_active:
                 return Response({
@@ -564,6 +605,27 @@ class StaffSendOTPView(APIView):
                     "role": role,
                     "username": phone
                 }, status=status.HTTP_403_FORBIDDEN)
+
+            # Labadmin must have a linked LabUser profile before OTP login.
+            if role == "labadmin":
+                from labs.models import LabUser
+
+                if not LabUser.objects.filter(user=user).exists():
+                    return Response(
+                        {
+                            "exists": True,
+                            "status": "registration_incomplete",
+                            "onboarding_state": "REGISTRATION_INCOMPLETE",
+                            "login_allowed": False,
+                            "message": (
+                                "Lab registration is incomplete. "
+                                "Please complete lab registration before logging in."
+                            ),
+                            "role": role,
+                            "username": phone,
+                        },
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
 
         except User.DoesNotExist:
             return Response({

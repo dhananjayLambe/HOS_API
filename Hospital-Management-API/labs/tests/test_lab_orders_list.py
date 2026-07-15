@@ -24,7 +24,7 @@ from diagnostics_engine.tests.test_order_creation_service import (
 )
 from labs.choices.workflow import LabAssignmentStatus
 from labs.models import LabBranch, LabCollectionRequest, LabOrderAssignment, LabUser
-from labs.choices.auth import LabUserRole
+from labs.choices.auth import LabUserRole, RegistrationStatus
 
 User = get_user_model()
 
@@ -212,6 +212,45 @@ class LabOrdersListAPITests(TestCase):
         res = self.client.get(self.url)
         self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
         self.assertEqual(res.json().get("code"), "lab_profile_missing")
+
+    def test_pending_org_orders_returns_403_lab_not_approved(self):
+        user, _branch, org = _lab_admin_with_branch()
+        org.registration_status = RegistrationStatus.PENDING
+        org.save(update_fields=["registration_status"])
+        self.client.force_authenticate(user=user)
+        res = self.client.get(self.url)
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+        body = res.json()
+        self.assertEqual(body.get("code"), "lab_not_approved")
+        self.assertEqual(body.get("registration_status"), RegistrationStatus.PENDING)
+
+    def test_under_review_org_orders_returns_403(self):
+        user, _branch, org = _lab_admin_with_branch()
+        org.registration_status = RegistrationStatus.UNDER_REVIEW
+        org.save(update_fields=["registration_status"])
+        self.client.force_authenticate(user=user)
+        res = self.client.get(self.url)
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(res.json().get("code"), "lab_not_approved")
+
+    def test_rejected_org_orders_returns_403(self):
+        user, _branch, org = _lab_admin_with_branch()
+        org.registration_status = RegistrationStatus.REJECTED
+        org.save(update_fields=["registration_status"])
+        self.client.force_authenticate(user=user)
+        res = self.client.get(self.url)
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(res.json().get("code"), "lab_not_approved")
+
+    def test_inactive_lab_user_orders_returns_403(self):
+        user, _branch, _org = _lab_admin_with_branch()
+        lab_user = LabUser.objects.get(user=user)
+        lab_user.is_active = False
+        lab_user.save(update_fields=["is_active"])
+        self.client.force_authenticate(user=user)
+        res = self.client.get(self.url)
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(res.json().get("code"), "lab_user_inactive")
 
     def test_branch_scoping_excludes_other_branch(self):
         user, branch, org = _lab_admin_with_branch()

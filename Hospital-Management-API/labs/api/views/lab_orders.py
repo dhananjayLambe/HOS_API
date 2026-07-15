@@ -18,7 +18,7 @@ from labs.api.services.lab_orders_list_service import (
     build_row_dtos,
     parse_list_params,
 )
-from labs.api.services.lab_session_resolver import LabSessionDenied, resolve_lab_user
+from labs.api.services.lab_session_resolver import LabSessionDenied, require_lab_operational_access
 
 
 class LabOrdersListView(APIView):
@@ -26,7 +26,7 @@ class LabOrdersListView(APIView):
     pagination_class = LabOrdersPageNumberPagination
 
     def get(self, request):
-        resolved = resolve_lab_user(request)
+        resolved = require_lab_operational_access(request)
         if isinstance(resolved, LabSessionDenied):
             return resolved.response
 
@@ -55,7 +55,7 @@ class LabOrderAssignmentDetailView(APIView):
     permission_classes = [IsAuthenticated, IsLabAdminUser]
 
     def get(self, request, assignment_id):
-        resolved = resolve_lab_user(request)
+        resolved = require_lab_operational_access(request)
         if isinstance(resolved, LabSessionDenied):
             return resolved.response
 

@@ -14,7 +14,7 @@ from rest_framework.views import APIView
 
 from labs.api.permissions import IsLabAdminUser
 from labs.api.serializers.lab_order_workflow import LabOrderRejectRequestSerializer
-from labs.api.services.lab_session_resolver import LabSessionDenied, resolve_lab_user
+from labs.api.services.lab_session_resolver import LabSessionDenied, require_lab_operational_access
 from labs.choices.workflow import LabAssignmentStatus
 from labs.services.workflow_transitions import (
     AssignmentNotFoundError,
@@ -50,7 +50,7 @@ class LabOrderAcceptView(APIView):
     permission_classes = [IsAuthenticated, IsLabAdminUser]
 
     def post(self, request, assignment_id):
-        resolved = resolve_lab_user(request)
+        resolved = require_lab_operational_access(request)
         if isinstance(resolved, LabSessionDenied):
             return resolved.response
 
@@ -79,7 +79,7 @@ class LabOrderRejectView(APIView):
     permission_classes = [IsAuthenticated, IsLabAdminUser]
 
     def post(self, request, assignment_id):
-        resolved = resolve_lab_user(request)
+        resolved = require_lab_operational_access(request)
         if isinstance(resolved, LabSessionDenied):
             return resolved.response
 

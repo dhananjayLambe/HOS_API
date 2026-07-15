@@ -9,7 +9,7 @@ from django.shortcuts import get_object_or_404
 
 from account.permissions import IsDoctor, IsPatient
 from consultations_core.models.encounter import ClinicalEncounter
-from labs.api.services.lab_session_resolver import LabSessionDenied, resolve_lab_user
+from labs.api.services.lab_session_resolver import LabSessionDenied, require_lab_operational_access
 from patient_account.models import PatientProfile
 
 
@@ -50,7 +50,7 @@ def resolve_patient_profile_access(request, patient_id) -> ReportListAccess | No
         if has_care:
             return ReportListAccess(role=ReportActorRole.DOCTOR, patient_profile=patient)
 
-    resolved = resolve_lab_user(request)
+    resolved = require_lab_operational_access(request)
     if not isinstance(resolved, LabSessionDenied):
         return ReportListAccess(
             role=ReportActorRole.LAB,
@@ -90,7 +90,7 @@ def resolve_encounter_access(request, encounter_id) -> ReportListAccess | None:
         if patient and account_user_id == request.user.id:
             return ReportListAccess(role=ReportActorRole.PATIENT, encounter=encounter)
 
-    resolved = resolve_lab_user(request)
+    resolved = require_lab_operational_access(request)
     if not isinstance(resolved, LabSessionDenied):
         return ReportListAccess(
             role=ReportActorRole.LAB,

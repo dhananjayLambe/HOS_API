@@ -11,16 +11,26 @@ from typing import Any
 
 from rest_framework import serializers
 
-from labs.choices.auth import LabUserRole
+from labs.api.services.lab_session_resolver import can_operate
+from labs.choices.auth import LabUserRole, RegistrationStatus
 from labs.models import LabUser
 
 
-def _permissions_for_role(role: str) -> dict[str, bool]:
-    """Phase-1 operational flags; refine when RBAC lands."""
+def _permissions_for_role(role: str, *, operational: bool) -> dict[str, bool]:
+    """Phase-1 operational flags; refine when RBAC lands. AND'd with operational_access."""
+    if not operational:
+        return {
+            "can_access_dashboard": False,
+            "can_upload_reports": False,
+            "can_manage_orders": False,
+            "can_assign_collections": False,
+        }
     admin_like = role in (LabUserRole.ADMIN, LabUserRole.MANAGER)
     clinical = role in (LabUserRole.PATHOLOGIST, LabUserRole.RADIOLOGIST)
     return {
+        "can_access_dashboard": True,
         "can_upload_reports": admin_like or clinical or role == LabUserRole.TECHNICIAN,
+        "can_manage_orders": admin_like,
         "can_assign_collections": admin_like
         or role
         in (
@@ -37,11 +47,34 @@ class LabSessionSerializer(serializers.Serializer):
     ).
     """
 
+    profile_complete = serializers.SerializerMethodField()
+    onboarding_complete = serializers.SerializerMethodField()
+    registration_status = serializers.SerializerMethodField()
+    operational_access = serializers.SerializerMethodField()
+    approval_required = serializers.SerializerMethodField()
     user = serializers.SerializerMethodField()
     lab_user = serializers.SerializerMethodField()
     organization = serializers.SerializerMethodField()
     branch = serializers.SerializerMethodField()
     permissions = serializers.SerializerMethodField()
+
+    def get_profile_complete(self, obj: LabUser) -> bool:
+        return True
+
+    def get_onboarding_complete(self, obj: LabUser) -> bool:
+        return bool(obj.organization.onboarding_completed)
+
+    def get_registration_status(self, obj: LabUser) -> str:
+        return obj.organization.registration_status
+
+    def get_operational_access(self, obj: LabUser) -> bool:
+        return can_operate(obj)
+
+    def get_approval_required(self, obj: LabUser) -> bool:
+        return obj.organization.registration_status != RegistrationStatus.APPROVED
+
+    def get_permissions(self, obj: LabUser) -> dict[str, bool]:
+        return _permissions_for_role(obj.role, operational=can_operate(obj))
 
     def get_user(self, obj: LabUser) -> dict[str, Any]:
         u = obj.user
@@ -161,6 +194,3 @@ class LabSessionSerializer(serializers.Serializer):
             "created_at": b.created_at.isoformat() if b.created_at else None,
             "updated_at": b.updated_at.isoformat() if b.updated_at else None,
         }
-
-    def get_permissions(self, obj: LabUser) -> dict[str, bool]:
-        return _permissions_for_role(obj.role)

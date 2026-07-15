@@ -24,7 +24,7 @@ from labs.api.services.home_collections_list_service import (
     build_summary_counts,
     parse_list_params,
 )
-from labs.api.services.lab_session_resolver import LabSessionDenied, resolve_lab_user
+from labs.api.services.lab_session_resolver import LabSessionDenied, require_lab_operational_access
 from labs.choices.auth import LabUserRole
 from labs.models import LabUser
 from labs.services.collection_workflow import (
@@ -56,7 +56,7 @@ class HomeCollectionsListView(APIView):
     pagination_class = LabOrdersPageNumberPagination
 
     def get(self, request):
-        resolved = resolve_lab_user(request)
+        resolved = require_lab_operational_access(request)
         if isinstance(resolved, LabSessionDenied):
             return resolved.response
 
@@ -78,7 +78,7 @@ class HomeCollectionsSummaryView(APIView):
     permission_classes = [IsAuthenticated, IsLabAdminUser]
 
     def get(self, request):
-        resolved = resolve_lab_user(request)
+        resolved = require_lab_operational_access(request)
         if isinstance(resolved, LabSessionDenied):
             return resolved.response
 
@@ -91,7 +91,7 @@ class PhlebotomistsListView(APIView):
     permission_classes = [IsAuthenticated, IsLabAdminUser]
 
     def get(self, request):
-        resolved = resolve_lab_user(request)
+        resolved = require_lab_operational_access(request)
         if isinstance(resolved, LabSessionDenied):
             return resolved.response
 
@@ -117,7 +117,7 @@ class HomeCollectionAssignView(APIView):
     permission_classes = [IsAuthenticated, IsLabAdminUser]
 
     def post(self, request, collection_id):
-        resolved = resolve_lab_user(request)
+        resolved = require_lab_operational_access(request)
         if isinstance(resolved, LabSessionDenied):
             return resolved.response
 
@@ -151,7 +151,7 @@ class HomeCollectionStartView(APIView):
     permission_classes = [IsAuthenticated, IsLabAdminUser]
 
     def post(self, request, collection_id):
-        resolved = resolve_lab_user(request)
+        resolved = require_lab_operational_access(request)
         if isinstance(resolved, LabSessionDenied):
             return resolved.response
 
@@ -172,7 +172,7 @@ class HomeCollectionCollectView(APIView):
     permission_classes = [IsAuthenticated, IsLabAdminUser]
 
     def post(self, request, collection_id):
-        resolved = resolve_lab_user(request)
+        resolved = require_lab_operational_access(request)
         if isinstance(resolved, LabSessionDenied):
             return resolved.response
 
@@ -193,7 +193,7 @@ class HomeCollectionFailView(APIView):
     permission_classes = [IsAuthenticated, IsLabAdminUser]
 
     def post(self, request, collection_id):
-        resolved = resolve_lab_user(request)
+        resolved = require_lab_operational_access(request)
         if isinstance(resolved, LabSessionDenied):
             return resolved.response
 
@@ -224,7 +224,7 @@ class HomeCollectionRetryView(APIView):
     permission_classes = [IsAuthenticated, IsLabAdminUser]
 
     def post(self, request, collection_id):
-        resolved = resolve_lab_user(request)
+        resolved = require_lab_operational_access(request)
         if isinstance(resolved, LabSessionDenied):
             return resolved.response
 

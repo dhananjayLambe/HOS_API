@@ -13,7 +13,7 @@ from labs.api.serializers.pricing_catalog import (
     service_dto_to_representation,
     summary_dto_to_representation,
 )
-from labs.api.services.lab_session_resolver import LabSessionDenied, resolve_lab_user
+from labs.api.services.lab_session_resolver import LabSessionDenied, require_lab_operational_access
 from labs.api.services.pricing_catalog_list_service import (
     PricingCatalogQueryError,
     apply_package_filters,
@@ -36,7 +36,7 @@ class PricingCatalogSummaryView(APIView):
     permission_classes = [IsAuthenticated, IsLabAdminUser]
 
     def get(self, request):
-        resolved = resolve_lab_user(request)
+        resolved = require_lab_operational_access(request)
         if isinstance(resolved, LabSessionDenied):
             return resolved.response
 
@@ -49,7 +49,7 @@ class PricingServicesListView(APIView):
     pagination_class = PricingCatalogPageNumberPagination
 
     def get(self, request):
-        resolved = resolve_lab_user(request)
+        resolved = require_lab_operational_access(request)
         if isinstance(resolved, LabSessionDenied):
             return resolved.response
 
@@ -76,7 +76,7 @@ class PricingPackagesListView(APIView):
     pagination_class = PricingCatalogPageNumberPagination
 
     def get(self, request):
-        resolved = resolve_lab_user(request)
+        resolved = require_lab_operational_access(request)
         if isinstance(resolved, LabSessionDenied):
             return resolved.response
 

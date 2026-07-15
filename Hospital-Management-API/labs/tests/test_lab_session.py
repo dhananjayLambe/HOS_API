@@ -84,6 +84,10 @@ class LabSessionMeAPITests(TestCase):
         self.assertEqual(data["user"]["username"], user.username)
         self.assertIn("slug", data["organization"])
         self.assertTrue(data["permissions"]["can_upload_reports"])
+        self.assertTrue(data.get("operational_access"))
+        self.assertTrue(data["permissions"].get("can_access_dashboard"))
+        self.assertEqual(data.get("registration_status"), RegistrationStatus.APPROVED)
+        self.assertFalse(data.get("approval_required"))
 
     def test_non_lab_group_user_forbidden(self):
         user = User.objects.create_user(
@@ -105,3 +109,20 @@ class LabSessionMeAPITests(TestCase):
         data = res.json()
         self.assertEqual(data.get("code"), "lab_profile_missing")
         self.assertIn("detail", data)
+
+    def test_pending_org_me_returns_200_without_operational_access(self):
+        user = self._create_lab_fixtures(add_lab_user=True)
+        lab_user = LabUser.objects.get(user=user)
+        org = lab_user.organization
+        org.registration_status = RegistrationStatus.PENDING
+        org.save(update_fields=["registration_status"])
+
+        self.client.force_authenticate(user=user)
+        res = self.client.get(self.url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        data = res.json()
+        self.assertEqual(data["registration_status"], RegistrationStatus.PENDING)
+        self.assertFalse(data["operational_access"])
+        self.assertTrue(data["approval_required"])
+        self.assertFalse(data["permissions"]["can_access_dashboard"])
+        self.assertFalse(data["permissions"]["can_upload_reports"])
