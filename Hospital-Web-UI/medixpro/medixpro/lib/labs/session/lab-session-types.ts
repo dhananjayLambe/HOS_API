@@ -81,14 +81,31 @@ export type LabSessionBranch = {
 };
 
 export type LabSessionPermissions = {
+  can_access_dashboard?: boolean;
   can_upload_reports: boolean;
+  can_manage_orders?: boolean;
   can_assign_collections: boolean;
 };
 
 export type LabSession = {
+  profile_complete?: boolean;
+  onboarding_complete?: boolean;
+  registration_status?: string;
+  operational_access?: boolean;
+  approval_required?: boolean;
   user: LabSessionUser;
   lab_user: LabSessionLabUser;
   organization: LabSessionOrganization;
   branch: LabSessionBranch;
   permissions: LabSessionPermissions;
 };
+
+/** True when session allows operational API calls (orders, reports, etc.). */
+export function sessionHasOperationalAccess(session: LabSession | undefined | null): boolean {
+  if (!session) return false;
+  if (typeof session.operational_access === "boolean") return session.operational_access;
+  if (typeof session.permissions?.can_access_dashboard === "boolean") {
+    return session.permissions.can_access_dashboard;
+  }
+  return session.organization?.registration_status === "APPROVED";
+}

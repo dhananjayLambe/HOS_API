@@ -11,6 +11,8 @@ import {
 } from "@/lib/labs/orders/build-lab-orders-query";
 import { mapLabOrderListItems } from "@/lib/labs/orders/map-order-row";
 import { PHASE1_ORDER_FILTER_STATUSES } from "@/lib/labs/constants/order-filters";
+import { useLabSession } from "@/lib/labs/session/lab-session-context";
+import { sessionHasOperationalAccess } from "@/lib/labs/session/lab-session-types";
 import type { LabOrderRow } from "@/lib/labs/types";
 import axios from "axios";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -55,6 +57,9 @@ export type UseLabOrdersListResult = {
 };
 
 export function useLabOrdersList(branchLabel = ""): UseLabOrdersListResult {
+  const { data: session, status: sessionStatus } = useLabSession();
+  const canFetch = sessionStatus === "success" && sessionHasOperationalAccess(session);
+
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -222,12 +227,17 @@ export function useLabOrdersList(branchLabel = ""): UseLabOrdersListResult {
   );
 
   useEffect(() => {
+    if (!canFetch) {
+      setLoading(sessionStatus === "pending");
+      return;
+    }
     const controller = new AbortController();
     void loadOrders({ signal: controller.signal });
     return () => controller.abort();
-  }, [filters, page, pageSize, debouncedQ, refreshKey, loadOrders]);
+  }, [filters, page, pageSize, debouncedQ, refreshKey, loadOrders, canFetch, sessionStatus]);
 
   useEffect(() => {
+    if (!canFetch) return;
     const poll = () => {
       if (document.visibilityState !== "visible") return;
       void loadOrders({ silent: true });
@@ -246,7 +256,7 @@ export function useLabOrdersList(branchLabel = ""): UseLabOrdersListResult {
       window.clearInterval(intervalId);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [loadOrders]);
+  }, [loadOrders, canFetch]);
 
   const refetch = useCallback(() => {
     setRefreshKey((k) => k + 1);

@@ -18,6 +18,8 @@ import {
 import { mapHomeCollectionListItem } from "@/lib/labs/home-collections/map-collection-row";
 import { mapLabOrderListItems } from "@/lib/labs/orders/map-order-row";
 import type { LabOrdersFilterState } from "@/lib/labs/orders/build-lab-orders-query";
+import { useLabSession } from "@/lib/labs/session/lab-session-context";
+import { sessionHasOperationalAccess } from "@/lib/labs/session/lab-session-types";
 import type { LabCollectionRow, LabOrderRow } from "@/lib/labs/types";
 import axios from "axios";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -76,6 +78,9 @@ export type UseLabDashboardDataResult = {
 };
 
 export function useLabDashboardData(branchLabel = ""): UseLabDashboardDataResult {
+  const { data: session, status: sessionStatus } = useLabSession();
+  const canFetch = sessionStatus === "success" && sessionHasOperationalAccess(session);
+
   const [pendingRows, setPendingRows] = useState<LabOrderRow[]>([]);
   const [pendingTotal, setPendingTotal] = useState(0);
   const [collectionRows, setCollectionRows] = useState<LabCollectionRow[]>([]);
@@ -101,6 +106,12 @@ export function useLabDashboardData(branchLabel = ""): UseLabDashboardDataResult
   }, []);
 
   useEffect(() => {
+    if (!canFetch) {
+      setLoading(sessionStatus === "pending");
+      setError(null);
+      return;
+    }
+
     const controller = new AbortController();
     let cancelled = false;
 
@@ -174,14 +185,15 @@ export function useLabDashboardData(branchLabel = ""): UseLabDashboardDataResult
       cancelled = true;
       controller.abort();
     };
-  }, [branchLabel, refreshKey]);
+  }, [branchLabel, refreshKey, canFetch, sessionStatus]);
 
   useEffect(() => {
+    if (!canFetch) return;
     const id = window.setInterval(() => {
       if (document.visibilityState === "visible") refetch();
     }, LAB_DASHBOARD_POLL_INTERVAL_MS);
     return () => window.clearInterval(id);
-  }, [refetch]);
+  }, [refetch, canFetch]);
 
   const visitTodayTotal =
     visitSummary.scheduled_today +

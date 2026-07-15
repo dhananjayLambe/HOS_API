@@ -1,4 +1,5 @@
 import { LabDashboardProviders } from "@/components/labs/LabDashboardProviders";
+import { LabOperationalGate } from "@/components/labs/LabOperationalGate";
 import { DashboardShellProviders } from "@/components/dashboard-shell-providers";
 import { LabShellLayout } from "@/components/labs/LabShellLayout";
 import type { ReactNode } from "react";
@@ -9,7 +10,9 @@ export default function LabDashboardRootLayout({ children }: { children: ReactNo
     <DashboardShellProviders>
       <LabDashboardProviders>
         <LabShellLayout>
-          <div className="mx-auto w-full max-w-[1600px]">{children}</div>
+          <div className="mx-auto w-full max-w-[1600px]">
+            <LabOperationalGate>{children}</LabOperationalGate>
+          </div>
         </LabShellLayout>
       </LabDashboardProviders>
     </DashboardShellProviders>

@@ -262,6 +262,42 @@ export default function OTPLoginPage() {
     setIsLoading(true);
 
     try {
+      // LabAdmin: surface incomplete / pending / rejected before OTP round-trip
+      if (selectedRole.toLowerCase() === "labadmin") {
+        const statusRes = await fetch(
+          `/api/registration-status?username=${encodeURIComponent(phoneNumber)}`,
+        );
+        const statusData = await statusRes.json().catch(() => ({}));
+        const onboardingState = String(statusData.onboarding_state || "").toUpperCase();
+        const status = String(statusData.status || "").toLowerCase();
+
+        if (status === "registration_incomplete" || onboardingState === "REGISTRATION_INCOMPLETE") {
+          setErrorMessage(
+            statusData.message ||
+              "Your lab registration is incomplete. Please complete lab registration first.",
+          );
+          return;
+        }
+        if (
+          status === "pending_approval" ||
+          onboardingState === "PENDING_APPROVAL" ||
+          onboardingState === "UNDER_REVIEW"
+        ) {
+          if (statusData.login_allowed === false || statusData.login_allowed === "false") {
+            setSuccessMessage(
+              statusData.message ||
+                "Registration submitted. Your documents are under review. Approval usually takes 24–48 hours.",
+            );
+            setErrorMessage("");
+            return;
+          }
+        }
+        if (status === "rejected" || onboardingState === "REJECTED" || onboardingState === "SUSPENDED") {
+          setErrorMessage(statusData.message || "Your lab registration cannot log in right now.");
+          return;
+        }
+      }
+
       const res = await fetch("/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -274,7 +310,15 @@ export default function OTPLoginPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        setErrorMessage(data.error || data.message || "Something went wrong");
+        const statusCode = String(data.status || "").toLowerCase();
+        if (statusCode === "not_approved") {
+          setErrorMessage(
+            data.message ||
+              "Your account is not approved yet. Please wait for admin approval (usually 24–48 hours).",
+          );
+        } else {
+          setErrorMessage(data.error || data.message || "Something went wrong");
+        }
       } else {
         setStep(3);
         setSuccessMessage(data.message || "OTP sent successfully.");
