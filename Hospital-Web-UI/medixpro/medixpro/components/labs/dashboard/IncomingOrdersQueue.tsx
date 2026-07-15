@@ -32,6 +32,7 @@ type IncomingOrdersQueueProps = {
   total: number;
   acceptingId: string | null;
   onAccept: (order: LabOrderRow) => void;
+  onView: (order: LabOrderRow) => void;
   className?: string;
 };
 
@@ -65,6 +66,7 @@ export function IncomingOrdersQueue({
   total,
   acceptingId,
   onAccept,
+  onView,
   className,
 }: IncomingOrdersQueueProps) {
   const visible = rows.slice(0, DASHBOARD_QUEUE_CAP);
@@ -146,12 +148,16 @@ export function IncomingOrdersQueue({
                         )}
                       </ActionButton>
                       <Button
+                        type="button"
                         variant="ghost"
                         size="sm"
                         className="h-8 shrink-0 rounded-lg px-1.5 text-[11px] text-[#6B7280]"
-                        asChild
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onView(o);
+                        }}
                       >
-                        <Link href="/lab-dashboard/orders/">View</Link>
+                        View
                       </Button>
                     </div>
                   </TableCell>

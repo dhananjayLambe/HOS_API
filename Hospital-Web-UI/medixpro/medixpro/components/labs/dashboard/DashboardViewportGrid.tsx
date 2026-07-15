@@ -16,6 +16,7 @@ type DashboardViewportGridProps = {
   pendingTotal: number;
   acceptingId: string | null;
   onAccept: (order: LabOrderRow) => void;
+  onView: (order: LabOrderRow) => void;
   collectionRows: LabCollectionRow[];
   collectionsTotal: number;
   reportsPendingRows: DashboardReportPipelineRow[];
@@ -30,6 +31,7 @@ export function DashboardViewportGrid({
   pendingTotal,
   acceptingId,
   onAccept,
+  onView,
   collectionRows,
   collectionsTotal,
   reportsPendingRows,
@@ -45,6 +47,7 @@ export function DashboardViewportGrid({
         total={pendingTotal}
         acceptingId={acceptingId}
         onAccept={onAccept}
+        onView={onView}
       />
 
       <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
