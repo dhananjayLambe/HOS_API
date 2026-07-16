@@ -65,6 +65,7 @@ import {
 } from "@/services/clinical-template.service";
 import { recordTemplateUse } from "@/services/template-management.service";
 import { ViewPreDrawer } from "./view-pre-drawer";
+import { ConsultationReportsDrawer } from "@/components/doctor/diagnostic-reports-workspace/ConsultationReportsDrawer";
 import { ConsultationAutosaveIndicator } from "./consultation-autosave-indicator";
 import { buildEndConsultationPayload } from "@/lib/consultation-payload-builder";
 import {
@@ -298,6 +299,7 @@ export function ConsultationActionBar() {
   const [showEndConsultationConfirm, setShowEndConsultationConfirm] = useState(false);
   const [showStartNewVisitConfirm, setShowStartNewVisitConfirm] = useState(false);
   const [showViewPre, setShowViewPre] = useState(false);
+  const [showReportsDrawer, setShowReportsDrawer] = useState(false);
   const [isEndingConsultation, setIsEndingConsultation] = useState(false);
   const [isStartingNewVisit, setIsStartingNewVisit] = useState(false);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
@@ -1103,6 +1105,17 @@ export function ConsultationActionBar() {
             <FileText className="h-4 w-4" />
             View Pre
           </Button>
+          {/* 2b. Diagnostic reports — embedded hybrid entry (UX Spec) */}
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5 rounded-lg min-h-[44px] touch-manipulation md:min-h-0"
+            onClick={() => setShowReportsDrawer(true)}
+            disabled={!selectedPatient?.id}
+          >
+            <FileText className="h-4 w-4" />
+            Reports
+          </Button>
           {/* Start New Visit – on consultation page only (not on pre-consultation) */}
           {/* <Button
             size="sm"
@@ -1307,6 +1320,14 @@ export function ConsultationActionBar() {
           encounterId={encounterId}
         />
       )}
+
+      <ConsultationReportsDrawer
+        open={showReportsDrawer}
+        onOpenChange={setShowReportsDrawer}
+        patientId={selectedPatient?.id ?? null}
+        consultationId={consultationId ?? encounterId ?? null}
+        patientName={selectedPatient?.full_name?.trim() || null}
+      />
 
       {isFinalizationOverlayVisible && (
         <div

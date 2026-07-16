@@ -141,9 +141,11 @@ export function Sidebar({ isOpen, setIsOpen, alignBelowHeader }: SidebarProps) {
       href: "/lab-tests-reports",
       icon: FileText,
       submenu: [
-        { title: "All Lab Tests Reports", href: "/lab-tests-reports" },
-        // { title: "Create Lab Test Report", href: "/lab-tests-reports/create" },
-        // { title: "Lab Test Report Templates", href: "/lab-tests-reports/templates" },
+        { title: "Diagnostic Reports", href: "/lab-tests-reports" },
+        {
+          title: "Available Reports",
+          href: "/lab-tests-reports?queue=needs_review",
+        },
       ],
     },
     // {

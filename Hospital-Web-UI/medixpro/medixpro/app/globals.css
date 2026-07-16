@@ -97,6 +97,44 @@ body {
     --sidebar-accent-foreground: 240 5.9% 10%;
     --sidebar-border: 220 13% 91%;
     --sidebar-ring: 217.2 91.2% 59.8%;
+
+    /* DoctorProCare clinical design tokens (Reports Workspace + future EMR modules) */
+    --clinical-surface-page: 210 20% 98%;
+    --clinical-surface-section: 0 0% 100%;
+    --clinical-surface-interactive: 210 40% 96.5%;
+    --clinical-border-subtle: 214 32% 91%;
+    --clinical-divider: 214 28% 92%;
+    --clinical-text-primary: 222 47% 11%;
+    --clinical-text-secondary: 215 16% 47%;
+    --clinical-text-meta: 215 14% 52%;
+    --clinical-accent-available: 199 89% 48%;
+    --clinical-accent-available-soft: 199 90% 96%;
+    --clinical-accent-awaiting: 38 92% 50%;
+    --clinical-accent-awaiting-soft: 43 96% 95%;
+    --clinical-accent-updated: 262 83% 58%;
+    --clinical-accent-updated-soft: 262 83% 97%;
+    --clinical-accent-critical: 0 72% 51%;
+    --clinical-accent-critical-soft: 0 86% 97%;
+    --clinical-accent-archived: 215 14% 52%;
+    --clinical-accent-archived-soft: 210 20% 96%;
+    --clinical-elevation-sm: 0 0% 0%;
+  }
+
+  /* Dark-mode stubs — not enabled in Phase 1; tokens stay swappable */
+  .dark {
+    --clinical-surface-page: 222 47% 8%;
+    --clinical-surface-section: 222 40% 11%;
+    --clinical-surface-interactive: 217 33% 16%;
+    --clinical-border-subtle: 217 25% 22%;
+    --clinical-divider: 217 25% 20%;
+    --clinical-text-primary: 210 40% 98%;
+    --clinical-text-secondary: 215 20% 65%;
+    --clinical-text-meta: 215 16% 55%;
+    --clinical-accent-available-soft: 199 50% 14%;
+    --clinical-accent-awaiting-soft: 43 40% 14%;
+    --clinical-accent-updated-soft: 262 40% 14%;
+    --clinical-accent-critical-soft: 0 40% 14%;
+    --clinical-accent-archived-soft: 217 25% 14%;
   }
 }
 

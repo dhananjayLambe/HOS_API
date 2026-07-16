@@ -3,6 +3,7 @@
 import { isCancel } from "axios";
 import { useEffect, useState } from "react";
 import { use } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PatientClinicalOverview } from "@/components/patients/patient-summary/patient-clinical-overview";
 import { PatientSummaryHeader } from "@/components/patients/patient-summary/patient-summary-header";
@@ -131,7 +132,15 @@ export default function PatientSummaryPage({ params }: PageProps) {
 
           {activeSection === "labs" ? (
             <section className="space-y-5">
-              <p className="text-lg font-semibold tracking-tight text-slate-900">Lab Reports</p>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-lg font-semibold tracking-tight text-slate-900">Lab Reports</p>
+                <Link
+                  href={`/lab-tests-reports?patientId=${encodeURIComponent(String(payload.patient.id))}`}
+                  className="inline-flex items-center rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-800 hover:bg-slate-50"
+                >
+                  Open in Diagnostic Reports Workspace
+                </Link>
+              </div>
               <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
                 {payload.labs.map((lab) => (
                   <PatientLabCard key={lab.id} lab={lab} />
