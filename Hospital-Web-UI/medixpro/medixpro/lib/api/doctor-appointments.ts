@@ -53,7 +53,7 @@ export async function fetchDoctorScheduleMetricsToday({
     "/appointments/metrics/today/",
     {
       params: { doctor_id: doctorId, clinic_id: clinicId },
-      validateStatus: () => true,
+      validateStatus: (status) => status !== 401,
       signal,
     }
   );
@@ -89,7 +89,7 @@ export async function fetchDoctorAppointmentsToday({
       page: 1,
       page_size: 50,
     },
-    { validateStatus: () => true, signal }
+    { validateStatus: (status) => status !== 401, signal }
   );
 
   if (response.status >= 400) {
@@ -119,7 +119,7 @@ export async function fetchDoctorQueueToday({
 }: FetchDoctorAppointmentsTodayInput): Promise<DoctorQueueApiRow[]> {
   const response = await axiosClient.get<DoctorQueueApiRow[]>(
     `/queue/doctor/${doctorId}/${clinicId}/`,
-    { validateStatus: () => true, signal }
+    { validateStatus: (status) => status !== 401, signal }
   );
 
   if (response.status >= 400) {

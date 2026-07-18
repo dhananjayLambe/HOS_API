@@ -12,6 +12,7 @@ export type UseDoctorPendingReportsResult = {
   pendingReports: number;
   loading: boolean;
   error: string | null;
+  refetch: () => Promise<void>;
 };
 
 export function useDoctorPendingReports(): UseDoctorPendingReportsResult {
@@ -64,8 +65,12 @@ export function useDoctorPendingReports(): UseDoctorPendingReportsResult {
   }, [sessionChecked, isAuthenticated]);
 
   useEffect(() => {
-    if (!sessionChecked || !isAuthenticated) {
+    if (!sessionChecked) {
+      return;
+    }
+    if (!isAuthenticated) {
       setLoading(false);
+      setError("Sign in required to load dashboard data.");
       return;
     }
 
@@ -76,11 +81,19 @@ export function useDoctorPendingReports(): UseDoctorPendingReportsResult {
       }
     }, POLL_INTERVAL_MS);
 
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void refetch();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
     return () => {
       window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       abortRef.current?.abort();
     };
   }, [sessionChecked, isAuthenticated, refetch]);
 
-  return { pendingReports, loading, error };
+  return { pendingReports, loading, error, refetch };
 }

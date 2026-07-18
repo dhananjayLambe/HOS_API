@@ -115,9 +115,15 @@ export function useDoctorPracticeOverviewTab(
   }, [sessionChecked, isAuthenticated, enabled]);
 
   useEffect(() => {
-    if (!sessionChecked || !isAuthenticated || !enabled) {
-      if (!enabled) {
+    if (!sessionChecked) {
+      return;
+    }
+    if (!isAuthenticated || !enabled) {
+      if (!enabled || !isAuthenticated) {
         setLoading(false);
+      }
+      if (sessionChecked && !isAuthenticated) {
+        setError("Sign in required to load dashboard data.");
       }
       return;
     }
@@ -129,8 +135,16 @@ export function useDoctorPracticeOverviewTab(
       }
     }, POLL_INTERVAL_MS);
 
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void refetch();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
     return () => {
       window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       abortRef.current?.abort();
     };
   }, [sessionChecked, isAuthenticated, enabled, refetch]);

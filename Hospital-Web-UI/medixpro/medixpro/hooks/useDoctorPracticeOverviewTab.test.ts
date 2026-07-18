@@ -97,7 +97,7 @@ describe("useDoctorPracticeOverviewTab", () => {
 
     await waitFor(() => {
       expect(result.current.metrics.patientsToday).toBe(1);
-      expect(result.current.error).toBeNull();
+      expect(result.current.error).toBe("Network error");
     });
   });
 

@@ -22,7 +22,7 @@ export async function fetchDoctorPendingReportsCount({
     "v1/diagnostics/reports/doctor-summary/",
     {
       params: { doctor_id: doctorId, clinic_id: clinicId },
-      validateStatus: () => true,
+      validateStatus: (status) => status !== 401,
       signal,
     }
   );

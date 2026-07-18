@@ -36,7 +36,7 @@ Status values: `Not started` | `In review` | `Blocked` | `Certified` | `Not elig
 
 | # | Page | Route | Status | Owner | Release | Notes |
 |---|------|-------|--------|-------|---------|-------|
-| 1 | Doctor Dashboard | `/doctor-dashboard` | In review | Frontend | TBD | Wave 1 — M1 workflow + M2 data integrity (client P1 fixed; DI-003 remaining) |
+| 1 | Doctor Dashboard | `/doctor-dashboard` | In review | Frontend | TBD | Wave 1 — M1–M3 complete (client P1 fixed; DI-003 + multi-tab remaining) |
 | 2 | Patients list | `/patients` | Not started | Frontend | TBD | Wave 1 |
 | 3 | Patient Summary | `/patients/[id]` | Not started | Frontend | TBD | Wave 1 |
 | 4 | Start Consultation | `/consultations/start-consultation` | Not started | Frontend | TBD | Wave 1 |
@@ -494,6 +494,16 @@ Every finding must include the fields below. Vague findings without evidence are
 | DI-007 | Doctor Dashboard | Data Integrity | P2 | Frontend | — | local | Fixed |
 | DI-008 | Doctor Dashboard | Data Integrity | P3 | Frontend | — | — | Open |
 | DI-009 | Doctor Dashboard | Data Integrity | P3 | Frontend | — | — | Open (documented expected) |
+| SC-001 | Doctor Dashboard | State Consistency | P2 | Frontend | — | — | Open (Remaining Risk — Strict Mode dev) |
+| SC-002 | Doctor Dashboard | State Consistency | P1 | Frontend | — | local | Fixed |
+| SC-003 | Doctor Dashboard | State Consistency | P1 | Frontend | — | local | Fixed |
+| SC-004 | Doctor Dashboard | State Consistency | P2 | Frontend | — | — | Accepted (last-good + visible error) |
+| SC-005 | Doctor Dashboard | State Consistency | P2 | Frontend | — | local | Fixed |
+| SC-006 | Doctor Dashboard | State Consistency | P3 | Frontend | — | — | Open (Remaining Risk — multi-tab) |
+| SC-007 | Doctor Dashboard | State Consistency | P2 | Frontend | — | local | Fixed |
+| SC-008 | Doctor Dashboard | State Consistency | P2 | Frontend | — | local | Fixed |
+| SC-009 | Doctor Dashboard | State Consistency | P2 | Frontend | — | local | Fixed |
+| SC-012 | Doctor Dashboard | State Consistency | P3 | Frontend | — | local | Fixed |
 
 ---
 
@@ -760,9 +770,9 @@ Login → Doctor Dashboard → Start Consultation / View Patient
 | Field | Value |
 |-------|-------|
 | Certification | FAIL (pending sign-off) |
-| Reason | Milestone 1 workflow P0/P1 fixed. Milestone 2 client P1 data-integrity defects (DI-001, DI-002) fixed. Full **Certified** still requires PO/QA sign-off and live parity check for DI-003 (encounter-aware metrics vs raw list badges). |
-| Blocking findings (P0/P1) | DI-003 open as Remaining Risk (backend semantic mismatch — not a silent client bug) |
-| Remaining risks | DI-003, DI-006, DI-008, DI-009; UI-005, UI-006; multi-browser matrix not executed |
+| Reason | Milestone 1–3 client P0/P1 defects fixed (workflow, data integrity client bugs, state coalescing/401/visibility). Full **Certified** still requires PO/QA sign-off, live DI-003 parity, and multi-tab risk acceptance. |
+| Blocking findings (P0/P1) | DI-003 open as Remaining Risk (backend semantic mismatch) |
+| Remaining risks | DI-003, DI-006, DI-008, DI-009; SC-001, SC-006; UI-005, UI-006 |
 | Product owner sign-off | Pending |
 | QA sign-off | Pending |
 
@@ -842,4 +852,59 @@ Do not invent widgets in this milestone. Track as product gaps if required for a
 
 ---
 
-<!-- End Audit #1 + Milestone 2 -->
+### Milestone 3 — State Management (State consistency report)
+
+**Date:** 2026-07-18  
+**Scope:** Loading, skeletons, error/retry, refresh, poll, cache, duplicates, browser refresh, multi-tab, session expiry on `/doctor-dashboard`  
+**Architecture:** Custom hooks only — **not** TanStack React Query (QueryClient exists in shell for other features)
+
+#### Exit criteria (this milestone)
+
+- No **silent** stale data (failed refresh surfaces error/Unavailable; last-good + banner allowed)
+- No **avoidable** duplicate API requests (coalesced context; no hidden-tab schedule polls; 401 hits axios refresh)
+
+#### Per-hook summary
+
+| Hook | Loading | Error / Retry | Poll | Visibility | Abort |
+|------|---------|---------------|------|------------|-------|
+| `useDoctorScheduleTab` | First-load skeleton; soft poll | Hard + soft banners; Retry | 30s | Visible-only + focus refetch | Yes |
+| `useDoctorPendingReports` | Initial loading | Unavailable KPI + **Retry** | 30s | Visible-only + focus refetch | Yes |
+| `useDoctorPatientsTab` | First-load; lazy tab | Soft banner + Retry | 30s | Visible-only + focus refetch | Yes |
+| `useDoctorReportsTab` | First-load + `isRefreshing` | Soft banner + Retry | 30s | Visible-only + focus refetch | Yes |
+| `useDoctorPracticeOverviewTab` | First-load; lazy tab | Soft banner + Retry (incl. post-success) | 30s | Visible-only + focus refetch | Yes |
+
+Shared: `resolveDoctorContext` in-flight coalescing + 30s TTL cache.
+
+#### Findings (SC-*)
+
+| ID | Severity | Status | Summary |
+|----|----------|--------|---------|
+| SC-001 | P2 | Remaining Risk | React Strict Mode double-mount in dev; abort cancels apply |
+| SC-002 | P1 | **Fixed** | Parallel context loads → coalesced `resolveDoctorContext` |
+| SC-003 | P1 | **Fixed** | Doctor APIs `validateStatus` now rejects 401 so axios refresh/logout runs |
+| SC-004 | P2 | Accepted | Last-good retained with visible error (patients/reports/practice/pending) |
+| SC-005 | P2 | **Fixed** | Schedule poll gated on `visibilityState === "visible"` |
+| SC-006 | P3 | Remaining Risk | No multi-tab leader; each tab polls independently |
+| SC-007 | P2 | **Fixed** | `visibilitychange` → soft refetch on all five hooks |
+| SC-008 | P2 | **Fixed** | Pending Reports KPI Retry via exported `refetch` |
+| SC-009 | P2 | **Fixed** | Unauthenticated after `sessionChecked` sets error / Unavailable path |
+| SC-012 | P3 | **Fixed** | Practice overview test expects error after failed background refetch |
+
+#### Browser refresh / session
+
+- URL `?tab=` remounts cleanly; hooks refetch after auth gate.
+- Mid-poll 401 now enters axios interceptor (refresh or logout) instead of soft Error-only path.
+
+#### Milestone 3 exit
+
+| Check | Result |
+|-------|--------|
+| No open **P1** state defects | Pass (SC-002, SC-003 fixed) |
+| No silent stale on failed refresh | Pass (errors surfaced; last-good + banner OK) |
+| Avoidable duplicate context fetches | Pass |
+| Remaining risks | SC-001, SC-006; DI-003 |
+| Page certification status | Remains **In review** |
+
+---
+
+<!-- End Audit #1 + Milestone 2 + Milestone 3 -->

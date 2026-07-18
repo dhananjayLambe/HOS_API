@@ -71,7 +71,7 @@ export async function fetchDoctorPatientsDashboard({
         page,
         page_size: pageSize,
       },
-      validateStatus: () => true,
+      validateStatus: (status) => status !== 401,
       signal,
     }
   );

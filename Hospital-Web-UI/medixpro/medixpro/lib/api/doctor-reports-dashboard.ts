@@ -72,7 +72,7 @@ export async function fetchDoctorReportsDashboard({
         page,
         page_size: pageSize,
       },
-      validateStatus: () => true,
+      validateStatus: (status) => status !== 401,
       signal,
     }
   );

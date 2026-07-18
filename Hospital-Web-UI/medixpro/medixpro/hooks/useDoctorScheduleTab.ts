@@ -163,18 +163,32 @@ export function useDoctorScheduleTab(): UseDoctorScheduleTabResult {
   }, [sessionChecked, isAuthenticated]);
 
   useEffect(() => {
-    if (!sessionChecked || !isAuthenticated) {
+    if (!sessionChecked) {
+      return;
+    }
+    if (!isAuthenticated) {
       setLoading(false);
+      setError("Sign in required to load dashboard data.");
       return;
     }
 
     void refetch();
     const intervalId = window.setInterval(() => {
-      void refetch();
+      if (document.visibilityState === "visible") {
+        void refetch();
+      }
     }, POLL_INTERVAL_MS);
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void refetch();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
 
     return () => {
       window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       abortRef.current?.abort();
     };
   }, [sessionChecked, isAuthenticated, refetch]);

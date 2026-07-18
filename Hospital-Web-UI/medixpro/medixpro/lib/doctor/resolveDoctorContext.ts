@@ -7,6 +7,11 @@ export type DoctorContext = {
   isReady: boolean;
 };
 
+const CONTEXT_CACHE_TTL_MS = 30_000;
+
+let inFlight: Promise<DoctorContext> | null = null;
+let cached: { value: DoctorContext; at: number } | null = null;
+
 function extractDoctorId(profileResponse: unknown): string | null {
   const data = profileResponse as Record<string, unknown>;
   const doctorProfile =
@@ -19,11 +24,7 @@ function extractDoctorId(profileResponse: unknown): string | null {
   return fromProfile != null && String(fromProfile).trim() !== "" ? String(fromProfile) : null;
 }
 
-/**
- * Resolves doctor + clinic scope for dashboard tabs.
- * Matches SmartQueue: doctor_profile.personal_info.id + loadStaffClinicSelection().
- */
-export async function resolveDoctorContext(): Promise<DoctorContext> {
+async function loadDoctorContext(): Promise<DoctorContext> {
   let doctorId = "";
   let clinicId = "";
 
@@ -58,4 +59,36 @@ export async function resolveDoctorContext(): Promise<DoctorContext> {
     clinicId,
     isReady: Boolean(doctorId && clinicId),
   };
+}
+
+/** Clears in-flight + TTL cache (tests / logout). */
+export function clearDoctorContextCache(): void {
+  inFlight = null;
+  cached = null;
+}
+
+/**
+ * Resolves doctor + clinic scope for dashboard tabs.
+ * Concurrent callers share one in-flight load; result is cached briefly to avoid duplicate profile/clinic fetches.
+ * Matches SmartQueue: doctor_profile.personal_info.id + loadStaffClinicSelection().
+ */
+export async function resolveDoctorContext(): Promise<DoctorContext> {
+  if (cached && Date.now() - cached.at < CONTEXT_CACHE_TTL_MS) {
+    return cached.value;
+  }
+
+  if (inFlight) {
+    return inFlight;
+  }
+
+  inFlight = loadDoctorContext()
+    .then((value) => {
+      cached = { value, at: Date.now() };
+      return value;
+    })
+    .finally(() => {
+      inFlight = null;
+    });
+
+  return inFlight;
 }

@@ -61,7 +61,7 @@ export async function fetchDoctorPracticeOverviewDashboard({
     "v1/doctors/dashboard/practice-overview/",
     {
       params: { clinic_id: clinicId },
-      validateStatus: () => true,
+      validateStatus: (status) => status !== 401,
       signal,
     },
   );

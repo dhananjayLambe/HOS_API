@@ -1,6 +1,7 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
@@ -14,6 +15,7 @@ export type DoctorDashboardMetric = {
   accent: DoctorDashboardMetricAccent;
   loading?: boolean;
   unavailable?: boolean;
+  onRetry?: () => void;
 };
 
 const accentStyles: Record<
@@ -81,6 +83,17 @@ export function DoctorDashboardSummaryCards({ metrics }: DoctorDashboardSummaryC
               </p>
             )}
             <p className="mt-1.5 text-xs text-muted-foreground">{metric.supportingText}</p>
+            {metric.unavailable && metric.onRetry ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-3 h-8"
+                onClick={() => metric.onRetry?.()}
+              >
+                Retry
+              </Button>
+            ) : null}
           </div>
         );
       })}

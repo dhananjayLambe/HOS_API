@@ -313,6 +313,7 @@ function DoctorDashboardPageContent() {
         accent: "green",
         loading: pendingReports.loading,
         unavailable: Boolean(pendingReports.error),
+        onRetry: pendingReports.error ? () => void pendingReports.refetch() : undefined,
       },
       {
         title: "Completed Consultations",
@@ -333,6 +334,7 @@ function DoctorDashboardPageContent() {
       pendingReports.pendingReports,
       pendingReports.loading,
       pendingReports.error,
+      pendingReports.refetch,
     ]
   );
 
