@@ -106,10 +106,16 @@ async function apiRequest<T>(endpoint: string, options: AxiosRequestConfig = {})
         }
       }
       
-      // Don't log 404 for /doctor/address - "no address yet" is expected for new users
-      const isAddress404 = endpoint.includes('/doctor/address') && status === 404
-      // Log full error for debugging (only for non-404 errors or if data is not empty)
-      if (!isAddress404 && (status !== 404 || Object.keys(data).length > 0)) {
+      // Don't log 404 for endpoints where "no data yet" is expected for new users
+      const isExpectedEmpty404 =
+        status === 404 &&
+        (endpoint.includes('/doctor/address') ||
+          endpoint.includes('/doctor/profile/bank-details') ||
+          endpoint.includes('/doctor-fees/') ||
+          endpoint.includes('/follow-up-policies/') ||
+          endpoint.includes('/cancellation-policies/'))
+      // Log full error for debugging (only for unexpected errors)
+      if (!isExpectedEmpty404 && (status !== 404 || Object.keys(data).length > 0)) {
         console.error(`[API Error] ${endpoint}:`, {
           status,
           data,
@@ -123,7 +129,9 @@ async function apiRequest<T>(endpoint: string, options: AxiosRequestConfig = {})
       
       // If data is empty, try to get error from response text or status text
       if (Object.keys(data).length === 0) {
-        console.warn(`[API Error] Empty error data for ${endpoint}, status: ${status}`)
+        if (!isExpectedEmpty404) {
+          console.warn(`[API Error] Empty error data for ${endpoint}, status: ${status}`)
+        }
         // Try to extract from response if available
         if (error.response?.data && typeof error.response.data === 'string') {
           data = { error: error.response.data }
@@ -503,11 +511,19 @@ export const doctorAPI = {
       data,
     }),
 
-  // Bank Details
-  getBankDetails: () =>
-    apiRequest<any>("/doctor/profile/bank-details", {
-      method: "GET",
-    }),
+  // Bank Details (404 on GET = not submitted yet — return null data so UI shows empty form)
+  getBankDetails: async () => {
+    try {
+      return await apiRequest<any>("/doctor/profile/bank-details", {
+        method: "GET",
+      })
+    } catch (e: any) {
+      if (e?.status === 404 || e?.response?.status === 404) {
+        return { status: "success", data: null }
+      }
+      throw e
+    }
+  },
   createBankDetails: (data: any) =>
     apiRequest<any>("/doctor/profile/bank-details", {
       method: "POST",

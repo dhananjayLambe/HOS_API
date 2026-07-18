@@ -264,21 +264,21 @@ export function FeeStructureSection() {
       // Only log non-404 errors (404 means no data exists yet, which is expected)
       if (feeStructuresResult.status === 'rejected') {
         const error = feeStructuresResult.reason
-        const status = error?.response?.status
+        const status = error?.status ?? error?.response?.status
         if (status && status !== 404) {
           console.warn("Failed to fetch fee structures:", error)
         }
       }
       if (followUpPoliciesResult.status === 'rejected') {
         const error = followUpPoliciesResult.reason
-        const status = error?.response?.status
+        const status = error?.status ?? error?.response?.status
         if (status && status !== 404) {
           console.warn("Failed to fetch follow-up policies:", error)
         }
       }
       if (cancellationPoliciesResult.status === 'rejected') {
         const error = cancellationPoliciesResult.reason
-        const status = error?.response?.status
+        const status = error?.status ?? error?.response?.status
         if (status && status !== 404) {
           console.warn("Failed to fetch cancellation policies:", error)
         }
@@ -612,11 +612,11 @@ export function FeeStructureSection() {
         // Silently loaded - no need to show success for data fetch
       }
     } catch (error: any) {
-      console.error("Failed to fetch fee structure data:", error)
       // If no data exists or there's an error, use defaults (this is expected for new clinic)
       // Don't show error toast for 404s (no data exists yet)
-      const status = error?.response?.status
-      if (status && status !== 404) {
+      const status = error?.status ?? error?.response?.status
+      if (status !== 404) {
+        console.error("Failed to fetch fee structure data:", error)
         // Only show error for non-404 errors (server errors, network issues, etc.)
         const errorMessage =
           error?.response?.data?.message ||
@@ -841,11 +841,14 @@ export function FeeStructureSection() {
         }
       } else {
         const err = feeStructures.reason
-        console.warn("⚠️ Failed to fetch fee structures:", {
-          status: err?.response?.status || err?.status,
-          message: err?.message,
-          error: err
-        })
+        const errStatus = err?.status ?? err?.response?.status
+        if (errStatus !== 404) {
+          console.warn("⚠️ Failed to fetch fee structures:", {
+            status: errStatus,
+            message: err?.message,
+            error: err
+          })
+        }
         // Don't fail - will try create/update anyway
         currentFeeStructureId = null
       }

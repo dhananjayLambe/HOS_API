@@ -86,10 +86,12 @@ export function BankDetailsSection() {
         setVerificationStatus("not_submitted")
       }
     } catch (error: any) {
-      console.error("Failed to fetch bank details:", error)
-      // If 404, bank details don't exist yet - this is fine
-      if (error?.response?.status !== 404) {
-        // Only show error for non-404 errors
+      // 404 / "not found" means bank details were never submitted — expected for new users
+      const status = error?.status ?? error?.response?.status
+      const isNotFound =
+        status === 404 ||
+        String(error?.message || "").toLowerCase().includes("not found")
+      if (!isNotFound) {
         console.error("Error fetching bank details:", error)
       }
       setHasBankDetails(false)
@@ -186,8 +188,7 @@ export function BankDetailsSection() {
         } catch (updateError: any) {
           // If update fails with 404, the record might have been deleted
           // Try to create new instead
-          if (updateError?.response?.status === 404) {
-            console.log("Bank details not found (may have been deleted), creating new")
+          if (updateError?.status === 404 || updateError?.response?.status === 404) {
             response = await apiClient.createBankDetails(payload)
             if (response?.data?.id) {
               setBankDetailsId(response.data.id)
