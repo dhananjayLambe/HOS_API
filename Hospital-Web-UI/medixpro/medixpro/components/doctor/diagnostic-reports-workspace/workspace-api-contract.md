@@ -1,6 +1,8 @@
 # Doctor Diagnostic Workspace API Contract (Phase 1)
 
-This is the frozen contract shared by UI and backend service responses.
+Frozen contract shared by the production UI (`createLiveWorkspaceProvider`) and backend responses.
+
+**Milestone 12:** demo/fixture providers are removed from runtime. This contract describes live API payloads only.
 
 ## Queue counts
 

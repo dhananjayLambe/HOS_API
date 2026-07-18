@@ -206,6 +206,28 @@ class ArtifactVersionAndReplaceTests(TestCase):
         primary = get_primary_artifact(report)
         self.assertEqual(primary.pk, new.pk)
 
+    def test_replace_artifact_preserves_sibling_same_type(self):
+        """Replacing primary PDF must not archive another active PDF on the report."""
+        _, line = _minimal_order_with_line()
+        report = _report(line)
+        primary, sibling = ArtifactUploadService.upload_report_artifacts(
+            report=report,
+            uploaded_files=[_pdf(b"primary-pdf"), _pdf(b"sibling-pdf")],
+            primary_file_index=0,
+        )
+        new = ArtifactUploadService.replace_artifact(
+            report=report,
+            old_artifact=primary,
+            file=_pdf(b"replacement-pdf"),
+        )
+        sibling.refresh_from_db()
+        primary.refresh_from_db()
+        self.assertFalse(primary.is_active)
+        self.assertTrue(sibling.is_active)
+        self.assertTrue(new.is_active)
+        self.assertTrue(new.is_primary)
+        self.assertEqual(report.artifacts.filter(is_active=True).count(), 2)
+
     def test_replace_artifact_allows_same_checksum(self):
         _, line = _minimal_order_with_line()
         report = _report(line)

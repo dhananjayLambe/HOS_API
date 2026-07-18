@@ -143,10 +143,8 @@ export function countActiveAdvancedFilters(advanced: AdvancedWorkspaceFilters): 
   let n = 0;
   if (advanced.dateFrom) n += 1;
   if (advanced.dateTo) n += 1;
-  if (advanced.lab) n += 1;
+  // lab/doctor/branch are UUID-only API params — display-name values are ignored
   if (advanced.category) n += 1;
-  if (advanced.doctor) n += 1;
-  if (advanced.branch) n += 1;
   if (advanced.status) n += 1;
   return n;
 }

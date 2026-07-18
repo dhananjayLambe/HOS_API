@@ -19,7 +19,20 @@ DEFAULT_MAX_REPORT_BATCH_UPLOAD_SIZE_MB = 100
 DEFAULT_MAX_REPORT_UPLOAD_FILES = 10
 
 ALLOWED_EXTENSIONS = frozenset(
-    {"pdf", "jpg", "jpeg", "png", "csv", "xlsx", "txt", "zip", "dcm"}
+    {
+        "pdf",
+        "jpg",
+        "jpeg",
+        "png",
+        "csv",
+        "xlsx",
+        "xls",
+        "docx",
+        "doc",
+        "txt",
+        "zip",
+        "dcm",
+    }
 )
 BLOCKED_EXTENSIONS = frozenset(
     {
@@ -50,6 +63,9 @@ EXTENSION_TO_ARTIFACT_TYPE: dict[str, str] = {
     "png": ReportArtifactType.IMAGE,
     "csv": ReportArtifactType.CSV,
     "xlsx": ReportArtifactType.XLSX,
+    "xls": ReportArtifactType.XLSX,
+    "docx": ReportArtifactType.DOCX,
+    "doc": ReportArtifactType.DOCX,
     "txt": ReportArtifactType.TXT,
     "zip": ReportArtifactType.ZIP,
     "dcm": ReportArtifactType.DICOM,
@@ -67,6 +83,14 @@ EXPECTED_MIME_BY_EXT: dict[str, frozenset[str]] = {
             "application/vnd.ms-excel",
         }
     ),
+    "xls": frozenset({"application/vnd.ms-excel"}),
+    "docx": frozenset(
+        {
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "application/msword",
+        }
+    ),
+    "doc": frozenset({"application/msword"}),
     "txt": frozenset({"text/plain"}),
     "zip": frozenset({"application/zip", "application/x-zip-compressed"}),
     "dcm": frozenset({"application/dicom", "application/octet-stream"}),

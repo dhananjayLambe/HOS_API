@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { createDemoReports } from "@/components/doctor/diagnostic-reports-workspace/mock/workspace-demo-fixtures";
 import {
   computeQueueCounts,
   filterReports,
@@ -7,9 +6,10 @@ import {
   sortReportsForBrowser,
 } from "@/lib/doctor/diagnostic-reports-workspace/filter-workspace-reports";
 import { parseWorkspaceUrlState } from "@/lib/doctor/diagnostic-reports-workspace/url-state";
+import { createTestWorkspaceReports } from "@/lib/doctor/diagnostic-reports-workspace/workspace-test-fixtures";
 
 describe("diagnostic reports workspace filters", () => {
-  const reports = createDemoReports();
+  const reports = createTestWorkspaceReports();
 
   it("computes three operational queue counts", () => {
     const counts = computeQueueCounts(reports);
@@ -66,5 +66,26 @@ describe("diagnostic reports workspace filters", () => {
     expect(state.q).toBe("Priya");
     expect(state.advanced.status).toBe("AVAILABLE");
     expect(state.page).toBe(2);
+  });
+
+  it("drops non-UUID demo patient/report ids from URL state", () => {
+    const state = parseWorkspaceUrlState(
+      new URLSearchParams(
+        "patientId=pat-priya&reportId=rpt-ramesh-hba1c&consultationId=consult-vikram-1&lab=Kolhapur+Main&branch=Main"
+      )
+    );
+    expect(state.patientId).toBeNull();
+    expect(state.reportId).toBeNull();
+    expect(state.consultationId).toBeNull();
+    expect(state.advanced.lab).toBe("");
+    expect(state.advanced.branch).toBe("");
+
+    const live = parseWorkspaceUrlState(
+      new URLSearchParams(
+        "patientId=2843aee4-784e-4777-a4aa-467c2be47722&reportId=137f35fb-d98f-4656-bdc7-dbc9d1c731be"
+      )
+    );
+    expect(live.patientId).toBe("2843aee4-784e-4777-a4aa-467c2be47722");
+    expect(live.reportId).toBe("137f35fb-d98f-4656-bdc7-dbc9d1c731be");
   });
 });

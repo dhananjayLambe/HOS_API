@@ -547,6 +547,7 @@ class ArtifactUploadService:
         checksum: str,
         download_filename: str,
         reupload_reason: str | None = None,
+        archive_same_type: bool = False,
     ) -> DiagnosticReportArtifact:
         report_public_id = report.id
         patient_profile_id = None
@@ -563,13 +564,15 @@ class ArtifactUploadService:
         except AttributeError:
             pass
 
-        # Enforce single active version per report + artifact_type.
-        DiagnosticReportArtifact.objects.filter(
-            report=report,
-            artifact_type=artifact_type,
-            is_active=True,
-            artifact_state=ArtifactLifecycleState.ACTIVE,
-        ).update(is_active=False, artifact_state=ArtifactLifecycleState.ARCHIVED)
+        # Optional bulk archive of same-type actives (legacy / explicit callers only).
+        # UPLOAD_NEW and REUPLOAD_REPLACE leave siblings alone; replace deactivates the target first.
+        if archive_same_type:
+            DiagnosticReportArtifact.objects.filter(
+                report=report,
+                artifact_type=artifact_type,
+                is_active=True,
+                artifact_state=ArtifactLifecycleState.ACTIVE,
+            ).update(is_active=False, artifact_state=ArtifactLifecycleState.ARCHIVED)
 
         artifact = DiagnosticReportArtifact(
             report=report,

@@ -520,6 +520,11 @@ class DiagnosticOrderTestLine(models.Model):
             models.Index(fields=["order_item"]),
             models.Index(fields=["service"]),
             models.Index(fields=["status"]),
+            # Workspace awaiting queue: status + updated_at cursor (M11)
+            models.Index(
+                fields=["status", "updated_at"],
+                name="diag_line_stat_upd_idx",
+            ),
         ]
 
     def __str__(self):

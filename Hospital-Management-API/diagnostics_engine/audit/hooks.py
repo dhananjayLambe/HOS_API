@@ -92,7 +92,13 @@ def schedule_report_uploaded(
         )
 
 
-def schedule_report_viewed(*, report, user, viewer_platform: str = "Web") -> None:
+def schedule_report_viewed(
+    *,
+    report,
+    user,
+    viewer_platform: str = "Web",
+    artifact_id: str | None = None,
+) -> None:
     try:
         encounter, consultation = DiagnosticAuditService.resolve_context_from_report(report)
         if encounter is None:
@@ -104,6 +110,7 @@ def schedule_report_viewed(*, report, user, viewer_platform: str = "Web") -> Non
             report=report,
             viewer_platform=viewer_platform,
             source=DiagnosticAuditService.resolve_source_from_user(user, default="system"),
+            artifact_id=artifact_id,
         )
     except Exception:
         logger.warning(
@@ -118,6 +125,8 @@ def schedule_report_downloaded(
     report,
     user,
     download_channel: str = "Web",
+    artifact_id: str | None = None,
+    download_format: str = "PDF",
 ) -> None:
     try:
         encounter, consultation = DiagnosticAuditService.resolve_context_from_report(report)
@@ -129,7 +138,9 @@ def schedule_report_downloaded(
             user,
             report=report,
             download_channel=download_channel,
+            download_format=download_format,
             source=DiagnosticAuditService.resolve_source_from_user(user, default="patient"),
+            artifact_id=artifact_id,
         )
     except Exception:
         logger.warning(

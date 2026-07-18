@@ -1,8 +1,10 @@
 import uuid
 from pathlib import Path
 
+from django.contrib.postgres.indexes import OpClass
 from django.core.exceptions import ValidationError
 from django.db import models, transaction
+from django.db.models.functions import Upper
 from django.utils import timezone
 from django.utils.text import slugify
 
@@ -77,6 +79,7 @@ class ReportArtifactType(models.TextChoices):
     IMAGE = "IMAGE", "Image"
     CSV = "CSV", "CSV"
     XLSX = "XLSX", "Excel"
+    DOCX = "DOCX", "Word"
     TXT = "TXT", "Text"
     ZIP = "ZIP", "ZIP"
     DICOM = "DICOM", "DICOM"
@@ -524,6 +527,15 @@ class DiagnosticTestReport(models.Model):
             models.Index(fields=["delivery_status"]),
             models.Index(fields=["uploaded_at"]),
             models.Index(fields=["order_test_line"]),
+            # Workspace search: UPPER(report_number) prefix / exact (M11)
+            models.Index(
+                OpClass(Upper("report_number"), name="varchar_pattern_ops"),
+                name="diag_rpt_num_up_pat_idx",
+            ),
+            # Active-head anti-join / supersession checks (M11)
+            models.Index(fields=["supersedes", "deleted_at"], name="diag_rpt_super_del_idx"),
+            # Soft-delete + chronological list support (M11)
+            models.Index(fields=["deleted_at", "uploaded_at"], name="diag_rpt_del_up_idx"),
         ]
 
     # Handles:
@@ -824,13 +836,8 @@ class DiagnosticReportArtifact(models.Model):
             models.Index(fields=["report", "artifact_type", "artifact_state", "is_active"]),
             models.Index(fields=["checksum_sha256", "report", "is_active"]),
         ]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["report", "artifact_type"],
-                condition=models.Q(is_active=True, artifact_state=ArtifactLifecycleState.ACTIVE),
-                name="unique_active_artifact_per_report_type",
-            )
-        ]
+        # Multiple active artifacts of the same type are allowed (multi-artifact append).
+        # Uniqueness of primary remains enforced in clean().
 
     def __str__(self):
         return f"Artifact - {self.report_id}"

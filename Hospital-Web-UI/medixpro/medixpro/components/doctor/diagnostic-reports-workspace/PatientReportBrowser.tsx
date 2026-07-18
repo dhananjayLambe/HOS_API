@@ -51,6 +51,8 @@ type PatientReportBrowserProps = {
   layout?: "table" | "cards";
   page: number;
   onPageChange: (page: number) => void;
+  /** When set, pagination is server/cursor driven (one API page per `page`). */
+  serverHasMore?: boolean;
   emptyTitle?: string;
   emptyDescription?: string;
   emptyActionLabel?: string;
@@ -66,6 +68,7 @@ export function PatientReportBrowser({
   layout = "table",
   page,
   onPageChange,
+  serverHasMore,
   emptyTitle = "No reports found",
   emptyDescription = "No reports match your filters. Try clearing filters or searching by patient.",
   emptyActionLabel,
@@ -76,12 +79,20 @@ export function PatientReportBrowser({
 }: PatientReportBrowserProps) {
   const [highlightIndex, setHighlightIndex] = useState(0);
 
-  const totalPages = Math.max(1, Math.ceil(reports.length / BROWSER_PAGE_SIZE));
-  const safePage = Math.min(Math.max(1, page), totalPages);
+  const serverPaged = serverHasMore !== undefined;
+  const safePage = Math.max(1, page);
+  const canGoNext = serverPaged
+    ? Boolean(serverHasMore)
+    : safePage < Math.max(1, Math.ceil(reports.length / BROWSER_PAGE_SIZE));
+  const canGoPrev = safePage > 1;
+  const totalPagesLabel = String(
+    Math.max(1, Math.ceil(reports.length / BROWSER_PAGE_SIZE))
+  );
   const pageSlice = useMemo(() => {
+    if (serverPaged) return reports;
     const start = (safePage - 1) * BROWSER_PAGE_SIZE;
     return reports.slice(start, start + BROWSER_PAGE_SIZE);
-  }, [reports, safePage]);
+  }, [reports, safePage, serverPaged]);
 
   useEffect(() => {
     setHighlightIndex(0);
@@ -134,15 +145,16 @@ export function PatientReportBrowser({
   const pagination = (
     <div className="flex items-center justify-between gap-2 border-t border-[hsl(var(--clinical-divider))] px-3 py-2 text-sm">
       <p className="text-[hsl(var(--clinical-text-secondary))]">
-        {reports.length} report{reports.length === 1 ? "" : "s"} · Page {safePage} of{" "}
-        {totalPages}
+        {reports.length} report{reports.length === 1 ? "" : "s"}
+        {serverPaged ? " on this page" : ""} · Page {safePage}
+        {serverPaged ? (serverHasMore ? "+" : "") : ` of ${totalPagesLabel}`}
       </p>
       <div className="flex gap-1">
         <Button
           type="button"
           size="sm"
           variant="outline"
-          disabled={safePage <= 1}
+          disabled={!canGoPrev}
           onClick={() => onPageChange(safePage - 1)}
         >
           <ChevronLeft className="h-4 w-4" />
@@ -151,7 +163,7 @@ export function PatientReportBrowser({
           type="button"
           size="sm"
           variant="outline"
-          disabled={safePage >= totalPages}
+          disabled={!canGoNext}
           onClick={() => onPageChange(safePage + 1)}
         >
           <ChevronRight className="h-4 w-4" />

@@ -24,18 +24,152 @@ import {
 } from "@/lib/design-system/clinical";
 import { cn } from "@/lib/utils";
 import { useToastNotification } from "@/hooks/use-toast-notification";
+import { resolveWorkspaceAccessUrl } from "@/lib/doctor/diagnostic-reports-workspace/resolve-workspace-access-url";
+import { printResolvedWorkspaceUrl } from "@/lib/doctor/diagnostic-reports-workspace/print-workspace-artifact";
 
-function ArtifactViewer({ artifact }: { artifact: WorkspaceArtifact }) {
+function ArtifactViewer({
+  artifact,
+  onDownload,
+}: {
+  artifact: WorkspaceArtifact;
+  onDownload?: () => void;
+}) {
+  const [resolvedSrc, setResolvedSrc] = useState<string | null>(null);
+  const [textPreview, setTextPreview] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(Boolean(artifact.previewUrl));
+
+  const isTextKind = artifact.kind === "CSV" || artifact.kind === "TXT";
+  const isOfficeOrBinary =
+    artifact.kind === "XLSX" ||
+    artifact.kind === "DOCX" ||
+    artifact.kind === "ZIP" ||
+    artifact.kind === "DICOM" ||
+    artifact.kind === "OTHER";
+
+  useEffect(() => {
+    let cancelled = false;
+    let revoke: (() => void) | undefined;
+    const previewUrl = artifact.previewUrl;
+
+    if (!previewUrl) {
+      setResolvedSrc(null);
+      setTextPreview(null);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    setResolvedSrc(null);
+    setTextPreview(null);
+
+    void resolveWorkspaceAccessUrl(previewUrl)
+      .then(async (resolved) => {
+        if (cancelled) {
+          if (resolved.kind === "blob") resolved.revoke();
+          return;
+        }
+        if (resolved.kind === "blob") revoke = resolved.revoke;
+        if (isTextKind) {
+          const res = await fetch(resolved.url);
+          const text = await res.text();
+          if (!cancelled) setTextPreview(text);
+          if (resolved.kind === "blob") {
+            // Text loaded — can revoke blob URL after reading
+            resolved.revoke();
+            revoke = undefined;
+          }
+        } else {
+          setResolvedSrc(resolved.url);
+        }
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : "Preview failed to load.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+      revoke?.();
+    };
+  }, [artifact.id, artifact.previewUrl, isTextKind]);
+
   if (!artifact.previewUrl) {
-    return <div className="p-6 text-sm text-[hsl(var(--clinical-text-secondary))]">Preview unavailable.</div>;
+    return (
+      <DownloadOnlyPanel
+        kind={artifact.kind}
+        label={artifact.label}
+        canDownload={Boolean(artifact.downloadUrl)}
+        onDownload={onDownload}
+      />
+    );
   }
-  if (artifact.kind === "IMAGE") {
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[min(82vh,900px)] items-center justify-center gap-2 text-sm text-[hsl(var(--clinical-text-secondary))]">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Loading document…
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-3 p-6 text-sm text-[hsl(var(--clinical-text-secondary))]">
+        <p>{error}</p>
+        {artifact.downloadUrl && onDownload ? (
+          <Button type="button" size="sm" variant="outline" onClick={onDownload}>
+            <Download className="mr-1.5 h-4 w-4" />
+            Download file
+          </Button>
+        ) : null}
+      </div>
+    );
+  }
+
+  if (isTextKind && textPreview != null) {
+    return (
+      <pre className="max-h-[min(82vh,900px)] overflow-auto whitespace-pre-wrap break-words bg-[hsl(var(--clinical-surface-page))] p-4 font-mono text-xs leading-relaxed text-[hsl(var(--clinical-text-primary))]">
+        {textPreview}
+      </pre>
+    );
+  }
+
+  if (artifact.kind === "IMAGE" && resolvedSrc) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
-        src={artifact.previewUrl}
+        src={resolvedSrc}
         alt={artifact.label}
         className="h-full min-h-[min(82vh,900px)] w-full object-contain bg-[hsl(var(--clinical-surface-page))]"
+      />
+    );
+  }
+
+  if (artifact.kind === "PDF" && resolvedSrc) {
+    return (
+      <iframe
+        title={artifact.label}
+        src={resolvedSrc}
+        className="h-[min(82vh,900px)] w-full border-0 bg-white"
+      />
+    );
+  }
+
+  if (isOfficeOrBinary || !resolvedSrc) {
+    return (
+      <DownloadOnlyPanel
+        kind={artifact.kind}
+        label={artifact.label}
+        canDownload={Boolean(artifact.downloadUrl)}
+        onDownload={onDownload}
       />
     );
   }
@@ -43,9 +177,51 @@ function ArtifactViewer({ artifact }: { artifact: WorkspaceArtifact }) {
   return (
     <iframe
       title={artifact.label}
-      src={artifact.previewUrl}
+      src={resolvedSrc}
       className="h-[min(82vh,900px)] w-full border-0 bg-white"
     />
+  );
+}
+
+function DownloadOnlyPanel({
+  kind,
+  label,
+  canDownload,
+  onDownload,
+}: {
+  kind: WorkspaceArtifact["kind"];
+  label: string;
+  canDownload: boolean;
+  onDownload?: () => void;
+}) {
+  const hint =
+    kind === "DOCX"
+      ? "Word documents open best after download (Microsoft Word or compatible app)."
+      : kind === "XLSX"
+        ? "Spreadsheets open best after download (Excel or compatible app)."
+        : kind === "ZIP"
+          ? "Archives must be downloaded to extract."
+          : kind === "DICOM"
+            ? "DICOM imaging requires a dedicated viewer — download the file."
+            : "Inline preview is not available for this file type.";
+
+  return (
+    <div className="flex min-h-[min(40vh,420px)] flex-col items-center justify-center gap-3 px-6 py-16 text-center">
+      <p className="text-sm font-medium text-[hsl(var(--clinical-text-primary))]">
+        {label || "Report file"}
+      </p>
+      <p className="max-w-md text-sm text-[hsl(var(--clinical-text-secondary))]">{hint}</p>
+      {canDownload && onDownload ? (
+        <Button type="button" onClick={onDownload}>
+          <Download className="mr-1.5 h-4 w-4" />
+          Download {kind === "OTHER" ? "file" : kind}
+        </Button>
+      ) : (
+        <p className="text-xs text-[hsl(var(--clinical-text-meta))]">
+          Download is not available for this artifact.
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -97,6 +273,8 @@ type ReportPreviewWorkspaceProps = {
   onOpenChange: (open: boolean) => void;
   report: WorkspaceReport | null;
   loading?: boolean;
+  /** Phase 1: show all workspace reports for this patient (not full history/versioning). */
+  onViewPatientReports?: (patientId: string) => void;
 };
 
 export function ReportPreviewWorkspace({
@@ -104,6 +282,7 @@ export function ReportPreviewWorkspace({
   onOpenChange,
   report,
   loading,
+  onViewPatientReports,
 }: ReportPreviewWorkspaceProps) {
   const toast = useToastNotification();
   const primary = useMemo(
@@ -119,32 +298,49 @@ export function ReportPreviewWorkspace({
   const activeArtifact =
     report?.artifacts.find((a) => a.id === activeArtifactId) ?? primary;
 
-  const handlePrint = () => {
-    if (!activeArtifact) return;
-    const w = window.open("", "_blank", "noopener,noreferrer,width=900,height=700");
-    if (!w) {
-      toast.error("Pop-up blocked. Allow pop-ups to print.");
-      return;
+  const canPrint =
+    activeArtifact &&
+    (activeArtifact.kind === "PDF" ||
+      activeArtifact.kind === "IMAGE" ||
+      activeArtifact.kind === "CSV" ||
+      activeArtifact.kind === "TXT") &&
+    Boolean(activeArtifact.previewUrl);
+
+  const handlePrint = async () => {
+    if (!activeArtifact?.previewUrl || !canPrint) return;
+    let revoke: (() => void) | undefined;
+    try {
+      const resolved = await resolveWorkspaceAccessUrl(activeArtifact.previewUrl);
+      if (resolved.kind === "blob") revoke = resolved.revoke;
+      await printResolvedWorkspaceUrl(resolved.url, activeArtifact.kind);
+      toast.success("Print dialog opened");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Print failed.");
+    } finally {
+      if (revoke) {
+        window.setTimeout(revoke, 60_000);
+      }
     }
-    if (activeArtifact.kind === "IMAGE") {
-      w.document.write(
-        `<html><body style="margin:0;display:flex;justify-content:center"><img src="${activeArtifact.previewUrl ?? ""}" style="max-width:100%"/></body></html>`
-      );
-    } else {
-      w.document.write(`<iframe src="${activeArtifact.previewUrl ?? ""}" style="width:100%;height:100vh;border:0;"></iframe>`);
-    }
-    w.document.close();
-    w.focus();
-    w.print();
   };
 
-  const handleDownload = () => {
-    if (!activeArtifact || !report) return;
-    const a = document.createElement("a");
-    a.href = activeArtifact.downloadUrl;
-    a.download = activeArtifact.label;
-    a.click();
-    toast.success("Download started");
+  const handleDownload = async () => {
+    if (!activeArtifact?.downloadUrl || !report) return;
+    try {
+      const resolved = await resolveWorkspaceAccessUrl(activeArtifact.downloadUrl);
+      const a = document.createElement("a");
+      a.href = resolved.url;
+      a.download = activeArtifact.label;
+      a.rel = "noopener noreferrer";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      if (resolved.kind === "blob") {
+        window.setTimeout(() => resolved.revoke(), 0);
+      }
+      toast.success("Download started");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Download failed.");
+    }
   };
 
   return (
@@ -193,14 +389,27 @@ export function ReportPreviewWorkspace({
                     >
                       Patient Summary
                     </Link>
-                    <button
-                      type="button"
-                      title="Coming soon"
-                      className="inline-flex items-center gap-1 text-[hsl(var(--clinical-text-meta))]"
-                    >
-                      <History className="h-3.5 w-3.5" />
-                      Previous reports (Coming Soon)
-                    </button>
+                    {onViewPatientReports ? (
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
+                        onClick={() => {
+                          onOpenChange(false);
+                          onViewPatientReports(report.patient.id);
+                        }}
+                      >
+                        <History className="h-3.5 w-3.5" />
+                        Previous reports
+                      </button>
+                    ) : (
+                      <span
+                        title="Coming soon"
+                        className="inline-flex items-center gap-1 text-[hsl(var(--clinical-text-meta))]"
+                      >
+                        <History className="h-3.5 w-3.5" />
+                        Previous reports (Coming Soon)
+                      </span>
+                    )}
                   </nav>
                 </div>
 
@@ -221,7 +430,12 @@ export function ReportPreviewWorkspace({
                     size="sm"
                     variant="outline"
                     className="h-9"
-                    disabled={!activeArtifact}
+                    disabled={!canPrint}
+                    title={
+                      canPrint
+                        ? "Print"
+                        : "Print is available for PDF, images, CSV, and text files"
+                    }
                     onClick={handlePrint}
                   >
                     <Printer className="mr-1.5 h-4 w-4" />
@@ -278,21 +492,26 @@ export function ReportPreviewWorkspace({
                 >
                   {report.artifacts.map((a) => {
                     const selected = activeArtifact?.id === a.id;
+                    const name = formatArtifactTabLabel(a.label);
+                    const tabLabel = a.isPrimary
+                      ? `${a.kind} · Primary · ${name}`
+                      : `${a.kind} · ${name}`;
                     return (
                       <button
                         key={a.id}
                         type="button"
                         role="tab"
                         aria-selected={selected}
+                        title={tabLabel}
                         onClick={() => setActiveArtifactId(a.id)}
                         className={cn(
-                          "-mb-px h-8 border-b-2 px-3 text-xs transition-colors duration-150",
+                          "-mb-px h-8 max-w-[12rem] truncate border-b-2 px-3 text-xs transition-colors duration-150",
                           selected
                             ? "border-primary font-semibold text-[hsl(var(--clinical-text-primary))]"
                             : "border-transparent text-[hsl(var(--clinical-text-meta))] hover:text-[hsl(var(--clinical-text-primary))]"
                         )}
                       >
-                        {formatArtifactTabLabel(a.label)}
+                        {tabLabel}
                       </button>
                     );
                   })}
@@ -326,7 +545,12 @@ export function ReportPreviewWorkspace({
                   </div>
                 ) : activeArtifact ? (
                   <div className="min-h-0 flex-1 border-t border-[hsl(var(--clinical-divider))] bg-white dark:bg-background">
-                    <ArtifactViewer artifact={activeArtifact} />
+                    <ArtifactViewer
+                      artifact={activeArtifact}
+                      onDownload={
+                        activeArtifact.downloadUrl ? handleDownload : undefined
+                      }
+                    />
                   </div>
                 ) : null}
               </div>

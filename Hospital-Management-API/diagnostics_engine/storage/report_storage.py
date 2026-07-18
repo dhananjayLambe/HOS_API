@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from diagnostics_engine.models.reports import DiagnosticReportArtifact
 from diagnostics_engine.storage.providers import DefaultStorageProvider
 from diagnostics_engine.storage.s3_report_storage import (
     generate_presigned_download_url,
-    reports_s3_enabled,
 )
+
+Disposition = Literal["attachment", "inline"]
 
 
 class ReportStorageService:
@@ -19,8 +22,13 @@ class ReportStorageService:
         return artifact.storage_key
 
     @staticmethod
-    def download_url(artifact: DiagnosticReportArtifact, *, expires_in: int | None = None) -> str | None:
-        """Presigned URL only — never return ``artifact.file.url``."""
+    def download_url(
+        artifact: DiagnosticReportArtifact,
+        *,
+        expires_in: int | None = None,
+        disposition: Disposition = "attachment",
+    ) -> str | None:
+        """Presigned URL when S3 mode is on; ``None`` for local (workspace streams bytes)."""
         key = ReportStorageService.storage_path(artifact)
         if not key:
             return None
@@ -29,12 +37,22 @@ class ReportStorageService:
             key,
             expires_in=expires_in,
             download_filename=filename,
+            disposition=disposition,
         )
-        if url:
-            return url
-        if not reports_s3_enabled() and artifact.file:
-            return None
-        return None
+        return url
+
+    @staticmethod
+    def preview_url(
+        artifact: DiagnosticReportArtifact,
+        *,
+        expires_in: int | None = None,
+    ) -> str | None:
+        """Presigned URL with inline disposition for browser preview."""
+        return ReportStorageService.download_url(
+            artifact,
+            expires_in=expires_in,
+            disposition="inline",
+        )
 
     @staticmethod
     def exists(artifact: DiagnosticReportArtifact) -> bool:

@@ -294,11 +294,16 @@ export function ReportsCompletionPage() {
       const pdfIndex = input.files.findIndex(
         (file) => file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf"),
       );
-      const primaryFileIndex = pdfIndex >= 0 ? pdfIndex : 0;
       const resolvedIntent =
-        input.mode === "reupload" || input.hasExistingArtifact
-          ? "REUPLOAD_REPLACE"
-          : "UPLOAD_NEW";
+        input.mode === "reupload" ? "REUPLOAD_REPLACE" : "UPLOAD_NEW";
+      // Append must not promote a new primary; first upload may pick PDF as primary.
+      const isAppend =
+        resolvedIntent === "UPLOAD_NEW" && Boolean(input.hasExistingArtifact);
+      const primaryFileIndex = isAppend
+        ? undefined
+        : pdfIndex >= 0
+          ? pdfIndex
+          : 0;
       try {
         const uploadResult = await mutations.uploadReport({
           reportId,

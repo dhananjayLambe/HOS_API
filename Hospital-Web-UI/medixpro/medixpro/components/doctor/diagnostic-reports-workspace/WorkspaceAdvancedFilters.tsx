@@ -44,21 +44,12 @@ export function WorkspaceAdvancedFilters({
   const activeCount = countActiveAdvancedFilters(value);
 
   const options = useMemo(() => {
-    const labs = new Set<string>();
     const categories = new Set<string>();
-    const doctors = new Set<string>();
-    const branches = new Set<string>();
     for (const r of reportsForOptions) {
-      if (r.labName) labs.add(r.labName);
       if (r.category) categories.add(r.category);
-      if (r.doctorName) doctors.add(r.doctorName);
-      if (r.branchName) branches.add(r.branchName);
     }
     return {
-      labs: [...labs].sort(),
       categories: [...categories].sort(),
-      doctors: [...doctors].sort(),
-      branches: [...branches].sort(),
     };
   }, [reportsForOptions]);
 
@@ -68,7 +59,13 @@ export function WorkspaceAdvancedFilters({
   };
 
   const apply = () => {
-    onChange(draft);
+    // Clear UUID-only filter fields that cannot be driven by display names.
+    onChange({
+      ...draft,
+      lab: "",
+      doctor: "",
+      branch: "",
+    });
     setOpen(false);
   };
 
@@ -117,11 +114,16 @@ export function WorkspaceAdvancedFilters({
               </div>
             </div>
 
+            <p className="text-xs text-[hsl(var(--clinical-text-secondary))]">
+              Lab, doctor, and branch filters require UUID options from a future
+              filters API. Display names are not sent to the live workspace API.
+            </p>
             <FilterSelect
               label="Lab"
-              value={draft.lab}
-              options={options.labs}
-              onChange={(lab) => setDraft({ ...draft, lab })}
+              value=""
+              options={[]}
+              disabled
+              onChange={() => {}}
             />
             <FilterSelect
               label="Category"
@@ -131,15 +133,17 @@ export function WorkspaceAdvancedFilters({
             />
             <FilterSelect
               label="Doctor"
-              value={draft.doctor}
-              options={options.doctors}
-              onChange={(doctor) => setDraft({ ...draft, doctor })}
+              value=""
+              options={[]}
+              disabled
+              onChange={() => {}}
             />
             <FilterSelect
               label="Branch"
-              value={draft.branch}
-              options={options.branches}
-              onChange={(branch) => setDraft({ ...draft, branch })}
+              value=""
+              options={[]}
+              disabled
+              onChange={() => {}}
             />
             <div className="space-y-1.5">
               <Label>Status</Label>
@@ -192,11 +196,13 @@ function FilterSelect({
   value,
   options,
   onChange,
+  disabled,
 }: {
   label: string;
   value: string;
   options: string[];
   onChange: (v: string) => void;
+  disabled?: boolean;
 }) {
   return (
     <div className="space-y-1.5">
@@ -204,9 +210,16 @@ function FilterSelect({
       <Select
         value={value || "__all__"}
         onValueChange={(v) => onChange(v === "__all__" ? "" : v)}
+        disabled={disabled}
       >
         <SelectTrigger>
-          <SelectValue placeholder={`All ${label.toLowerCase()}`} />
+          <SelectValue
+            placeholder={
+              disabled
+                ? `${label} (coming soon)`
+                : `All ${label.toLowerCase()}`
+            }
+          />
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="__all__">All</SelectItem>

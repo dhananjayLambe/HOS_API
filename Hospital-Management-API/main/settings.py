@@ -83,7 +83,14 @@ MAX_REPORT_BATCH_UPLOAD_SIZE_MB = int(os.getenv("MAX_REPORT_BATCH_UPLOAD_SIZE_MB
 MAX_REPORT_UPLOAD_FILES = int(os.getenv("MAX_REPORT_UPLOAD_FILES", "10"))
 
 # Report object storage (S3) — optional; local MEDIA_ROOT when unset
+# REPORT_ARTIFACT_STORAGE:
+#   auto  — use S3 when AWS_REPORTS_BUCKET is set, else local MEDIA_ROOT (default; best for env promotion)
+#   local — always stream/serve from MEDIA_ROOT (dev/staging without S3)
+#   s3    — require AWS_REPORTS_BUCKET and issue presigned URLs (production)
 AWS_REPORTS_BUCKET = os.getenv("AWS_REPORTS_BUCKET", "").strip() or None
+REPORT_ARTIFACT_STORAGE = (
+    os.getenv("REPORT_ARTIFACT_STORAGE", "auto").strip().lower() or "auto"
+)
 AWS_S3_REGION_NAME = os.getenv("AWS_S3_REGION_NAME", os.getenv("AWS_REGION", "ap-south-1"))
 AWS_S3_SIGNATURE_VERSION = os.getenv("AWS_S3_SIGNATURE_VERSION", "s3v4")
 AWS_S3_FILE_OVERWRITE = False
@@ -93,7 +100,12 @@ REPORT_PRESIGNED_URL_EXPIRY_SECONDS = int(os.getenv("REPORT_PRESIGNED_URL_EXPIRY
 IDEMPOTENCY_KEY_TTL_HOURS = int(os.getenv("IDEMPOTENCY_KEY_TTL_HOURS", "24"))
 REPORT_DELIVERY_ASYNC = os.getenv("REPORT_DELIVERY_ASYNC", "true").lower() in ("1", "true", "yes", "on")
 
-if AWS_REPORTS_BUCKET:
+# Use S3 Django storage backend only when mode resolves to s3
+_REPORTS_USE_S3_STORAGE = REPORT_ARTIFACT_STORAGE == "s3" or (
+    REPORT_ARTIFACT_STORAGE == "auto" and bool(AWS_REPORTS_BUCKET)
+)
+
+if _REPORTS_USE_S3_STORAGE and AWS_REPORTS_BUCKET:
     STORAGES = {
         "default": {
             "BACKEND": "storages.backends.s3boto3.S3Boto3Storage",
@@ -234,6 +246,7 @@ INSTALLED_APPS = [
     'medicines.apps.MedicinesConfig',
     'analytics.apps.AnalyticsConfig',
     'diagnostics_engine.apps.DiagnosticsEngineConfig',
+    'doctor_report_workspace.apps.DoctorReportWorkspaceConfig',
     'notifications.apps.NotificationsConfig',
     'clinical_audit.apps.ClinicalAuditConfig',
     'business_audit.apps.BusinessAuditConfig',

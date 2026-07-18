@@ -1,6 +1,6 @@
 /**
  * Clinical view-models for the Diagnostic Reports Workspace.
- * Provider-agnostic — demo and live backends must satisfy these shapes.
+ * Shapes match production DTOs from `doctor_report_workspace` (live API only).
  */
 
 export type ClinicalReportStatus = "AWAITING_REPORT" | "AVAILABLE" | "UPDATED";
@@ -14,7 +14,16 @@ export type QuickClinicalFilter =
   | "awaiting"
   | "today";
 
-export type ArtifactKind = "PDF" | "IMAGE" | "OTHER";
+export type ArtifactKind =
+  | "PDF"
+  | "IMAGE"
+  | "CSV"
+  | "XLSX"
+  | "DOCX"
+  | "TXT"
+  | "ZIP"
+  | "DICOM"
+  | "OTHER";
 
 export type WorkspacePatient = {
   id: string;
@@ -98,6 +107,8 @@ export type WorkspaceListQuery = {
   patientId?: string | null;
   consultationId?: string | null;
   encounterId?: string | null;
+  /** Opaque keyset cursor from prior `pagination.next_cursor` (server pagination). */
+  cursor?: string | null;
   advanced?: AdvancedWorkspaceFilters;
 };
 

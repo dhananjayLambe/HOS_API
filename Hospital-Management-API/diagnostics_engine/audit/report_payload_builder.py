@@ -32,26 +32,30 @@ class ReportPayloadBuilder:
         *,
         viewer_role: str,
         viewer_platform: str = "Web",
+        artifact_id: str | None = None,
     ) -> dict[str, Any]:
-        return sanitize_audit_payload(
-            {
-                "viewer_role": viewer_role,
-                "viewer_platform": viewer_platform,
-            }
-        )
+        payload: dict[str, Any] = {
+            "viewer_role": viewer_role,
+            "viewer_platform": viewer_platform,
+        }
+        if artifact_id:
+            payload["artifact_id"] = str(artifact_id)
+        return sanitize_audit_payload(payload)
 
     @staticmethod
     def build_downloaded(
         *,
         download_format: str = "PDF",
         download_channel: str = "Web",
+        artifact_id: str | None = None,
     ) -> dict[str, Any]:
-        return sanitize_audit_payload(
-            {
-                "download_format": download_format,
-                "download_channel": download_channel,
-            }
-        )
+        payload: dict[str, Any] = {
+            "download_format": download_format,
+            "download_channel": download_channel,
+        }
+        if artifact_id:
+            payload["artifact_id"] = str(artifact_id)
+        return sanitize_audit_payload(payload)
 
     @staticmethod
     def build_shared(

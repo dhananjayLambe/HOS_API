@@ -50,7 +50,8 @@ export type OperationalConflictContext = {
 export type UploadReportInput = {
   reportId: string;
   files: File[];
-  primaryFileIndex: number;
+  /** Omit on append so existing primary stays primary. */
+  primaryFileIndex?: number;
   uploadIntent?: "UPLOAD_NEW" | "REUPLOAD_REPLACE";
   notes?: string;
   version?: number;
@@ -231,7 +232,9 @@ export function useReportMutations(branchId: string | null | undefined) {
         for (const file of input.files) {
           formData.append("files", file);
         }
-        formData.append("primary_file_index", String(input.primaryFileIndex));
+        if (input.primaryFileIndex != null) {
+          formData.append("primary_file_index", String(input.primaryFileIndex));
+        }
         if (input.uploadIntent) formData.append("upload_intent", input.uploadIntent);
         if (input.uploadRequestId) formData.append("upload_request_id", input.uploadRequestId);
         if (input.notes) formData.append("notes", input.notes);

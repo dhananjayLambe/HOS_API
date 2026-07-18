@@ -146,11 +146,13 @@ class DiagnosticAuditService:
         viewer_platform: str = "Web",
         source: str = "doctor",
         correlation_id: str | None = None,
+        artifact_id: str | None = None,
     ) -> AuditRecordResult:
         role = viewer_role or ReportPayloadBuilder.resolve_viewer_role(user)
         payload = ReportPayloadBuilder.build_viewed(
             viewer_role=role,
             viewer_platform=viewer_platform,
+            artifact_id=artifact_id,
         )
         return cls._record(
             action=AuditAction.REPORT_VIEWED,
@@ -176,10 +178,12 @@ class DiagnosticAuditService:
         download_channel: str = "Web",
         source: str = "patient",
         correlation_id: str | None = None,
+        artifact_id: str | None = None,
     ) -> AuditRecordResult:
         payload = ReportPayloadBuilder.build_downloaded(
             download_format=download_format,
             download_channel=download_channel,
+            artifact_id=artifact_id,
         )
         return cls._record(
             action=AuditAction.REPORT_DOWNLOADED,

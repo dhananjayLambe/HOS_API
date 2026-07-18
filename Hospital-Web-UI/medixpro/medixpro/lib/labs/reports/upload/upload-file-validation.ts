@@ -7,8 +7,8 @@ export type UploadFileRejection = {
   reason: UploadFileRejectionReason;
 };
 
-/** Client-side limit — align with backend when known. */
-export const REPORT_UPLOAD_MAX_BYTES = 25 * 1024 * 1024;
+/** Client-side limit — aligned with backend MAX_REPORT_UPLOAD_SIZE_MB (default 20). */
+export const REPORT_UPLOAD_MAX_BYTES = 20 * 1024 * 1024;
 
 export const UPLOAD_ACCEPT_ATTR =
   ".pdf,.jpg,.jpeg,.png,.csv,.xlsx,.txt,.zip,application/pdf,image/jpeg,image/png,text/csv,text/plain,application/zip,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";

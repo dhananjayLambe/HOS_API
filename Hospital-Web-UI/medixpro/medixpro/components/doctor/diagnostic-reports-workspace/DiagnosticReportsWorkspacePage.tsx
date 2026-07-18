@@ -12,7 +12,7 @@ import { PatientReportBrowser } from "@/components/doctor/diagnostic-reports-wor
 import { PatientSearchBar } from "@/components/doctor/diagnostic-reports-workspace/PatientSearchBar";
 import { ReportPreviewWorkspace } from "@/components/doctor/diagnostic-reports-workspace/ReportPreviewWorkspace";
 import { WorkspaceAdvancedFilters } from "@/components/doctor/diagnostic-reports-workspace/WorkspaceAdvancedFilters";
-import { resolveWorkspaceProvider } from "@/components/doctor/diagnostic-reports-workspace/mock/resolve-workspace-provider";
+import { createLiveWorkspaceProvider } from "@/components/doctor/diagnostic-reports-workspace/live-workspace-provider";
 import {
   EMPTY_ADVANCED_FILTERS,
   type AdvancedWorkspaceFilters,
@@ -27,9 +27,11 @@ import {
   workspaceStateToSearchParams,
   type WorkspaceUrlState,
 } from "@/lib/doctor/diagnostic-reports-workspace/url-state";
+import { workspaceUuidOrNull } from "@/lib/doctor/diagnostic-reports-workspace/workspace-ids";
 import { typePageTitle } from "@/lib/design-system/clinical";
 import { cn } from "@/lib/utils";
 import { countActiveAdvancedFilters } from "@/lib/doctor/diagnostic-reports-workspace/filter-workspace-reports";
+import { WORKSPACE_MIN_SEARCH_LENGTH } from "@/components/doctor/diagnostic-reports-workspace/live-workspace-provider";
 
 const EMPTY_COUNTS: OperationalQueueCounts = {
   reports_ready: 0,
@@ -70,24 +72,32 @@ export function DiagnosticReportsWorkspacePage({
 
   const activeQueue = embedded ? embedQueue : urlState.queue;
   const activeQuickFilter = embedded ? null : urlState.quickFilter;
-  const effectivePatientId = lockedPatientId ?? urlState.patientId;
-  const effectiveConsultationId = lockedConsultationId ?? urlState.consultationId;
-  const useDemo = embedded ? true : urlState.demo;
+  const effectivePatientId =
+    workspaceUuidOrNull(lockedPatientId) ?? urlState.patientId;
+  const effectiveConsultationId =
+    workspaceUuidOrNull(lockedConsultationId) ?? urlState.consultationId;
   const page = embedded ? 1 : urlState.page;
   const advanced = embedded ? embedAdvanced : urlState.advanced;
+  const advancedKey = JSON.stringify(advanced);
 
-  const provider = useMemo(
-    () => resolveWorkspaceProvider({ demo: useDemo }),
-    [useDemo]
-  );
+  const provider = useMemo(() => createLiveWorkspaceProvider(), []);
   const providerRef = useRef(provider);
   providerRef.current = provider;
 
   const [searchInput, setSearchInput] = useState(urlState.q);
   const debouncedQ = useDebouncedValue(searchInput, 300);
+  /** Search API min length — shorter terms use list (no `q`) to avoid 400s while typing. */
+  const searchQ =
+    debouncedQ.trim().length >= WORKSPACE_MIN_SEARCH_LENGTH
+      ? debouncedQ.trim()
+      : "";
+
 
   const [counts, setCounts] = useState<OperationalQueueCounts>(EMPTY_COUNTS);
   const [reports, setReports] = useState<WorkspaceReport[]>([]);
+  const [listHasMore, setListHasMore] = useState(false);
+  /** Opaque cursors keyed by page number (page 1 = null). */
+  const cursorByPageRef = useRef<Record<number, string | null>>({ 1: null });
   const [allReportsForOptions, setAllReportsForOptions] = useState<WorkspaceReport[]>([]);
   const [loadingQueues, setLoadingQueues] = useState(true);
   const [loadingReports, setLoadingReports] = useState(true);
@@ -100,13 +110,18 @@ export function DiagnosticReportsWorkspacePage({
   urlStateRef.current = urlState;
   const debouncedQRef = useRef(debouncedQ);
   debouncedQRef.current = debouncedQ;
+  const queueRequestIdRef = useRef(0);
+  const listRequestIdRef = useRef(0);
 
   const pushState = useCallback(
     (patch: Partial<WorkspaceUrlState>) => {
       if (embedded) return;
       const next: WorkspaceUrlState = {
         ...urlStateRef.current,
-        q: debouncedQRef.current,
+        q:
+          debouncedQRef.current.trim().length === 1
+            ? urlStateRef.current.q
+            : debouncedQRef.current.trim(),
         ...patch,
       };
       const params = workspaceStateToSearchParams(next);
@@ -137,43 +152,94 @@ export function DiagnosticReportsWorkspacePage({
 
   useEffect(() => {
     if (embedded) return;
-    if (debouncedQ === urlState.q) return;
-    pushState({ q: debouncedQ, page: 1 });
-  }, [debouncedQ, urlState.q, pushState, embedded]);
+    const trimmed = debouncedQ.trim();
+    // Don't sync 1-char queries to URL/API search (backend min length is 2)
+    if (trimmed.length === 1) return;
+    if (trimmed.length >= WORKSPACE_MIN_SEARCH_LENGTH) {
+      // Clear sticky patient/report scope so free-text search can find other patients
+      if (
+        trimmed === urlState.q &&
+        !urlState.patientId &&
+        !urlState.reportId
+      ) {
+        return;
+      }
+      pushState({
+        q: trimmed,
+        page: 1,
+        patientId: null,
+        reportId: null,
+      });
+      return;
+    }
+    if (trimmed === urlState.q) return;
+    pushState({ q: trimmed, page: 1 });
+  }, [
+    debouncedQ,
+    urlState.q,
+    urlState.patientId,
+    urlState.reportId,
+    pushState,
+    embedded,
+  ]);
 
   useEffect(() => {
-    let cancelled = false;
+    const requestId = ++queueRequestIdRef.current;
     setLoadingQueues(true);
     void (async () => {
       try {
         const c = await providerRef.current.getQueueCounts({
-          q: debouncedQ || undefined,
+          q: searchQ || undefined,
           patientId: effectivePatientId,
           consultationId: effectiveConsultationId,
         });
-        if (!cancelled) setCounts(c);
+        if (requestId !== queueRequestIdRef.current) return;
+        setCounts(c);
       } catch (e) {
-        if (!cancelled) {
-          toastRef.current.error(
-            e instanceof Error ? e.message : "Failed to load workspace"
-          );
-        }
+        if (requestId !== queueRequestIdRef.current) return;
+        toastRef.current.error(
+          e instanceof Error ? e.message : "Failed to load workspace"
+        );
       } finally {
-        if (!cancelled) setLoadingQueues(false);
+        if (requestId === queueRequestIdRef.current) {
+          setLoadingQueues(false);
+        }
       }
     })();
-    return () => {
-      cancelled = true;
-    };
-  }, [debouncedQ, effectivePatientId, effectiveConsultationId, useDemo]);
+  }, [searchQ, effectivePatientId, effectiveConsultationId]);
 
   useEffect(() => {
-    let cancelled = false;
+    // Filter identity changed — reset cursor stack (callers reset page to 1).
+    cursorByPageRef.current = { 1: null };
+  }, [
+    searchQ,
+    activeQueue,
+    activeQuickFilter,
+    effectivePatientId,
+    effectiveConsultationId,
+    embedded,
+    urlState.encounterId,
+    advancedKey,
+  ]);
+
+  useEffect(() => {
+    const requestId = ++listRequestIdRef.current;
     setLoadingReports(true);
     void (async () => {
       try {
+        const pageCursor =
+          page <= 1 ? null : cursorByPageRef.current[page] ?? null;
+        if (page > 1 && pageCursor == null) {
+          if (requestId === listRequestIdRef.current) {
+            setLoadingReports(false);
+          }
+          if (!embedded) {
+            pushState({ page: 1 });
+          }
+          return;
+        }
         const listQuery = {
-          q: debouncedQ || undefined,
+          q: searchQ || undefined,
           queue: activeQueue,
           // Avoid double-filtering when queue already encodes quick chip
           quickFilter:
@@ -182,20 +248,29 @@ export function DiagnosticReportsWorkspacePage({
                 ? activeQuickFilter
                 : null
               : activeQuickFilter,
-          patientId: effectivePatientId,
-          consultationId: effectiveConsultationId,
-          encounterId: embedded ? null : urlState.encounterId,
+          // Free-text search must not stay locked to a prior patient filter
+          patientId: searchQ ? null : effectivePatientId,
+          consultationId: searchQ ? null : effectiveConsultationId,
+          encounterId: embedded || searchQ ? null : urlState.encounterId,
+          cursor: pageCursor,
           advanced,
         };
         const [result, optionsSource] = await Promise.all([
           providerRef.current.listReports(listQuery),
           providerRef.current.listReports({
-            patientId: effectivePatientId,
-            consultationId: effectiveConsultationId,
+            patientId: searchQ ? null : effectivePatientId,
+            consultationId: searchQ ? null : effectiveConsultationId,
           }),
         ]);
-        if (cancelled) return;
+        if (requestId !== listRequestIdRef.current) return;
         setReports(result.reports);
+        setListHasMore(Boolean(result.nextCursor));
+        if (result.nextCursor) {
+          cursorByPageRef.current = {
+            ...cursorByPageRef.current,
+            [page + 1]: result.nextCursor,
+          };
+        }
         setAllReportsForOptions(optionsSource.reports);
         if (effectivePatientId) {
           const fromRow = result.reports.find(
@@ -204,7 +279,7 @@ export function DiagnosticReportsWorkspacePage({
           if (fromRow) setContextPatient(fromRow);
           else {
             const patients = await providerRef.current.searchPatients("");
-            if (cancelled) return;
+            if (requestId !== listRequestIdRef.current) return;
             const match = patients.find((p) => p.id === effectivePatientId);
             if (match) setContextPatient(match);
           }
@@ -212,28 +287,29 @@ export function DiagnosticReportsWorkspacePage({
           setContextPatient(null);
         }
       } catch (e) {
-        if (!cancelled) {
-          toastRef.current.error(
-            e instanceof Error ? e.message : "Failed to load reports"
-          );
-        }
+        if (requestId !== listRequestIdRef.current) return;
+        setReports([]);
+        setListHasMore(false);
+        toastRef.current.error(
+          e instanceof Error ? e.message : "Failed to load reports"
+        );
       } finally {
-        if (!cancelled) setLoadingReports(false);
+        if (requestId === listRequestIdRef.current) {
+          setLoadingReports(false);
+        }
       }
     })();
-    return () => {
-      cancelled = true;
-    };
   }, [
-    debouncedQ,
+    searchQ,
     activeQueue,
     activeQuickFilter,
     effectivePatientId,
     effectiveConsultationId,
     embedded,
     urlState.encounterId,
-    advanced,
-    useDemo,
+    advancedKey,
+    page,
+    pushState,
   ]);
 
   const openPreview = useCallback(
@@ -288,7 +364,7 @@ export function DiagnosticReportsWorkspacePage({
         description: "No flagged critical reports right now.",
       };
     }
-    if (debouncedQ.trim()) {
+    if (searchQ) {
       return {
         title: "No reports found",
         description:
@@ -300,7 +376,7 @@ export function DiagnosticReportsWorkspacePage({
       description:
         "No reports match your filters. Try clearing filters or searching by patient.",
     };
-  }, [activeQueue, debouncedQ]);
+  }, [activeQueue, searchQ]);
 
   const onPreviewReport = (report: WorkspaceReport) => {
     if (report.clinicalStatus === "AWAITING_REPORT") {
@@ -345,7 +421,7 @@ export function DiagnosticReportsWorkspacePage({
   const hasActiveFilters = Boolean(
     activeQueue ||
       resolvedQuickFilter ||
-      debouncedQ.trim() ||
+      searchQ ||
       countActiveAdvancedFilters(advanced)
   );
 
@@ -440,6 +516,7 @@ export function DiagnosticReportsWorkspacePage({
         loading={loadingReports}
         layout={isMobile || embedded ? "cards" : "table"}
         page={page}
+        serverHasMore={listHasMore}
         onPageChange={(p) => {
           if (!embedded) pushState({ page: p });
         }}
@@ -474,6 +551,23 @@ export function DiagnosticReportsWorkspacePage({
         }}
         report={previewReport}
         loading={previewLoading}
+        onViewPatientReports={
+          embedded
+            ? undefined
+            : (patientId) => {
+                setSearchInput("");
+                setPreviewOpen(false);
+                setPreviewReport(null);
+                pushState({
+                  patientId,
+                  reportId: null,
+                  q: "",
+                  queue: null,
+                  quickFilter: null,
+                  page: 1,
+                });
+              }
+        }
       />
     </div>
   );

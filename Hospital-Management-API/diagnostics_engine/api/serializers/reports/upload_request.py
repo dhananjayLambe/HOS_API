@@ -9,7 +9,7 @@ class UploadArtifactRequestSerializer(serializers.Serializer):
     files = serializers.ListField(
         child=serializers.FileField(),
         allow_empty=False,
-        max_length=upload_rules.DEFAULT_MAX_REPORT_UPLOAD_FILES,
+        max_length=upload_rules.max_file_count(),
     )
     primary_file_index = serializers.IntegerField(required=False, min_value=0)
     notes = serializers.CharField(required=False, allow_blank=True, max_length=2000)

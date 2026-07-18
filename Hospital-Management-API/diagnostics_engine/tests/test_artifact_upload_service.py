@@ -255,6 +255,27 @@ class ArtifactUploadServiceTests(TestCase):
         self.assertTrue(first_batch[0].is_primary)
         self.assertFalse(second_batch[0].is_primary)
 
+    def test_second_pdf_append_keeps_both_active_and_primary_stable(self):
+        """UPLOAD_NEW same-type append must not archive the existing PDF."""
+        _, line = _minimal_order_with_line()
+        report = self._report(line)
+        first_batch = ArtifactUploadService.upload_report_artifacts(
+            report=report,
+            uploaded_files=[_pdf(b"pdf-primary")],
+            primary_file_index=0,
+        )
+        second_batch = ArtifactUploadService.upload_report_artifacts(
+            report=report,
+            uploaded_files=[_pdf(b"pdf-append")],
+        )
+        self.assertEqual(report.artifacts.filter(is_active=True).count(), 2)
+        first_batch[0].refresh_from_db()
+        second_batch[0].refresh_from_db()
+        self.assertTrue(first_batch[0].is_active)
+        self.assertTrue(first_batch[0].is_primary)
+        self.assertTrue(second_batch[0].is_active)
+        self.assertFalse(second_batch[0].is_primary)
+
     def test_second_batch_can_replace_primary(self):
         _, line = _minimal_order_with_line()
         report = self._report(line)
