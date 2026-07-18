@@ -653,7 +653,7 @@ export default function CompletedPrescriptionPage() {
 
       <StartNextConsultationSection
         onOpenSmartQueue={() => router.push("/doctor-dashboard?queue=open")}
-        onSearchPatient={() => router.push("/doctor-dashboard?search=patient")}
+        onSearchPatient={() => router.push("/patients")}
       />
 
       <CancelPrescriptionModal

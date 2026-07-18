@@ -12,11 +12,11 @@ This roadmap is ordered by **business value, dependency, and launch risk**, not 
 
 ### Complete
 
-* ✅ Doctor Report Workspace
-* Complete remaining report APIs
+* ✅ Doctor Report Workspace  DONE
+* Complete remaining report APIs DONE
 * Remove demo providers
 * Remove temporary code
-* Fix known UI bugs
+* Fix known UI bugs (tracked via Release UI Certification — see Phase 7)
 * Fix backend bugs
 * Complete validations
 * Improve error handling
@@ -27,6 +27,7 @@ This roadmap is ordered by **business value, dependency, and launch risk**, not 
 
 * No unfinished features remain.
 * No TODOs in production code.
+* Wave 1 clinical pages meet Release UI Certification **entry criteria** (ready to audit).
 
 ---
 
@@ -231,9 +232,40 @@ Every request can be traced end-to-end.
 
 ---
 
-# Phase 7 — End-to-End Production Testing (Week 3–4)
+# Phase 7 — Release UI Certification (Week 3–4)
 
-This should happen **after deployment**, not before.
+Permanent **release gate** (not a one-time September checklist). Applies to every production release alongside Feature Freeze, Security Review, Production Readiness, and End-to-End Testing.
+
+**Governing document:** [`Hospital-Web-UI/medixpro/medixpro/RELEASE_UI_CERTIFICATION.md`](../../Hospital-Web-UI/medixpro/medixpro/RELEASE_UI_CERTIFICATION.md)
+
+### Objective
+
+Every Wave 1 clinical page behaves correctly for a real doctor. No redesign. Criteria-based certification with P0–P4 severity, ownership, and evidence.
+
+### Required
+
+* Confirm entry criteria per page (APIs final, mocks removed, QA-ready)
+* Audit Wave 1 pages one at a time against Must Pass categories
+* Resolve all **P0** and **P1** findings before release
+* Validate workflow paths: Consultation, Diagnostics, Prescription
+* Patient Safety and State Consistency must pass
+* Product owner + QA sign-off per Definition of Done
+
+### Wave 1 pages (doctor clinical)
+
+Doctor Dashboard · Patients · Patient Summary · Consultation flow · Prescriptions · Diagnostic Reports Workspace · Appointments · Templates
+
+### Exit Criteria
+
+* All Wave 1 pages **Certified** (or explicitly Not eligible with documented reason)
+* Consultation, Diagnostics, and Prescription workflow paths **PASS**
+* No open P0 or P1 UI findings on certified surfaces
+
+---
+
+# Phase 8 — End-to-End Production Testing (Week 3–4)
+
+This should happen **after deployment**, not before. Run after or in parallel with Release UI Certification for overlapping doctor workflows.
 
 ## Doctor Workflow
 
@@ -288,7 +320,7 @@ Entire business workflow passes.
 
 ---
 
-# Phase 8 — Security Hardening (Week 4)
+# Phase 9 — Security Hardening (Week 4)
 
 Security before launch.
 
@@ -313,7 +345,7 @@ No obvious security gaps.
 
 ---
 
-# Phase 9 — Government & Legal Compliance (Week 4)
+# Phase 10 — Government & Legal Compliance (Week 4)
 
 Many startups ignore this until after launch. Don't.
 
@@ -371,7 +403,7 @@ Business is legally ready to operate.
 
 ---
 
-# Phase 10 — Pilot Launch (Week 5)
+# Phase 11 — Pilot Launch (Week 5)
 
 Launch to a **small controlled audience**.
 
@@ -402,7 +434,7 @@ Real users complete consultations successfully.
 
 ---
 
-# Phase 11 — Public Production Launch
+# Phase 12 — Public Production Launch
 
 Deploy.
 
@@ -425,7 +457,7 @@ Monitor closely during the first 48–72 hours.
 
 ---
 
-# Phase 12 — Post-Launch Operations
+# Phase 13 — Post-Launch Operations
 
 Daily:
 
@@ -472,5 +504,6 @@ Your biggest risks are:
 4. **Legal and regulatory readiness**
 5. **Real-world pilot feedback**
 6. **Resisting the temptation to add new features**
+7. **Shipping without Release UI Certification** (Wave 1 pages + clinical workflows uncertified)
 
-If you can successfully complete those six areas, you have a realistic path to a stable September launch. If you continue adding features instead, the launch date is much more likely to slip.
+If you can successfully complete those areas, you have a realistic path to a stable September launch. If you continue adding features instead, the launch date is much more likely to slip.

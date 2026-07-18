@@ -1,12 +1,14 @@
 "use client";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 export type ScheduleAppointmentRow = {
   id: string;
+  patientId: string;
   time: string;
   patientName: string;
   type: string;
@@ -26,12 +28,16 @@ type DoctorScheduleAppointmentsListProps = {
   appointments: ScheduleAppointmentRow[];
   totalAppointments?: number;
   loading?: boolean;
+  onViewPatient?: (appointment: ScheduleAppointmentRow) => void;
+  onStartConsultation?: (appointment: ScheduleAppointmentRow) => void;
 };
 
 export function DoctorScheduleAppointmentsList({
   appointments,
   totalAppointments,
   loading,
+  onViewPatient,
+  onStartConsultation,
 }: DoctorScheduleAppointmentsListProps) {
   const count = totalAppointments ?? appointments.length;
 
@@ -59,27 +65,68 @@ export function DoctorScheduleAppointmentsList({
             No appointments scheduled today.
           </p>
         ) : (
-          appointments.map((appointment) => (
-            <div
-              key={appointment.id}
-              className="flex flex-wrap items-center gap-3 rounded-lg border bg-card px-4 py-3 text-sm transition-colors hover:bg-muted/40"
-            >
-              <span className="w-[88px] shrink-0 font-semibold tabular-nums text-foreground">
-                {appointment.time}
-              </span>
-              <span className="min-w-[120px] flex-1 font-medium">{appointment.patientName}</span>
-              <span className="text-muted-foreground">{appointment.type}</span>
-              <Badge
-                variant="secondary"
+          appointments.map((appointment) => {
+            const canOpenPatient = Boolean(appointment.patientId) && Boolean(onViewPatient);
+            const canStart =
+              Boolean(appointment.patientId) &&
+              Boolean(onStartConsultation) &&
+              (appointment.status === "Waiting" ||
+                appointment.status === "Scheduled" ||
+                appointment.status === "In Progress");
+
+            return (
+              <div
+                key={appointment.id}
                 className={cn(
-                  "ml-auto font-normal",
-                  statusBadgeClass[appointment.status] ?? "bg-muted text-muted-foreground"
+                  "flex flex-wrap items-center gap-3 rounded-lg border bg-card px-4 py-3 text-sm transition-colors",
+                  canOpenPatient && "hover:bg-muted/40"
                 )}
               >
-                {appointment.status}
-              </Badge>
-            </div>
-          ))
+                <button
+                  type="button"
+                  className={cn(
+                    "flex min-w-0 flex-1 flex-wrap items-center gap-3 text-left",
+                    canOpenPatient ? "cursor-pointer" : "cursor-default"
+                  )}
+                  onClick={() => {
+                    if (canOpenPatient) onViewPatient?.(appointment);
+                  }}
+                  disabled={!canOpenPatient}
+                  aria-label={
+                    canOpenPatient
+                      ? `View patient ${appointment.patientName}`
+                      : `Appointment for ${appointment.patientName}`
+                  }
+                >
+                  <span className="w-[88px] shrink-0 font-semibold tabular-nums text-foreground">
+                    {appointment.time}
+                  </span>
+                  <span className="min-w-[120px] flex-1 font-medium">{appointment.patientName}</span>
+                  <span className="text-muted-foreground">{appointment.type}</span>
+                  <Badge
+                    variant="secondary"
+                    className={cn(
+                      "font-normal",
+                      statusBadgeClass[appointment.status] ?? "bg-muted text-muted-foreground"
+                    )}
+                  >
+                    {appointment.status}
+                  </Badge>
+                </button>
+                {canStart ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0"
+                    onClick={() => onStartConsultation?.(appointment)}
+                  >
+                    Start
+                  </Button>
+                ) : null}
+              </div>
+            );
+          })
         )}
       </CardContent>
     </Card>

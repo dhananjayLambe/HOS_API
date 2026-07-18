@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Calendar, FileText, Stethoscope, Users } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -9,6 +9,8 @@ import {
   type DoctorDashboardMetric,
 } from "@/components/doctor/doctor-dashboard-summary-cards";
 import { DoctorScheduleTab } from "@/components/doctor/doctor-schedule-tab";
+import type { ScheduleAppointmentRow } from "@/components/doctor/doctor-schedule-appointments-list";
+import type { ScheduleQueueTokenRow } from "@/components/doctor/doctor-schedule-queue-panel";
 import { DoctorPatientsTab } from "@/components/doctor/doctor-patients-tab";
 import type { RecentPatientRow } from "@/components/doctor/doctor-patients-recent-table";
 import type { FollowUpPatientRow } from "@/components/doctor/doctor-patients-follow-up-list";
@@ -25,13 +27,31 @@ import { useDoctorScheduleTab } from "@/hooks/useDoctorScheduleTab";
 import { downloadDoctorReport } from "@/lib/doctor/downloadDoctorReport";
 import { usePatient } from "@/lib/patientContext";
 
+const DASHBOARD_TABS = ["schedule", "patients", "reports", "practice-overview"] as const;
+type DashboardTab = (typeof DASHBOARD_TABS)[number];
 
-export default function DoctorDashboardPage() {
+function isDashboardTab(value: string | null): value is DashboardTab {
+  return Boolean(value && (DASHBOARD_TABS as readonly string[]).includes(value));
+}
+
+function resolveTabFromSearchParams(searchParams: URLSearchParams): DashboardTab {
+  const tab = searchParams.get("tab");
+  if (isDashboardTab(tab)) return tab;
+  if (searchParams.get("queue") === "open") return "schedule";
+  if (searchParams.get("search") === "patient") return "patients";
+  return "schedule";
+}
+
+function DoctorDashboardPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const toast = useToastNotification();
   const { setSelectedPatient } = usePatient();
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState("schedule");
+  const [activeTab, setActiveTab] = useState<DashboardTab>(() =>
+    resolveTabFromSearchParams(new URLSearchParams(searchParams.toString()))
+  );
+  const [highlightQueue, setHighlightQueue] = useState(false);
   const [downloadingReportId, setDownloadingReportId] = useState<string | null>(null);
   const schedule = useDoctorScheduleTab();
   const pendingReports = useDoctorPendingReports();
@@ -40,6 +60,71 @@ export default function DoctorDashboardPage() {
   const practiceOverviewTab = useDoctorPracticeOverviewTab({
     enabled: activeTab === "practice-overview",
   });
+
+  const replaceDashboardParams = useCallback(
+    (mutate: (next: URLSearchParams) => void) => {
+      const next = new URLSearchParams(searchParams.toString());
+      mutate(next);
+      const query = next.toString();
+      router.replace(query ? `/doctor-dashboard?${query}` : "/doctor-dashboard", { scroll: false });
+    },
+    [router, searchParams]
+  );
+
+  useEffect(() => {
+    // Deep link: Search Patient should land on the searchable patients list.
+    if (searchParams.get("search") === "patient") {
+      router.replace("/patients");
+      return;
+    }
+
+    const resolved = resolveTabFromSearchParams(searchParams);
+    setActiveTab(resolved);
+
+    const queueOpen = searchParams.get("queue") === "open";
+    const focusQueue = searchParams.get("focus") === "queue" || queueOpen;
+    setHighlightQueue(focusQueue);
+
+    const tabParam = searchParams.get("tab");
+    if (queueOpen || (!isDashboardTab(tabParam) && searchParams.toString())) {
+      replaceDashboardParams((next) => {
+        next.set("tab", resolved);
+        next.delete("queue");
+        next.delete("search");
+        if (focusQueue) {
+          next.set("focus", "queue");
+        } else {
+          next.delete("focus");
+        }
+      });
+    }
+  }, [replaceDashboardParams, router, searchParams]);
+
+  useEffect(() => {
+    if (!highlightQueue || activeTab !== "schedule") return;
+    const timer = window.setTimeout(() => {
+      document.getElementById("doctor-schedule-queue")?.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+      });
+    }, 150);
+    return () => window.clearTimeout(timer);
+  }, [activeTab, highlightQueue, schedule.loading]);
+
+  const handleTabChange = useCallback(
+    (value: string) => {
+      if (!isDashboardTab(value)) return;
+      setActiveTab(value);
+      setHighlightQueue(false);
+      replaceDashboardParams((next) => {
+        next.set("tab", value);
+        next.delete("queue");
+        next.delete("search");
+        next.delete("focus");
+      });
+    },
+    [replaceDashboardParams]
+  );
 
   const selectPatientFromRow = useCallback(
     (row: RecentPatientRow) => {
@@ -50,6 +135,21 @@ export default function DoctorDashboardPage() {
         last_name: rest.join(" "),
         full_name: row.patientName,
         mobile: row.mobile,
+        relation: "self",
+      });
+    },
+    [setSelectedPatient]
+  );
+
+  const selectPatientById = useCallback(
+    (patientId: string, patientName: string, mobile?: string) => {
+      const [firstName = "", ...rest] = patientName.split(" ");
+      setSelectedPatient({
+        id: patientId,
+        first_name: firstName,
+        last_name: rest.join(" "),
+        full_name: patientName,
+        mobile,
         relation: "self",
       });
     },
@@ -78,6 +178,42 @@ export default function DoctorDashboardPage() {
       router.push("/consultations/start-consultation");
     },
     [router, selectPatientFromRow]
+  );
+
+  const handleViewAppointmentPatient = useCallback(
+    (appointment: ScheduleAppointmentRow) => {
+      if (!appointment.patientId) return;
+      selectPatientById(appointment.patientId, appointment.patientName);
+      router.push(`/patients/${appointment.patientId}`);
+    },
+    [router, selectPatientById]
+  );
+
+  const handleStartAppointmentConsultation = useCallback(
+    (appointment: ScheduleAppointmentRow) => {
+      if (!appointment.patientId) return;
+      selectPatientById(appointment.patientId, appointment.patientName);
+      router.push("/consultations/start-consultation");
+    },
+    [router, selectPatientById]
+  );
+
+  const handleViewQueuePatient = useCallback(
+    (token: ScheduleQueueTokenRow) => {
+      if (!token.patientId) return;
+      selectPatientById(token.patientId, token.patientName);
+      router.push(`/patients/${token.patientId}`);
+    },
+    [router, selectPatientById]
+  );
+
+  const handleStartQueueConsultation = useCallback(
+    (token: ScheduleQueueTokenRow) => {
+      if (!token.patientId) return;
+      selectPatientById(token.patientId, token.patientName);
+      router.push("/consultations/start-consultation");
+    },
+    [router, selectPatientById]
   );
 
   const handleFollowUpPatientView = useCallback(
@@ -203,8 +339,7 @@ export default function DoctorDashboardPage() {
     day: "numeric",
     year: "numeric",
   }).format(new Date());
-  
-  // Build welcome message with user's name
+
   const getWelcomeMessage = () => {
     if (user?.first_name || user?.last_name) {
       const firstName = user.first_name || "";
@@ -226,7 +361,7 @@ export default function DoctorDashboardPage() {
 
         <DoctorDashboardSummaryCards metrics={dashboardMetrics} />
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
           <TabsList className="grid h-auto grid-cols-4 gap-1 rounded-xl bg-muted/40 p-1.5 md:w-[520px]">
             <TabsTrigger
               value="schedule"
@@ -264,7 +399,12 @@ export default function DoctorDashboardPage() {
               loading={schedule.loading}
               error={schedule.error}
               metricsError={schedule.metricsError}
+              highlightQueue={highlightQueue}
               onRetry={schedule.refetch}
+              onViewAppointmentPatient={handleViewAppointmentPatient}
+              onStartAppointmentConsultation={handleStartAppointmentConsultation}
+              onViewQueuePatient={handleViewQueuePatient}
+              onStartQueueConsultation={handleStartQueueConsultation}
             />
           </TabsContent>
 
@@ -326,5 +466,13 @@ export default function DoctorDashboardPage() {
         </Tabs>
       </main>
     </div>
+  );
+}
+
+export default function DoctorDashboardPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading dashboard…</div>}>
+      <DoctorDashboardPageContent />
+    </Suspense>
   );
 }

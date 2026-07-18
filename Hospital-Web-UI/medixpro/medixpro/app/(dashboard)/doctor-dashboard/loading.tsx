@@ -39,11 +39,11 @@ export default function DoctorDashboardLoading() {
         </div>
 
         <Tabs defaultValue="schedule" className="space-y-4">
-          <TabsList className="grid grid-cols-4 md:w-[400px]">
+          <TabsList className="grid grid-cols-4 md:w-[520px]">
             <TabsTrigger value="schedule">Schedule</TabsTrigger>
             <TabsTrigger value="patients">Patients</TabsTrigger>
-            <TabsTrigger value="tasks">Tasks</TabsTrigger>
-            <TabsTrigger value="stats">Stats</TabsTrigger>
+            <TabsTrigger value="reports">Reports</TabsTrigger>
+            <TabsTrigger value="practice-overview">Practice Overview</TabsTrigger>
           </TabsList>
 
           <TabsContent value="schedule" className="space-y-4">

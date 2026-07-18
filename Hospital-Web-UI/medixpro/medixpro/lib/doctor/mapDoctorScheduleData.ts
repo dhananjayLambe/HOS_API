@@ -92,6 +92,7 @@ export function mapDoctorAppointmentToRow(row: DoctorAppointmentApiRow): Schedul
   const statusKey = normalizeStatus(row.status);
   return {
     id: String(row.id),
+    patientId: String(row.patient_profile_id ?? "").trim(),
     time: formatSlotTime(row.slot_start_time),
     patientName: (row.patient_name ?? "").trim() || "Patient",
     type: resolveAppointmentTypeLabel(row),
@@ -203,6 +204,7 @@ export function mapDoctorQueueToPanel(
     .sort((a, b) => a.position - b.position)
     .map((row) => ({
       id: String(row.id),
+      patientId: row.patient_profile_id ? String(row.patient_profile_id).trim() : undefined,
       token: row.token ?? "",
       patientName: (row.patient_name ?? "").trim() || "Patient",
       status: row.status,

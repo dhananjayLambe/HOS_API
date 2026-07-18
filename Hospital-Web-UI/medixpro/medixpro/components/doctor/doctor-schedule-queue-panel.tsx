@@ -1,6 +1,7 @@
 "use client";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -14,6 +15,7 @@ export type ScheduleQueueSnapshot = {
 
 export type ScheduleQueueTokenRow = {
   id: string;
+  patientId?: string;
   token: string;
   patientName: string;
   status?: "waiting" | "vitals_done";
@@ -40,9 +42,19 @@ type DoctorScheduleQueuePanelProps = {
   snapshot: ScheduleQueueSnapshot;
   tokens: ScheduleQueueTokenRow[];
   loading?: boolean;
+  highlight?: boolean;
+  onViewPatient?: (token: ScheduleQueueTokenRow) => void;
+  onStartConsultation?: (token: ScheduleQueueTokenRow) => void;
 };
 
-export function DoctorScheduleQueuePanel({ snapshot, tokens, loading }: DoctorScheduleQueuePanelProps) {
+export function DoctorScheduleQueuePanel({
+  snapshot,
+  tokens,
+  loading,
+  highlight,
+  onViewPatient,
+  onStartConsultation,
+}: DoctorScheduleQueuePanelProps) {
   const kpiPills: QueueKpiPill[] = [
     {
       label: "In Queue",
@@ -71,7 +83,13 @@ export function DoctorScheduleQueuePanel({ snapshot, tokens, loading }: DoctorSc
   ];
 
   return (
-    <Card className="h-full border shadow-sm">
+    <Card
+      id="doctor-schedule-queue"
+      className={cn(
+        "h-full border shadow-sm scroll-mt-24",
+        highlight && "ring-2 ring-primary ring-offset-2 ring-offset-background"
+      )}
+    >
       <CardHeader className="p-6 pb-4">
         <CardTitle className="text-2xl font-semibold">Live Queue</CardTitle>
         <CardDescription className="text-sm">Today&apos;s operational queue</CardDescription>
@@ -114,25 +132,61 @@ export function DoctorScheduleQueuePanel({ snapshot, tokens, loading }: DoctorSc
             </p>
           ) : (
             <ul className="space-y-2">
-              {tokens.map((token, index) => (
-                <li
-                  key={token.id}
-                  className="flex items-center justify-between gap-2 rounded-lg border bg-card px-3 py-2.5 text-sm"
-                >
-                  <div className="flex min-w-0 items-center gap-2">
-                    <span className="font-semibold tabular-nums text-foreground">#{index + 1}</span>
-                    <span className="truncate font-medium">{token.patientName}</span>
-                  </div>
-                  {token.status ? (
-                    <Badge
-                      variant="secondary"
-                      className={cn("shrink-0 text-[10px] font-normal", queueStatusBadge[token.status])}
+              {tokens.map((token, index) => {
+                const canOpenPatient = Boolean(token.patientId) && Boolean(onViewPatient);
+                const canStart =
+                  Boolean(token.patientId) &&
+                  Boolean(onStartConsultation) &&
+                  (token.status === "waiting" || token.status === "vitals_done");
+
+                return (
+                  <li
+                    key={token.id}
+                    className="flex items-center justify-between gap-2 rounded-lg border bg-card px-3 py-2.5 text-sm"
+                  >
+                    <button
+                      type="button"
+                      className={cn(
+                        "flex min-w-0 flex-1 items-center gap-2 text-left",
+                        canOpenPatient ? "cursor-pointer hover:underline" : "cursor-default"
+                      )}
+                      onClick={() => {
+                        if (canOpenPatient) onViewPatient?.(token);
+                      }}
+                      disabled={!canOpenPatient}
+                      aria-label={
+                        canOpenPatient
+                          ? `View patient ${token.patientName}`
+                          : `Queue patient ${token.patientName}`
+                      }
                     >
-                      {queueStatusLabel[token.status]}
-                    </Badge>
-                  ) : null}
-                </li>
-              ))}
+                      <span className="font-semibold tabular-nums text-foreground">#{index + 1}</span>
+                      <span className="truncate font-medium">{token.patientName}</span>
+                    </button>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      {token.status ? (
+                        <Badge
+                          variant="secondary"
+                          className={cn("text-[10px] font-normal", queueStatusBadge[token.status])}
+                        >
+                          {queueStatusLabel[token.status]}
+                        </Badge>
+                      ) : null}
+                      {canStart ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8 px-2 text-xs"
+                          onClick={() => onStartConsultation?.(token)}
+                        >
+                          Start
+                        </Button>
+                      ) : null}
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>

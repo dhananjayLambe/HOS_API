@@ -18,7 +18,12 @@ export type DoctorScheduleTabProps = {
   loading?: boolean;
   error?: string | null;
   metricsError?: string | null;
+  highlightQueue?: boolean;
   onRetry?: () => void;
+  onViewAppointmentPatient?: (appointment: ScheduleAppointmentRow) => void;
+  onStartAppointmentConsultation?: (appointment: ScheduleAppointmentRow) => void;
+  onViewQueuePatient?: (token: ScheduleQueueTokenRow) => void;
+  onStartQueueConsultation?: (token: ScheduleQueueTokenRow) => void;
 };
 
 export function DoctorScheduleTab({
@@ -30,7 +35,12 @@ export function DoctorScheduleTab({
   loading,
   error,
   metricsError,
+  highlightQueue,
   onRetry,
+  onViewAppointmentPatient,
+  onStartAppointmentConsultation,
+  onViewQueuePatient,
+  onStartQueueConsultation,
 }: DoctorScheduleTabProps) {
   if (error && !loading) {
     return (
@@ -63,10 +73,19 @@ export function DoctorScheduleTab({
             appointments={appointments}
             totalAppointments={totalAppointments}
             loading={loading}
+            onViewPatient={onViewAppointmentPatient}
+            onStartConsultation={onStartAppointmentConsultation}
           />
         </div>
         <div className="lg:col-span-3">
-          <DoctorScheduleQueuePanel snapshot={queueSnapshot} tokens={queueTokens} loading={loading} />
+          <DoctorScheduleQueuePanel
+            snapshot={queueSnapshot}
+            tokens={queueTokens}
+            loading={loading}
+            highlight={highlightQueue}
+            onViewPatient={onViewQueuePatient}
+            onStartConsultation={onStartQueueConsultation}
+          />
         </div>
       </div>
     </div>

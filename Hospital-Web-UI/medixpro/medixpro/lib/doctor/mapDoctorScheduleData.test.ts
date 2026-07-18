@@ -23,6 +23,7 @@ describe("mapDoctorScheduleData", () => {
     });
 
     expect(row.patientName).toBe("Amit Patil");
+    expect(row.patientId).toBe("p1");
     expect(row.time).toBe("09:00 AM");
     expect(row.type).toBe("Follow-up");
     expect(row.status).toBe("Waiting");
@@ -88,8 +89,8 @@ describe("mapDoctorScheduleData", () => {
   it("maps queue panel snapshot and tokens", () => {
     const { snapshot, tokens } = mapDoctorQueueToPanel(
       [
-        { id: "q1", patient_name: "Rachana", status: "vitals_done", position: 1 },
-        { id: "q2", patient_name: "Amit", status: "waiting", position: 2 },
+        { id: "q1", patient_name: "Rachana", patient_profile_id: "p1", status: "vitals_done", position: 1 },
+        { id: "q2", patient_name: "Amit", patient_profile_id: "p2", status: "waiting", position: 2 },
       ],
       { completed: 3, cancelled: 1, noShow: 2 }
     );
@@ -97,6 +98,7 @@ describe("mapDoctorScheduleData", () => {
     expect(snapshot).toEqual({ waiting: 1, completed: 3, cancelled: 1, noShow: 2 });
     expect(tokens).toHaveLength(2);
     expect(tokens[0]?.patientName).toBe("Rachana");
+    expect(tokens[0]?.patientId).toBe("p1");
   });
 
   it("uses backend metrics for completed and cancelled counts", () => {
