@@ -24,8 +24,23 @@ import {
 import type { LabOrderRow } from "@/lib/labs/types";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
-import { Inbox, Loader2, Phone } from "lucide-react";
+import { Inbox, Loader2 } from "lucide-react";
 import Link from "next/link";
+
+function CollectionTypeBadge({ type }: { type: LabOrderRow["collectionType"] }) {
+  const isHome = type === "HOME";
+  return (
+    <span
+      className={cn(
+        "inline-flex max-w-full truncate rounded-md px-1.5 py-0.5 text-[10px] font-semibold leading-tight",
+        isHome ? "bg-[#F3F0FF] text-[#6D4FF5]" : "bg-[#F3F4F6] text-[#374151]",
+      )}
+      title={isHome ? "Home collection" : "Visit lab"}
+    >
+      {isHome ? "Home" : "Visit"}
+    </span>
+  );
+}
 
 type IncomingOrdersQueueProps = {
   rows: LabOrderRow[];
@@ -100,42 +115,55 @@ export function IncomingOrdersQueue({
           className={cn(dashboardQueueTableClassName, "overflow-y-auto")}
         >
           <Table>
+            <colgroup>
+              <col className="w-[22%]" />
+              <col className="w-[26%]" />
+              <col className="w-[9%]" />
+              <col className="w-[12%]" />
+              <col className="w-[14%]" />
+              <col className="w-[17%]" />
+            </colgroup>
             <TableHeader>
               <TableRow className="border-0 hover:bg-transparent">
-                <TableHead className="w-[24%]">Patient</TableHead>
-                <TableHead className="w-[32%]">Tests</TableHead>
-                <TableHead className="w-[14%]">Status</TableHead>
-                <TableHead className="w-[18%]">Waiting</TableHead>
-                <TableHead className="w-[12%] text-right">Action</TableHead>
+                <TableHead>Patient</TableHead>
+                <TableHead>Tests</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Waiting</TableHead>
+                <TableHead className="text-right">Action</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {visible.map((o) => (
                 <TableRow key={o.assignmentId} className="border-0">
-                  <TableCell className="font-semibold text-[#111827]">
-                    <div className="flex items-center gap-1">
-                      <span className="truncate">{o.patient}</span>
+                  <TableCell className="overflow-hidden text-[#111827]">
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold leading-tight">{o.patient}</p>
                       {o.patientPhone ? (
                         <a
                           href={`tel:${o.patientPhone}`}
-                          className="shrink-0 text-[#6D4FF5] hover:text-[#7C5CFC]"
-                          aria-label={`Call ${o.patient}`}
+                          className="mt-0.5 block truncate text-[11px] font-normal tabular-nums text-[#6B7280] hover:text-[#6D4FF5]"
                           onClick={(e) => e.stopPropagation()}
                         >
-                          <Phone className="h-3.5 w-3.5" strokeWidth={2} />
+                          {o.patientPhone}
                         </a>
                       ) : null}
                     </div>
                   </TableCell>
-                  <TableCell className="truncate text-[#6B7280]">{o.tests.map((t) => t.name).join(", ")}</TableCell>
-                  <TableCell>
+                  <TableCell className="min-w-0 overflow-hidden truncate text-[#6B7280]">
+                    {o.tests.map((t) => t.name).join(", ")}
+                  </TableCell>
+                  <TableCell className="overflow-hidden align-middle">
+                    <CollectionTypeBadge type={o.collectionType} />
+                  </TableCell>
+                  <TableCell className="overflow-hidden align-middle">
                     <LabStatusBadge domain="order" status={o.status} />
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="overflow-hidden align-middle">
                     <WaitingSinceCell order={o} />
                   </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-0.5">
+                  <TableCell className="overflow-hidden text-right align-middle">
+                    <div className="flex items-center justify-end gap-0.5 whitespace-nowrap">
                       <ActionButton
                         className="h-8 shrink-0 px-2 text-[11px]"
                         disabled={acceptingId === o.assignmentId}
