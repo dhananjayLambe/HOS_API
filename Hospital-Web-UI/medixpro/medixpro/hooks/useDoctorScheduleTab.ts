@@ -43,6 +43,7 @@ export type UseDoctorScheduleTabResult = {
   loading: boolean;
   error: string | null;
   metricsError: string | null;
+  queueError: string | null;
   refetch: () => Promise<void>;
 };
 
@@ -56,6 +57,7 @@ export function useDoctorScheduleTab(): UseDoctorScheduleTabResult {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [metricsError, setMetricsError] = useState<string | null>(null);
+  const [queueError, setQueueError] = useState<string | null>(null);
   const hasLoadedOnceRef = useRef(false);
 
   const contextRef = useRef<{ doctorId: string; clinicId: string } | null>(null);
@@ -89,6 +91,7 @@ export function useDoctorScheduleTab(): UseDoctorScheduleTabResult {
     }
     setError(null);
     setMetricsError(null);
+    setQueueError(null);
 
     try {
       const [appointmentsResult, queueResult, metricsResult] = await Promise.allSettled([
@@ -120,6 +123,13 @@ export function useDoctorScheduleTab(): UseDoctorScheduleTabResult {
         queueResult.status === "fulfilled" ? queueResult.value : [];
       const backendMetrics =
         metricsResult.status === "fulfilled" ? metricsResult.value : null;
+
+      if (queueResult.status === "rejected") {
+        const reason = queueResult.reason;
+        setQueueError(
+          reason instanceof Error ? reason.message : "Live queue unavailable."
+        );
+      }
 
       if (metricsResult.status === "rejected") {
         const reason = metricsResult.reason;
@@ -178,6 +188,7 @@ export function useDoctorScheduleTab(): UseDoctorScheduleTabResult {
     loading,
     error,
     metricsError,
+    queueError,
     refetch: () => refetch({ showLoading: true }),
   };
 }

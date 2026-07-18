@@ -36,7 +36,7 @@ Status values: `Not started` | `In review` | `Blocked` | `Certified` | `Not elig
 
 | # | Page | Route | Status | Owner | Release | Notes |
 |---|------|-------|--------|-------|---------|-------|
-| 1 | Doctor Dashboard | `/doctor-dashboard` | In review | Frontend | TBD | Wave 1 — Milestone 1 workflow audit complete; P0/P1 fixed; awaiting PO/QA sign-off |
+| 1 | Doctor Dashboard | `/doctor-dashboard` | In review | Frontend | TBD | Wave 1 — M1 workflow + M2 data integrity (client P1 fixed; DI-003 remaining) |
 | 2 | Patients list | `/patients` | Not started | Frontend | TBD | Wave 1 |
 | 3 | Patient Summary | `/patients/[id]` | Not started | Frontend | TBD | Wave 1 |
 | 4 | Start Consultation | `/consultations/start-consultation` | Not started | Frontend | TBD | Wave 1 |
@@ -485,6 +485,15 @@ Every finding must include the fields below. Vague findings without evidence are
 | UI-004 | Doctor Dashboard | Loading States | P3 | Frontend | — | local | Fixed |
 | UI-005 | Doctor Dashboard | Visual Consistency | P3 | Frontend | — | — | Open |
 | UI-006 | Doctor Dashboard | Navigation | P2 | Frontend | — | — | Open |
+| DI-001 | Doctor Dashboard | Data Integrity | P1 | Frontend | — | local | Fixed |
+| DI-002 | Doctor Dashboard | Data Integrity | P1 | Frontend | — | local | Fixed |
+| DI-003 | Doctor Dashboard | Data Integrity | P1 | Frontend | — | — | Open (Remaining Risk — backend semantics) |
+| DI-004 | Doctor Dashboard | Data Integrity | P2 | Frontend | — | local | Fixed |
+| DI-005 | Doctor Dashboard | Data Integrity | P2 | Frontend | — | local | Fixed |
+| DI-006 | Doctor Dashboard | Data Integrity | P2 | Frontend | — | — | Open |
+| DI-007 | Doctor Dashboard | Data Integrity | P2 | Frontend | — | local | Fixed |
+| DI-008 | Doctor Dashboard | Data Integrity | P3 | Frontend | — | — | Open |
+| DI-009 | Doctor Dashboard | Data Integrity | P3 | Frontend | — | — | Open (documented expected) |
 
 ---
 
@@ -688,7 +697,7 @@ Login → Doctor Dashboard → Start Consultation / View Patient
 | State Consistency | Pass | Tab URL sync; inbound deep links honored |
 | Patient Safety | Pass | Patient id set in context before navigate; schedule rows require `patientId` |
 | Clinical Safety | Pass | Identifiers shown as names; UHID not on cards (list context) |
-| Data Integrity | Pass (wiring) | KPI numerical accuracy vs live DB needs runtime QA |
+| Data Integrity | In review | Milestone 2 report below; P1 client defects fixed; DI-003 remaining risk |
 | Privacy | Pass (code) | Clinic/doctor context via `resolveDoctorContext` |
 
 #### Findings detail
@@ -751,12 +760,86 @@ Login → Doctor Dashboard → Start Consultation / View Patient
 | Field | Value |
 |-------|-------|
 | Certification | FAIL (pending sign-off) |
-| Reason | Milestone 1 P0/P1 workflow defects are fixed in code. Full page **Certified** still requires Product owner + QA sign-off and runtime KPI accuracy check against live APIs. No open P0/P1 workflow findings remain. |
-| Blocking findings (P0/P1) | None open |
-| Remaining risks | UI-005, UI-006; live KPI count parity vs backend; multi-browser matrix not executed this milestone |
+| Reason | Milestone 1 workflow P0/P1 fixed. Milestone 2 client P1 data-integrity defects (DI-001, DI-002) fixed. Full **Certified** still requires PO/QA sign-off and live parity check for DI-003 (encounter-aware metrics vs raw list badges). |
+| Blocking findings (P0/P1) | DI-003 open as Remaining Risk (backend semantic mismatch — not a silent client bug) |
+| Remaining risks | DI-003, DI-006, DI-008, DI-009; UI-005, UI-006; multi-browser matrix not executed |
 | Product owner sign-off | Pending |
 | QA sign-off | Pending |
 
 ---
 
-<!-- End Audit #1 -->
+### Milestone 2 — Data Integrity (Data consistency report)
+
+**Date:** 2026-07-18  
+**Scope:** Every number currently shown on `/doctor-dashboard`  
+**Method:** Code-path verification + client fixes; live clinic QA matrix below for PO/QA
+
+#### Field map (UI → source)
+
+| UI label | Hook field | API | Response field |
+|----------|------------|-----|----------------|
+| Today's Appointments | `schedule.totalAppointments` | `POST /appointments/doctor-appointments/` | `total_appointments` + queue-only walk-in merge count |
+| Patients Waiting | `schedule.metrics.waiting` | `GET /appointments/metrics/today/` (+ queue-only `waiting`) | `data.waiting` + `countQueueOnlyWaiting` |
+| Pending Reports | `pendingReports.pendingReports` | `GET v1/diagnostics/reports/doctor-summary/` | `data.pending_review` |
+| Completed Consultations | `schedule.metrics.completed` | `GET /appointments/metrics/today/` | `data.completed` |
+| Schedule strip chips | `schedule.metrics.*` | Same metrics API / client fallback | `scheduled`, `waiting`, `completed`, `cancelled`, `no_show` |
+| Live Queue In Queue | `queueSnapshot.waiting` | `GET /queue/doctor/{doctorId}/{clinicId}/` | count of `status === "waiting"` |
+| Appointments list length | `schedule.appointments` | appointments + merged walk-ins | rows (capped by `page_size: 50`) |
+| Patients `totalCount` | `patientsTab.totalCount` | `GET v1/doctors/dashboard/patients/` | backend count |
+| Reports `totalCount` / insights | `reportsTab.*` | `GET v1/doctors/dashboard/reports/` | backend count + insight fields |
+| Practice Overview metrics | `practiceOverviewTab.metrics` | `GET v1/doctors/dashboard/practice-overview/` | mapped practice fields |
+
+#### Scope gaps (Milestone 2 checklist items not on this page)
+
+| Item | Status |
+|------|--------|
+| Pending consultations | **N/A** — no KPI/widget on dashboard |
+| Pending prescriptions | **N/A** — absent |
+| Notifications | **N/A** — not a dashboard page surface (shell dropdown separate) |
+| Quick actions | **N/A** — absent |
+
+Do not invent widgets in this milestone. Track as product gaps if required for a future release.
+
+#### Findings (DI-001 … DI-009)
+
+| ID | Severity | Status | Summary |
+|----|----------|--------|---------|
+| DI-001 | P1 | **Fixed** | Schedule error showed `0` on three KPIs; now `—` / Unavailable (same as Pending Reports). |
+| DI-002 | P1 | **Fixed** | Queue failure soft-failed to `[]` silently; now `queueError` amber banner on Schedule tab. |
+| DI-003 | P1 | **Open (Remaining Risk)** | Backend metrics are encounter-aware; list badges use raw appointment status — Waiting/Completed can disagree with list. Requires live QA fixture; do not invent a second client metrics engine. |
+| DI-004 | P2 | **Fixed** | Supporting text “Scheduled today” → “Appointments today” to match `totalAppointments`. |
+| DI-005 | P2 | **Fixed** | Queue-only `vitals_done` walk-ins labeled **Vitals Done** (not Waiting) so list badges align with KPI waiting (waiting-only). |
+| DI-006 | P2 | **Open** | Appointments `page_size: 50` — header total can exceed visible rows (no schedule pagination). |
+| DI-007 | P2 | **Fixed** | Practice Overview refresh errors now surface after first successful load (no silent stale numbers). |
+| DI-008 | P3 | **Open** | Metrics API fail → client recount used on summary cards; Schedule tab shows amber banner only. |
+| DI-009 | P3 | **Open (expected)** | Follow-up insight count can exceed Follow-Up list (list capped at 5). |
+
+#### Correctly wired
+
+- Live path API-backed; Pending Reports Unavailable UX.
+- Patients/Reports totals and insights from backend payload (not current-page recount).
+- AbortController + lazy-tab refetch; 30s polling.
+
+#### QA verification matrix (live clinic)
+
+1. Today's Appointments card vs `POST doctor-appointments` `total_appointments` + unlinked queue walk-ins.
+2. Patients Waiting / strip Waiting vs `metrics/today.data.waiting` + queue-only `waiting`; vs list “Waiting” badges; vs Live Queue “In Queue”.
+3. Completed Consultations vs `metrics/today.data.completed` vs list “Completed” badges (expect possible DI-003 mismatch — capture fixture).
+4. Force appointments 500 → cards show `—` / Unavailable (DI-001).
+5. Force queue 500 with appointments OK → amber Live queue banner (DI-002); do not treat empty queue as success.
+6. Pending Reports card vs `doctor-summary.pending_review` vs Reports insight Ready For Review.
+7. Patients Follow-up Due insight vs list length (expect list ≤ 5).
+8. Confirm pending consultations / prescriptions / quick actions / notifications absent on this page.
+
+#### Milestone 2 exit
+
+| Check | Result |
+|-------|--------|
+| No open **P1 client** data-integrity defects on existing surfaces | Pass (DI-001, DI-002 fixed) |
+| Existing KPIs equal backend source fields or show Unavailable | Pass for client wiring; DI-003 needs live QA |
+| Scope gaps documented as N/A | Pass |
+| Page certification status | Remains **In review** |
+
+---
+
+<!-- End Audit #1 + Milestone 2 -->

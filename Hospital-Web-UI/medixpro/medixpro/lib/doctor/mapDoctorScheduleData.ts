@@ -11,6 +11,7 @@ import type { DoctorAppointmentApiRow, DoctorQueueApiRow, DoctorScheduleMetricsA
 const STATUS_LABEL: Record<string, string> = {
   scheduled: "Scheduled",
   checked_in: "Waiting",
+  vitals_done: "Vitals Done",
   in_consultation: "In Progress",
   completed: "Completed",
   cancelled: "Cancelled",
@@ -47,7 +48,8 @@ function formatSlotTime(slotStartTime: string): string {
 }
 
 function queueStatusToAppointmentStatus(status: DoctorQueueApiRow["status"]): string {
-  return status === "vitals_done" ? "checked_in" : "checked_in";
+  // Keep vitals_done distinct so list badges match Live Queue (not inflated as Waiting KPI).
+  return status === "vitals_done" ? "vitals_done" : "checked_in";
 }
 
 /**

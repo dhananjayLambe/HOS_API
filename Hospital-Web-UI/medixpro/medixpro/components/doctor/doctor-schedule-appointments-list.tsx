@@ -18,6 +18,7 @@ export type ScheduleAppointmentRow = {
 const statusBadgeClass: Record<string, string> = {
   Completed: "bg-emerald-500/15 text-emerald-900 dark:text-emerald-100",
   Waiting: "bg-sky-500/15 text-sky-900 dark:text-sky-100",
+  "Vitals Done": "bg-sky-500/15 text-sky-900 dark:text-sky-100",
   "In Progress": "bg-violet-500/15 text-violet-900 dark:text-violet-100",
   Scheduled: "bg-amber-500/15 text-amber-900 dark:text-amber-100",
   Cancelled: "bg-muted text-muted-foreground",
@@ -71,6 +72,7 @@ export function DoctorScheduleAppointmentsList({
               Boolean(appointment.patientId) &&
               Boolean(onStartConsultation) &&
               (appointment.status === "Waiting" ||
+                appointment.status === "Vitals Done" ||
                 appointment.status === "Scheduled" ||
                 appointment.status === "In Progress");
 

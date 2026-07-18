@@ -106,9 +106,7 @@ export function useDoctorPracticeOverviewTab(
     } catch (err) {
       if (controller.signal.aborted) return;
       const message = err instanceof Error ? err.message : "Unable to load practice overview data.";
-      if (!hasLoadedOnceRef.current) {
-        setError(message);
-      }
+      setError(message);
     } finally {
       if (!controller.signal.aborted) {
         setLoading(false);

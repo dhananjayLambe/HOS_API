@@ -18,6 +18,7 @@ export type DoctorScheduleTabProps = {
   loading?: boolean;
   error?: string | null;
   metricsError?: string | null;
+  queueError?: string | null;
   highlightQueue?: boolean;
   onRetry?: () => void;
   onViewAppointmentPatient?: (appointment: ScheduleAppointmentRow) => void;
@@ -35,6 +36,7 @@ export function DoctorScheduleTab({
   loading,
   error,
   metricsError,
+  queueError,
   highlightQueue,
   onRetry,
   onViewAppointmentPatient,
@@ -60,6 +62,11 @@ export function DoctorScheduleTab({
       {metricsError ? (
         <div className="rounded-lg border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
           Schedule summary counts may be incomplete: {metricsError}
+        </div>
+      ) : null}
+      {queueError ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
+          Live queue may be incomplete: {queueError}
         </div>
       ) : null}
       <div>

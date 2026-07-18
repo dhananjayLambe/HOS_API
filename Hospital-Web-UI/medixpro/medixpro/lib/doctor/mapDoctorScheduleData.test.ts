@@ -84,6 +84,37 @@ describe("mapDoctorScheduleData", () => {
     expect(merged).toHaveLength(1);
     expect(merged[0]?.booking_source).toBe("walk_in");
     expect(merged[0]?.patient_name).toBe("Walk-in Patient");
+    expect(merged[0]?.status).toBe("checked_in");
+  });
+
+  it("labels queue-only vitals_done walk-ins as Vitals Done (not Waiting)", () => {
+    const mapped = mapDoctorAppointmentsResponse(
+      [],
+      [
+        {
+          id: "q1",
+          patient_name: "Walk-in Vitals",
+          patient_profile_id: "p9",
+          status: "vitals_done",
+          position: 1,
+        },
+      ],
+      0,
+      {
+        date: "2026-06-14",
+        scheduled: 0,
+        waiting: 0,
+        completed: 0,
+        cancelled: 0,
+        no_show: 0,
+      }
+    );
+
+    expect(mapped.appointments).toHaveLength(1);
+    expect(mapped.appointments[0]?.status).toBe("Vitals Done");
+    // vitals_done is not counted toward KPI waiting when backend metrics are used
+    expect(mapped.metrics.waiting).toBe(0);
+    expect(mapped.queueSnapshot.waiting).toBe(0);
   });
 
   it("maps queue panel snapshot and tokens", () => {

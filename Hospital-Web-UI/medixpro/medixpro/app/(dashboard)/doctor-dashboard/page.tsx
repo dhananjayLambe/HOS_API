@@ -289,19 +289,21 @@ function DoctorDashboardPageContent() {
     () => [
       {
         title: "Today's Appointments",
-        value: schedule.error ? 0 : schedule.totalAppointments,
-        supportingText: "Scheduled today",
+        value: schedule.error ? "—" : schedule.totalAppointments,
+        supportingText: schedule.error ? "Unavailable" : "Appointments today",
         icon: Calendar,
         accent: "blue",
         loading: schedule.loading,
+        unavailable: Boolean(schedule.error),
       },
       {
         title: "Patients Waiting",
-        value: schedule.error ? 0 : schedule.metrics.waiting,
-        supportingText: "Checked in today",
+        value: schedule.error ? "—" : schedule.metrics.waiting,
+        supportingText: schedule.error ? "Unavailable" : "Checked in today",
         icon: Users,
         accent: "orange",
         loading: schedule.loading,
+        unavailable: Boolean(schedule.error),
       },
       {
         title: "Pending Reports",
@@ -314,11 +316,12 @@ function DoctorDashboardPageContent() {
       },
       {
         title: "Completed Consultations",
-        value: schedule.error ? 0 : schedule.metrics.completed,
-        supportingText: "Completed today",
+        value: schedule.error ? "—" : schedule.metrics.completed,
+        supportingText: schedule.error ? "Unavailable" : "Completed today",
         icon: Stethoscope,
         accent: "purple",
         loading: schedule.loading,
+        unavailable: Boolean(schedule.error),
       },
     ],
     [
@@ -399,6 +402,7 @@ function DoctorDashboardPageContent() {
               loading={schedule.loading}
               error={schedule.error}
               metricsError={schedule.metricsError}
+              queueError={schedule.queueError}
               highlightQueue={highlightQueue}
               onRetry={schedule.refetch}
               onViewAppointmentPatient={handleViewAppointmentPatient}
