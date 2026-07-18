@@ -65,10 +65,22 @@ Multi-artifact lifecycle (append, primary, preview/download `artifact_id`): [MUL
 | Phase 1 (M1–M11) | Search, browser, preview, download, artifacts, performance |
 | Milestone 12 | Production cutover — live-only FE; demo provider removed |
 | Milestone 13 | Production Integration Certification — matrix, contract cert, readiness certificate |
-| Phase 2 | Previous reports, version history, comparison |
-| Phase 3 | AI summaries, trends, structured lab values |
+| **CDS Phase 1** | Consultation **Clinical Decision Support** reports panel (patient-locked summary, timeline, modality chips, clinical empty actions, inline preview). Full `/lab-tests-reports` workspace remains operational. |
+| Phase 2 | Previous reports, version history, comparison; insert findings into consultation notes; multi-resource Clinical Context Panel (reports + prescriptions + history) |
+| Phase 3 | AI summaries / clinical highlights, compare-with-last, trends, structured lab values |
 | Phase 4 | Patient app / telemedicine report access |
 | Phase 5 | FHIR/HL7 exchange and enterprise integrations |
+
+## Consultation CDS panel (Phase 1)
+
+Mid-consultation **Reports** opens a Clinical Decision Support drawer (`ConsultationClinicalReportsPanel`), not a thinner copy of the operational workspace.
+
+- Shows **only the current patient’s** reports (search never unlocks other patients)
+- Organizes by clinical timeline + Laboratory / Radiology / Cardiology / Pathology chips
+- Inline PDF/image preview; doctor does **not** upload (Order tests → Investigations; Upload external → patient summary labs)
+- Explicitly deferred: insert-into-findings, AI highlights, critical flags, right-column Clinical Context Panel tabs
+
+FE entry: `Hospital-Web-UI/.../ConsultationReportsDrawer.tsx` → `ConsultationClinicalReportsPanel`.
 
 ## Milestone 12 status
 

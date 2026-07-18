@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ExternalLink, FileText } from "lucide-react";
+import { ExternalLink, Stethoscope } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -9,7 +9,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { DiagnosticReportsWorkspacePage } from "@/components/doctor/diagnostic-reports-workspace/DiagnosticReportsWorkspacePage";
+import { ConsultationClinicalReportsPanel } from "@/components/doctor/diagnostic-reports-workspace/ConsultationClinicalReportsPanel";
 
 type ConsultationReportsDrawerProps = {
   open: boolean;
@@ -17,10 +17,12 @@ type ConsultationReportsDrawerProps = {
   patientId: string | null;
   consultationId?: string | null;
   patientName?: string | null;
+  /** Close drawer and focus Investigations for ordering new tests. */
+  onOrderTests?: () => void;
 };
 
 /**
- * Hybrid Phase 1 entry: mid-consultation opens embedded patient report browser
+ * Clinical Decision Support entry: mid-consultation patient report panel
  * without leaving the consultation screen.
  */
 export function ConsultationReportsDrawer({
@@ -29,10 +31,13 @@ export function ConsultationReportsDrawer({
   patientId,
   consultationId,
   patientName,
+  onOrderTests,
 }: ConsultationReportsDrawerProps) {
   const workspaceHref = patientId
     ? `/lab-tests-reports?patientId=${encodeURIComponent(patientId)}${
-        consultationId ? `&consultationId=${encodeURIComponent(consultationId)}` : ""
+        consultationId
+          ? `&consultationId=${encodeURIComponent(consultationId)}`
+          : ""
       }`
     : "/lab-tests-reports";
 
@@ -46,13 +51,13 @@ export function ConsultationReportsDrawer({
           <div className="flex flex-wrap items-center justify-between gap-2 pr-8">
             <div>
               <SheetTitle className="flex items-center gap-2 text-lg">
-                <FileText className="h-5 w-5" />
-                Diagnostic reports
+                <Stethoscope className="h-5 w-5" />
+                Clinical reports
               </SheetTitle>
               <p className="mt-1 text-sm text-muted-foreground">
                 {patientName
-                  ? `Reports for ${patientName} — stay in this consultation`
-                  : "Patient-scoped reports for this consultation"}
+                  ? `What previous reports help diagnose ${patientName}?`
+                  : "Patient reports for clinical decision support — stay in this consultation"}
               </p>
             </div>
             <Button asChild size="sm" variant="outline">
@@ -65,14 +70,14 @@ export function ConsultationReportsDrawer({
         </SheetHeader>
         <div className="flex-1 px-4 py-4">
           {patientId ? (
-            <DiagnosticReportsWorkspacePage
-              embedded
-              lockedPatientId={patientId}
-              lockedConsultationId={consultationId ?? null}
+            <ConsultationClinicalReportsPanel
+              patientId={patientId}
+              consultationId={consultationId ?? null}
+              onOrderTests={onOrderTests}
             />
           ) : (
             <p className="py-10 text-center text-sm text-muted-foreground">
-              Select a patient before viewing diagnostic reports.
+              Select a patient before viewing clinical reports.
             </p>
           )}
         </div>

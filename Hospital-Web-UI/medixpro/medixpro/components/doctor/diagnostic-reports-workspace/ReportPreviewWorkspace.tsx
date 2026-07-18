@@ -275,6 +275,8 @@ type ReportPreviewWorkspaceProps = {
   loading?: boolean;
   /** Phase 1: show all workspace reports for this patient (not full history/versioning). */
   onViewPatientReports?: (patientId: string) => void;
+  /** CDS consultation drawer uses clinical decision-support copy. */
+  variant?: "workspace" | "cds";
 };
 
 export function ReportPreviewWorkspace({
@@ -283,7 +285,9 @@ export function ReportPreviewWorkspace({
   report,
   loading,
   onViewPatientReports,
+  variant = "workspace",
 }: ReportPreviewWorkspaceProps) {
+  const isCds = variant === "cds";
   const toast = useToastNotification();
   const primary = useMemo(
     () => report?.artifacts.find((a) => a.isPrimary) ?? report?.artifacts[0] ?? null,
@@ -414,6 +418,13 @@ export function ReportPreviewWorkspace({
                 </div>
 
                 <div className="flex shrink-0 items-center gap-1.5 self-start">
+                  {isCds ? (
+                    <Button type="button" size="sm" variant="outline" className="h-9" asChild>
+                      <Link href={`/patients/${report.patient.id}?tab=labs`}>
+                        View Full
+                      </Link>
+                    </Button>
+                  ) : null}
                   <Button
                     type="button"
                     size="sm"
@@ -449,6 +460,42 @@ export function ReportPreviewWorkspace({
             <div className="shrink-0 space-y-2 border-b border-[hsl(var(--clinical-divider))] px-4 py-2.5 sm:px-5">
               <div>
                 <h3 className={typeSectionTitle}>{report.testName}</h3>
+                {isCds ? (
+                  <dl className="mt-2 grid gap-2 text-sm sm:grid-cols-2">
+                    <div>
+                      <dt className={typeMeta}>Uploaded by</dt>
+                      <dd className="font-medium text-[hsl(var(--clinical-text-primary))]">
+                        {report.labName ?? "—"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className={typeMeta}>Date</dt>
+                      <dd className="font-medium text-[hsl(var(--clinical-text-primary))]">
+                        {formatShortDate(
+                          report.reportDate ||
+                            report.uploadedAt ||
+                            report.collectionDate
+                        )}
+                      </dd>
+                    </div>
+                    {report.category ? (
+                      <div>
+                        <dt className={typeMeta}>Category</dt>
+                        <dd className="font-medium text-[hsl(var(--clinical-text-primary))]">
+                          {report.category}
+                        </dd>
+                      </div>
+                    ) : null}
+                    {report.reportNumber ? (
+                      <div>
+                        <dt className={typeMeta}>Report ID</dt>
+                        <dd className="font-medium text-[hsl(var(--clinical-text-primary))]">
+                          {report.reportNumber}
+                        </dd>
+                      </div>
+                    ) : null}
+                  </dl>
+                ) : (
                 <dl className={cn(typeMeta, "mt-1 flex flex-wrap gap-x-3 gap-y-1")}>
                   <div>
                     <dt className="sr-only">Category</dt>
@@ -481,6 +528,7 @@ export function ReportPreviewWorkspace({
                     </div>
                   ) : null}
                 </dl>
+                )}
               </div>
 
               <CompactTimeline report={report} />
@@ -555,10 +603,14 @@ export function ReportPreviewWorkspace({
                 ) : null}
               </div>
 
-              {/* Collapsed AI placeholder — unobtrusive */}
+              {/* Collapsed AI placeholder — Phase 3 roadmap */}
               <div className="mx-4 mb-3 mt-auto flex shrink-0 items-center gap-2 rounded-md border border-dashed border-[hsl(var(--clinical-border-subtle))] px-3 py-2 text-xs text-[hsl(var(--clinical-text-meta))] sm:mx-5">
                 <Sparkles className="h-3.5 w-3.5 shrink-0" />
-                <span>AI summary reserved — trends and risk indicators coming later</span>
+                <span>
+                  {isCds
+                    ? "Clinical highlights & compare-with-last — Phase 3"
+                    : "AI summary reserved — trends and risk indicators coming later"}
+                </span>
               </div>
             </div>
           </>

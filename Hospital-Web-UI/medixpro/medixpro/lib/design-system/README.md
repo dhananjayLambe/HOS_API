@@ -74,3 +74,5 @@ Import from `@/components/clinical`:
 ## First consumer
 
 Diagnostic Reports Workspace under `components/doctor/diagnostic-reports-workspace/`.
+
+**Consultation CDS (Phase 1):** mid-consult `ConsultationReportsDrawer` embeds `ConsultationClinicalReportsPanel` (clinical summary, timeline, modality filters, clinical empty state). The full-page `/lab-tests-reports` route keeps the operational workspace chrome.

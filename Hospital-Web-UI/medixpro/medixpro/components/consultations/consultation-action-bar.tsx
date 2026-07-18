@@ -1327,6 +1327,12 @@ export function ConsultationActionBar() {
         patientId={selectedPatient?.id ?? null}
         consultationId={consultationId ?? encounterId ?? null}
         patientName={selectedPatient?.full_name?.trim() || null}
+        onOrderTests={() => {
+          setShowReportsDrawer(false);
+          expandSectionCard("investigations");
+          scrollSectionIntoView("investigations");
+          activateSection("investigations");
+        }}
       />
 
       {isFinalizationOverlayVisible && (
