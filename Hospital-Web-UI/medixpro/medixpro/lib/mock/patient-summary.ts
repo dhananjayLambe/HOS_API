@@ -58,6 +58,8 @@ export interface PatientSummaryPayload {
     date_label: string;
     event: string;
     detail: string;
+    kind?: string;
+    report_id?: string | null;
   }>;
 }
 

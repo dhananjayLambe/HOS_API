@@ -128,8 +128,19 @@ def _operational_flags(profile: PatientProfile) -> dict[str, Any]:
     }
 
 
-def build_patient_summary(*, patient_profile: PatientProfile) -> dict[str, Any]:
-    """Compose UI-ready summary dict matching frontend PatientSummaryPayload."""
+def build_patient_summary(
+    *,
+    patient_profile: PatientProfile,
+    doctor_id=None,
+    clinic_id=None,
+) -> dict[str, Any]:
+    """
+    Compose UI-ready summary dict matching frontend PatientSummaryPayload.
+
+    When doctor_id + clinic_id are provided, lab KPIs and timeline events are
+    filled via PatientLabHistoryService (shared WorkspaceReportRepository).
+    Never query DiagnosticTestReport directly from this module.
+    """
     profile = patient_profile
 
     enc_valid = ClinicalEncounter.objects.filter(patient_profile=profile).exclude(
@@ -272,7 +283,7 @@ def build_patient_summary(*, patient_profile: PatientProfile) -> dict[str, Any]:
         follow_up_label=snapshot_follow_up,
     )
 
-    timeline_events: list[tuple[Any, str, str, str]] = []
+    timeline_events: list[tuple] = []
 
     for enc in ClinicalEncounter.objects.filter(patient_profile=profile).exclude(
         status__in=VALID_ENCOUNTER_EXCLUDE
@@ -283,6 +294,8 @@ def build_patient_summary(*, patient_profile: PatientProfile) -> dict[str, Any]:
                 f"e-{enc.id}-start",
                 "Encounter recorded",
                 enc.visit_pnr or "Visit started.",
+                "encounter",
+                None,
             )
         )
 
@@ -294,6 +307,8 @@ def build_patient_summary(*, patient_profile: PatientProfile) -> dict[str, Any]:
                     f"c-{c.id}-done",
                     "Consultation completed",
                     "Consultation finalized.",
+                    "consultation",
+                    None,
                 )
             )
 
@@ -305,6 +320,8 @@ def build_patient_summary(*, patient_profile: PatientProfile) -> dict[str, Any]:
                     f"rx-{rx.id}-fx",
                     "Prescription issued",
                     rx.prescription_pnr or "Prescription finalized.",
+                    "prescription",
+                    None,
                 )
             )
         if rx.status == PrescriptionStatus.CANCELLED and rx.cancelled_at:
@@ -314,20 +331,82 @@ def build_patient_summary(*, patient_profile: PatientProfile) -> dict[str, Any]:
                     f"rx-{rx.id}-cx",
                     "Prescription cancelled",
                     rx.cancel_reason_code or "Prescription cancelled.",
+                    "prescription",
+                    None,
                 )
             )
 
+    pending_labs = 0
+    latest_lab = "No lab data"
+    if doctor_id and clinic_id:
+        try:
+            from datetime import datetime
+
+            from django.utils.dateparse import parse_datetime
+
+            from doctor_report_workspace.services.patient_lab_history import (
+                PatientLabHistoryService,
+            )
+
+            lab_svc = PatientLabHistoryService()
+            lab_summary = lab_svc.get_summary(
+                doctor_id=doctor_id,
+                clinic_id=clinic_id,
+                patient_id=profile.id,
+            )
+            pending_labs = int(lab_summary.pending or 0)
+            if lab_summary.latest_lab:
+                if lab_summary.latest_date:
+                    latest_lab = f"{lab_summary.latest_lab} · {lab_summary.latest_date}"
+                else:
+                    latest_lab = lab_summary.latest_lab
+
+            for ev in lab_svc.timeline_events(
+                doctor_id=doctor_id,
+                clinic_id=clinic_id,
+                patient_id=profile.id,
+                limit=15,
+            ):
+                ts = parse_datetime(ev.timestamp) if ev.timestamp else None
+                if ts is None and ev.timestamp:
+                    try:
+                        ts = datetime.fromisoformat(ev.timestamp.replace("Z", "+00:00"))
+                    except Exception:
+                        ts = timezone.now()
+                if ts is None:
+                    ts = timezone.now()
+                timeline_events.append(
+                    (
+                        ts,
+                        ev.id,
+                        ev.event,
+                        ev.detail,
+                        ev.kind,
+                        ev.report_id,
+                    )
+                )
+        except Exception:
+            # Lab enrichment must not break the rest of Patient Summary.
+            pending_labs = 0
+            latest_lab = "No lab data"
+
     timeline_events.sort(key=lambda x: x[0], reverse=True)
     timeline_payload = []
-    for ts, eid, title, detail in timeline_events[:20]:
-        timeline_payload.append(
-            {
-                "id": eid,
-                "date_label": _format_local_date(ts),
-                "event": title,
-                "detail": detail,
-            }
-        )
+    for row in timeline_events[:20]:
+        ts, eid, title, detail = row[0], row[1], row[2], row[3]
+        kind = row[4] if len(row) > 4 else None
+        report_id = row[5] if len(row) > 5 else None
+        item = {
+            "id": eid,
+            "date_label": _format_local_date(ts),
+            "event": title,
+            "detail": detail,
+        }
+        if kind:
+            item["kind"] = kind
+        if report_id:
+            item["report_id"] = report_id
+        timeline_payload.append(item)
 
     return {
         "patient": {
@@ -345,7 +424,7 @@ def build_patient_summary(*, patient_profile: PatientProfile) -> dict[str, Any]:
             "visits": visits_count,
             "active_rx": active_rx_count,
             "last_visit_label": _last_visit_label(last_visit_at),
-            "pending_labs": 0,
+            "pending_labs": pending_labs,
         },
         "generated_summary": {
             "headline": headline,
@@ -355,7 +434,7 @@ def build_patient_summary(*, patient_profile: PatientProfile) -> dict[str, Any]:
             "last_diagnosis": last_diagnosis,
             "current_medications": current_meds,
             "follow_up": snapshot_follow_up,
-            "latest_lab": "No lab data",
+            "latest_lab": latest_lab,
         },
         "consultations": consultations_payload,
         "prescriptions": prescriptions_payload,

@@ -388,7 +388,25 @@ class PatientSummaryAPIView(APIView):
             user=request.user,
             patient_profile_id=patient_profile_id,
         )
-        data = build_patient_summary(patient_profile=profile)
+        doctor_id = None
+        clinic_id = request.query_params.get("clinic_id")
+        if request.user.groups.filter(name="doctor").exists():
+            from doctor.models import doctor as Doctor
+
+            try:
+                doc = Doctor.objects.get(user=request.user)
+                doctor_id = doc.id
+                if not clinic_id:
+                    first_clinic = doc.clinics.first()
+                    if first_clinic is not None:
+                        clinic_id = str(first_clinic.id)
+            except Doctor.DoesNotExist:
+                doctor_id = None
+        data = build_patient_summary(
+            patient_profile=profile,
+            doctor_id=doctor_id,
+            clinic_id=clinic_id,
+        )
         return Response(data, status=status.HTTP_200_OK)
 
 

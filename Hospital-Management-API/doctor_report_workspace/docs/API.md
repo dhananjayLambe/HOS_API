@@ -15,6 +15,9 @@ GET  /workspace/search/                                    # WorkspaceListRespon
 GET  /workspace/reports/{report_id}/                       # WorkspaceReportDetailDTO
 GET  /workspace/reports/{report_id}/preview/?clinic_id=    # 302 inline URL | 200 unsupported
 GET  /workspace/reports/{report_id}/download/?clinic_id=   # 302 → opaque storage URL
+GET  /patients/{patient_id}/lab-history/summary/?clinic_id=   # PatientLabHistorySummaryDTO
+GET  /patients/{patient_id}/lab-history/?clinic_id=           # PatientLabHistoryListResponseDTO
+GET  /patients/{patient_id}/lab-history/{report_id}/?clinic_id=  # PatientLabHistoryDetailDTO
 ```
 
 Deferred:
@@ -23,6 +26,25 @@ Deferred:
 GET  /patients/search/?q=
 POST /bulk-download/
 ```
+
+### Access rule (permanent product rule)
+
+```
+Doctor → Clinic → Reports
+```
+
+Patient Lab History never returns reports from clinics the doctor does not belong to.
+Cross-clinic patient sharing is a future phase and must not be implied by these endpoints.
+
+### Patient Lab History KPIs
+
+`pending` = clinic-scoped awaiting-report / incomplete test lines for this patient
+(same formula as workspace `awaiting` for `patient_id`).
+
+`total_reports` = active ready report heads (AVAILABLE / UPDATED) for this patient at this clinic.
+
+List cards include version (`version`, `is_latest`, `superseded_by_id`), `source`, and
+`lifecycle_state` (`ACTIVE` | `ARCHIVED` | `DELETED`). List defaults to ACTIVE only.
 
 Envelope (all doctor v1 workspace responses):
 

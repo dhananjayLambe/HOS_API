@@ -9,7 +9,7 @@ const sections: Array<{ id: PatientSummarySection; label: string }> = [
   { id: "overview", label: "Overview" },
   { id: "consultations", label: "Consultations" },
   { id: "prescriptions", label: "Prescriptions" },
-  { id: "labs", label: "Lab Reports" },
+  { id: "labs", label: "Lab History" },
   { id: "timeline", label: "Timeline" },
 ];
 

@@ -14,6 +14,11 @@ from doctor_report_workspace.api.views.workspace import (
     WorkspaceSummaryAPIView,
 )
 from doctor_report_workspace.api.views.workspace_search import WorkspaceSearchAPIView
+from doctor_report_workspace.api.views.patient_lab_history import (
+    PatientLabHistoryDetailAPIView,
+    PatientLabHistoryListAPIView,
+    PatientLabHistorySummaryAPIView,
+)
 
 app_name = "doctor_report_workspace"
 
@@ -47,5 +52,21 @@ urlpatterns = [
         "workspace/reports/<uuid:report_id>/",
         WorkspaceReportDetailAPIView.as_view(),
         name="workspace-report-detail",
+    ),
+    # Patient Lab History (Patient Summary — Doctor → Clinic → Reports)
+    path(
+        "patients/<uuid:patient_id>/lab-history/summary/",
+        PatientLabHistorySummaryAPIView.as_view(),
+        name="patient-lab-history-summary",
+    ),
+    path(
+        "patients/<uuid:patient_id>/lab-history/<uuid:report_id>/",
+        PatientLabHistoryDetailAPIView.as_view(),
+        name="patient-lab-history-detail",
+    ),
+    path(
+        "patients/<uuid:patient_id>/lab-history/",
+        PatientLabHistoryListAPIView.as_view(),
+        name="patient-lab-history-list",
     ),
 ]
