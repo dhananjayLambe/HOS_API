@@ -23,7 +23,6 @@ export async function GET(request: Request) {
     }
 
     const data = await res.json()
-    console.log("Fetched clinics data:", data)
     return NextResponse.json({
       success: true,
       pagination: {

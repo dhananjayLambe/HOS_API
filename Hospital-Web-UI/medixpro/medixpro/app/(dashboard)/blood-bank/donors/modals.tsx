@@ -53,7 +53,6 @@ export function ScheduleDonationModal({ isOpen, onClose, donorId, donorName, don
     setIsSubmitting(true);
     // Simulate API call
     setTimeout(() => {
-      console.log(values);
       setIsSubmitting(false);
       onClose();
     }, 1000);

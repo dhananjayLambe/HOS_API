@@ -27,6 +27,7 @@ from queue_management.api.serializers import (
 )
 from account.permissions import IsDoctor, IsDoctorOrHelpdesk,IsHelpdesk
 from django.db import IntegrityError, transaction
+from shared.logging import LogModule, logger
 from queue_management.services.queue_realtime import (
     publish_queue_update,
     queue_reorder_lock,
@@ -780,9 +781,17 @@ class QueuePatientView(RetrieveAPIView):
 
         # Try fetching from Redis first
         redis_key = f"queue:patient:{id}:doctor:{doctor_id}:clinic:{clinic_id}"
-        print(f"Redis Key: {redis_key}")
+        logger.debug(
+            "Queue patient cache lookup",
+            module=LogModule.API,
+            action="queue.patient.cache_lookup",
+            metadata={
+                "patient_id": str(id),
+                "doctor_id": str(doctor_id),
+                "clinic_id": str(clinic_id),
+            },
+        )
         cached_data = redis_client.get(redis_key)
-        print(f"Cached Data: {cached_data}")
         if cached_data:
             return Response(eval(cached_data), status=status.HTTP_200_OK)
 

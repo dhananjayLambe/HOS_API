@@ -106,7 +106,6 @@ export default function EditRoomPage({ params }: { params: Promise<{ id: string 
   // Handle form submission
   function onSubmit(values: FormValues) {
     setIsSubmitting(true)
-    console.log(values)
 
     // Simulate API call
     setTimeout(() => {

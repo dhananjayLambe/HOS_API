@@ -91,13 +91,11 @@ export default function StaffAttendancePage() {
 
   const handleSaveTime = (data: { timeType: string; time: string }) => {
     // In a real app, this would update the database
-    console.log(`Updated ${data.timeType} to ${data.time} for ${selectedStaffMember?.name}`)
     // You could update the local state here to reflect the changes
   }
 
   const handleSaveNote = (data: { noteType: string; note: string }) => {
     // In a real app, this would update the database
-    console.log(`Added ${data.noteType} note: ${data.note} for ${selectedStaffMember?.name}`)
     // You could update the local state here to reflect the changes
   }
 

@@ -25,10 +25,6 @@ async function apiRequest<T>(endpoint: string, options: AxiosRequestConfig = {})
   
   // Log request details for digital signature uploads
   if (endpoint.includes("digital-signature")) {
-    console.log("[apiRequest] Digital signature upload request")
-    console.log("[apiRequest] Endpoint:", endpoint)
-    console.log("[apiRequest] Method:", options.method || "GET")
-    console.log("[apiRequest] Is FormData:", isFormDataBody)
   }
   
   // Prepare headers
@@ -52,7 +48,6 @@ async function apiRequest<T>(endpoint: string, options: AxiosRequestConfig = {})
   }
 
   if (endpoint.includes("digital-signature")) {
-    console.log("[apiRequest] Final headers:", headers)
   }
 
   try {
@@ -68,24 +63,11 @@ async function apiRequest<T>(endpoint: string, options: AxiosRequestConfig = {})
     }
     
     if (endpoint.includes("digital-signature")) {
-      console.log("[apiRequest] Making request to:", endpoint)
-      console.log("[apiRequest] Request config:", {
-        method: config.method,
-        url: config.url,
-        hasData: !!config.data,
-        isFormData: config.data instanceof FormData
-      })
     }
     
     const response = await axiosClient(config)
 
     if (endpoint.includes("digital-signature")) {
-      console.log("[apiRequest] Response received:", {
-        status: response.status,
-        statusText: response.statusText,
-        headers: response.headers,
-        data: response.data
-      })
     }
 
     return response.data
@@ -114,17 +96,9 @@ async function apiRequest<T>(endpoint: string, options: AxiosRequestConfig = {})
           endpoint.includes('/doctor-fees/') ||
           endpoint.includes('/follow-up-policies/') ||
           endpoint.includes('/cancellation-policies/'))
-      // Log full error for debugging (only for unexpected errors)
+      // Log unexpected errors without dumping full response bodies/headers (PHI risk)
       if (!isExpectedEmpty404 && (status !== 404 || Object.keys(data).length > 0)) {
-        console.error(`[API Error] ${endpoint}:`, {
-          status,
-          data,
-          dataKeys: Object.keys(data),
-          dataStringified: JSON.stringify(data),
-          headers: error.response.headers,
-          responseText: error.response?.data,
-          fullError: error.response,
-        })
+        console.error(`[API Error] ${endpoint}: status ${status}`)
       }
       
       // If data is empty, try to get error from response text or status text
@@ -400,17 +374,6 @@ export const doctorAPI = {
     }),
 
   uploadDigitalSignature: (formData: FormData) => {
-    console.log("[API Client] uploadDigitalSignature called")
-    console.log("[API Client] Endpoint: /doctor/kyc/upload/digital-signature")
-    console.log("[API Client] Method: PATCH")
-    console.log("[API Client] FormData entries:")
-    for (const [key, value] of formData.entries()) {
-      if (value instanceof File) {
-        console.log(`[API Client]   ${key}: File(${value.name}, ${value.size} bytes, ${value.type})`)
-      } else {
-        console.log(`[API Client]   ${key}: ${value}`)
-      }
-    }
     return apiRequest<any>("/doctor/kyc/upload/digital-signature", {
       method: "PATCH",
       data: formData,

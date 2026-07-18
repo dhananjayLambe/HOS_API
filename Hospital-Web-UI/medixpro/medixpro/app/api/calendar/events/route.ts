@@ -63,8 +63,6 @@ export async function POST(request: NextRequest) {
     const authHeader = request.headers.get("authorization") || request.headers.get("Authorization")
     const body = await request.json()
 
-    console.log("[Next.js API] POST /api/calendar/events - Request body:", JSON.stringify(body, null, 2))
-
     const response = await fetch(`${DJANGO_API_URL}calendar/events/`, {
       method: "POST",
       headers: {
@@ -84,9 +82,6 @@ export async function POST(request: NextRequest) {
         { status: response.status }
       )
     }
-
-    console.log("[Next.js API] POST response status:", response.status)
-    console.log("[Next.js API] POST response data:", JSON.stringify(data, null, 2))
 
     if (!response.ok) {
       // Extract error message from backend response

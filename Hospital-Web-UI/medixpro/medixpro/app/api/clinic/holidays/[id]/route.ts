@@ -121,9 +121,6 @@ export async function PATCH(
       )
     }
 
-    console.log(`[PATCH /api/clinic/holidays/${id}] Updating holiday with data:`, body)
-    console.log(`[PATCH /api/clinic/holidays/${id}] Backend URL: ${DJANGO_API_URL}/api/clinic/clinics/${clinicId}/holidays/${id}/`)
-
     const response = await fetch(
       `${DJANGO_API_URL}/api/clinic/clinics/${clinicId}/holidays/${id}/`,
       {
@@ -137,12 +134,9 @@ export async function PATCH(
       }
     )
 
-    console.log(`[PATCH /api/clinic/holidays/${id}] Response status:`, response.status)
-
     let data
     try {
       const responseText = await response.text()
-      console.log(`[PATCH /api/clinic/holidays/${id}] Response text:`, responseText)
       data = responseText ? JSON.parse(responseText) : {}
     } catch (e) {
       console.error(`[PATCH /api/clinic/holidays/${id}] Failed to parse response:`, e)

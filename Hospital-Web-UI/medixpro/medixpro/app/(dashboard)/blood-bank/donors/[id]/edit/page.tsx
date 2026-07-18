@@ -93,7 +93,6 @@ export default function EditDonorPage({ params }: { params: Promise<{ id: string
     setIsSubmitting(true);
     // Simulate API call
     setTimeout(() => {
-      console.log(values);
       setIsSubmitting(false);
       // Redirect to donor details page
       window.location.href = `/blood-bank/donors/${id}`;

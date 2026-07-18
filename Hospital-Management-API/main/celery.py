@@ -18,6 +18,7 @@ from django.conf import settings as django_settings
 app.conf.timezone = django_settings.TIME_ZONE
 app.conf.enable_utc = True
 
+from shared.logging import LogModule, logger
 from shared.logging.factory import configure_logging
 
 configure_logging(django_settings.DOCTORPROCARE_LOGGING_CONFIG)
@@ -27,4 +28,9 @@ register_celery_context_signals()
 
 @app.task(bind=True)
 def debug_task(self):
-    print(f'Request: {self.request!r}')
+    logger.debug(
+        "Celery debug task invoked",
+        module=LogModule.CELERY,
+        action="celery.debug_task",
+        metadata={"task_id": getattr(self.request, "id", None)},
+    )

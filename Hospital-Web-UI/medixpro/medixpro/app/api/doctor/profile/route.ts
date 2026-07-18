@@ -25,7 +25,6 @@ const DJANGO_API_URL = resolveDjangoApiBase();
 
 // GET - Fetch doctor profile
 export async function GET(request: NextRequest) {
-  console.log("Fetching doctor profile...")
   try {
     const token = request.headers.get("authorization")
 
@@ -84,8 +83,6 @@ export async function PATCH(request: NextRequest) {
     const authHeader = request.headers.get("authorization") || request.headers.get("Authorization")
     const body = await request.json()
 
-    console.log("[Next.js API] PATCH /api/doctor/profile - Request body:", JSON.stringify(body, null, 2))
-
     const response = await fetch(`${DJANGO_API_URL}/api/doctor/profile/`, {
       method: "PATCH",
       headers: {
@@ -97,9 +94,6 @@ export async function PATCH(request: NextRequest) {
     })
 
     const data = await response.json()
-
-    console.log("[Next.js API] PATCH response status:", response.status)
-    console.log("[Next.js API] PATCH response data:", JSON.stringify(data, null, 2))
 
     if (!response.ok) {
       return NextResponse.json(

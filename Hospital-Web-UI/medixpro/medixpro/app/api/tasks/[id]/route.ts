@@ -61,8 +61,6 @@ export async function PUT(
     const authHeader = request.headers.get("authorization") || request.headers.get("Authorization")
     const body = await request.json()
 
-    console.log("[Next.js API] PUT /api/tasks/[id] - Request body:", JSON.stringify(body, null, 2))
-
     const response = await fetch(`${DJANGO_API_URL}tasks/${taskId}/`, {
       method: "PUT",
       headers: {
@@ -113,8 +111,6 @@ export async function PUT(
         }
       }
 
-      console.log("[Next.js API] PUT error response:", JSON.stringify(data, null, 2))
-
       return NextResponse.json(
         {
           error: errorMessage,
@@ -147,8 +143,6 @@ export async function PATCH(
     const { id: taskId } = await params
     const authHeader = request.headers.get("authorization") || request.headers.get("Authorization")
     const body = await request.json()
-
-    console.log("[Next.js API] PATCH /api/tasks/[id] - Request body:", JSON.stringify(body, null, 2))
 
     const response = await fetch(`${DJANGO_API_URL}tasks/${taskId}/`, {
       method: "PATCH",

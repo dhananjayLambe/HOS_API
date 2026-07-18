@@ -166,7 +166,6 @@ export function ClinicPreferences() {
         }
       } else if (response.status === 404) {
         // No preferences exist yet, use defaults
-        console.log("No preferences found, using defaults")
       } else {
         const errorData = await response.json().catch(() => ({}))
         throw new Error(errorData.message || errorData.error || "Failed to fetch preferences")

@@ -251,7 +251,6 @@ export default function FeedbackEditPage() {
   // Function to save survey changes
   const saveSurvey = () => {
     // In a real app, this would call an API to save the survey
-    console.log("Saving survey:", survey)
     setUnsavedChanges(false)
     router.push(`/feedback/${surveyId}`)
   }

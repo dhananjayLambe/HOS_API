@@ -218,10 +218,8 @@ export default function CalendarPage() {
           .filter((task: any) => task !== null);
         
         setTasks(transformedTasks);
-        console.log(`Loaded ${transformedTasks.length} tasks from database`);
       } else {
         setTasks([]);
-        console.log("No tasks found in database");
       }
     } catch (error: any) {
       console.error("Error fetching tasks:", error);
@@ -245,7 +243,6 @@ export default function CalendarPage() {
 
   // Helper function to transform leave to calendar event format
   const transformLeaveToEvent = useCallback((leave: any) => {
-    console.log("Transforming leave:", leave);
     
     // Handle different possible field names from backend
     const startDateStr = leave.start_date || leave.startDate;
@@ -319,11 +316,8 @@ export default function CalendarPage() {
       const doctorId = profile?.personal_info?.id || profile?.id || user.user_id;
       const clinics = profile?.clinic_association || [];
       
-      console.log("Fetching leaves - Doctor ID:", doctorId, "Clinics:", clinics);
       
       if (!doctorId || clinics.length === 0) {
-        console.log("No doctor ID or clinics found, skipping leaves fetch");
-        console.log("Profile data:", profile);
         setLeaves([]);
         return;
       }
@@ -341,7 +335,6 @@ export default function CalendarPage() {
           }
           
           try {
-            console.log(`Fetching leaves for clinic ${clinicId} with doctor ${doctorId}`);
             // Use /doctor/leaves/ since axiosClient already has /api as baseURL
             const response = await axiosClient.get("/doctor/leaves/", {
               params: {
@@ -350,11 +343,9 @@ export default function CalendarPage() {
               },
             });
             
-            console.log(`Leaves API response for clinic ${clinicId}:`, response.data);
             
             if (response.data && response.data.status === "success" && response.data.data) {
               const leavesData = Array.isArray(response.data.data) ? response.data.data : [];
-              console.log(`Found ${leavesData.length} leaves for clinic ${clinicId}:`, leavesData);
               return leavesData;
             }
             return [];
@@ -370,18 +361,15 @@ export default function CalendarPage() {
       } else {
         // No clinics found, try fetching all leaves for the doctor
         try {
-          console.log(`No clinics found, trying to fetch all leaves for doctor ${doctorId}`);
           const response = await axiosClient.get("/doctor/leaves/", {
             params: {
               doctor_id: doctorId,
             },
           });
           
-          console.log("Leaves API response (all leaves):", response.data);
           
           if (response.data && response.data.status === "success" && response.data.data) {
             allLeaves = Array.isArray(response.data.data) ? response.data.data : [];
-            console.log(`Found ${allLeaves.length} leaves:`, allLeaves);
           }
         } catch (error: any) {
           console.error("Error fetching all leaves:", error);
@@ -394,16 +382,13 @@ export default function CalendarPage() {
         index === self.findIndex((l: any) => l.id === leave.id)
       );
       
-      console.log("All leaves fetched:", uniqueLeaves);
       
       // Transform leaves to calendar events
       const transformedLeaves = uniqueLeaves
         .map(transformLeaveToEvent)
         .filter((leave: any) => leave !== null);
       
-      console.log("Transformed leaves:", transformedLeaves);
       setLeaves(transformedLeaves);
-      console.log(`Loaded ${transformedLeaves.length} leaves from database`);
     } catch (error: any) {
       console.error("Error fetching leaves:", error);
       console.error("Error details:", error.response?.data);
@@ -427,7 +412,6 @@ export default function CalendarPage() {
 
   // Helper function to transform holiday to calendar event format
   const transformHolidayToEvent = useCallback((holiday: any) => {
-    console.log("Transforming holiday:", holiday);
     
     // Handle different possible field names from backend
     const startDateStr = holiday.start_date || holiday.startDate;
@@ -512,10 +496,8 @@ export default function CalendarPage() {
       const profile = profileResponse.data?.doctor_profile || profileResponse.data;
       const clinics = profile?.clinic_association || [];
       
-      console.log("Fetching holidays - Clinics:", clinics);
       
       if (clinics.length === 0) {
-        console.log("No clinics found, skipping holidays fetch");
         setHolidays([]);
         return;
       }
@@ -529,7 +511,6 @@ export default function CalendarPage() {
         }
         
         try {
-          console.log(`Fetching holidays for clinic ${clinicId}`);
           // Use /clinic/holidays/ since axiosClient already has /api as baseURL
           const response = await axiosClient.get("/clinic/holidays/", {
             params: {
@@ -538,11 +519,9 @@ export default function CalendarPage() {
             },
           });
           
-          console.log(`Holidays API response for clinic ${clinicId}:`, response.data);
           
           if (response.data && response.data.status === "success" && response.data.data) {
             const holidaysData = Array.isArray(response.data.data) ? response.data.data : [];
-            console.log(`Found ${holidaysData.length} holidays for clinic ${clinicId}:`, holidaysData);
             return holidaysData;
           }
           return [];
@@ -561,16 +540,13 @@ export default function CalendarPage() {
         index === self.findIndex((h: any) => h.id === holiday.id)
       );
       
-      console.log("All holidays fetched:", uniqueHolidays);
       
       // Transform holidays to calendar events
       const transformedHolidays = uniqueHolidays
         .map(transformHolidayToEvent)
         .filter((holiday: any) => holiday !== null);
       
-      console.log("Transformed holidays:", transformedHolidays);
       setHolidays(transformedHolidays);
-      console.log(`Loaded ${transformedHolidays.length} holidays from database`);
     } catch (error: any) {
       console.error("Error fetching holidays:", error);
       console.error("Error details:", error.response?.data);
@@ -595,7 +571,6 @@ export default function CalendarPage() {
   // Combine all events (OPD appointments + calendar events + tasks + leaves + holidays)
   const allEvents = useMemo(() => {
     const combined = [...opdAppointments, ...events, ...tasks, ...leaves, ...holidays];
-    console.log("All events (OPD + Calendar + Tasks + Leaves + Holidays):", combined.length, "OPD:", opdAppointments.length, "Calendar:", events.length, "Tasks:", tasks.length, "Leaves:", leaves.length, "Holidays:", holidays.length);
     return combined;
   }, [opdAppointments, events, tasks, leaves, holidays]);
 
@@ -623,8 +598,6 @@ export default function CalendarPage() {
       return true;
     });
     
-    console.log("Filtered events:", filtered.length, "out of", allEvents.length, "total events");
-    console.log("Selected categories:", selectedCategories);
     return filtered;
   }, [allEvents, selectedCategories, selectedAppointmentTypes, selectedAppointmentStatuses]);
 
@@ -724,12 +697,10 @@ export default function CalendarPage() {
         },
       });
 
-      console.log("Calendar events API response:", response.data);
       
       if (response.data && response.data.status === "success" && response.data.data) {
         // Backend returns: { status: "success", data: { events: [...], pagination: {...} } }
         const eventsData = response.data.data.events || [];
-        console.log("Raw events data from API:", eventsData);
         
         if (Array.isArray(eventsData) && eventsData.length > 0) {
           // Transform events and filter out any null values (invalid dates)
@@ -737,13 +708,10 @@ export default function CalendarPage() {
             .map(transformBackendEventToFrontend)
             .filter((event: any) => event !== null);
           
-          console.log("Transformed events:", transformedEvents);
           setEvents(transformedEvents);
-          console.log(`Loaded ${transformedEvents.length} calendar events from database`);
         } else {
           // No events in database - set empty array
           setEvents([]);
-          console.log("No calendar events found in database");
         }
       } else {
         // Unexpected response format - set empty array

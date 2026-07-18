@@ -84,7 +84,6 @@ export default function AddBloodUnitPage() {
 
   function onSubmit(values: z.infer<typeof formSchema>) {
     // In a real application, you would submit this data to your backend
-    console.log(values);
 
     toast({
       title: "Blood unit added successfully",

@@ -57,13 +57,18 @@ from django_filters.rest_framework import DjangoFilterBackend
 from clinic.models import Clinic
 from clinic.api.serializers import ClinicListFrontendSerializer
 from clinic.pagination import ClinicPageNumberPagination
+from shared.logging import LogModule, logger
 
 class ClinicOnboardingView(APIView):
-    print("i am in clinic onboarding view API ")
     permission_classes = []
 
     @transaction.atomic
     def post(self, request):
+        logger.info(
+            "Clinic onboarding requested",
+            module=LogModule.API,
+            action="clinic.onboarding.create",
+        )
         serializer = ClinicOnboardingSerializer(data=request.data)
         if serializer.is_valid():
             reg_no = serializer.validated_data.get("registration_number")
@@ -626,7 +631,11 @@ class ClinicAdminLogoutView(APIView):
 
 
     def post(self, request):
-        print("Request data:", request.data)  # Debugging line to check request data
+        logger.info(
+            "Clinic admin logout requested",
+            module=LogModule.AUTHENTICATION,
+            action="clinic.admin.logout",
+        )
         refresh_token = request.data.get("refresh")
 
         if not refresh_token:
@@ -659,7 +668,6 @@ class ClinicAdminTokenVerifyView(TokenVerifyView):
 
 
 class ClinicListViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
-    print("ClinicListViewSet")
     """
     Endpoint: GET /api/clinics/
     Returns paginated clinics in frontend-friendly format.

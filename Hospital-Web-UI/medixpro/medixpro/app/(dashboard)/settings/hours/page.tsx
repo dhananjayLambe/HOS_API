@@ -353,12 +353,6 @@ const transformFrontendToBackendLeave = (frontendData: Leave): any => {
   const startDate = formatDateLocal(frontendData.fromDate);
   const endDate = formatDateLocal(frontendData.toDate);
   
-  console.log("Transform leave dates:", {
-    fromDate: frontendData.fromDate,
-    toDate: frontendData.toDate,
-    startDate,
-    endDate,
-  });
   
   return {
     start_date: startDate,
@@ -681,10 +675,8 @@ export default function DoctorWorkingHoursPage() {
 
           if (leavesResponse.ok) {
             const leavesData = await leavesResponse.json();
-            console.log("Loaded leaves from API:", leavesData);
             if (leavesData.data && Array.isArray(leavesData.data)) {
               const transformedLeaves = transformBackendToFrontendLeaves(leavesData.data);
-              console.log("Transformed leaves:", transformedLeaves);
               setLeaves(transformedLeaves);
               setOriginalLeaves(JSON.parse(JSON.stringify(transformedLeaves)));
             } else {
@@ -713,10 +705,8 @@ export default function DoctorWorkingHoursPage() {
 
           if (holidaysResponse.ok) {
             const holidaysData = await holidaysResponse.json();
-            console.log("Loaded holidays from API:", holidaysData);
             if (holidaysData.data && Array.isArray(holidaysData.data)) {
               const transformedHolidays = transformBackendToFrontendHolidays(holidaysData.data);
-              console.log("Transformed holidays:", transformedHolidays);
               setHolidays(transformedHolidays);
               setOriginalHolidays(transformedHolidays.map(h => ({
                 ...h,
@@ -878,12 +868,6 @@ export default function DoctorWorkingHoursPage() {
         // Normalize dates to local midnight when updating
         if (field === "fromDate" || field === "toDate") {
           const normalizedDate = normalizeToLocalMidnight(value);
-          console.log(`Updating leave ${id} ${field}:`, {
-            original: value,
-            normalized: normalizedDate,
-            dateString: normalizedDate.toDateString(),
-            localFormat: formatDateLocal(normalizedDate),
-          });
           return { ...l, [field]: normalizedDate };
         }
         return { ...l, [field]: value };
@@ -1117,15 +1101,11 @@ export default function DoctorWorkingHoursPage() {
       const leavesToCreate = leaves.filter((l) => !isUUID(l.id));
       const leavesToUpdate = leaves.filter((l) => isUUID(l.id));
       
-      console.log("Leaves to create:", leavesToCreate.length, leavesToCreate);
-      console.log("Leaves to update:", leavesToUpdate.length, leavesToUpdate);
 
       // Create new leaves
-      console.log("Creating new leaves:", leavesToCreate);
       for (const leave of leavesToCreate) {
         try {
           const leaveData = transformFrontendToBackendLeave(leave);
-          console.log("Saving leave:", leaveData);
           
           // Check if a leave with the same dates already exists in originalLeaves
           // If it exists, we'll update it instead of creating a new one
@@ -1136,7 +1116,6 @@ export default function DoctorWorkingHoursPage() {
           
           let response;
           if (existingLeave && isUUID(existingLeave.id)) {
-            console.log("Updating existing leave instead of creating:", existingLeave.id);
             // Update existing leave instead of creating duplicate
             response = await fetch(`/api/doctor/leaves/${existingLeave.id}`, {
               method: "PATCH",
@@ -1162,7 +1141,6 @@ export default function DoctorWorkingHoursPage() {
             }
           } else {
             // Create new leave
-            console.log("Creating new leave with data:", { clinic: clinicId, ...leaveData });
             response = await fetch("/api/doctor/leaves", {
               method: "POST",
               headers: {
@@ -1176,7 +1154,6 @@ export default function DoctorWorkingHoursPage() {
             });
           }
 
-          console.log("Leave save response status:", response.status);
           if (!response.ok) {
             const data = await response.json();
             // Extract detailed error messages
@@ -1291,10 +1268,6 @@ export default function DoctorWorkingHoursPage() {
       }
 
       // Update existing leaves
-      console.log("=== UPDATING LEAVES ===");
-      console.log("Leaves to update count:", leavesToUpdate.length);
-      console.log("Leaves to update:", leavesToUpdate.map(l => ({ id: l.id, fromDate: l.fromDate, toDate: l.toDate })));
-      console.log("Original leaves:", originalLeaves.map(l => ({ id: l.id, fromDate: l.fromDate, toDate: l.toDate })));
       
       // Helper function to safely convert date to ISO string (handles both Date objects and date strings)
       const toDateString = (date: Date | string): string => {
@@ -1338,20 +1311,10 @@ export default function DoctorWorkingHoursPage() {
               (originalLeave.reason || "").trim() !== (leave.reason || "").trim();
             
             if (!hasChanged) {
-              console.log(`Leave ${leave.id} has not changed, skipping update`);
               shouldUpdate = false;
             } else {
-              console.log(`Leave ${leave.id} has changed, updating...`);
-              console.log("Changes:", {
-                fromDate: originalFromDateStr + " -> " + currentFromDateStr,
-                toDate: originalToDateStr + " -> " + currentToDateStr,
-                leaveType: originalLeave.leaveType + " -> " + leave.leaveType,
-                halfDay: originalLeave.halfDay + " -> " + leave.halfDay,
-                reason: (originalLeave.reason || "") + " -> " + (leave.reason || ""),
-              });
             }
           } else {
-            console.log(`Leave ${leave.id} not found in original leaves, will update anyway`);
           }
           
           if (!shouldUpdate) {
@@ -1359,8 +1322,6 @@ export default function DoctorWorkingHoursPage() {
           }
           
           const leaveData = transformFrontendToBackendLeave(leave);
-          console.log(`Updating leave ${leave.id} with data:`, leaveData);
-          console.log(`Update URL: /api/doctor/leaves/${leave.id}`);
           
           const response = await fetch(`/api/doctor/leaves/${leave.id}`, {
             method: "PATCH",
@@ -1370,9 +1331,6 @@ export default function DoctorWorkingHoursPage() {
             },
             body: JSON.stringify(leaveData),
           });
-
-          console.log(`Update leave ${leave.id} response status:`, response.status);
-          console.log(`Update leave ${leave.id} response ok:`, response.ok);
 
           if (!response.ok) {
             let data;
@@ -1423,7 +1381,6 @@ export default function DoctorWorkingHoursPage() {
             // Success - log the response and update state immediately
             try {
               const data = await response.json();
-              console.log(`Successfully updated leave ${leave.id}:`, data);
               
               // Update the leave in state immediately with the updated leave data
               // Use the leave object we're updating (which has the new dates)
@@ -1436,19 +1393,12 @@ export default function DoctorWorkingHoursPage() {
                       fromDate: parseDateString(leave.fromDate),
                       toDate: parseDateString(leave.toDate),
                     };
-                    console.log(`Updating state for leave ${leave.id} with dates:`, {
-                      fromDate: updatedLeave.fromDate,
-                      toDate: updatedLeave.toDate,
-                      fromDateStr: updatedLeave.fromDate.toDateString(),
-                      toDateStr: updatedLeave.toDate.toDateString(),
-                    });
                     return updatedLeave;
                   }
                   return l;
                 })
               );
             } catch (e) {
-              console.log(`Successfully updated leave ${leave.id} (no response body or parse error):`, e);
               // Even if we can't parse the response, the update succeeded (status was ok)
               // Update state to reflect the change immediately
               setLeaves((prevLeaves) => 
@@ -1459,12 +1409,6 @@ export default function DoctorWorkingHoursPage() {
                       fromDate: parseDateString(leave.fromDate),
                       toDate: parseDateString(leave.toDate),
                     };
-                    console.log(`Updating state for leave ${leave.id} (fallback) with dates:`, {
-                      fromDate: updatedLeave.fromDate,
-                      toDate: updatedLeave.toDate,
-                      fromDateStr: updatedLeave.fromDate.toDateString(),
-                      toDateStr: updatedLeave.toDate.toDateString(),
-                    });
                     return updatedLeave;
                   }
                   return l;
@@ -1483,20 +1427,15 @@ export default function DoctorWorkingHoursPage() {
       const currentLeaveIds = new Set(leaves.map((l) => l.id));
       const deletedLeaves = originalLeaves.filter((l) => !currentLeaveIds.has(l.id));
 
-      console.log("=== DELETING LEAVES ===");
-      console.log("Leaves to delete:", deletedLeaves.length, deletedLeaves.map(l => ({ id: l.id, fromDate: l.fromDate, toDate: l.toDate })));
-
       for (const leave of deletedLeaves) {
         try {
           // Only delete if it's a UUID (exists in backend)
           if (!isUUID(leave.id)) {
-            console.log(`Skipping deletion of temporary leave ${leave.id} (not in backend)`);
             // Remove from state immediately since it was never saved
             setLeaves((prevLeaves) => prevLeaves.filter((l) => l.id !== leave.id));
             continue;
           }
 
-          console.log(`Deleting leave ${leave.id} from backend`);
           const response = await fetch(`/api/doctor/leaves/${leave.id}`, {
             method: "DELETE",
             headers: {
@@ -1522,7 +1461,6 @@ export default function DoctorWorkingHoursPage() {
             console.error("Leave deletion error:", data);
           } else {
             // Successfully deleted - remove from state immediately
-            console.log(`Successfully deleted leave ${leave.id}`);
             setLeaves((prevLeaves) => prevLeaves.filter((l) => l.id !== leave.id));
           }
         } catch (error: any) {
@@ -1536,7 +1474,6 @@ export default function DoctorWorkingHoursPage() {
       // Reload leaves from server to ensure state is in sync
       // Always reload regardless of errors to get the current state from backend
       // Add a small delay to ensure backend has processed all updates
-      console.log("=== RELOADING LEAVES AFTER SAVE ===");
       await new Promise(resolve => setTimeout(resolve, 200)); // Small delay to ensure backend is ready
       
       try {
@@ -1552,24 +1489,14 @@ export default function DoctorWorkingHoursPage() {
           }
         );
 
-        console.log("Reload response status:", leavesResponse.status);
         
         if (leavesResponse.ok) {
           const leavesData = await leavesResponse.json();
-          console.log("Reloaded leaves after save:", leavesData);
           if (leavesData.data && Array.isArray(leavesData.data)) {
             const transformedLeaves = transformBackendToFrontendLeaves(leavesData.data);
-            console.log("Transformed reloaded leaves:", transformedLeaves);
-            console.log("Setting leaves state with:", transformedLeaves.length, "leaves");
             
             // Log the dates to verify they're correct
             transformedLeaves.forEach(leave => {
-              console.log(`Leave ${leave.id} dates:`, {
-                fromDate: leave.fromDate,
-                toDate: leave.toDate,
-                fromDateStr: leave.fromDate instanceof Date ? leave.fromDate.toISOString().split("T")[0] : leave.fromDate,
-                toDateStr: leave.toDate instanceof Date ? leave.toDate.toISOString().split("T")[0] : leave.toDate,
-              });
             });
             
             // Ensure dates are Date objects using parseDateString to avoid timezone issues
@@ -1587,7 +1514,6 @@ export default function DoctorWorkingHoursPage() {
               toDate: new Date(leave.toDate),
             }));
             setOriginalLeaves(clonedLeaves);
-            console.log("Leaves state updated successfully from server");
           } else {
             console.warn("Leaves data is not an array:", leavesData);
           }
@@ -1614,12 +1540,9 @@ export default function DoctorWorkingHoursPage() {
       }
 
       // Save holidays (create/update/delete)
-      console.log("=== SAVING HOLIDAYS ===");
       const holidaysToCreate = holidays.filter((h) => !isUUID(h.id));
       const holidaysToUpdate = holidays.filter((h) => isUUID(h.id));
       
-      console.log("Holidays to create:", holidaysToCreate.length, holidaysToCreate);
-      console.log("Holidays to update:", holidaysToUpdate.length, holidaysToUpdate);
 
       // Helper function to extract error messages from API response
       const extractErrorMessages = (data: any): string => {
@@ -1674,7 +1597,6 @@ export default function DoctorWorkingHoursPage() {
           }
 
           const holidayData = transformFrontendToBackendHoliday(holiday, clinicId);
-          console.log("Creating holiday:", holidayData);
           
           const response = await fetch("/api/clinic/holidays", {
             method: "POST",
@@ -1714,7 +1636,6 @@ export default function DoctorWorkingHoursPage() {
                   h === holiday ? { ...h, id: newHolidayId } : h
                 )
               );
-              console.log(`Successfully created holiday with ID: ${newHolidayId}`);
             } else {
               console.warn("Holiday created but no ID returned in response:", responseData);
             }
@@ -1759,7 +1680,6 @@ export default function DoctorWorkingHoursPage() {
               (originalHoliday.endTime || "") !== (holiday.endTime || "");
             
             if (!hasChanged) {
-              console.log(`Holiday ${holiday.id} has not changed, skipping update`);
               shouldUpdate = false;
             }
           }
@@ -1769,7 +1689,6 @@ export default function DoctorWorkingHoursPage() {
           }
           
           const holidayData = transformFrontendToBackendHoliday(holiday, clinicId);
-          console.log(`Updating holiday ${holiday.id} with data:`, holidayData);
           
           const response = await fetch(`/api/clinic/holidays/${holiday.id}?clinic_id=${clinicId}`, {
             method: "PATCH",
@@ -1799,7 +1718,6 @@ export default function DoctorWorkingHoursPage() {
             toast.error(fullErrorMsg, { duration: 5000 });
             console.error("Holiday update error:", responseData);
           } else {
-            console.log(`Successfully updated holiday ${holiday.id}`);
           }
         } catch (error: any) {
           const errorMsg = `Failed to update holiday "${holiday.title || 'Untitled'}": ${error.message || "Network error"}`;
@@ -1814,20 +1732,15 @@ export default function DoctorWorkingHoursPage() {
       const currentHolidayIds = new Set(holidays.map((h) => h.id));
       const deletedHolidays = originalHolidays.filter((h) => !currentHolidayIds.has(h.id));
 
-      console.log("=== DELETING HOLIDAYS ===");
-      console.log("Holidays to delete:", deletedHolidays.length, deletedHolidays.map(h => ({ id: h.id, title: h.title, startDate: h.startDate, endDate: h.endDate })));
-
       for (const holiday of deletedHolidays) {
         try {
           // Only delete if it's a UUID (exists in backend)
           if (!isUUID(holiday.id)) {
-            console.log(`Skipping deletion of temporary holiday ${holiday.id} (not in backend)`);
             // Remove from state immediately since it was never saved
             setHolidays((prevHolidays) => prevHolidays.filter((h) => h.id !== holiday.id));
             continue;
           }
 
-          console.log(`Deleting holiday ${holiday.id} from backend`);
           const response = await fetch(`/api/clinic/holidays/${holiday.id}?clinic_id=${clinicId}`, {
             method: "DELETE",
             headers: {
@@ -1835,12 +1748,9 @@ export default function DoctorWorkingHoursPage() {
             },
           });
 
-          console.log(`Holiday delete response status for ${holiday.id}:`, response.status);
-
           // Handle successful deletion (200 OK or 204 No Content)
           if (response.ok || response.status === 200 || response.status === 204) {
             // Successfully deleted - remove from state immediately
-            console.log(`Successfully deleted holiday ${holiday.id} (status ${response.status})`);
             setHolidays((prevHolidays) => prevHolidays.filter((h) => h.id !== holiday.id));
             
             // Try to parse response for logging, but don't fail if it's empty
@@ -1848,13 +1758,10 @@ export default function DoctorWorkingHoursPage() {
               const responseText = await response.text();
               if (responseText && responseText.trim()) {
                 const responseData = JSON.parse(responseText);
-                console.log(`Holiday delete response data:`, responseData);
               } else {
-                console.log(`Holiday ${holiday.id} deleted successfully (empty response)`);
               }
             } catch (e) {
               // Empty response is fine for successful deletion
-              console.log(`Holiday ${holiday.id} deleted successfully (could not parse response)`);
             }
           } else {
             // Handle error responses - read response text once
@@ -1893,7 +1800,6 @@ export default function DoctorWorkingHoursPage() {
       // Reload holidays from server to ensure state is in sync
       // Always reload regardless of errors to get the current state from backend
       // This ensures deleted holidays are removed from UI even if there were other errors
-      console.log("=== RELOADING HOLIDAYS AFTER SAVE ===");
       await new Promise(resolve => setTimeout(resolve, 200)); // Small delay to ensure backend is ready
       
       try {
@@ -1909,15 +1815,11 @@ export default function DoctorWorkingHoursPage() {
           }
         );
 
-        console.log("Holidays reload response status:", holidaysResponse.status);
         
         if (holidaysResponse.ok) {
           const holidaysData = await holidaysResponse.json();
-          console.log("Reloaded holidays after save:", holidaysData);
           if (holidaysData.data && Array.isArray(holidaysData.data)) {
             const transformedHolidays = transformBackendToFrontendHolidays(holidaysData.data);
-            console.log("Transformed reloaded holidays:", transformedHolidays);
-            console.log("Setting holidays state with:", transformedHolidays.length, "holidays");
             
             // Update state with fresh data from server - this ensures deleted holidays are removed
             setHolidays(transformedHolidays);
@@ -1926,7 +1828,6 @@ export default function DoctorWorkingHoursPage() {
               startDate: new Date(h.startDate),
               endDate: new Date(h.endDate),
             })));
-            console.log("Holidays state updated successfully from server");
           } else {
             console.warn("Holidays data is not an array:", holidaysData);
           }

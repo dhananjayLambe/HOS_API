@@ -46,14 +46,6 @@ export function UpdateStockModal({ isOpen, onClose, medicine }: UpdateStockModal
     await new Promise((resolve) => setTimeout(resolve, 1000))
 
     // In a real app, you would send this data to your backend
-    console.log({
-      medicineId: medicine.id,
-      operation,
-      quantity,
-      batchNumber: operation === "add" ? batchNumber : undefined,
-      expiryDate: operation === "add" ? expiryDate : undefined,
-      notes,
-    })
 
     setIsSubmitting(false)
     resetForm()

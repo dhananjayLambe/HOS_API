@@ -132,7 +132,6 @@ export default function FeedbackDetailsPage() {
   // Function to handle survey deletion
   const handleDeleteSurvey = () => {
     // In a real app, this would call an API to delete the survey
-    console.log(`Deleting survey ${surveyId}`)
     setDeleteDialogOpen(false)
     router.push("/feedback")
   }
@@ -141,7 +140,6 @@ export default function FeedbackDetailsPage() {
   const handleCopyLink = () => {
     navigator.clipboard.writeText(`https://clinic-dashboard.com/s/${surveyId}`)
     // In a real app, you would show a toast notification here
-    console.log("Survey link copied to clipboard")
   }
 
   return (

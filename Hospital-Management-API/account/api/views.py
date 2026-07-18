@@ -3,7 +3,6 @@
 import random
 import re
 import datetime
-import logging
 import time
 
 # Django imports
@@ -22,6 +21,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 # Local app imports
 from account.models import User
+from shared.logging import LogModule, logger
 
 VALID_ROLES = ["doctor", "helpdesk", "superadmin","labadmin"]
 # ----------------------
@@ -97,8 +97,13 @@ def _store_or_get_otp(role: str, phone: str, otp: str = None):
 
         cache.set(cache_key, otp, timeout=OTP_TTL_SECONDS)
         return otp
-    except Exception as e:
-        logging.error(f"Redis OTP store/get failed for {cache_key}: {e}")
+    except Exception:
+        logger.exception(
+            "Redis OTP store/get failed",
+            module=LogModule.AUTHENTICATION,
+            action="auth.otp.store",
+            metadata={"role": role},
+        )
         raise
 
 def _get_otp(role: str, phone: str):
@@ -106,8 +111,13 @@ def _get_otp(role: str, phone: str):
     cache_key = _otp_cache_key(role, phone)
     try:
         return cache.get(cache_key)
-    except Exception as e:
-        logging.error(f"Redis OTP fetch failed for {cache_key}: {e}")
+    except Exception:
+        logger.exception(
+            "Redis OTP fetch failed",
+            module=LogModule.AUTHENTICATION,
+            action="auth.otp.fetch",
+            metadata={"role": role},
+        )
         return None
 
 def _delete_otp(role: str, phone: str):
@@ -115,8 +125,13 @@ def _delete_otp(role: str, phone: str):
     cache_key = _otp_cache_key(role, phone)
     try:
         cache.delete(cache_key)
-    except Exception as e:
-        logging.error(f"Redis OTP delete failed for {cache_key}: {e}")
+    except Exception:
+        logger.exception(
+            "Redis OTP delete failed",
+            module=LogModule.AUTHENTICATION,
+            action="auth.otp.delete",
+            metadata={"role": role},
+        )
 
 #FOR RESEND OTP Helper function
 def _resend_count_key(role: str, phone: str):
@@ -568,9 +583,12 @@ class StaffSendOTPView(APIView):
     def post(self, request):
         phone = str(request.data.get("phone_number", "")).strip()
         role = str(request.data.get("role", "")).lower().strip()
-        print("I am in send OTP")
-        print("phone:", phone)
-        print("role:", role)
+        logger.info(
+            "Staff OTP send requested",
+            module=LogModule.AUTHENTICATION,
+            action="auth.otp.send",
+            metadata={"role": role},
+        )
 
         # Input validation
         if not phone or not role:
@@ -643,7 +661,12 @@ class StaffSendOTPView(APIView):
         otp = _store_or_get_otp(role, phone, otp)
 
         # TODO: Integrate with external SMS gateway in production
-        print(f"[DEV] OTP for {phone} ({role}): {otp}")
+        logger.info(
+            "Staff OTP generated",
+            module=LogModule.AUTHENTICATION,
+            action="auth.otp.send",
+            metadata={"role": role, "status": "otp_sent"},
+        )
 
         # Response
         response = {
@@ -685,14 +708,23 @@ class VerifyOTPStaffView(APIView):
 
         # OTP check
         cached_otp = _get_otp(role, phone)
-        print("cached OTP", cached_otp)
         if not cached_otp:
+            logger.warning(
+                "Staff OTP expired or missing",
+                module=LogModule.AUTHENTICATION,
+                action="auth.otp.verify",
+                metadata={"role": role, "status": "otp_expired"},
+            )
             return Response({"status": "otp_expired", "message": "OTP expired or not found."},
                             status=status.HTTP_401_UNAUTHORIZED)
 
         if str(cached_otp) != str(otp):
-            if settings.DEBUG:
-                print(f"[DEV] OTP mismatch: entered={otp}, cached={cached_otp}")
+            logger.warning(
+                "Staff OTP mismatch",
+                module=LogModule.AUTHENTICATION,
+                action="auth.otp.verify",
+                metadata={"role": role, "status": "otp_mismatch"},
+            )
             return Response(
                 {"status": "otp_mismatch", "message": "OTP mismatched."},
                 status=status.HTTP_401_UNAUTHORIZED
@@ -717,8 +749,13 @@ class VerifyOTPStaffView(APIView):
 
         # Generate JWT tokens
         tokens = _generate_jwt_tokens(user, role)
-        print(f"JWT tokens:access_token: {tokens['access']}", f"JWT tokens:refresh_token: {tokens['refresh']}")
-        
+        logger.info(
+            "Staff OTP verified; tokens issued",
+            module=LogModule.AUTHENTICATION,
+            action="auth.otp.verify",
+            metadata={"role": role, "user_id": str(user.id), "status": "login_success"},
+        )
+
         # Return tokens in response body for Authorization header usage
         response = Response({
             "status": "login_success",
@@ -804,7 +841,12 @@ class ResendOTPStaffView(APIView):
         # Update resend info
         update_resend_counters(role, phone)
 
-        print(f"[DEV] Resend OTP for {phone} ({role}): {otp}")
+        logger.info(
+            "Staff OTP resent",
+            module=LogModule.AUTHENTICATION,
+            action="auth.otp.resend",
+            metadata={"role": role, "status": "otp_resent"},
+        )
 
         response = {
             "exists": True,

@@ -35,7 +35,6 @@ export default function EditDepartmentPage({ params }: { params: Promise<{ id: s
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     // In a real application, you would save the department data here
-    console.log("Department data saved:", department)
     // Then redirect to the department details page
   }
 

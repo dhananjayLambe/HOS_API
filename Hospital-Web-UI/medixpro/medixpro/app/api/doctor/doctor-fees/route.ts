@@ -8,12 +8,10 @@ const DJANGO_API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000
 // GET - List all fee structures (with optional clinic filter)
 export async function GET(request: NextRequest) {
   try {
-    console.log("[Next.js API] GET /api/doctor/doctor-fees - Request received")
     const token = request.headers.get("Authorization")
     const { searchParams } = new URL(request.url)
     const clinicId = searchParams.get("clinic")
     const doctorId = searchParams.get("doctor")
-    console.log("[Next.js API] Clinic ID:", clinicId, "Doctor ID:", doctorId)
 
     const params = new URLSearchParams()
     if (clinicId) params.append('clinic', clinicId)
@@ -22,8 +20,6 @@ export async function GET(request: NextRequest) {
     const url = queryString 
       ? `${DJANGO_API_URL}/api/doctor/doctor-fees/?${queryString}`
       : `${DJANGO_API_URL}/api/doctor/doctor-fees/`
-
-    console.log("[Next.js API] Calling Django:", url)
 
     const response = await fetch(url, {
       method: "GET",
@@ -115,25 +111,6 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Log the Django response structure for debugging
-    console.log("[Next.js API] Django GET response data (FULL):", JSON.stringify(data, null, 2))
-    console.log("[Next.js API] Django response data type:", typeof data)
-    console.log("[Next.js API] Django response keys:", data && typeof data === 'object' ? Object.keys(data) : 'N/A')
-    console.log("[Next.js API] Django response has 'data' property:", !!data?.data)
-    console.log("[Next.js API] Django response.data is array:", Array.isArray(data?.data))
-    console.log("[Next.js API] Django response is array:", Array.isArray(data))
-    if (data?.data) {
-      console.log("[Next.js API] Django response.data length:", Array.isArray(data.data) ? data.data.length : 'not array')
-      if (Array.isArray(data.data) && data.data.length > 0) {
-        console.log("[Next.js API] Django response.data[0]:", JSON.stringify(data.data[0], null, 2))
-      }
-    } else if (Array.isArray(data)) {
-      console.log("[Next.js API] Django response is direct array, length:", data.length)
-      if (data.length > 0) {
-        console.log("[Next.js API] Django response[0]:", JSON.stringify(data[0], null, 2))
-      }
-    }
-
     // CRITICAL: Django ViewSet.list() returns { status: "success", message: "...", data: [...] }
     // But paginated responses have nested structure: { count, next, previous, results: { status, message, data: [...] } }
     // Normalize to always have { status, message, data }
@@ -147,7 +124,6 @@ export async function GET(request: NextRequest) {
         // Paginated response with 'results' property
         if (Array.isArray(data.results)) {
           // results is an array - convert to 'data'
-          console.log("[Next.js API] Paginated response detected (results is array), converting 'results' to 'data'")
           normalizedData = {
             status: data.status || "success",
             message: data.message || "Fee structures retrieved successfully",
@@ -158,7 +134,6 @@ export async function GET(request: NextRequest) {
           }
         } else if (data.results && typeof data.results === 'object' && data.results.data && Array.isArray(data.results.data)) {
           // results is an object with nested { status, message, data: [...] } - extract the data array
-          console.log("[Next.js API] Paginated response detected (results is object with nested data), extracting data.results.data")
           normalizedData = {
             status: data.results.status || data.status || "success",
             message: data.results.message || data.message || "Fee structures retrieved successfully",
@@ -172,7 +147,6 @@ export async function GET(request: NextRequest) {
         }
       } else if (data.id) {
         // Single record - wrap in data array
-        console.log("[Next.js API] Single record detected, wrapping in data array")
         normalizedData = {
           status: "success",
           message: "Fee structure retrieved successfully",
@@ -180,13 +154,10 @@ export async function GET(request: NextRequest) {
         }
       } else {
         // Unknown structure - try to extract array from any property
-        console.log("[Next.js API] Unknown response structure, attempting to normalize...")
         const dataKeys = Object.keys(data)
-        console.log("[Next.js API] Response keys:", dataKeys)
         // Check if any key contains an array
         for (const key of dataKeys) {
           if (Array.isArray(data[key])) {
-            console.log(`[Next.js API] Found array in key '${key}', using as data`)
             normalizedData = {
               status: data.status || "success",
               message: data.message || "Fee structures retrieved successfully",
@@ -198,7 +169,6 @@ export async function GET(request: NextRequest) {
       }
     } else if (Array.isArray(data)) {
       // Django returned array directly - wrap it
-      console.log("[Next.js API] Response is direct array, wrapping in Django format")
       normalizedData = {
         status: "success",
         message: "Fee structures retrieved successfully",
@@ -227,10 +197,8 @@ export async function GET(request: NextRequest) {
 // POST - Create a new fee structure
 export async function POST(request: NextRequest) {
   try {
-    console.log("[Next.js API] POST /api/doctor/doctor-fees - Request received")
     const token = request.headers.get("Authorization")
     const body = await request.json()
-    console.log("[Next.js API] Request body:", JSON.stringify(body, null, 2))
 
     const response = await fetch(`${DJANGO_API_URL}/api/doctor/doctor-fees/`, {
       method: "POST",
@@ -242,14 +210,9 @@ export async function POST(request: NextRequest) {
       credentials: "include",
     })
 
-    console.log("[Next.js API] Django response status:", response.status)
-    console.log("[Next.js API] Django response headers:", Object.fromEntries(response.headers.entries()))
-
     let data
     const contentType = response.headers.get("content-type")
     const responseText = await response.text()
-    console.log("[Next.js API] Response text:", responseText)
-    console.log("[Next.js API] Content-Type:", contentType)
 
     try {
       if (responseText) {
@@ -268,8 +231,6 @@ export async function POST(request: NextRequest) {
         { status: response.status }
       )
     }
-
-    console.log("[Next.js API] Parsed data:", data)
 
     if (!response.ok) {
       console.error("[Next.js API] Django error response:", data)

@@ -114,7 +114,6 @@ export default function IssuePage() {
   });
 
   function onSubmit(values: z.infer<typeof formSchema>) {
-    console.log(values);
 
     toast({
       title: "Blood issued successfully",

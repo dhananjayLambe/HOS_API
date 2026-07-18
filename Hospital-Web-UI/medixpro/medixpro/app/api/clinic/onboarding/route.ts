@@ -3,9 +3,7 @@ import { NextResponse } from "next/server"
 
 export async function POST(req: Request) {
   try {
-    console.log("clinic onboarding request received")
     const payload = await req.json()
-    console.log("Incoming Payload:", payload)
 
     // Transform frontend payload -> backend API payload
     const backendPayload = {
@@ -45,8 +43,6 @@ export async function POST(req: Request) {
     // Backend API URL
     const base = process.env.DJANGO_API_URL || "http://localhost:8000/api/"
     const endpoint = `${base.replace(/\/$/, "")}/clinic/clinics/onboarding/`
-    console.log("Backend endpoint:", endpoint)
-    console.log("Backend Payload:", backendPayload)
 
     // Send request to Django
     const upstream = await fetch(endpoint, {
@@ -56,7 +52,6 @@ export async function POST(req: Request) {
     })
 
     const text = await upstream.text()
-    console.log("Upstream response text:", text)
     let data: any
     try {
       data = JSON.parse(text)

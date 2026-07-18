@@ -2,6 +2,7 @@ import os
 from django.db.models.signals import pre_save
 from django.dispatch import receiver
 from doctor.models import doctor
+from shared.logging import LogModule, logger
 
 @receiver(pre_save, sender=doctor)
 def delete_old_profile_photo(sender, instance, **kwargs):
@@ -21,4 +22,9 @@ def delete_old_profile_photo(sender, instance, **kwargs):
             try:
                 os.remove(old_photo.path)
             except Exception as e:
-                print(f"Could not delete old photo: {e}")
+                logger.warning(
+                    "Could not delete old doctor profile photo",
+                    module=LogModule.STORAGE,
+                    action="doctor.profile.photo.delete",
+                    metadata={"doctor_id": str(instance.pk), "error": str(e)},
+                )

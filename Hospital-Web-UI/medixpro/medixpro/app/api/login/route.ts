@@ -6,8 +6,6 @@ const BASE_URL = process.env.DJANGO_API_URL || "http://localhost:8000/api/";
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    console.log("Request Body:", body);
-    console.log("login API called");
 
     // Call Django backend API
     const res = await fetch(`${BASE_URL}auth/send-otp/`, {

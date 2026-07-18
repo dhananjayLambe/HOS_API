@@ -8,12 +8,10 @@ const DJANGO_API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000
 // GET - List all follow-up policies (with optional clinic filter)
 export async function GET(request: NextRequest) {
   try {
-    console.log("[Next.js API] GET /api/doctor/follow-up-policies - Request received")
     const token = request.headers.get("Authorization")
     const { searchParams } = new URL(request.url)
     const clinicId = searchParams.get("clinic")
     const doctorId = searchParams.get("doctor")
-    console.log("[Next.js API] Clinic ID:", clinicId, "Doctor ID:", doctorId)
 
     const params = new URLSearchParams()
     if (clinicId) params.append('clinic', clinicId)
@@ -22,8 +20,6 @@ export async function GET(request: NextRequest) {
     const url = queryString 
       ? `${DJANGO_API_URL}/api/doctor/follow-up-policies/?${queryString}`
       : `${DJANGO_API_URL}/api/doctor/follow-up-policies/`
-
-    console.log("[Next.js API] Calling Django:", url)
 
     const response = await fetch(url, {
       method: "GET",
@@ -187,10 +183,8 @@ export async function GET(request: NextRequest) {
 // POST - Create a new follow-up policy
 export async function POST(request: NextRequest) {
   try {
-    console.log("[Next.js API] POST /api/doctor/follow-up-policies - Request received")
     const token = request.headers.get("Authorization")
     const body = await request.json()
-    console.log("[Next.js API] Request body:", JSON.stringify(body, null, 2))
 
     const response = await fetch(`${DJANGO_API_URL}/api/doctor/follow-up-policies/`, {
       method: "POST",
@@ -202,14 +196,9 @@ export async function POST(request: NextRequest) {
       credentials: "include",
     })
 
-    console.log("[Next.js API] Django response status:", response.status)
-    console.log("[Next.js API] Django response headers:", Object.fromEntries(response.headers.entries()))
-
     let data
     const contentType = response.headers.get("content-type")
     const responseText = await response.text()
-    console.log("[Next.js API] Response text:", responseText)
-    console.log("[Next.js API] Content-Type:", contentType)
 
     try {
       if (responseText) {
@@ -228,8 +217,6 @@ export async function POST(request: NextRequest) {
         { status: response.status }
       )
     }
-
-    console.log("[Next.js API] Parsed data:", data)
 
     if (!response.ok) {
       console.error("[Next.js API] Django error response:", data)

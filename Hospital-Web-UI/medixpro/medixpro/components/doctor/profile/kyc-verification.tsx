@@ -103,7 +103,6 @@ export function KYCVerificationSection() {
       try {
         const govIdResponse = await apiClient.getGovernmentID()
         govIdData = govIdResponse?.data || govIdResponse
-        console.log("Government ID data:", govIdData) // Debug log
       } catch (error: any) {
         // 404 is okay - government ID doesn't exist yet
         if (error?.status !== 404) {
@@ -138,7 +137,6 @@ export function KYCVerificationSection() {
       try {
         const kycResponse = await apiClient.getKYCStatus()
         kycStatusData = kycResponse?.data || kycResponse
-        console.log("KYC Status data:", kycStatusData) // Debug log
         
         // Get detailed status directly from response
         detailedStatus = kycStatusData?.detailed_status || null
@@ -153,7 +151,6 @@ export function KYCVerificationSection() {
 
       // Get digital signature from KYC status - now included in response
       const digitalSigFromKYC = kycStatusData?.digital_signature
-      console.log("Digital signature:", digitalSigFromKYC) // Debug log
 
       // Helper function to ensure status is valid
       const getValidStatus = (status: string | undefined): "pending" | "approved" | "rejected" => {
@@ -194,7 +191,6 @@ export function KYCVerificationSection() {
         if (doc.type === "PAN Card") {
           const panFile = govIdData?.pan_card_file || panFileFromProfile
           const panStatus = detailedStatus?.pan
-          console.log("PAN Status from API:", panStatus) // Debug log
           return {
             ...doc,
             number: govIdData?.pan_card_number || "",
@@ -208,7 +204,6 @@ export function KYCVerificationSection() {
         if (doc.type === "Aadhaar Card") {
           const aadharFile = govIdData?.aadhar_card_file || aadharFileFromProfile
           const aadharStatus = detailedStatus?.aadhar
-          console.log("Aadhaar Status from API:", aadharStatus) // Debug log
           return {
             ...doc,
             number: govIdData?.aadhar_card_number || "",
@@ -222,7 +217,6 @@ export function KYCVerificationSection() {
         if (doc.type === "Medical Registration") {
           const regCert = registrationData?.registration_certificate || regCertFromProfile
           const regStatus = detailedStatus?.registration
-          console.log("Registration Status from API:", regStatus) // Debug log
           return {
             ...doc,
             number: registrationData?.medical_registration_number || "",
@@ -272,15 +266,12 @@ export function KYCVerificationSection() {
   }
 
   const handleSave = async () => {
-    console.log("[KYC Component] handleSave called")
     
     // Use functional state update to get the latest documents state
     setDocuments((currentDocs) => {
-      console.log("[KYC Component] Current documents state in setState:", currentDocs)
       return currentDocs
     })
     
-    console.log("[KYC Component] Current documents state:", documents)
     
     // Validate documents - get fresh references
     const panDoc = documents.find((d) => d.type === "PAN Card")
@@ -289,12 +280,6 @@ export function KYCVerificationSection() {
     const digitalSigDoc = documents.find((d) => d.type === "Digital Signature")
     
     // Also log all documents to see the full state
-    console.log("[KYC Component] All documents:", documents.map(d => ({
-      type: d.type,
-      hasFile: !!d.file,
-      fileName: d.file?.name,
-      uploadedFileName: d.uploadedFileName
-    })))
 
     if (panDoc && panDoc.number && !validatePAN(panDoc.number)) {
       toast.error("Invalid PAN number format")
@@ -355,7 +340,6 @@ export function KYCVerificationSection() {
         const uploadResponse = await apiClient.uploadGovernmentIDFiles(formData)
         // Update file names from response - upload response should have file paths
         const uploadData = uploadResponse?.data || uploadResponse
-        console.log("Upload response data:", uploadData) // Debug log
         
         if (uploadData) {
           setDocuments((prevDocs) =>
@@ -447,7 +431,6 @@ export function KYCVerificationSection() {
           const uploadResponse = await apiClient.uploadRegistrationCertificate(formData)
           // Update file name from response
           const uploadData = uploadResponse?.data || uploadResponse
-          console.log("Registration upload response:", uploadData) // Debug log
           
           if (uploadData && uploadData.registration_certificate) {
             setDocuments((prevDocs) =>
@@ -488,22 +471,13 @@ export function KYCVerificationSection() {
       const digitalSigFile = digitalSigDoc?.file || digitalSigFileFromRef
       
       if (digitalSigFile) {
-        console.log("[KYC Component] Starting digital signature upload")
-        console.log("[KYC Component] File details:", {
-          name: digitalSigFile.name,
-          size: digitalSigFile.size,
-          type: digitalSigFile.type
-        })
         
         const formData = new FormData()
         formData.append("digital_signature", digitalSigFile)
         
         try {
-          console.log("[KYC Component] Calling apiClient.uploadDigitalSignature...")
           const uploadResponse = await apiClient.uploadDigitalSignature(formData)
-          console.log("[KYC Component] Upload response received:", uploadResponse)
           const uploadData = uploadResponse?.data || uploadResponse
-          console.log("[KYC Component] Upload data:", uploadData) // Debug log
           
           if (uploadData && uploadData.digital_signature) {
             setDocuments((prevDocs) =>
@@ -537,7 +511,6 @@ export function KYCVerificationSection() {
           // Clear file from ref after successful upload
           if (digitalSigIndex >= 0) {
             filesRef.current.delete(digitalSigIndex)
-            console.log("[KYC Component] File cleared from ref after upload")
           }
         } catch (error: any) {
           console.error("Could not upload digital signature:", error)
@@ -627,22 +600,17 @@ export function KYCVerificationSection() {
   }
 
   const updateDocument = (index: number, field: keyof KYCDocument, value: any) => {
-    console.log("[KYC Component] updateDocument called:", { index, field, value: value instanceof File ? { name: value.name, size: value.size } : value })
     const updated = [...documents]
     updated[index] = { ...updated[index], [field]: value }
-    console.log("[KYC Component] Updated document at index", index, ":", updated[index])
     setDocuments(updated)
   }
 
   const handleFileChange = (index: number, file: File | null) => {
-    console.log("[KYC Component] handleFileChange called", { index, file: file ? { name: file.name, size: file.size, type: file.type } : null })
     if (file) {
       const docType = documents[index]?.type
-      console.log("[KYC Component] Updating document:", docType, "with file:", file.name)
       
       // Store file in ref for reliable access
       filesRef.current.set(index, file)
-      console.log("[KYC Component] File stored in ref at index:", index)
       
       // Use functional update to ensure we have the latest state
       setDocuments((prevDocs) => {
@@ -652,16 +620,9 @@ export function KYCVerificationSection() {
           file: file,
           uploadedFileName: file.name
         }
-        console.log("[KYC Component] Document updated in state:", {
-          type: updated[index].type,
-          hasFile: !!updated[index].file,
-          fileName: updated[index].file?.name,
-          uploadedFileName: updated[index].uploadedFileName
-        })
         return updated
       })
     } else {
-      console.log("[KYC Component] No file provided in handleFileChange")
       filesRef.current.delete(index)
     }
   }

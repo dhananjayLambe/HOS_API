@@ -87,7 +87,6 @@ export function AddressDetailsSection() {
         if (status === 404) {
           // Address doesn't exist - that's okay, use defaults
           // This is expected for new users
-          console.log("Address not found (404), using default values")
         } else if (status === 503 || errorMessage?.includes('Connection refused') || errorMessage?.includes('ECONNREFUSED')) {
           // Backend not running
           console.warn("Backend server not available. Using default address values.")

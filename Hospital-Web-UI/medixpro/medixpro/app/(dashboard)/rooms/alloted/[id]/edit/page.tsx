@@ -108,7 +108,6 @@ export default function EditRoomAllotmentPage({ params }: { params: Promise<{ id
 
   function onSubmit(values: z.infer<typeof formSchema>) {
     // In a real application, this would update the allotment in the database
-    console.log(values)
     // Redirect to the allotment details page
     window.location.href = `/rooms/alloted/${id}`
   }

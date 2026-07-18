@@ -115,11 +115,8 @@ export function ProfileSummarySection() {
       // If registration number is empty, we still need to handle it
       // But for now, we'll skip registration update if number is empty
 
-      console.log("Sending profile summary update:", JSON.stringify(updatePayload, null, 2))
-
       const response = await doctorAPI.updatePersonalInfo(updatePayload)
       
-      console.log("Update response:", JSON.stringify(response, null, 2))
       
       // Check if update was successful - handle various response structures
       const isSuccess = response?.doctor_profile || 

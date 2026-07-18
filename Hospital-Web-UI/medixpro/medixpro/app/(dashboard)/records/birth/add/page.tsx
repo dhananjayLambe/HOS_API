@@ -75,7 +75,6 @@ export default function AddBirthRecordPage() {
 
     // Simulate API call
     setTimeout(() => {
-      console.log(data)
       toast({
         title: "Birth record created",
         description: `Record for ${data.childFirstName} ${data.childLastName} has been created successfully.`,

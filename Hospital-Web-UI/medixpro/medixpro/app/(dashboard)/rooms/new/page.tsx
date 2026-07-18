@@ -57,7 +57,6 @@ export default function NewAllotmentPage() {
   })
 
   function onSubmit(values: z.infer<typeof formSchema>) {
-    console.log(values)
     // In a real application, you would submit this data to your backend
     alert("Room allotment created successfully!")
   }

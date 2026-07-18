@@ -28,6 +28,7 @@ from clinic.models import ClinicAdminProfile
 from clinic.api.serializers import PendingClinicAdminSerializer
 from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
+from shared.logging import LogModule, logger
 from rest_framework_simplejwt.views import TokenRefreshView
 from rest_framework import generics
 
@@ -459,14 +460,22 @@ class AdminLogoutJwtView(APIView):
     authentication_classes=[]
     #print("AdminLogoutJwtView called")
     def post(self, request):
-        print("Raw request body:", request.body)  # Debugging
-        print("Parsed request data:", request.data)  # Debugging
+        logger.info(
+            "Admin JWT logout requested",
+            module=LogModule.AUTHENTICATION,
+            action="admin.logout",
+        )
         try:
             refresh_token = request.data["refresh_token"]
             token = RefreshToken(refresh_token)
             token.blacklist()  # Blacklist token so it can't be reused
             return Response({"message": "Logout successful"}, status=status.HTTP_200_OK)
-        except Exception as e:
+        except Exception:
+            logger.warning(
+                "Admin JWT logout failed",
+                module=LogModule.AUTHENTICATION,
+                action="admin.logout",
+            )
             return Response({"error": "Invalid token"}, status=status.HTTP_400_BAD_REQUEST)
 
 

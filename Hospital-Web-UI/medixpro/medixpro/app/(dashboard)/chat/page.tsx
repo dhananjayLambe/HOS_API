@@ -162,7 +162,6 @@ export default function ChatPage() {
   const handleSendMessage = () => {
     if (messageInput.trim()) {
       // In a real app, you would send this message to your backend
-      console.log("Sending message:", messageInput)
       setMessageInput("")
     }
   }

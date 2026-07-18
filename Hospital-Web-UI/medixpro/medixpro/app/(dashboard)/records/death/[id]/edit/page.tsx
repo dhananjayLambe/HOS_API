@@ -129,7 +129,6 @@ export default function EditDeathRecordPage({ params }: { params: Promise<{ id: 
   })
 
   function onSubmit(data: DeathRecordFormValues) {
-    console.log(data)
     // In a real application, you would save the data to your backend here
     router.push(`/records/death/${id}`)
   }

@@ -182,7 +182,6 @@ export function BankDetailsSection() {
       if (hasBankDetails && bankDetailsId) {
         // We have bank details and an ID - try to update
         try {
-          console.log(`Updating bank details with ID: ${bankDetailsId}`)
           response = await apiClient.updateBankDetails(payload, bankDetailsId)
           // Update successful
         } catch (updateError: any) {
@@ -200,7 +199,6 @@ export function BankDetailsSection() {
         }
       } else {
         // No existing bank details - create new
-        console.log("Creating new bank details")
         try {
           response = await apiClient.createBankDetails(payload)
           // Store the ID from the response
@@ -212,7 +210,6 @@ export function BankDetailsSection() {
           // If create fails with 409 (conflict), there might be an active record
           // Try to fetch and update instead
           if (createError?.response?.status === 409) {
-            console.log("Bank details already exist, fetching to update")
             try {
               const currentBankDetails = await apiClient.getBankDetails()
               const existingId = currentBankDetails?.data?.id

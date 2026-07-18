@@ -291,9 +291,6 @@ export function PreConsultationView() {
         if (cancelled || !encounter) return;
         const st = (encounter.status || "").toUpperCase().replace(/\s/g, "_");
         setEncounterStatus(st);
-        if (process.env.NODE_ENV === "development") {
-          console.log("Encounter status:", encounter.status, "→", st);
-        }
         if (encounter.visit_pnr) {
           setVisitPnr(encounter.visit_pnr);
         }

@@ -190,7 +190,6 @@ export async function PATCH(request: NextRequest) {
     }
 
     const getData = await getResponse.json()
-    console.log("[PATCH] Bank details GET response:", JSON.stringify(getData, null, 2))
     
     // Extract ID from response - backend returns { status: "success", data: { id: "...", ... } }
     // The ID should be in getData.data.id
@@ -229,9 +228,7 @@ export async function PATCH(request: NextRequest) {
       )
     }
 
-    console.log(`[PATCH] Updating bank details with ID: ${bankDetailsId} (type: ${typeof bankDetailsId})`)
     const updateUrl = `${DJANGO_API_URL}/api/doctor/bank-details/${bankDetailsId}/`
-    console.log(`[PATCH] Update URL: ${updateUrl}`)
     
     const response = await fetch(updateUrl, {
       method: "PATCH",
@@ -270,7 +267,6 @@ export async function PATCH(request: NextRequest) {
       )
     }
     
-    console.log(`[PATCH] Update successful:`, JSON.stringify(data, null, 2))
 
     // Backend returns: { status: "success", message: "...", data: {...} }
     const nextRes = NextResponse.json(data, { status: response.status })
@@ -333,7 +329,6 @@ export async function DELETE(request: NextRequest) {
     }
 
     const getData = await getResponse.json()
-    console.log("[DELETE] Bank details GET response:", JSON.stringify(getData, null, 2))
     
     // Extract ID from response - backend returns { status: "success", data: { id: "...", ... } }
     const responseData = getData?.data || getData
@@ -357,9 +352,7 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    console.log(`[DELETE] Deleting bank details with ID: ${bankDetailsId}`)
     const deleteUrl = `${DJANGO_API_URL}/api/doctor/bank-details/${bankDetailsId}/`
-    console.log(`[DELETE] Delete URL: ${deleteUrl}`)
 
     const response = await fetch(`${DJANGO_API_URL}/api/doctor/bank-details/${bankDetailsId}/`, {
       method: "DELETE",

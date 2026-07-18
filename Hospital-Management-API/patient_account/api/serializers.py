@@ -3,8 +3,10 @@ from account.models import User
 from datetime import datetime
 import logging
 from patient_account.models import PatientAccount, PatientProfile,PatientProfileDetails
+from shared.logging import LogModule, logger as dpc_logger
 
 logger = logging.getLogger(__name__)
+
 
 class PatientLoginSerializer(serializers.Serializer):
     mobile = serializers.CharField(max_length=15)
@@ -42,8 +44,12 @@ class PatientProfileSerializer(serializers.ModelSerializer):
         Creates a new patient profile under the authenticated user's account.
         """
         user = self.context["request"].user
-        print("user", user)
-        print("username", user.username)
+        dpc_logger.debug(
+            "Patient profile create",
+            module=LogModule.API,
+            action="patient.profile.create",
+            metadata={"user_id": str(user.id)},
+        )
         account, _ = PatientAccount.objects.get_or_create(user=user)
         validated_data["account"] = account  # Assign the patient account
         return super().create(validated_data)

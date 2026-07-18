@@ -242,21 +242,17 @@ export function DoctorOnboarding() {
 
     if (step === 1) {
       //FOR DEV PURPOSES, SKIPPING VALIDATION
-      console.log("Validating Step 1")
     }
 
     if (step === 2) {
       //FOR DEV PURPOSES, SKIPPING VALIDATION
-      console.log("Validating Step 2")
     }
 
     if (step === 3) {
-      console.log("Validating Step 3")
       //FOR DEV PURPOSES, SKIPPING VALIDATION
     }
 
     if (step === 4) {
-      console.log("Validating Step 4")
       //FOR DEV PURPOSES, SKIPPING VALIDATION
     }
 
@@ -286,7 +282,7 @@ export function DoctorOnboarding() {
   // const handleSubmit = async () => {
 
   //   //if (!validateStep(4)) return
-  //   console.log("I am in handleSubmit method")
+  //   
   //   setIsSubmitting(true)
   //   try {
   //     const response = await fetch("/api/doctor/onboarding/phase1", {
@@ -296,11 +292,11 @@ export function DoctorOnboarding() {
   //       },
   //       body: JSON.stringify(formData),
   //     })
-  //     console.log("I am in handleSubmit method")
+  //     
   //     const data = await response.json();
-  //     console.log("Response Data:", data);
+  //     
   //       if (data.status === "error") {
-  //         console.log("Validation Errors:", data.errors);
+  //         
   //         // ✅ Show them in your UI
   //         // e.g. set state for field errors
   //         setErrors(data.errors);
@@ -308,7 +304,7 @@ export function DoctorOnboarding() {
   //       }
   //     if (response.ok) {
   //       const result = await response.json()
-  //       console.log("Registration successful:", result)
+  //       
   //       setRegistrationData(result)
   //       setIsSuccess(true)
   //     } else {
@@ -370,16 +366,13 @@ export function DoctorOnboarding() {
     };
 
     helper(errors);
-    console.log("Flattened errors:", flatErrors);
     return flatErrors;
   };
   const handleSubmit = async () => {
-    console.log("Starting form submission...");
     setErrors({});
     setIsSubmitting(true);
     
     try {
-      console.log("Form data being submitted:", formData);
       
       const response = await fetch("/api/doctor/onboarding/phase1", {
         method: "POST",
@@ -387,22 +380,16 @@ export function DoctorOnboarding() {
         body: JSON.stringify(formData),
       });
 
-      console.log("Response status:", response.status);
       const result = await response.json();
-      console.log("Full API response:", result);
 
       if (response.ok && result.status === "success") {
-        console.log("✅ Registration successful!");
         setRegistrationData(result.data);
         setIsSuccess(true);
       } else {
-        console.log("❌ Registration failed:", result);
         
         // Handle validation errors
         if (result.errors) {
-          console.log("Validation errors:", result.errors);
           const flatErrors = flattenErrors(result.errors);
-          console.log("Flattened errors:", flatErrors);
           setErrors(flatErrors);
         } else if (result.message) {
           setErrors({ submit: result.message });
@@ -419,7 +406,6 @@ export function DoctorOnboarding() {
   };
 
   const nextStep = () => {
-    console.log("Current Step:", currentStep)
     if (validateStep(currentStep) && currentStep < steps.length) {
       setCurrentStep(currentStep + 1)
     }
@@ -1223,7 +1209,6 @@ export function DoctorOnboarding() {
                   <Button
                     type="button"
                     onClick={async () => {
-                      console.log("🧪 Simple test button clicked!");
                       try {
                         const testData = {
                           user: { username: "1234567890", first_name: "Test", last_name: "Doctor", email: "test@test.com" },
@@ -1237,7 +1222,6 @@ export function DoctorOnboarding() {
                           data_storage_consent: true,
                         };
                         
-                        console.log("🧪 Sending test data:", testData);
                         const response = await fetch("/api/doctor/onboarding/phase1", {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
@@ -1245,14 +1229,11 @@ export function DoctorOnboarding() {
                         });
                         
                         const result = await response.json();
-                        console.log("🧪 Test response:", result);
                         
                         if (response.ok && result.status === "success") {
-                          console.log("🧪 Test SUCCESS!");
                           setRegistrationData(result.data);
                           setIsSuccess(true);
                         } else {
-                          console.log("🧪 Test failed:", result);
                         }
                       } catch (error) {
                         console.error("🧪 Test error:", error);
@@ -1267,13 +1248,9 @@ export function DoctorOnboarding() {
                   <Button
                     type="button"
                     onClick={() => {
-                      console.log("🔥 Submit button clicked!");
-                      console.log("isSubmitting state:", isSubmitting);
-                      console.log("Button disabled state:", isSubmitting);
                       if (!isSubmitting) {
                         handleSubmit();
                       } else {
-                        console.log("Button is disabled, not calling handleSubmit");
                       }
                     }}
                     disabled={isSubmitting}

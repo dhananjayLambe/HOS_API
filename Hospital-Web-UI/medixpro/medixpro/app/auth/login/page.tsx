@@ -230,7 +230,6 @@ export default function OTPLoginPage() {
           }
         }
       } catch (err) {
-        console.log("No active session, showing OTP login");
         // Clear tokens on error
         localStorage.removeItem("access_token");
         localStorage.removeItem("refresh_token");

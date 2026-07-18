@@ -1,4 +1,6 @@
 from rest_framework.permissions import BasePermission
+from shared.logging import LogModule, logger
+
 
 class IsDoctor(BasePermission):
     """Custom permission for Doctors."""
@@ -109,9 +111,15 @@ class IsDoctorOrOwner(BasePermission):
 class IsClinicAdmin(BasePermission):
     def has_permission(self, request, view):
         user = request.user
-        print("User:", user)
-        print("Is Authenticated:", user.is_authenticated)
-        print("User Groups:", user.groups.values_list("name", flat=True))
+        logger.debug(
+            "Clinic admin permission check",
+            module=LogModule.AUTHORIZATION,
+            action="authz.clinic_admin.check",
+            metadata={
+                "user_id": str(getattr(user, "id", None)),
+                "is_authenticated": bool(getattr(user, "is_authenticated", False)),
+            },
+        )
 
         return user and user.is_authenticated and \
                user.groups.filter(name='clinic_admin').exists()

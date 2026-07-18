@@ -23,9 +23,6 @@ export async function PATCH(
       )
     }
 
-    console.log(`[PATCH /api/doctor/leaves/${id}] Updating leave with data:`, body)
-    console.log(`[PATCH /api/doctor/leaves/${id}] Backend URL: ${DJANGO_API_URL}/api/doctor/doctor-leave-update/${id}/`)
-
     const response = await fetch(
       `${DJANGO_API_URL}/api/doctor/doctor-leave-update/${id}/`,
       {
@@ -39,13 +36,9 @@ export async function PATCH(
       }
     )
 
-    console.log(`[PATCH /api/doctor/leaves/${id}] Response status:`, response.status)
-    console.log(`[PATCH /api/doctor/leaves/${id}] Response ok:`, response.ok)
-
     let data
     try {
       const responseText = await response.text()
-      console.log(`[PATCH /api/doctor/leaves/${id}] Response text:`, responseText)
       data = responseText ? JSON.parse(responseText) : {}
     } catch (e) {
       console.error(`[PATCH /api/doctor/leaves/${id}] Failed to parse response:`, e)
@@ -54,8 +47,6 @@ export async function PATCH(
         { status: response.status }
       )
     }
-
-    console.log(`[PATCH /api/doctor/leaves/${id}] Parsed data:`, data)
 
     if (!response.ok) {
       console.error(`[PATCH /api/doctor/leaves/${id}] Error response:`, data)

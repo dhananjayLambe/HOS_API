@@ -25,6 +25,7 @@ from django.utils import timezone
 # Local App Imports
 from account.permissions import IsDiagnosticOrderOrchestrationActor, IsDoctor
 from consultations_core.audit import ConsultationAuditService, emit_after_commit
+from shared.logging import LogModule, logger as dpc_logger
 from clinical_documentation.audit import schedule_allergy_audits, schedule_vitals_audit
 from consultations_core.domain.vitals_meaningful import vitals_data_is_meaningful
 from consultations_core.services.consultation_engine import ConsultationEngine
@@ -614,7 +615,11 @@ class StartNewVisitAPIView(APIView):
 
     @transaction.atomic
     def post(self, request):
-        print("Start new visit called at:", timezone.now())
+        dpc_logger.info(
+            "Start new visit requested",
+            module=LogModule.CONSULTATION,
+            action="consultation.visit.start",
+        )
         intent = str(request.data.get("intent") or "").strip().lower()
         direct_consultation = intent == "direct_consultation"
         redirect_base = (

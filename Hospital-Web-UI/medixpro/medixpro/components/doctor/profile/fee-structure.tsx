@@ -128,7 +128,6 @@ export function FeeStructureSection() {
   const fetchDoctorId = async () => {
     try {
       const profileResponse = await apiClient.getProfile()
-      console.log("Profile response for doctor ID:", profileResponse)
       const profile = profileResponse?.doctor_profile || profileResponse
       
       // Try multiple possible locations for doctor ID
@@ -142,7 +141,6 @@ export function FeeStructureSection() {
         profileResponse?.id ||
         profileResponse?.doctor_id
       
-      console.log("Extracted doctor ID:", doctorIdFromProfile)
       
       if (doctorIdFromProfile) {
         setDoctorId(doctorIdFromProfile)
@@ -152,7 +150,6 @@ export function FeeStructureSection() {
         // Try to get from localStorage as fallback
         const storedDoctorId = localStorage.getItem("doctor_id")
         if (storedDoctorId) {
-          console.log("Using doctor ID from localStorage:", storedDoctorId)
           setDoctorId(storedDoctorId)
         } else {
           console.warn("Could not find doctor ID in profile response or localStorage")
@@ -163,7 +160,6 @@ export function FeeStructureSection() {
       // Try to get from localStorage as fallback
       const storedDoctorId = localStorage.getItem("doctor_id")
       if (storedDoctorId) {
-        console.log("Using doctor ID from localStorage (fallback):", storedDoctorId)
         setDoctorId(storedDoctorId)
       }
     }
@@ -174,8 +170,6 @@ export function FeeStructureSection() {
     if (selectedClinicId) {
       fetchFeeStructureData()
     } else {
-      console.log("🔍 No clinic selected - resetting to defaults")
-      console.log("reset to defaults 1");
       // Reset to defaults when no clinic available
       resetToDefaults()
     }
@@ -225,7 +219,6 @@ export function FeeStructureSection() {
 
     setIsFetching(true)
     try {
-      console.log("🔄 fetchFeeStructureData: Starting fetch with clinicId:", selectedClinicId, "doctorId:", doctorId)
       
       // Fetch all three models for the selected clinic and doctor
       // Use Promise.allSettled to handle individual failures gracefully
@@ -236,7 +229,6 @@ export function FeeStructureSection() {
         apiClient.getCancellationPolicies(selectedClinicId, doctorId ?? undefined),
       ])
       
-      console.log("🔄 fetchFeeStructureData: API calls completed")
 
       // Extract data from responses, handling both fulfilled and rejected promises
       const feeStructuresRes = feeStructuresResult.status === 'fulfilled' ? feeStructuresResult.value : null
@@ -244,21 +236,6 @@ export function FeeStructureSection() {
       const cancellationPoliciesRes = cancellationPoliciesResult.status === 'fulfilled' ? cancellationPoliciesResult.value : null
       
       // Log raw responses for debugging - FULL response to see structure
-      console.log("🔄 fetchFeeStructureData - Raw responses (FULL):", {
-        feeStructuresRes: feeStructuresRes,
-        followUpPoliciesRes: followUpPoliciesRes,
-        cancellationPoliciesRes: cancellationPoliciesRes,
-      })
-      console.log("🔄 Response structure analysis:", {
-        feeStructuresResType: typeof feeStructuresRes,
-        feeStructuresResIsArray: Array.isArray(feeStructuresRes),
-        feeStructuresResHasData: !!feeStructuresRes?.data,
-        feeStructuresResDataIsArray: Array.isArray(feeStructuresRes?.data),
-        feeStructuresResKeys: feeStructuresRes && typeof feeStructuresRes === 'object' ? Object.keys(feeStructuresRes) : 'N/A',
-        feeStructuresResDataSample: feeStructuresRes?.data ? (Array.isArray(feeStructuresRes.data) ? `Array[${feeStructuresRes.data.length}]` : typeof feeStructuresRes.data) : 'N/A',
-        feeStructuresResStatus: feeStructuresRes?.status,
-        feeStructuresResMessage: feeStructuresRes?.message,
-      })
 
       // Log errors for debugging but don't fail the entire operation
       // Only log non-404 errors (404 means no data exists yet, which is expected)
@@ -290,15 +267,6 @@ export function FeeStructureSection() {
       // apiRequest returns response.data, which is the Django response object
       // So we receive: { status: "success", message: "...", data: [...] }
       const extractDataArray = (response: any, name: string = "Response"): any[] => {
-        console.log(`🔍 extractDataArray for ${name}:`, {
-          response,
-          type: typeof response,
-          isArray: Array.isArray(response),
-          hasData: !!response?.data,
-          dataType: response?.data ? typeof response.data : 'undefined',
-          dataIsArray: Array.isArray(response?.data),
-          responseKeys: response && typeof response === 'object' ? Object.keys(response) : 'N/A',
-        })
         
         if (!response) {
           console.warn(`⚠️ ${name}: Response is null/undefined`)
@@ -307,28 +275,21 @@ export function FeeStructureSection() {
         
         // If response is already an array, return it
         if (Array.isArray(response)) {
-          console.log(`✅ ${name}: Response is direct array, length:`, response.length)
           return response
         }
         
         // If response has a data property that is an array
         if (response?.data && Array.isArray(response.data)) {
-          console.log(`✅ ${name}: Found data array in response.data, length:`, response.data.length)
-          if (response.data.length > 0) {
-            console.log(`✅ ${name}: First record:`, response.data[0])
-          }
           return response.data
         }
         
         // If response has a data property that is a single object
         if (response?.data && !Array.isArray(response.data) && typeof response.data === 'object') {
-          console.log(`✅ ${name}: Found single object in response.data, wrapping in array`)
           return [response.data]
         }
         
         // If response itself is an object (single record)
         if (response && typeof response === 'object' && response.id) {
-          console.log(`✅ ${name}: Response is a single object with ID, wrapping in array`)
           return [response]
         }
         
@@ -340,14 +301,6 @@ export function FeeStructureSection() {
       const followUpPolicies = extractDataArray(followUpPoliciesRes, "Follow-up Policies")
       const cancellationPolicies = extractDataArray(cancellationPoliciesRes, "Cancellation Policies")
       
-      console.log("📊 Extracted arrays:", {
-        feeStructures: feeStructures.length,
-        followUpPolicies: followUpPolicies.length,
-        cancellationPolicies: cancellationPolicies.length,
-        feeStructuresSample: feeStructures.length > 0 ? feeStructures[0] : null,
-        followUpPoliciesSample: followUpPolicies.length > 0 ? followUpPolicies[0] : null,
-        cancellationPoliciesSample: cancellationPolicies.length > 0 ? cancellationPolicies[0] : null,
-      })
 
       // Get the first record for each (since unique_together ensures one per doctor-clinic)
       // When filtered by both doctor_id and clinic_id, we should get exactly 0 or 1 record
@@ -367,103 +320,35 @@ export function FeeStructureSection() {
         })
       }
       
-      console.log("🔍 Extracted records:", {
-        feeStructure: feeStructure ? {
-          id: feeStructure.id,
-          first_time_consultation_fee: feeStructure.first_time_consultation_fee,
-          follow_up_fee: feeStructure.follow_up_fee,
-          updated_at: feeStructure.updated_at,
-        } : null,
-        followUpPolicy: followUpPolicy ? {
-          id: followUpPolicy.id,
-          follow_up_duration: followUpPolicy.follow_up_duration,
-          follow_up_fee: followUpPolicy.follow_up_fee,
-          updated_at: followUpPolicy.updated_at,
-        } : null,
-        cancellationPolicy: cancellationPolicy ? {
-          id: cancellationPolicy.id,
-          cancellation_window_hours: cancellationPolicy.cancellation_window_hours,
-          updated_at: cancellationPolicy.updated_at,
-        } : null,
-      })
       
-      console.log("📋 Fetched records summary:", {
-        feeStructure: feeStructure ? { 
-          id: feeStructure.id, 
-          first_time_consultation_fee: feeStructure.first_time_consultation_fee,
-          follow_up_fee: feeStructure.follow_up_fee,
-          updated_at: feeStructure.updated_at,
-          fullRecord: feeStructure  // Log full record to see all fields
-        } : null,
-        followUpPolicy: followUpPolicy ? { 
-          id: followUpPolicy.id, 
-          follow_up_duration: followUpPolicy.follow_up_duration,
-          follow_up_fee: followUpPolicy.follow_up_fee,
-          updated_at: followUpPolicy.updated_at,
-          fullRecord: followUpPolicy  // Log full record to see all fields
-        } : null,
-        cancellationPolicy: cancellationPolicy ? { 
-          id: cancellationPolicy.id, 
-          allow_cancellation: cancellationPolicy.allow_cancellation,
-          cancellation_window_hours: cancellationPolicy.cancellation_window_hours,
-          updated_at: cancellationPolicy.updated_at,
-          fullRecord: cancellationPolicy  // Log full record to see all fields
-        } : null,
-        feeStructuresCount: Array.isArray(feeStructures) ? feeStructures.length : 0,
-        followUpPoliciesCount: Array.isArray(followUpPolicies) ? followUpPolicies.length : 0,
-        cancellationPoliciesCount: Array.isArray(cancellationPolicies) ? cancellationPolicies.length : 0,
-      })
       
       // Log full records for debugging
-      if (feeStructure) {
-        console.log("📄 Fee Structure FULL record from database:", feeStructure)
-      } else {
-        console.warn("⚠️ No fee structure record found in response!")
-      }
-      if (followUpPolicy) {
-        console.log("📄 Follow-up Policy FULL record from database:", followUpPolicy)
-      } else {
-        console.warn("⚠️ No follow-up policy record found in response!")
-      }
-      if (cancellationPolicy) {
-        console.log("📄 Cancellation Policy FULL record from database:", cancellationPolicy)
-      } else {
-        console.warn("⚠️ No cancellation policy record found in response!")
-      }
 
       // Update IDs for update operations - ALWAYS set (null if no record exists)
       if (feeStructure?.id) {
         setFeeStructureId(feeStructure.id)
-        console.log("✅ Set fee structure ID:", feeStructure.id)
       } else {
         setFeeStructureId(null)
-        console.log("ℹ️ No fee structure ID (will create new)")
       }
       if (followUpPolicy?.id) {
         setFollowUpPolicyId(followUpPolicy.id)
-        console.log("✅ Set follow-up policy ID:", followUpPolicy.id)
       } else {
         setFollowUpPolicyId(null)
-        console.log("ℹ️ No follow-up policy ID (will create new)")
       }
       if (cancellationPolicy?.id) {
         setCancellationPolicyId(cancellationPolicy.id)
-        console.log("✅ Set cancellation policy ID:", cancellationPolicy.id)
       } else {
         setCancellationPolicyId(null)
-        console.log("ℹ️ No cancellation policy ID (will create new)")
       }
 
       // Helper to safely convert value to string, handling null/undefined/0
       const safeToString = (value: any, defaultValue: string, fieldName: string = "field"): string => {
         // CRITICAL: Check for null/undefined first, but allow 0 as a valid value
         if (value === null || value === undefined) {
-          console.log(`⚠️ ${fieldName}: Value is null/undefined, using default: ${defaultValue}`)
           return defaultValue
         }
         // Convert to string, handling decimal formatting (e.g., "1005.00" -> "1005")
         const str = value.toString()
-        console.log(`🔍 ${fieldName}: Converting value: ${value} (type: ${typeof value}) -> string: "${str}"`)
         // Remove trailing zeros after decimal point for cleaner display
         if (str.includes('.')) {
           const parsed = parseFloat(str)
@@ -472,7 +357,6 @@ export function FeeStructureSection() {
             return defaultValue
           }
           const result = parsed.toString()
-          console.log(`🔍 ${fieldName}: Parsed decimal: ${str} -> ${result}`)
           return result
         }
         // If it's a number, convert to string
@@ -495,16 +379,6 @@ export function FeeStructureSection() {
 
       // Merge data from all three models - USE ACTUAL VALUES FROM DATABASE, not defaults
       // CRITICAL: Only use defaults if record doesn't exist, otherwise use actual database values
-      console.log("🔍 Creating mergedData - feeStructure exists:", !!feeStructure, "followUpPolicy exists:", !!followUpPolicy, "cancellationPolicy exists:", !!cancellationPolicy)
-      if (feeStructure) {
-        console.log("🔍 FeeStructure record found with values:", {
-          first_time_consultation_fee: feeStructure.first_time_consultation_fee,
-          follow_up_fee: feeStructure.follow_up_fee,
-          case_paper_duration: feeStructure.case_paper_duration,
-        })
-      } else {
-        console.warn("⚠️ No feeStructure record found - will use defaults")
-      }
       
       const mergedData: FeeStructureData = {
         // DoctorFeeStructure fields - Use actual values from database
@@ -541,52 +415,18 @@ export function FeeStructureSection() {
         refund_percentage: cancellationPolicy ? safeToString(cancellationPolicy.refund_percentage, "0", "refund_percentage") : "0",
       }
       
-      console.log("🔍 Before merging - Raw values from database:", {
-        feeStructure_first_time: feeStructure?.first_time_consultation_fee,
-        feeStructure_follow_up: feeStructure?.follow_up_fee,
-        feeStructure_case_paper_duration: feeStructure?.case_paper_duration,
-        feeStructure_case_paper_renewal_fee: feeStructure?.case_paper_renewal_fee,
-        followUpPolicy_duration: followUpPolicy?.follow_up_duration,
-        followUpPolicy_fee: followUpPolicy?.follow_up_fee,
-        followUpPolicy_max_visits: followUpPolicy?.max_follow_up_visits,
-        cancellationPolicy_window: cancellationPolicy?.cancellation_window_hours,
-        cancellationPolicy_allow_cancellation: cancellationPolicy?.allow_cancellation,
-      })
       
-      console.log("✅ Merged data (FULL JSON):", JSON.stringify(mergedData, null, 2))
-      console.log("✅ Merged data (sample):", {
-        first_time_consultation_fee: mergedData.first_time_consultation_fee,
-        follow_up_fee: mergedData.follow_up_fee,
-        case_paper_duration: mergedData.case_paper_duration,
-        case_paper_renewal_fee: mergedData.case_paper_renewal_fee,
-        follow_up_duration: mergedData.follow_up_duration,
-        max_follow_up_visits: mergedData.max_follow_up_visits,
-        allow_cancellation: mergedData.allow_cancellation,
-        cancellation_window_hours: mergedData.cancellation_window_hours,
-      })
-      console.log("✅ Setting feeData and originalData with merged data from database...")
 
       // Set the state with the fresh data from database - this will update the UI
       // Create a new object reference to ensure React detects the change
       const freshMergedData = { ...mergedData }
       
-      console.log("✅ Setting feeData state with merged data:", {
-        first_time_consultation_fee: freshMergedData.first_time_consultation_fee,
-        follow_up_fee: freshMergedData.follow_up_fee,
-        follow_up_duration: freshMergedData.follow_up_duration,
-      })
       
       // CRITICAL: Verify we're not using defaults when we have actual data
       const hasActualData = feeStructure || followUpPolicy || cancellationPolicy
       if (!hasActualData) {
         console.warn("⚠️ No actual data found in any of the three models - using defaults")
       } else {
-        console.log("✅ Found actual data from database - using real values, not defaults")
-        console.log("✅ Data summary:", {
-          feeStructure: feeStructure ? { id: feeStructure.id, first_time: feeStructure.first_time_consultation_fee, follow_up: feeStructure.follow_up_fee } : null,
-          followUpPolicy: followUpPolicy ? { id: followUpPolicy.id, duration: followUpPolicy.follow_up_duration, fee: followUpPolicy.follow_up_fee } : null,
-          cancellationPolicy: cancellationPolicy ? { id: cancellationPolicy.id, window: cancellationPolicy.cancellation_window_hours } : null,
-        })
       }
       
       // Use functional update to ensure we're setting the latest data
@@ -598,13 +438,6 @@ export function FeeStructureSection() {
       // Force a re-render by updating the refresh key (increment by 1 as integer)
       setRefreshKey(prev => Math.floor(prev) + 1)
       
-      console.log("✅ State updated with fresh data. UI should now show updated values.")
-      console.log("✅ Final feeData state values:", {
-        first_time_consultation_fee: newFeeData.first_time_consultation_fee,
-        follow_up_fee: newFeeData.follow_up_fee,
-        follow_up_duration: newFeeData.follow_up_duration,
-        cancellation_window_hours: newFeeData.cancellation_window_hours,
-      })
       
       // Show success message if data was loaded (optional, can be removed if too verbose)
       // Only show if we actually got data
@@ -632,8 +465,6 @@ export function FeeStructureSection() {
       // DO NOT reset if we have existing data - preserve it!
       const hasExistingData = feeStructureId || followUpPolicyId || cancellationPolicyId
       if (!hasExistingData) {
-        console.log("ℹ️ No existing data found, resetting to defaults")
-        console.log("reset to defaults 2");
         resetToDefaults()
       } else {
         console.warn("⚠️ Fetch failed but existing data found in state. Preserving current state to avoid data loss.")
@@ -695,7 +526,6 @@ export function FeeStructureSection() {
   }
 
   const handleSave = async () => {
-    console.log("handleSave called - isEditing:", isEditing, "selectedClinicId:", selectedClinicId, "doctorId:", doctorId)
     
     if (!selectedClinicId) {
       toast.error("No clinic associated. Please add a clinic association first to manage fee structures.")
@@ -747,7 +577,6 @@ export function FeeStructureSection() {
         if (currentDoctorId) {
           setDoctorId(currentDoctorId)
           localStorage.setItem("doctor_id", currentDoctorId)
-          console.log("Doctor ID fetched and set:", currentDoctorId)
         }
       } catch (error) {
         console.error("Failed to fetch doctor ID:", error)
@@ -756,7 +585,6 @@ export function FeeStructureSection() {
         if (storedDoctorId) {
           currentDoctorId = storedDoctorId
           setDoctorId(storedDoctorId)
-          console.log("Using doctor ID from localStorage:", storedDoctorId)
         }
       }
       
@@ -766,12 +594,9 @@ export function FeeStructureSection() {
       }
     }
 
-    console.log("Saving fee structure with doctorId:", currentDoctorId, "clinicId:", selectedClinicId)
-    console.log("Current IDs - Fee Structure:", feeStructureId, "Follow-up:", followUpPolicyId, "Cancellation:", cancellationPolicyId)
     
     // ALWAYS fetch existing records before save to ensure we update instead of creating duplicates
     // This is critical to prevent unique constraint errors
-    console.log("Fetching existing records to check for updates...")
     let currentFeeStructureId = feeStructureId
     let currentFollowUpPolicyId = followUpPolicyId
     let currentCancellationPolicyId = cancellationPolicyId
@@ -789,9 +614,6 @@ export function FeeStructureSection() {
       // Fee Structure
       if (feeStructures.status === 'fulfilled') {
         const response = feeStructures.value
-        console.log("🔍 Fee Structure: Pre-fetch response (FULL):", JSON.stringify(response, null, 2))
-        console.log("🔍 Fee Structure: Response type:", typeof response, "Is Array:", Array.isArray(response))
-        console.log("🔍 Fee Structure: Response keys:", response && typeof response === 'object' ? Object.keys(response) : 'N/A')
         
         // Django returns: { status: "success", message: "...", data: [...] }
         // Next.js API route returns the same structure
@@ -799,14 +621,11 @@ export function FeeStructureSection() {
         let feeData: any[] = []
         if (Array.isArray(response)) {
           feeData = response
-          console.log("✅ Fee Structure: Response is direct array")
         } else if (response?.data && Array.isArray(response.data)) {
           feeData = response.data
-          console.log("✅ Fee Structure: Found data array in response.data")
         } else if (response?.data && !Array.isArray(response.data)) {
           // Single object wrapped in data
           feeData = [response.data]
-          console.log("✅ Fee Structure: Single object in response.data, wrapped in array")
         } else {
           console.warn("⚠️ Fee Structure: Could not extract data from response structure:", {
             response,
@@ -816,16 +635,11 @@ export function FeeStructureSection() {
           })
         }
         
-        console.log("📊 Fee Structure: Extracted feeData:", feeData, "Length:", feeData.length)
         
         if (feeData.length > 0) {
           const feeRecord = feeData[0] // First (and only) record
-          console.log("🔍 Fee Structure: First record:", JSON.stringify(feeRecord, null, 2))
-          console.log("🔍 Fee Structure: Record has 'id'?", 'id' in feeRecord, "ID value:", feeRecord?.id)
-          console.log("🔍 Fee Structure: All record keys:", feeRecord ? Object.keys(feeRecord) : 'N/A')
           
           if (feeRecord?.id) {
-            console.log("✅ Found existing fee structure ID:", feeRecord.id)
             currentFeeStructureId = feeRecord.id
             setFeeStructureId(feeRecord.id)
           } else {
@@ -835,7 +649,6 @@ export function FeeStructureSection() {
             setFeeStructureId(null)
           }
         } else {
-          console.log("ℹ️ No existing fee structure found (will create new)")
           currentFeeStructureId = null
           setFeeStructureId(null)
         }
@@ -856,20 +669,14 @@ export function FeeStructureSection() {
       // Follow-up Policy
       if (followUpPolicies.status === 'fulfilled') {
         const response = followUpPolicies.value
-        console.log("🔍 Follow-up Policy: Pre-fetch response (FULL):", JSON.stringify(response, null, 2))
-        console.log("🔍 Follow-up Policy: Response type:", typeof response, "Is Array:", Array.isArray(response))
-        console.log("🔍 Follow-up Policy: Response keys:", response && typeof response === 'object' ? Object.keys(response) : 'N/A')
         
         let followUpData: any[] = []
         if (Array.isArray(response)) {
           followUpData = response
-          console.log("✅ Follow-up Policy: Response is direct array")
         } else if (response?.data && Array.isArray(response.data)) {
           followUpData = response.data
-          console.log("✅ Follow-up Policy: Found data array in response.data")
         } else if (response?.data && !Array.isArray(response.data)) {
           followUpData = [response.data]
-          console.log("✅ Follow-up Policy: Single object in response.data, wrapped in array")
         } else {
           console.warn("⚠️ Follow-up Policy: Could not extract data from response structure:", {
             response,
@@ -879,16 +686,11 @@ export function FeeStructureSection() {
           })
         }
         
-        console.log("📊 Follow-up Policy: Extracted followUpData:", followUpData, "Length:", followUpData.length)
         
         if (followUpData.length > 0) {
           const followUpRecord = followUpData[0]
-          console.log("🔍 Follow-up Policy: First record:", JSON.stringify(followUpRecord, null, 2))
-          console.log("🔍 Follow-up Policy: Record has 'id'?", 'id' in followUpRecord, "ID value:", followUpRecord?.id)
-          console.log("🔍 Follow-up Policy: All record keys:", followUpRecord ? Object.keys(followUpRecord) : 'N/A')
           
           if (followUpRecord?.id) {
-            console.log("✅ Found existing follow-up policy ID:", followUpRecord.id)
             currentFollowUpPolicyId = followUpRecord.id
             setFollowUpPolicyId(followUpRecord.id)
           } else {
@@ -898,7 +700,6 @@ export function FeeStructureSection() {
             setFollowUpPolicyId(null)
           }
         } else {
-          console.log("ℹ️ No existing follow-up policy found (will create new)")
           currentFollowUpPolicyId = null
           setFollowUpPolicyId(null)
         }
@@ -916,20 +717,14 @@ export function FeeStructureSection() {
       // Cancellation Policy
       if (cancellationPolicies.status === 'fulfilled') {
         const response = cancellationPolicies.value
-        console.log("🔍 Cancellation Policy: Pre-fetch response (FULL):", JSON.stringify(response, null, 2))
-        console.log("🔍 Cancellation Policy: Response type:", typeof response, "Is Array:", Array.isArray(response))
-        console.log("🔍 Cancellation Policy: Response keys:", response && typeof response === 'object' ? Object.keys(response) : 'N/A')
         
         let cancellationData: any[] = []
         if (Array.isArray(response)) {
           cancellationData = response
-          console.log("✅ Cancellation Policy: Response is direct array")
         } else if (response?.data && Array.isArray(response.data)) {
           cancellationData = response.data
-          console.log("✅ Cancellation Policy: Found data array in response.data")
         } else if (response?.data && !Array.isArray(response.data)) {
           cancellationData = [response.data]
-          console.log("✅ Cancellation Policy: Single object in response.data, wrapped in array")
         } else {
           console.warn("⚠️ Cancellation Policy: Could not extract data from response structure:", {
             response,
@@ -939,16 +734,11 @@ export function FeeStructureSection() {
           })
         }
         
-        console.log("📊 Cancellation Policy: Extracted cancellationData:", cancellationData, "Length:", cancellationData.length)
         
         if (cancellationData.length > 0) {
           const cancellationRecord = cancellationData[0]
-          console.log("🔍 Cancellation Policy: First record:", JSON.stringify(cancellationRecord, null, 2))
-          console.log("🔍 Cancellation Policy: Record has 'id'?", 'id' in cancellationRecord, "ID value:", cancellationRecord?.id)
-          console.log("🔍 Cancellation Policy: All record keys:", cancellationRecord ? Object.keys(cancellationRecord) : 'N/A')
           
           if (cancellationRecord?.id) {
-            console.log("✅ Found existing cancellation policy ID:", cancellationRecord.id)
             currentCancellationPolicyId = cancellationRecord.id
             setCancellationPolicyId(cancellationRecord.id)
           } else {
@@ -958,7 +748,6 @@ export function FeeStructureSection() {
             setCancellationPolicyId(null)
           }
         } else {
-          console.log("ℹ️ No existing cancellation policy found (will create new)")
           currentCancellationPolicyId = null
           setCancellationPolicyId(null)
         }
@@ -973,10 +762,6 @@ export function FeeStructureSection() {
         currentCancellationPolicyId = null
       }
       
-      console.log("📋 Final IDs before save:")
-      console.log("  - Fee Structure ID:", currentFeeStructureId, "(will use", currentFeeStructureId ? "PATCH" : "POST", ")")
-      console.log("  - Follow-up Policy ID:", currentFollowUpPolicyId, "(will use", currentFollowUpPolicyId ? "PATCH" : "POST", ")")
-      console.log("  - Cancellation Policy ID:", currentCancellationPolicyId, "(will use", currentCancellationPolicyId ? "PATCH" : "POST", ")")
       
       // CRITICAL: If any ID is missing but records exist, we MUST fetch them
       // This prevents duplicate creation attempts
@@ -1047,11 +832,6 @@ export function FeeStructureSection() {
       // Create or update all three models with better error handling
       // Use PATCH for updates (partial updates) instead of PUT
       // If create fails with unique constraint, retry with update
-      console.log("Making API calls with payloads:", {
-        feeStructure: feeStructurePayload,
-        followUpPolicy: followUpPolicyPayload,
-        cancellationPolicy: cancellationPolicyPayload
-      })
       
       // Helper function to handle create/update with retry on unique constraint
       const createOrUpdate = async (
@@ -1061,15 +841,12 @@ export function FeeStructureSection() {
         name: string,
         fetchFn?: () => Promise<any> // Optional: function to fetch existing record
       ) => {
-        console.log(`${name}: createOrUpdate called with ID:`, id, "Type:", typeof id, "Truthy:", !!id)
         
         if (id) {
           // ID exists, use PATCH to update existing record
-          console.log(`✅ ${name}: ID exists (${id}), using PATCH to update existing record`)
           return updateFn()
         } else {
           // No ID found - but records might exist! Try to fetch one more time before creating
-          console.log(`⚠️ ${name}: No ID found in pre-fetch. Fetching one more time to check for existing record...`)
           
           // Final check: try to fetch existing record before attempting POST
           if (fetchFn) {
@@ -1079,7 +856,6 @@ export function FeeStructureSection() {
               const finalRecord = Array.isArray(finalData) && finalData.length > 0 ? finalData[0] : null
               
               if (finalRecord?.id) {
-                console.log(`✅ ${name}: Found existing record in final check! ID: ${finalRecord.id}, using PATCH instead of POST`)
                 // Update the ID in state for future use
                 if (name === "Fee Structure") {
                   setFeeStructureId(finalRecord.id)
@@ -1092,7 +868,6 @@ export function FeeStructureSection() {
                   return apiClient.patchCancellationPolicy(finalRecord.id, cancellationPolicyPayload)
                 }
               } else {
-                console.log(`ℹ️ ${name}: Final check confirms no existing record, will create new with POST`)
               }
             } catch (fetchError: any) {
               console.warn(`${name}: Final fetch check failed, will try POST (unique constraint retry will handle if record exists):`, fetchError)
@@ -1101,7 +876,6 @@ export function FeeStructureSection() {
           }
           
           // No ID and final check didn't find record - try to create new record
-          console.log(`ℹ️ ${name}: No existing record found, attempting to create new record with POST`)
           try {
             return await createFn()
           } catch (error: any) {
@@ -1132,15 +906,6 @@ export function FeeStructureSection() {
               (Array.isArray(errorData) ? errorData : []) ||
               []
             
-            console.log(`${name}: Error extraction:`, {
-              hasErrors: !!error?.errors,
-              errorErrors: error?.errors,
-              hasResponseData: !!error?.response?.data,
-              responseData: error?.response?.data,
-              errorData,
-              nonFieldErrors,
-              errorMessage
-            })
             
             // Check if this is a unique constraint error - check all possible locations
             const errorString = JSON.stringify(errorData).toLowerCase()
@@ -1183,28 +948,8 @@ export function FeeStructureSection() {
             
             const isUniqueError = hasUniqueInNonFieldErrors || hasUniqueInMessage || hasUniqueInErrorString || apiErrorNonFieldErrors || is400WithUnique
             
-            console.log(`${name}: Create failed. Full error analysis:`, {
-              error,
-              errorType: error?.constructor?.name,
-              errorData,
-              errorMessage,
-              nonFieldErrors,
-              hasUniqueInNonFieldErrors,
-              hasUniqueInMessage,
-              hasUniqueInErrorString,
-              apiErrorNonFieldErrors,
-              is400WithUnique,
-              isUniqueError,
-              responseStatus: error?.response?.status,
-              errorStatus: error?.status,
-              responseData: error?.response?.data,
-              errorStringified: JSON.stringify(errorData),
-              errorErrors: error?.errors
-            })
             
             if (isUniqueError) {
-              console.log(`✅ ${name}: Unique constraint detected! Proceeding to fetch and update...`)
-              console.log(`${name}: Record already exists, fetching and updating...`)
               // Fetch existing records to get IDs
               try {
                 let existing: any = null
@@ -1223,19 +968,9 @@ export function FeeStructureSection() {
                     } else if (existingData && !Array.isArray(existingData)) {
                       existingRecord = existingData
                     }
-                    console.log(`${name}: Fetched existing record by doctor+clinic:`, {
-                      existingRecord,
-                      hasId: !!existingRecord?.id,
-                      id: existingRecord?.id,
-                      existingData,
-                      existingDataIsArray: Array.isArray(existingData),
-                      existingDataLength: Array.isArray(existingData) ? existingData.length : 'not array'
-                    })
                     if (existingRecord?.id) {
-                      console.log(`${name}: Found ID ${existingRecord.id}, calling PATCH...`)
                       setFeeStructureId(existingRecord.id)
                       const patchResult = await apiClient.patchFeeStructure(existingRecord.id, feeStructurePayload)
-                      console.log(`${name}: PATCH successful:`, patchResult)
                       return patchResult
                     } else {
                       console.warn(`${name}: No record found with doctor_id=${currentDoctorId} and clinic_id=${selectedClinicId}`, {
@@ -1258,19 +993,9 @@ export function FeeStructureSection() {
                     } else if (existingData && !Array.isArray(existingData)) {
                       existingRecord = existingData
                     }
-                    console.log(`${name}: Fetched existing record by doctor+clinic:`, {
-                      existingRecord,
-                      hasId: !!existingRecord?.id,
-                      id: existingRecord?.id,
-                      existingData,
-                      existingDataIsArray: Array.isArray(existingData),
-                      existingDataLength: Array.isArray(existingData) ? existingData.length : 'not array'
-                    })
                     if (existingRecord?.id) {
-                      console.log(`${name}: Found ID ${existingRecord.id}, calling PATCH...`)
                       setFollowUpPolicyId(existingRecord.id)
                       const patchResult = await apiClient.patchFollowUpPolicy(existingRecord.id, followUpPolicyPayload)
-                      console.log(`${name}: PATCH successful:`, patchResult)
                       return patchResult
                     } else {
                       console.warn(`${name}: No record found with doctor_id=${currentDoctorId} and clinic_id=${selectedClinicId}`, {
@@ -1293,19 +1018,9 @@ export function FeeStructureSection() {
                     } else if (existingData && !Array.isArray(existingData)) {
                       existingRecord = existingData
                     }
-                    console.log(`${name}: Fetched existing record by doctor+clinic:`, {
-                      existingRecord,
-                      hasId: !!existingRecord?.id,
-                      id: existingRecord?.id,
-                      existingData,
-                      existingDataIsArray: Array.isArray(existingData),
-                      existingDataLength: Array.isArray(existingData) ? existingData.length : 'not array'
-                    })
                     if (existingRecord?.id) {
-                      console.log(`${name}: Found ID ${existingRecord.id}, calling PATCH...`)
                       setCancellationPolicyId(existingRecord.id)
                       const patchResult = await apiClient.patchCancellationPolicy(existingRecord.id, cancellationPolicyPayload)
-                      console.log(`${name}: PATCH successful:`, patchResult)
                       return patchResult
                     } else {
                       console.warn(`${name}: No record found with doctor_id=${currentDoctorId} and clinic_id=${selectedClinicId}`, {
@@ -1359,7 +1074,6 @@ export function FeeStructureSection() {
         ),
       ])
       
-      console.log("API call results:", results)
 
       // Check for failures
       const failures: string[] = []
@@ -1406,7 +1120,6 @@ export function FeeStructureSection() {
 
       // All operations succeeded
       // Refresh data to get updated records with latest values from database
-      console.log("🔄 Refreshing fee structure data after successful save...")
       
       // Force a fresh fetch by clearing any cached state
       // Wait a bit to ensure database has committed the changes
@@ -1415,11 +1128,6 @@ export function FeeStructureSection() {
       await fetchFeeStructureData()
       
       // Double-check: verify the state was actually updated
-      console.log("✅ Fee structure data refreshed after save")
-      console.log("🔍 Verifying state update - current feeData:", {
-        first_time_consultation_fee: feeData.first_time_consultation_fee,
-        follow_up_fee: feeData.follow_up_fee,
-      })
       
       // NOTE: fetchFeeStructureData() already sets both feeData and originalData from fresh database data
       // So we don't need to set originalData here - it would use stale feeData anyway
@@ -1528,7 +1236,6 @@ export function FeeStructureSection() {
 
       // All deletions succeeded
       toast.success("Fee structure and policies deleted successfully.", { duration: 2500 })
-      console.log("reset to defaults 4");
       resetToDefaults()
       setIsEditing(false)
     } catch (error: any) {

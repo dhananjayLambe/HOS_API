@@ -25,11 +25,6 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Log request for debugging
-    console.log("Scheduling rules UPSERT request:", {
-      doctor_id: doctorId,
-      clinic_id: clinicId,
-      url: `${DJANGO_API_URL}/api/doctor/scheduling-rules/update/?doctor_id=${doctorId}&clinic_id=${clinicId}`,
-    })
 
     const response = await fetch(
       `${DJANGO_API_URL}/api/doctor/scheduling-rules/update/?doctor_id=${doctorId}&clinic_id=${clinicId}`,
@@ -43,8 +38,6 @@ export async function PATCH(request: NextRequest) {
         credentials: "include",
       }
     )
-
-    console.log("Scheduling rules UPSERT response status:", response.status, response.statusText)
 
     let data: any = {}
     const contentType = response.headers.get("content-type")

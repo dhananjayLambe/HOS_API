@@ -250,7 +250,6 @@ export default function FeedbackResponsesPage() {
   // Function to handle reply submission
   function handleReplySubmit() {
     // In a real app, this would call an API to send the reply
-    console.log(`Sending reply to response ${selectedResponse}: ${replyText}`)
     setReplyText("")
     // You would typically close the dialog or show a success message here
   }

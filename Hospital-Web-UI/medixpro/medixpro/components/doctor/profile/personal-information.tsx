@@ -80,22 +80,11 @@ export function PersonalInformationSection() {
           const profile = profileResponse?.doctor_profile || profileResponse
 
           // Debug: Log full response
-          console.log("Full API Response:", JSON.stringify(profileResponse, null, 2))
-          console.log("Profile object:", profile)
 
           if (profile?.personal_info && !profile.detail) {
             const personalInfo = profile.personal_info
             
             // Debug logging - always log for now to see what we're getting
-            console.log("Personal info from API:", {
-              dob: personalInfo.dob,
-              gender: personalInfo.gender,
-              about: personalInfo.about,
-              has_dob: !!personalInfo.dob,
-              has_gender: !!personalInfo.gender,
-              has_about: !!personalInfo.about,
-              fullPersonalInfo: personalInfo
-            })
 
             // Format date of birth - handle various date formats
             let dobFormatted = ""
@@ -117,19 +106,16 @@ export function PersonalInformationSection() {
                     dobFormatted = `${year}-${month}-${day}`
                   }
                 }
-                console.log("DOB formatted:", dobFormatted, "from:", personalInfo.dob)
               } catch (e) {
                 console.error("Error parsing date of birth:", e, personalInfo.dob)
               }
             } else {
-              console.log("No DOB in personalInfo:", personalInfo.dob)
             }
 
             // Map gender - handle both backend format (M/F/O) and frontend format (male/female/other)
             let genderValue = ""
             if (personalInfo.gender) {
               const genderStr = String(personalInfo.gender).trim().toUpperCase()
-              console.log("Raw gender from API:", personalInfo.gender, "processed:", genderStr)
               if (genderStr in GENDER_MAP_REVERSE) {
                 genderValue = GENDER_MAP_REVERSE[genderStr]
               } else {
@@ -146,12 +132,10 @@ export function PersonalInformationSection() {
                 }
               }
             } else {
-              console.log("Gender is null/empty in API response")
             }
 
             // Get bio from 'about' field (as per doctor model)
             const bioValue = personalInfo.about || personalInfo.bio || ""
-            console.log("Bio value:", bioValue, "from about:", personalInfo.about, "from bio:", personalInfo.bio)
 
             const newFormData = {
               firstName: personalInfo.first_name || firstName || "",
@@ -164,12 +148,6 @@ export function PersonalInformationSection() {
             }
 
             // Debug logging - always log for debugging
-            console.log("Form data being set:", {
-              dateOfBirth: dobFormatted,
-              gender: genderValue,
-              bio: bioValue,
-              fullFormData: newFormData
-            })
 
             setFormData(newFormData)
             setOriginalData(newFormData)
@@ -248,11 +226,8 @@ export function PersonalInformationSection() {
       // Note: firstName, lastName, email, and phone are restricted fields
       // They should not be sent in the update payload
 
-      console.log("Sending update payload:", updatePayload)
-
       const response = await doctorAPI.updatePersonalInfo(updatePayload)
       
-      console.log("Update response:", response)
       
       // Show success notification only on successful response (HTTP 200/204)
       // The API request will throw an error if it fails, so if we reach here, it's successful
@@ -469,7 +444,6 @@ export function PersonalInformationSection() {
             </SelectContent>
           </Select>
         </div>
-
 
         <div className="col-span-full space-y-2">
           <Label htmlFor="bio">Bio</Label>

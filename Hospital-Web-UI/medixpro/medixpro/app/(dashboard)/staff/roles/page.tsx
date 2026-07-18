@@ -1304,7 +1304,6 @@ export default function RolesAndPermissionsPage() {
           roleName={roleToDelete.name}
           onConfirm={() => {
             // This would be replaced with actual delete logic in a real app
-            console.log(`Deleting role: ${roleToDelete.name}`)
             setDeleteModalOpen(false)
             setRoleToDelete(null)
           }}

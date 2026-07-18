@@ -270,7 +270,6 @@ export function DoctorOnboarding() {
       const response = await fetch("/api/clinic/clinics-list")
 
       if (!response.ok) {
-        console.log("Failed to fetch clinics:", response.status)
         setClinics([])
         return
       }
@@ -463,11 +462,9 @@ export function DoctorOnboarding() {
     }
 
     helper(errors)
-    console.log("Flattened errors:", flatErrors)
     return flatErrors
   }
   const handleSubmit = async () => {
-    console.log("Starting form submission...")
     setErrors({})
     setIsSubmitting(true)
 
@@ -485,31 +482,23 @@ export function DoctorOnboarding() {
         data_storage_consent: formData.data_storage_consent,
       }
 
-      console.log("Form data being submitted:", payload)
-
       const response = await fetch("/api/doctor/onboarding/phase1", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       })
 
-      console.log("Response status:", response.status)
       const result = await response.json()
-      console.log("Full API response:", result)
 
       if (response.ok && result.status === "success") {
-        console.log("✅ Registration successful!")
         setRegistrationData(result.data)
         setIsSuccess(true)
         const dataParam = encodeURIComponent(JSON.stringify(registrationData))
         router.push(`/auth/register/doctor-registration/success?data=${dataParam}`)
       } else {
-        console.log("❌ Registration failed:", result)
 
         if (result.errors) {
-          console.log("Validation errors:", result.errors)
           const flatErrors = flattenErrors(result.errors)
-          console.log("Flattened errors:", flatErrors)
           setErrors(flatErrors)
 
           const errorDetails = Object.entries(flatErrors).map(([field, message]) => `${field}: ${message}`)
@@ -573,7 +562,6 @@ export function DoctorOnboarding() {
   }
 
   const nextStep = () => {
-    console.log("Current Step:", currentStep)
     if (validateStep(currentStep) && currentStep < steps.length) {
       setCurrentStep(currentStep + 1)
     }

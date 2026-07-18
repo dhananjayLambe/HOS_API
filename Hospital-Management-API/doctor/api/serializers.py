@@ -20,6 +20,9 @@ from helpdesk.models import HelpdeskClinicUser
 from account.models import User
 from doctor.utils.progress_calculator import calculate_doctor_profile_progress
 from clinic.api.serializers import ClinicSerializer
+from shared.logging import LogModule, logger
+
+
 class DoctorBasicSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source="user.username", read_only=True)
     first_name = serializers.CharField(source="user.first_name", read_only=True)
@@ -1688,13 +1691,23 @@ class DoctorPhase1Serializer(serializers.ModelSerializer):
 
     @transaction.atomic
     def create(self, validated_data):
-        print("validated_data:", validated_data)
+        logger.info(
+            "Doctor phase1 serializer create started",
+            module=LogModule.API,
+            action="doctor.onboarding.phase1.create",
+        )
         user_data = validated_data.pop("user", {})
         gov_data = validated_data.pop("government_ids", {})
         reg_data = validated_data.pop("registration", {})
         # Extract clinic_id from user_data if present
         clinic_id = validated_data.pop("clinic_id", None)
-        print("clinic_id:", clinic_id)
+        if clinic_id:
+            logger.debug(
+                "Doctor phase1 linking clinic",
+                module=LogModule.API,
+                action="doctor.onboarding.phase1.create",
+                metadata={"clinic_id": str(clinic_id)},
+            )
 
         # Create User with default values if data is missing
         username = user_data.get("username", f"doctor_{timezone.now().timestamp()}")
@@ -1729,7 +1742,12 @@ class DoctorPhase1Serializer(serializers.ModelSerializer):
             try:
                 clinic = Clinic.objects.get(id=clinic_id)
                 doctor_obj.clinics.add(clinic)
-                print(f"✅ Clinic {clinic} linked to doctor {doctor_obj}")
+                logger.info(
+                    "Clinic linked to doctor during phase1",
+                    module=LogModule.API,
+                    action="doctor.onboarding.phase1.create",
+                    metadata={"clinic_id": str(clinic.id), "doctor_id": str(doctor_obj.id)},
+                )
             except Clinic.DoesNotExist:
                 raise serializers.ValidationError({"clinic_id": "Invalid clinic ID"})
         # Create GovernmentID with provided or default values

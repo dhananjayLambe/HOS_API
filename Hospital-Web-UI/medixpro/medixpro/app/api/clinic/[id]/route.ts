@@ -131,24 +131,9 @@ export async function GET(
       if (clinicRes.value.ok) {
         try {
           const clinicResponse = await clinicRes.value.json()
-          console.log("[Clinic API] Clinic response:", {
-            success: clinicResponse.success,
-            hasData: !!clinicResponse.data,
-            dataKeys: clinicResponse.data ? Object.keys(clinicResponse.data) : [],
-            message: clinicResponse.message,
-          })
           
           if (clinicResponse.success && clinicResponse.data) {
             const data = clinicResponse.data
-            console.log("[Clinic API] Raw clinic data from backend:", {
-              name: data.name,
-              hasName: !!data.name,
-              registration_number: data.registration_number,
-              website_url: data.website_url,
-              email_address: data.email_address,
-              contact_number_primary: data.contact_number_primary,
-              allKeys: Object.keys(data),
-            })
             
             clinicData = {
               name: data.name || "",
@@ -164,14 +149,6 @@ export async function GET(
               emergency_email_address: data.emergency_email_address === "NA" ? "" : data.emergency_email_address || "",
               emergency_instructions_text: data.emergency_instructions_text || "",
             }
-            console.log("[Clinic API] Processed clinic data:", {
-              name: clinicData.name,
-              hasName: !!clinicData.name,
-              registration_number: clinicData.registration_number,
-              website: clinicData.website,
-              email: clinicData.email_address,
-              phone: clinicData.contact_number_primary,
-            })
           } else {
             console.warn("[Clinic API] Clinic response missing success or data:", clinicResponse)
             clinicError = {
@@ -238,51 +215,26 @@ export async function GET(
     if (addressRes.status === "fulfilled" && addressRes.value.ok) {
       try {
         const addressResponse = await addressRes.value.json()
-        console.log("[Clinic API] Raw address response:", JSON.stringify(addressResponse, null, 2))
-        console.log("[Clinic API] Address response structure:", {
-          success: addressResponse.success,
-          hasData: !!addressResponse.data,
-          responseKeys: addressResponse ? Object.keys(addressResponse) : [],
-          dataType: addressResponse.data ? typeof addressResponse.data : 'undefined',
-          dataKeys: addressResponse.data && typeof addressResponse.data === 'object' ? Object.keys(addressResponse.data) : [],
-        })
         
         // Handle different response structures
         let addr: any = null
         if (addressResponse.success && addressResponse.data) {
           addr = addressResponse.data
-          console.log("[Clinic API] Using addressResponse.data:", addr)
         } else if (addressResponse.data) {
           // Sometimes data is directly in response.data
           addr = addressResponse.data
-          console.log("[Clinic API] Using addressResponse.data (no success check):", addr)
         } else if (addressResponse.status && addressResponse.data) {
           // Sometimes wrapped in status: true, data: {...}
           addr = addressResponse.data
-          console.log("[Clinic API] Using addressResponse.data (status check):", addr)
         } else if (addressResponse.address) {
           // Sometimes address is directly in response
           addr = addressResponse.address
-          console.log("[Clinic API] Using addressResponse.address:", addr)
         } else if (addressResponse && typeof addressResponse === 'object' && !addressResponse.success) {
           // Response might be the address data directly
           addr = addressResponse
-          console.log("[Clinic API] Using addressResponse directly:", addr)
         }
         
         if (addr && typeof addr === 'object') {
-          console.log("[Clinic API] Parsed address object:", JSON.stringify(addr, null, 2))
-          console.log("[Clinic API] Address object keys:", Object.keys(addr))
-          console.log("[Clinic API] Address field values:", {
-            address: addr.address,
-            address2: addr.address2,
-            addressLine1: addr.addressLine1,
-            addressLine2: addr.addressLine2,
-            city: addr.city,
-            state: addr.state,
-            pincode: addr.pincode,
-            country: addr.country,
-          })
           
           // Backend model uses 'address' and 'address2' fields
           // Frontend expects 'addressLine1' and 'addressLine2'
@@ -303,8 +255,6 @@ export async function GET(
             country: cleanValue(addr.country) || "India",
           }
           
-          console.log("[Clinic API] Processed address data for frontend:", JSON.stringify(addressData, null, 2))
-          console.log("[Clinic API] Address data object:", addressData)
         } else {
           console.warn("[Clinic API] Could not extract address data from response. addr:", addr, "type:", typeof addr)
         }
@@ -314,7 +264,6 @@ export async function GET(
       }
     } else if (addressRes.status === "fulfilled" && addressRes.value.status === 404) {
       // 404 is acceptable - address may not exist yet
-      console.log("[Clinic API] Address not found (404) - using default empty address")
     } else if (addressRes.status === "rejected") {
       console.warn("[Clinic API] Error fetching address:", addressRes.reason)
       // Continue with default address data
@@ -333,13 +282,6 @@ export async function GET(
     if (schedulesRes.status === "fulfilled" && schedulesRes.value.ok) {
       try {
         const schedulesResponse = await schedulesRes.value.json()
-        console.log("[Clinic API] Schedules response:", {
-          success: schedulesResponse.success,
-          hasData: !!schedulesResponse.data,
-          dataIsArray: Array.isArray(schedulesResponse.data),
-          dataLength: Array.isArray(schedulesResponse.data) ? schedulesResponse.data.length : 0,
-          response: schedulesResponse,
-        })
         
         if (schedulesResponse.success && Array.isArray(schedulesResponse.data)) {
           operatingHours = schedulesResponse.data.map((schedule: any) => {
@@ -359,7 +301,6 @@ export async function GET(
               closed: schedule.is_closed || false,
             }
           })
-          console.log("[Clinic API] Processed operating hours:", operatingHours)
         } else if (schedulesResponse.data && !Array.isArray(schedulesResponse.data)) {
           // Handle single schedule object
           const schedule = schedulesResponse.data
@@ -376,7 +317,6 @@ export async function GET(
       }
     } else if (schedulesRes.status === "fulfilled" && schedulesRes.value.status === 404) {
       // 404 is acceptable - schedules may not exist yet
-      console.log("[Clinic API] Schedules not found (404) - using default empty schedules")
     } else if (schedulesRes.status === "rejected") {
       console.warn("[Clinic API] Error fetching schedules:", schedulesRes.reason)
       // Continue with empty operating hours
@@ -403,29 +343,6 @@ export async function GET(
         instructions: clinicData.emergency_instructions_text || "",
       },
     }
-
-    console.log("[Clinic API] Final response data:", {
-      hasClinic: Object.keys(clinicData).length > 0,
-      hasAddress: Object.keys(addressData).length > 0,
-      operatingHoursCount: operatingHours.length,
-      clinicName: clinicData.name,
-      clinicDataKeys: Object.keys(clinicData),
-      addressDataKeys: Object.keys(addressData),
-      addressDataFull: JSON.stringify(addressData, null, 2),
-      sampleClinicData: {
-        name: clinicData.name,
-        email: clinicData.email_address,
-        phone: clinicData.contact_number_primary,
-      },
-      sampleAddressData: {
-        addressLine1: addressData.addressLine1,
-        addressLine2: addressData.addressLine2,
-        city: addressData.city,
-        state: addressData.state,
-        pincode: addressData.pincode,
-        country: addressData.country,
-      },
-    })
 
     return NextResponse.json(responseData, { status: 200 })
   } catch (error: any) {
@@ -624,7 +541,6 @@ export async function PATCH(
 
     // 3. Update operating hours/schedules
     if (body.operating_hours && Array.isArray(body.operating_hours) && body.operating_hours.length > 0) {
-      console.log("[Clinic API] Processing operating hours update:", body.operating_hours.length, "days")
       
       const schedulePromises = body.operating_hours.map(async (hours: any) => {
         // Map frontend day (lowercase) to backend day (capitalized)
@@ -657,8 +573,6 @@ export async function PATCH(
           }
         }
 
-        console.log(`[Clinic API] Updating schedule for ${dayOfWeek}:`, schedulePayload)
-
         try {
           const scheduleRes = await fetch(`${BACKEND_URL}clinic/clinics/${clinicId}/schedules/`, {
             method: "POST",
@@ -689,7 +603,6 @@ export async function PATCH(
 
           try {
             const scheduleData = await scheduleRes.json()
-            console.log(`[Clinic API] Schedule updated successfully for ${dayOfWeek}:`, scheduleData)
             return { success: true, data: scheduleData, day: dayOfWeek }
           } catch (parseError: any) {
             console.error(`[Clinic API] Error parsing schedule response for ${dayOfWeek}:`, parseError)
@@ -711,12 +624,6 @@ export async function PATCH(
       const scheduleErrors = scheduleResults.filter((r: any) => r.error)
       const scheduleSuccesses = scheduleResults.filter((r: any) => r.success)
       
-      console.log("[Clinic API] Schedule update results:", {
-        total: scheduleResults.length,
-        successes: scheduleSuccesses.length,
-        errorCount: scheduleErrors.length,
-        errors: scheduleErrors
-      })
       
       if (scheduleErrors.length > 0) {
         // Collect all error messages

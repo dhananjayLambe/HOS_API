@@ -148,7 +148,6 @@ export default function SettingsPage() {
       
       // If clinic_id not in localStorage, fetch it from doctor's associated clinics
       if (!clinicId) {
-        console.log("[Clinic Settings] No clinic_id in localStorage, fetching from doctor's clinics...")
         try {
           // Fetch doctor's associated clinics
           const clinicsResponse = await fetch("/api/doctor/profile/clinics", {
@@ -160,7 +159,6 @@ export default function SettingsPage() {
             const clinicsData = await clinicsResponse.json()
             const clinics = clinicsData?.data || clinicsData?.clinics || []
             
-            console.log("[Clinic Settings] Doctor's clinics:", clinics)
             
             if (Array.isArray(clinics) && clinics.length > 0) {
               // If doctor has multiple clinics, use the first one
@@ -174,15 +172,9 @@ export default function SettingsPage() {
                         selectedClinic?.clinic_id ||
                         (typeof selectedClinic === 'string' ? selectedClinic : null) || ""
               
-              console.log("[Clinic Settings] Selected clinic:", {
-                clinic: selectedClinic,
-                extractedClinicId: clinicId,
-                allKeys: selectedClinic ? Object.keys(selectedClinic) : [],
-              })
               
               if (clinicId) {
                 localStorage.setItem("clinic_id", clinicId)
-                console.log("[Clinic Settings] Fetched clinic_id from doctor's clinics:", clinicId)
                 
                 // If multiple clinics, show info message
                 if (clinics.length > 1) {
@@ -220,7 +212,6 @@ export default function SettingsPage() {
         return
       }
 
-      console.log("[Clinic Settings] Loading clinic data for clinic_id:", clinicId)
       
       // Add cache-busting parameter to ensure fresh data
       const response = await fetch(`/api/clinic/${clinicId}?t=${Date.now()}`, {
@@ -229,7 +220,6 @@ export default function SettingsPage() {
         cache: "no-store",
       })
       
-      console.log("[Clinic Settings] API Response status:", response.status, response.ok)
       
       if (!response.ok) {
         let errorData: any = {}
@@ -246,7 +236,6 @@ export default function SettingsPage() {
         
         // Don't show error for 404 if it's expected (new clinic)
         if (response.status === 404) {
-          console.log("Clinic not found - may be a new clinic")
           setIsLoading(false)
           return
         }
@@ -268,14 +257,6 @@ export default function SettingsPage() {
       let data: any = {}
       try {
         data = await response.json()
-        console.log("[Clinic Settings] Received data:", {
-          hasClinic: !!data.clinic,
-          hasAddress: !!data.address,
-          hasOperatingHours: !!data.operating_hours,
-          hasEmergencyContact: !!data.emergency_contact,
-          clinicKeys: data.clinic ? Object.keys(data.clinic) : [],
-          addressKeys: data.address ? Object.keys(data.address) : [],
-        })
       } catch (parseError) {
         console.error("[Clinic Settings] Error parsing response:", parseError)
         toast.error("Received invalid response from server. Please try again.")
@@ -285,12 +266,6 @@ export default function SettingsPage() {
       
       // Populate form with data - always set values even if empty to ensure form is initialized
       if (data.clinic) {
-        console.log("[Clinic Settings] Populating clinic data:", {
-          name: data.clinic.name,
-          registration_number: data.clinic.registration_number,
-          hasData: Object.keys(data.clinic).length > 0,
-          allKeys: Object.keys(data.clinic),
-        })
         
         // Always set these values, even if empty
         setClinicName(data.clinic.name || "")
@@ -303,30 +278,12 @@ export default function SettingsPage() {
         setIsApproved(data.clinic.is_approved || false)
         
         // Note: clinicName state won't be updated immediately, but will be after setState
-        console.log("[Clinic Settings] Set clinic form values from data:", {
-          name: data.clinic.name,
-          registrationNumber: data.clinic.registration_number,
-          email: data.clinic.email_address,
-          phone: data.clinic.contact_number_primary,
-        })
       } else {
         console.warn("[Clinic Settings] No clinic data in response")
       }
       
       // Check if address exists and has data
       if (data.address && typeof data.address === 'object' && Object.keys(data.address).length > 0) {
-        console.log("[Clinic Settings] Populating address data:", {
-          rawAddress: data.address,
-          addressLine1: data.address.addressLine1,
-          addressLine2: data.address.addressLine2,
-          city: data.address.city,
-          state: data.address.state,
-          pincode: data.address.pincode,
-          country: data.address.country,
-          hasData: Object.keys(data.address).length > 0,
-          allKeys: Object.keys(data.address),
-          addressString: JSON.stringify(data.address, null, 2),
-        })
         
         // Extract address data, handling "NA" values and empty strings
         const addr = data.address
@@ -347,14 +304,6 @@ export default function SettingsPage() {
         const cleanedPincode = cleanAddressValue(addr.pincode)
         const cleanedCountry = cleanAddressValue(addr.country) || "India"
         
-        console.log("[Clinic Settings] Cleaned address values:", {
-          addressLine1: cleanedAddressLine1,
-          addressLine2: cleanedAddressLine2,
-          city: cleanedCity,
-          state: cleanedState,
-          pincode: cleanedPincode,
-          country: cleanedCountry,
-        })
         
         // Set the state values - use functional updates to ensure React detects changes
         setAddressLine1(() => cleanedAddressLine1)
@@ -364,25 +313,11 @@ export default function SettingsPage() {
         setPincode(() => cleanedPincode)
         setCountry(() => cleanedCountry)
         
-        console.log("[Clinic Settings] Address form values set in state using functional updates")
         
         // Verify state was set by checking after a brief delay
         setTimeout(() => {
-          console.log("[Clinic Settings] Address state verification (after setState):", {
-            addressLine1: addressLine1,
-            addressLine2: addressLine2,
-            city: city,
-            state: state,
-            pincode: pincode,
-            country: country,
-          })
         }, 100)
       } else {
-        console.log("[Clinic Settings] No address data in response (may be new clinic or address not set):", {
-          hasAddress: !!data.address,
-          addressType: data.address ? typeof data.address : 'undefined',
-          addressValue: data.address,
-        })
         // Initialize with empty values
         setAddressLine1("")
         setAddressLine2("")
@@ -392,7 +327,6 @@ export default function SettingsPage() {
         setCountry("India")
       }
       if (data.operating_hours && Array.isArray(data.operating_hours) && data.operating_hours.length > 0) {
-        console.log("[Clinic Settings] Processing operating hours:", data.operating_hours.length, "days")
         // Ensure we have all 7 days
         const daysMap = new Map<string, OperatingHours>()
         data.operating_hours.forEach((h: any) => {
@@ -418,24 +352,19 @@ export default function SettingsPage() {
           }
         })
         setOperatingHours(completeHours)
-        console.log("[Clinic Settings] Set operating hours for", completeHours.length, "days")
       } else {
-        console.log("[Clinic Settings] No operating hours in response, using defaults")
       }
       
       if (data.emergency_contact) {
-        console.log("[Clinic Settings] Populating emergency contact:", data.emergency_contact)
         setEmergencyName(data.emergency_contact.name || "")
         setEmergencyPhone(data.emergency_contact.phone || "")
         setEmergencyInstructions(data.emergency_contact.instructions || "")
       } else {
-        console.log("[Clinic Settings] No emergency contact in response")
         setEmergencyName("")
         setEmergencyPhone("")
         setEmergencyInstructions("")
       }
       
-      console.log("[Clinic Settings] Data loading complete")
       
       // Store loaded data as original for cancel functionality
       // Use the data we just loaded, not the state (which may not be updated yet)
@@ -837,7 +766,6 @@ export default function SettingsPage() {
         setIsLoading(true)
         try {
           await loadClinicData()
-          console.log("[Clinic Settings] Address data reloaded after save")
         } catch (reloadError) {
           console.error("[Clinic Settings] Error reloading address data:", reloadError)
           // Still show success but log the error

@@ -231,19 +231,6 @@ backendAxiosClient.interceptors.response.use(
         error.response?.status === 400 &&
         (responseMessage.includes("consultation_completed") ||
           responseMessage.includes("current: consultation_completed"));
-      if (isExpectedPreview400 && process.env.NODE_ENV !== "production") {
-        console.info(
-          `[backendAxiosClient] Suppressed expected 400 on ${error.config.method?.toUpperCase()} ${fullUrl}`,
-          error.response?.data,
-        );
-      }
-      if (isAlreadyCompleted400 && process.env.NODE_ENV !== "production") {
-        console.info(
-          `[backendAxiosClient] Suppressed expected already-completed 400 on ${error.config.method?.toUpperCase()} ${fullUrl}`,
-          error.response?.data,
-        );
-      }
-      
       // Only log actionable errors:
       // - skip expected 404s on section/template endpoints
       // - skip expected 400s on preview endpoint (e.g. cancelled/no-show encounters)
@@ -256,21 +243,14 @@ backendAxiosClient.interceptors.response.use(
         !isLabsMeExpected &&
         !isReportTasksV1Expected
       ) {
-        console.error(
-          `[backendAxiosClient] Error ${error.response?.status || "Network"} on ${error.config.method?.toUpperCase()} ${fullUrl}`,
-        );
-        if (!error.response) {
-          // No HTTP response: Django down, wrong BACKEND_PROXY_TARGET, CORS (if using absolute BACKEND_URL), or timeout
+        const method = error.config.method?.toUpperCase() || "REQUEST";
+        const status = error.response?.status || "Network";
+        console.error(`[backendAxiosClient] Error ${status} on ${method} ${fullUrl}`);
+        if (!error.response && process.env.NODE_ENV !== "production") {
           console.error(
-            "[backendAxiosClient] No response — with default same-origin /api, ensure Django is running and Next rewrites match BACKEND_PROXY_TARGET (see next.config.mjs). Or set NEXT_PUBLIC_BACKEND_URL to your API.",
+            "[backendAxiosClient] No response — check Django / Next rewrites / BACKEND_PROXY_TARGET",
             { code: error.code, message: error.message },
           );
-        }
-        // Always log response payload if present (even if empty) to avoid losing DRF "detail" messages
-        if (error.response) {
-          console.error("[backendAxiosClient] Error response statusText:", error.response.statusText);
-          console.error("[backendAxiosClient] Error response headers:", error.response.headers);
-          console.error("[backendAxiosClient] Error response data:", error.response.data);
         }
       }
     }

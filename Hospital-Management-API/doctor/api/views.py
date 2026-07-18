@@ -67,6 +67,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import  filters
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.decorators import action
+from shared.logging import LogModule, logger as dpc_logger
 # Constants
 CACHE_TIMEOUT = 300  # 5 minutes
 
@@ -83,22 +84,31 @@ class DoctorOnboardingPhase1View(GenericAPIView):
 
     def post(self, request, *args, **kwargs):
         try:
-            print("I am in DOCTOR phase 1 onboarding")
-            #print("Request data:", request.data)
+            dpc_logger.info(
+                "Doctor phase 1 onboarding started",
+                module=LogModule.API,
+                action="doctor.onboarding.phase1",
+            )
             serializer = self.get_serializer(data=request.data, context={"request": request})
-            #print("Serializer:", serializer.data)
-            #print("serializer.is_valid()",serializer.is_valid())
             if not serializer.is_valid():
-                print("Validation errors:", serializer.errors)
-                #return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                dpc_logger.warning(
+                    "Doctor phase 1 onboarding validation failed",
+                    module=LogModule.API,
+                    action="doctor.onboarding.phase1",
+                    metadata={"error_count": len(serializer.errors)},
+                )
                 return Response({"status": "error", "errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
             serializer.is_valid(raise_exception=True)
             with transaction.atomic():
                 doctor_obj = serializer.save()
-            #print("Doctor object:", doctor_obj)
             return Response(self.get_serializer(doctor_obj).data, status=status.HTTP_201_CREATED)
         except Exception as e:
-            print("Exception:", e)
+            dpc_logger.exception(
+                "Doctor phase 1 onboarding failed",
+                module=LogModule.API,
+                action="doctor.onboarding.phase1",
+                exc=e,
+            )
             return Response({"status": "error", "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 #Determines if the user is new or existing.
@@ -317,9 +327,12 @@ class DoctorFullProfileAPIView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        # Log incoming data for debugging
-        print(f"[DEBUG] PATCH request data: {request.data}")
-        print(f"[DEBUG] Current doctor gender before update: {doctor_instance.gender}")
+        dpc_logger.info(
+            "Doctor profile patch requested",
+            module=LogModule.API,
+            action="doctor.profile.patch",
+            metadata={"doctor_id": str(doctor_instance.id)},
+        )
 
         # Use DoctorProfileUpdateSerializer for updates
         serializer = DoctorProfileUpdateSerializer(
@@ -334,9 +347,12 @@ class DoctorFullProfileAPIView(APIView):
             
             # Refresh from database to get updated values
             doctor_instance.refresh_from_db()
-            print(f"[DEBUG] Doctor gender after save: {doctor_instance.gender}")
-            print(f"[DEBUG] Doctor dob after save: {doctor_instance.dob}")
-            print(f"[DEBUG] Doctor about after save: {doctor_instance.about}")
+            dpc_logger.info(
+                "Doctor profile patch completed",
+                module=LogModule.API,
+                action="doctor.profile.patch",
+                metadata={"doctor_id": str(doctor_instance.id)},
+            )
             
             # Return updated profile using DoctorFullProfileSerializer
             updated_serializer = DoctorFullProfileSerializer(doctor_instance, context={"request": request})
@@ -345,7 +361,12 @@ class DoctorFullProfileAPIView(APIView):
                 status=status.HTTP_200_OK
             )
         
-        print(f"[DEBUG] Serializer errors: {serializer.errors}")
+        dpc_logger.warning(
+            "Doctor profile patch validation failed",
+            module=LogModule.API,
+            action="doctor.profile.patch",
+            metadata={"doctor_id": str(doctor_instance.id), "error_count": len(serializer.errors)},
+        )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
   
 class DoctorRegistrationAPIView(APIView):
@@ -1805,11 +1826,20 @@ class UploadDigitalSignatureView(APIView):
     parser_classes = [MultiPartParser, FormParser]
 
     def patch(self, request):
-        print("UploadDigitalSignatureView request received")
+        dpc_logger.info(
+            "Digital signature upload requested",
+            module=LogModule.API,
+            action="doctor.kyc.digital_signature.upload",
+        )
         doctor = request.user.doctor
         try:
             kyc_status, _ = KYCStatus.objects.get_or_create(doctor=doctor)
-            print(f"KYC Status retrieved: {kyc_status.id}, Doctor: {doctor.id}")
+            dpc_logger.info(
+                "KYC status ready for digital signature upload",
+                module=LogModule.API,
+                action="doctor.kyc.digital_signature.upload",
+                metadata={"doctor_id": str(doctor.id), "kyc_status_id": str(kyc_status.id)},
+            )
         except Exception as e:
             logger.error(f"Failed to get or create KYC status: {str(e)}")
             return Response({
@@ -1825,14 +1855,30 @@ class UploadDigitalSignatureView(APIView):
             }, status=status.HTTP_400_BAD_REQUEST)
 
         file = request.FILES['digital_signature']
-        print(f"File received: {file.name}, Size: {file.size}, Content type: {file.content_type}")
+        dpc_logger.info(
+            "Digital signature file received",
+            module=LogModule.API,
+            action="doctor.kyc.digital_signature.upload",
+            metadata={
+                "doctor_id": str(doctor.id),
+                "file_size": file.size,
+                "content_type": file.content_type,
+            },
+        )
 
         # Use serializer for validation and file upload (same pattern as PAN/Aadhaar)
         serializer = DigitalSignatureUploadSerializer(kyc_status, data=request.data, partial=True)
         if serializer.is_valid():
             instance = serializer.save()
-            print(f"File saved. Digital signature path: {instance.digital_signature.name if instance.digital_signature else 'None'}")
-            print(f"Digital signature URL: {instance.digital_signature.url if instance.digital_signature else 'None'}")
+            dpc_logger.info(
+                "Digital signature uploaded",
+                module=LogModule.API,
+                action="doctor.kyc.digital_signature.upload",
+                metadata={
+                    "doctor_id": str(doctor.id),
+                    "has_signature": bool(instance.digital_signature),
+                },
+            )
             
             # Refresh from DB to ensure we have the latest data
             instance.refresh_from_db()
@@ -1951,7 +1997,6 @@ class DoctorFeeStructureViewSet(viewsets.ModelViewSet):
     ordering = ['-created_at']
     
     def get_queryset(self):
-        print("DoctorFeeStructureViewSet initialized")
         """Filter queryset based on user role"""
         user = self.request.user
         base_qs = DoctorFeeStructure.objects.select_related('doctor', 'clinic').all()
@@ -3173,14 +3218,14 @@ class DoctorAvailabilityView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def delete(self, request):
-        print("DELETE request received")
-        # doctor_id = request.data.get("doctor_id")
-        # clinic_id = request.data.get("clinic_id")
         doctor_id = request.query_params.get("doctor_id")
         clinic_id = request.query_params.get("clinic_id")
-
-        print("DELETE request - doctor_id:", doctor_id)
-        print("DELETE request - clinic_id:", clinic_id)
+        dpc_logger.info(
+            "Doctor availability delete requested",
+            module=LogModule.API,
+            action="doctor.availability.delete",
+            metadata={"doctor_id": doctor_id, "clinic_id": clinic_id},
+        )
 
         if not doctor_id or not clinic_id:
             return Response({"error": "doctor_id and clinic_id are required"}, status=status.HTTP_400_BAD_REQUEST)

@@ -116,11 +116,6 @@ export async function POST(
     }
 
     // Log request for debugging (remove in production)
-    console.log("Scheduling rules POST request:", {
-      doctor_id,
-      clinic_id: body.clinic_id,
-      url: `${DJANGO_API_URL}/api/doctor/scheduling-rules/`,
-    })
 
     const response = await fetch(
       `${DJANGO_API_URL}/api/doctor/scheduling-rules/`,
@@ -134,8 +129,6 @@ export async function POST(
         credentials: "include",
       }
     )
-
-    console.log("Scheduling rules POST response status:", response.status, response.statusText)
 
     let data: any = {}
     const contentType = response.headers.get("content-type")

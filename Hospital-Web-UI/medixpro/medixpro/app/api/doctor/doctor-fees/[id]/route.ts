@@ -126,12 +126,9 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    console.log("[Next.js API] PATCH /api/doctor/doctor-fees/[id] - Request received")
     const token = request.headers.get("Authorization")
     const { id } = await params
     const body = await request.json()
-    console.log("[Next.js API] Request body:", JSON.stringify(body, null, 2))
-    console.log("[Next.js API] Fee Structure ID:", id)
 
     const response = await fetch(`${DJANGO_API_URL}/api/doctor/doctor-fees/${id}/`, {
       method: "PATCH",
@@ -143,14 +140,9 @@ export async function PATCH(
       credentials: "include",
     })
 
-    console.log("[Next.js API] Django response status:", response.status)
-    console.log("[Next.js API] Django response headers:", Object.fromEntries(response.headers.entries()))
-
     let data
     const contentType = response.headers.get("content-type")
     const responseText = await response.text()
-    console.log("[Next.js API] Response text:", responseText)
-    console.log("[Next.js API] Content-Type:", contentType)
 
     try {
       if (responseText) {
@@ -169,8 +161,6 @@ export async function PATCH(
         { status: response.status }
       )
     }
-
-    console.log("[Next.js API] Parsed data:", data)
 
     if (!response.ok) {
       console.error("[Next.js API] Django error response:", data)

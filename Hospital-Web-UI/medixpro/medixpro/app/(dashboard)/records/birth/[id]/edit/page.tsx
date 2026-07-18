@@ -102,7 +102,6 @@ export default function EditBirthRecordPage({ params }: { params: Promise<{ id: 
 
     // Simulate API call
     setTimeout(() => {
-      console.log(data)
       toast({
         title: "Birth record updated",
         description: `Record for ${data.childFirstName} ${data.childLastName} has been updated successfully.`,
