@@ -1513,7 +1513,8 @@ export default function SettingsPage() {
             </div>
           </SimpleFormCard>
 
-          {/* Operating Hours Section */}
+          {/* Operating Hours Section - hidden: use Settings > Working Hours tab instead to avoid duplicate UI */}
+          {/*
           <SimpleFormCard
             title="Operating Hours"
             description="Configure operating hours for each day of the week"
@@ -1580,6 +1581,7 @@ export default function SettingsPage() {
               </div>
             </div>
           </SimpleFormCard>
+          */}
 
           {/* Emergency Contact Section */}
           <SimpleFormCard
