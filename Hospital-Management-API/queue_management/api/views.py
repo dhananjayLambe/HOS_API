@@ -1,3 +1,4 @@
+import json
 import redis
 import logging
 import threading
@@ -793,7 +794,13 @@ class QueuePatientView(RetrieveAPIView):
         )
         cached_data = redis_client.get(redis_key)
         if cached_data:
-            return Response(eval(cached_data), status=status.HTTP_200_OK)
+            try:
+                data = json.loads(cached_data)
+                if not isinstance(data, dict):
+                    raise ValueError("Expected JSON object")
+                return Response(data, status=status.HTTP_200_OK)
+            except (json.JSONDecodeError, TypeError, ValueError):
+                redis_client.delete(redis_key)
 
         # If not in Redis, fetch from DB
         queue_entry = get_object_or_404(Queue,patient__id=id, doctor__id=doctor_id, clinic__id=clinic_id, status='waiting')
@@ -802,6 +809,6 @@ class QueuePatientView(RetrieveAPIView):
         data = serializer.data
 
         # Cache the data in Redis for 10 seconds (adjustable)
-        redis_client.setex(redis_key, 10, str(data))
+        redis_client.setex(redis_key, 10, json.dumps(data))
 
         return Response(data, status=status.HTTP_200_OK)
