@@ -67,7 +67,7 @@ class IsDoctorOrHelpdeskOrOwnerOrAdmin(BasePermission):
             return True
         if hasattr(request.user, 'helpdesk'):
             return obj.patient_account.clinic in request.user.helpdesk.clinics.all()
-        if hasattr(request.user, 'patient') and obj.patient_account.user == request.user:
+        if hasattr(request.user, 'patientaccount') and obj.patient_account.user == request.user:
             return True
         return False
     

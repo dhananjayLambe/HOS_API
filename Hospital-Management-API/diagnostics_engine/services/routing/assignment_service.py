@@ -71,10 +71,6 @@ class AssignmentService:
         profile = order.patient_profile
         doc = order.doctor
 
-        from diagnostics_engine.services.routing.routing_helpers import resolve_patient_legacy_row
-
-        patient_row = resolve_patient_legacy_row(profile)
-
         encounter_display = getattr(encounter, "visit_pnr", None) or (str(encounter.pk) if encounter else "")
         patient_name = profile.get_full_name() if profile else ""
         patient_phone = ""
@@ -114,7 +110,7 @@ class AssignmentService:
                     diagnostic_order=order,
                     encounter=encounter,
                     consultation=consultation,
-                    patient=patient_row,
+                    patient_profile=profile,
                     lab=c.lab,
                     branch=c.branch,
                     is_eligible=False,
@@ -211,7 +207,7 @@ class AssignmentService:
                 diagnostic_order=order,
                 encounter=encounter,
                 consultation=consultation,
-                patient=patient_row,
+                patient_profile=profile,
                 lab=c.lab,
                 branch=c.branch,
                 is_eligible=True,
@@ -261,7 +257,7 @@ class AssignmentService:
             diagnostic_order=order,
             encounter=encounter,
             consultation=consultation,
-            patient=patient_row,
+            patient_profile=profile,
             clinic=encounter.clinic if encounter else None,
             doctor=doc.user if doc else None,
             encounter_display_id=encounter_display,

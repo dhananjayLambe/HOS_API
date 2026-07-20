@@ -38,8 +38,7 @@ from diagnostics_engine.tests.test_order_creation_service import _consultation_w
 from diagnostics_engine.tests.test_routing_service import _branch_with_area_and_org
 from doctor.models import doctor as DoctorProfile
 from labs.models.branch_pricing import BranchServicePricing
-from patient.models import patient as PatientRow
-from patient_account.models import PatientProfile
+from patient_account.models import PatientAddress, PatientProfile
 
 User = get_user_model()
 
@@ -98,12 +97,17 @@ class RoutingCatalogPricingAlignmentTests(TestCase):
         self.doc_profile = DoctorProfile.objects.create(user=self.user, primary_specialization="General")
         self.doc_profile.clinics.add(self.clinic)
 
-    def _patient_row_for_profile(self, profile: PatientProfile) -> PatientRow:
-        return PatientRow.objects.create(
-            user=profile.account.user,
-            age=Decimal("30.0"),
-            address="Home 400001 Mumbai",
-            mobile="9999999998",
+    def _patient_address_for_profile(
+        self, profile: PatientProfile, *, pincode: str = "400001"
+    ) -> PatientAddress:
+        return PatientAddress.objects.create(
+            account=profile.account,
+            address_type=PatientAddress.HOME,
+            street="Home",
+            city="Mumbai",
+            state="MH",
+            pincode=pincode,
+            country="India",
         )
 
     def test_positive_same_service_uuid_pricing_eligible_and_snapshots(self):
@@ -113,7 +117,7 @@ class RoutingCatalogPricingAlignmentTests(TestCase):
         ClinicalEncounter.objects.filter(pk=encounter.pk).update(clinic=self.clinic)
         encounter.refresh_from_db()
         consultation.refresh_from_db()
-        self._patient_row_for_profile(profile)
+        self._patient_address_for_profile(profile)
 
         with self.captureOnCommitCallbacks(execute=True):
             r = DiagnosticOrderCreationService.create_order_from_consultation(
@@ -126,17 +130,19 @@ class RoutingCatalogPricingAlignmentTests(TestCase):
         self.assertEqual(order.routing_status, DiagnosticOrderRoutingStatus.ASSIGNED)
 
         loc = resolve_routing_location(order)
-        cand = next(c for c in EligibilityEngine.evaluate_all(order, loc) if c.branch_id == self.branch.pk)
+        cand = next(c for c in EligibilityEngine.evaluate_all(order, loc) if c.branch.pk == self.branch.pk)
         self.assertNotIn(IR_MISSING_TEST_PRICING, cand.ineligibility_reasons)
         self.assertIn(ER_HAS_SERVICE_PRICING, cand.eligibility_reasons)
 
         run = RoutingRun.objects.filter(diagnostic_order=order).order_by("-created_at").first()
         self.assertIsNotNone(run)
         self.assertEqual(run.routing_status, RoutingStatus.COMPLETED)
+        self.assertEqual(run.patient_profile_id, profile.id)
         self.assertTrue(EligibleLabSnapshot.objects.filter(routing_run=run, is_eligible=True).exists())
         self.assertTrue(RoutingDecisionSnapshot.objects.filter(routing_run=run).exists())
         assign = RoutingLabOrderAssignment.objects.get(diagnostic_order=order)
         self.assertEqual(assign.branch_id, self.branch.pk)
+        self.assertEqual(assign.patient_profile_id, profile.id)
 
     def test_negative_pricing_on_different_catalog_uuid_same_display_name(self):
         """
@@ -155,6 +161,17 @@ class RoutingCatalogPricingAlignmentTests(TestCase):
         )
         BranchServicePricing.objects.filter(branch=self.branch, service=self.svc_cbc).delete()
         past = timezone.now().date() - timedelta(days=7)
+        # Temporary pricing so order creation can quote the ordered service.
+        BranchServicePricing.objects.create(
+            branch=self.branch,
+            service=svc_order,
+            selling_price=Decimal("150.00"),
+            platform_margin_type="flat",
+            platform_margin_value=Decimal("5"),
+            doctor_commission_type="flat",
+            doctor_commission_value=Decimal("2"),
+            valid_from=past,
+        )
         BranchServicePricing.objects.create(
             branch=self.branch,
             service=svc_stale,
@@ -172,7 +189,7 @@ class RoutingCatalogPricingAlignmentTests(TestCase):
         ClinicalEncounter.objects.filter(pk=encounter.pk).update(clinic=self.clinic)
         encounter.refresh_from_db()
         consultation.refresh_from_db()
-        self._patient_row_for_profile(profile)
+        self._patient_address_for_profile(profile)
 
         with self.captureOnCommitCallbacks(execute=True):
             r = DiagnosticOrderCreationService.create_order_from_consultation(
@@ -180,12 +197,15 @@ class RoutingCatalogPricingAlignmentTests(TestCase):
                 branch=self.branch,
                 created_by=self.user,
             )
+            # Leave only mis-linked (same display name, different UUID) pricing for routing.
+            BranchServicePricing.objects.filter(branch=self.branch, service=svc_order).delete()
+
         order = r.order
         order.refresh_from_db()
         self.assertEqual(order.routing_status, DiagnosticOrderRoutingStatus.NO_MATCH_FOUND)
 
         loc = resolve_routing_location(order)
-        cand = next(c for c in EligibilityEngine.evaluate_all(order, loc) if c.branch_id == self.branch.pk)
+        cand = next(c for c in EligibilityEngine.evaluate_all(order, loc) if c.branch.pk == self.branch.pk)
         self.assertIn(IR_MISSING_TEST_PRICING, cand.ineligibility_reasons)
 
         run = RoutingRun.objects.filter(diagnostic_order=order).order_by("-created_at").first()

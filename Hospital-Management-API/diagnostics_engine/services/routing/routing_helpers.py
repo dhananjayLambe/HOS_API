@@ -178,19 +178,35 @@ def _decimal_or_none(val: Any) -> Decimal | None:
         return None
 
 
-def resolve_patient_legacy_row(patient_profile: Any) -> Any:
-    """Map PatientProfile → legacy patient.patient row when present."""
+def resolve_patient_address(patient_profile: Any) -> Any:
+    """
+    Load a PatientAddress for the profile's account.
+
+    Prefers home address; otherwise first address with a pincode.
+    """
     if patient_profile is None:
         return None
     acc = getattr(patient_profile, "account", None)
     if acc is None:
         return None
-    user = getattr(acc, "user", None)
-    if user is None:
-        return None
-    from patient.models import patient as PatientRow
+    from patient_account.models import PatientAddress
 
-    return PatientRow.objects.filter(user_id=user.pk).first()
+    addresses = list(
+        PatientAddress.objects.filter(account_id=acc.pk).order_by("created_at")
+    )
+    if not addresses:
+        return None
+    home = next(
+        (a for a in addresses if getattr(a, "address_type", None) == PatientAddress.HOME),
+        None,
+    )
+    if home and normalize_indian_pincode(getattr(home, "pincode", None)):
+        return home
+    with_pin = next(
+        (a for a in addresses if normalize_indian_pincode(getattr(a, "pincode", None))),
+        None,
+    )
+    return with_pin or home or addresses[0]
 
 
 def resolve_routing_location_for_context(
@@ -210,7 +226,7 @@ def resolve_routing_location_for_context(
     )
 
     clinic = encounter.clinic if encounter else None
-    patient_row = resolve_patient_legacy_row(patient_profile)
+    patient_addr = resolve_patient_address(patient_profile)
 
     clinic_addr = None
     if clinic is not None:
@@ -226,9 +242,15 @@ def resolve_routing_location_for_context(
         clinic_city = clinic_addr.city if getattr(clinic_addr, "city", None) not in (None, "NA") else None
 
     patient_pin = normalize_indian_pincode(
-        extract_pincode_from_text(getattr(patient_row, "address", None) if patient_row else None)
+        getattr(patient_addr, "pincode", None) if patient_addr else None
     )
-    patient_lat = patient_lon = None
+    if not patient_pin and patient_addr is not None:
+        # Fallback: pincode embedded in street text
+        patient_pin = normalize_indian_pincode(
+            extract_pincode_from_text(getattr(patient_addr, "street", None))
+        )
+    patient_lat = _decimal_or_none(getattr(patient_addr, "latitude", None) if patient_addr else None)
+    patient_lon = _decimal_or_none(getattr(patient_addr, "longitude", None) if patient_addr else None)
 
     mode = collection_mode or "lab"
 
@@ -237,8 +259,8 @@ def resolve_routing_location_for_context(
             return ResolvedRoutingLocation(
                 source=RoutingLocationSource.PATIENT_PINCODE,
                 pincode=patient_pin,
-                latitude=patient_lat,
-                longitude=patient_lon,
+                latitude=_float_or_none(patient_lat),
+                longitude=_float_or_none(patient_lon),
                 city=None,
                 confidence=RecommendationConfidence.MEDIUM,
             )
@@ -264,8 +286,8 @@ def resolve_routing_location_for_context(
         return ResolvedRoutingLocation(
             source=RoutingLocationSource.PATIENT_PINCODE,
             pincode=patient_pin,
-            latitude=patient_lat,
-            longitude=patient_lon,
+            latitude=_float_or_none(patient_lat),
+            longitude=_float_or_none(patient_lon),
             city=None,
             confidence=RecommendationConfidence.MEDIUM,
         )
@@ -301,7 +323,7 @@ def resolve_routing_location(order: DiagnosticOrder) -> ResolvedRoutingLocation:
     """
     India-focused fallback: patient → clinic.
 
-    Home collection: pincode from patient address text, then clinic pincode.
+    Home collection: pincode from PatientAddress, then clinic pincode.
     Lab visit: patient pincode, clinic pincode, clinic coordinates, city-level.
     """
     encounter = order.encounter

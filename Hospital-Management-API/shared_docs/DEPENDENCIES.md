@@ -91,4 +91,4 @@ Cross-app coupling for developers and AI tools. See [event_registry.md](event_re
 
 ## Tier-3 apps
 
-account, clinic, hospital_mgmt, hospitalAdmin, helpdesk, support, tasks, caleder_events, analytics, consultation_config, patient (legacy) — see each app's `docs/README.md`.
+account, clinic, hospital_mgmt, hospitalAdmin, helpdesk, support, tasks, caleder_events, analytics, consultation_config — see each app's `docs/README.md`.

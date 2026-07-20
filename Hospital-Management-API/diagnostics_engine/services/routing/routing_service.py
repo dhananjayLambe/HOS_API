@@ -41,7 +41,6 @@ class RoutingService:
             describe_diagnostic_order_tests,
             privacy_patient_label,
             resolve_routing_location,
-            resolve_patient_legacy_row,
             routing_journey_human,
             routing_journey_info,
         )
@@ -103,8 +102,6 @@ class RoutingService:
         clinic_name = encounter.clinic.name if encounter and encounter.clinic else ""
         doctor_name = doc.get_name if doc else ""
 
-        patient_row = resolve_patient_legacy_row(profile)
-
         tests_summary = describe_diagnostic_order_tests(order)
         patient_short = privacy_patient_label(patient_name)
         coll_human = (
@@ -142,7 +139,7 @@ class RoutingService:
                     diagnostic_order=order,
                     encounter=encounter,
                     consultation=order.consultation,
-                    patient=patient_row,
+                    patient_profile=profile,
                     clinic=encounter.clinic if encounter else None,
                     doctor=doc.user if doc else None,
                     encounter_display_id=encounter_display,

@@ -130,8 +130,8 @@ class RoutingRun(BaseModel):
         related_name="routing_runs",
     )
 
-    patient = models.ForeignKey(
-        "patient.patient",
+    patient_profile = models.ForeignKey(
+        "patient_account.PatientProfile",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -272,7 +272,7 @@ class RoutingRun(BaseModel):
             models.Index(fields=["resolved_pincode"]),
             models.Index(fields=["encounter"]),
             models.Index(fields=["consultation"]),
-            models.Index(fields=["patient"]),
+            models.Index(fields=["patient_profile"], name="diagnostics_patient_91c38d_idx"),
             models.Index(fields=["clinic"]),
             models.Index(fields=["doctor"]),
             models.Index(fields=["created_at"]),
@@ -331,8 +331,8 @@ class EligibleLabSnapshot(BaseModel):
         related_name="eligible_lab_snapshots",
     )
 
-    patient = models.ForeignKey(
-        "patient.patient",
+    patient_profile = models.ForeignKey(
+        "patient_account.PatientProfile",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -399,7 +399,7 @@ class EligibleLabSnapshot(BaseModel):
             models.Index(fields=["ranking_position"]),
             models.Index(fields=["encounter"]),
             models.Index(fields=["consultation"]),
-            models.Index(fields=["patient"]),
+            models.Index(fields=["patient_profile"], name="diagnostics_patient_d7556a_idx"),
             models.Index(fields=["estimated_price"]),
             models.Index(fields=["distance_km"]),
             models.Index(fields=["estimated_tat_hours"]),
@@ -561,8 +561,8 @@ class RoutingLabOrderAssignment(BaseModel):
         related_name="lab_assignments",
     )
 
-    patient = models.ForeignKey(
-        "patient.patient",
+    patient_profile = models.ForeignKey(
+        "patient_account.PatientProfile",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -723,7 +723,7 @@ class RoutingLabOrderAssignment(BaseModel):
             models.Index(fields=["branch"]),
             models.Index(fields=["encounter"]),
             models.Index(fields=["consultation"]),
-            models.Index(fields=["patient"]),
+            models.Index(fields=["patient_profile"], name="diagnostics_patient_b7f3c5_idx"),
             models.Index(fields=["clinic"]),
             models.Index(fields=["doctor"]),
             models.Index(fields=["expires_at"]),

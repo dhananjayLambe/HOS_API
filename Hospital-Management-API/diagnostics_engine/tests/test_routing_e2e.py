@@ -43,8 +43,7 @@ from doctor.models import doctor as DoctorProfile
 from labs.models import BranchServiceArea, LabType, RegistrationStatus
 from labs.models.branch_pricing import BranchPackagePricing, BranchServicePricing
 from labs.models.lab_auth import LabAddress, LabBranch, LabOrganization
-from patient.models import patient as PatientRow
-from patient_account.models import PatientProfile
+from patient_account.models import PatientAddress, PatientProfile
 
 User = get_user_model()
 
@@ -144,12 +143,17 @@ class DiagnosticRoutingE2ETests(TestCase):
         self.doc_profile = DoctorProfile.objects.create(user=self.user, primary_specialization="General")
         self.doc_profile.clinics.add(self.clinic)
 
-    def _patient_row(self, profile: PatientProfile, *, address: str) -> PatientRow:
-        return PatientRow.objects.create(
-            user=profile.account.user,
-            age=Decimal("35.0"),
-            address=address,
-            mobile="9888888888",
+    def _patient_address(
+        self, profile: PatientProfile, *, pincode: str | None = "400001", street: str = "Home"
+    ) -> PatientAddress:
+        return PatientAddress.objects.create(
+            account=profile.account,
+            address_type=PatientAddress.HOME,
+            street=street,
+            city="Mumbai",
+            state="MH",
+            pincode=pincode,
+            country="India",
         )
 
     def _consultation_on_clinic(self, *, with_catalog: bool = True):
@@ -166,7 +170,7 @@ class DiagnosticRoutingE2ETests(TestCase):
         _add_pricing(branch, self.svc, self.pkg)
 
         consultation, _, profile = self._consultation_on_clinic()
-        self._patient_row(profile, address="Home near 400001")
+        self._patient_address(profile, pincode="400001")
 
         with self.captureOnCommitCallbacks(execute=True):
             r = DiagnosticOrderCreationService.create_order_from_consultation(
@@ -183,11 +187,13 @@ class DiagnosticRoutingE2ETests(TestCase):
         self.assertIsNotNone(run)
         self.assertEqual(run.routing_status, RoutingStatus.COMPLETED)
         self.assertEqual(run.routing_engine_version, "v1")
+        self.assertEqual(run.patient_profile_id, profile.id)
 
         self.assertGreaterEqual(EligibleLabSnapshot.objects.filter(routing_run=run, is_eligible=True).count(), 1)
         self.assertTrue(RoutingLabOrderAssignment.objects.filter(diagnostic_order=order).exists())
         assign = RoutingLabOrderAssignment.objects.get(diagnostic_order=order)
         self.assertEqual(assign.branch_id, branch.id)
+        self.assertEqual(assign.patient_profile_id, profile.id)
 
         types = list(RoutingEvent.objects.filter(routing_run=run).values_list("event_type", flat=True))
         self.assertIn(RoutingEventType.ROUTING_STARTED, types)
@@ -203,7 +209,7 @@ class DiagnosticRoutingE2ETests(TestCase):
         self.clinic.address.save(update_fields=["pincode"])
 
         consultation, _, profile = self._consultation_on_clinic()
-        self._patient_row(profile, address="No six digit pincode in this text")
+        self._patient_address(profile, pincode=None, street="No six digit pincode in this text")
 
         with self.captureOnCommitCallbacks(execute=True):
             r = DiagnosticOrderCreationService.create_order_from_consultation(
@@ -233,7 +239,7 @@ class DiagnosticRoutingE2ETests(TestCase):
         _add_pricing(branch, self.svc, self.pkg)
 
         consultation, _, profile = self._consultation_on_clinic()
-        self._patient_row(profile, address="Addr 400001")
+        self._patient_address(profile, pincode="400001")
 
         with self.captureOnCommitCallbacks(execute=True):
             r = DiagnosticOrderCreationService.create_order_from_consultation(
@@ -265,7 +271,7 @@ class DiagnosticRoutingE2ETests(TestCase):
         _add_pricing(branch_good, self.svc, self.pkg)
 
         consultation, _, profile = self._consultation_on_clinic()
-        self._patient_row(profile, address="400001")
+        self._patient_address(profile, pincode="400001")
 
         with self.captureOnCommitCallbacks(execute=True):
             r = DiagnosticOrderCreationService.create_order_from_consultation(
@@ -288,7 +294,7 @@ class DiagnosticRoutingE2ETests(TestCase):
         BranchServicePricing.objects.filter(branch=b2, service=self.svc).update(selling_price=Decimal("35.00"))
 
         consultation, _, profile = self._consultation_on_clinic()
-        self._patient_row(profile, address="400001")
+        self._patient_address(profile, pincode="400001")
 
         with self.captureOnCommitCallbacks(execute=True):
             r = DiagnosticOrderCreationService.create_order_from_consultation(
@@ -330,7 +336,7 @@ class DiagnosticRoutingE2ETests(TestCase):
         )
 
         consultation, _, profile = self._consultation_on_clinic()
-        self._patient_row(profile, address="400001")
+        self._patient_address(profile, pincode="400001")
 
         with self.captureOnCommitCallbacks(execute=True):
             r = DiagnosticOrderCreationService.create_order_from_consultation(
@@ -371,7 +377,7 @@ class DiagnosticRoutingE2ETests(TestCase):
         )
 
         consultation, _, profile = self._consultation_on_clinic()
-        self._patient_row(profile, address="400001")
+        self._patient_address(profile, pincode="400001")
 
         with self.captureOnCommitCallbacks(execute=True):
             r = DiagnosticOrderCreationService.create_order_from_consultation(
@@ -431,14 +437,19 @@ class DiagnosticRoutingAPIE2ETests(TestCase):
             self.user, self.doc_profile, with_catalog=True, svc=self.svc
         )
         ClinicalEncounter.objects.filter(pk=enc.pk).update(clinic=self.clinic)
-        self._patient_row(self.profile, address="400001")
+        self._patient_address(self.profile, pincode="400001")
 
-    def _patient_row(self, profile: PatientProfile, *, address: str) -> PatientRow:
-        return PatientRow.objects.create(
-            user=profile.account.user,
-            age=Decimal("28.0"),
-            address=address,
-            mobile="9777777777",
+    def _patient_address(
+        self, profile: PatientProfile, *, pincode: str | None = "400001", street: str = "Home"
+    ) -> PatientAddress:
+        return PatientAddress.objects.create(
+            account=profile.account,
+            address_type=PatientAddress.HOME,
+            street=street,
+            city="Mumbai",
+            state="MH",
+            pincode=pincode,
+            country="India",
         )
 
     def test_api_create_order_then_routing_summary(self):

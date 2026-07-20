@@ -226,7 +226,6 @@ INSTALLED_APPS = [
     # Apps
     'account.apps.AccountConfig',
     'doctor.apps.DoctorConfig',
-    'patient.apps.PatientConfig',
     'hospitalAdmin.apps.HospitaladminConfig',
     'hospital_mgmt.apps.HospitalMgmtConfig',
     'clinic.apps.ClinicConfig',

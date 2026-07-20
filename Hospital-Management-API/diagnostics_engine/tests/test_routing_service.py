@@ -24,8 +24,7 @@ from doctor.models import doctor as DoctorProfile
 from labs.models import BranchServiceArea, LabType, RegistrationStatus
 from labs.models.branch_pricing import BranchServicePricing
 from labs.models.lab_auth import LabAddress, LabBranch, LabOrganization
-from patient.models import patient as PatientRow
-from patient_account.models import PatientProfile
+from patient_account.models import PatientAddress, PatientProfile
 
 User = get_user_model()
 
@@ -116,12 +115,17 @@ class RoutingServiceTests(TestCase):
         self.doc_profile = DoctorProfile.objects.create(user=self.user, primary_specialization="General")
         self.doc_profile.clinics.add(self.clinic)
 
-    def _patient_row_for_profile(self, profile: PatientProfile) -> PatientRow:
-        return PatientRow.objects.create(
-            user=profile.account.user,
-            age=Decimal("30.0"),
-            address="Home 400001 Mumbai",
-            mobile="9999999998",
+    def _patient_address_for_profile(
+        self, profile: PatientProfile, *, pincode: str = "400001"
+    ) -> PatientAddress:
+        return PatientAddress.objects.create(
+            account=profile.account,
+            address_type=PatientAddress.HOME,
+            street="Home",
+            city="Mumbai",
+            state="MH",
+            pincode=pincode,
+            country="India",
         )
 
     def test_routing_creates_run_assignment_and_order_status(self):
@@ -131,7 +135,7 @@ class RoutingServiceTests(TestCase):
         ClinicalEncounter.objects.filter(pk=encounter.pk).update(clinic=self.clinic)
         encounter.refresh_from_db()
         consultation.refresh_from_db()
-        self._patient_row_for_profile(profile)
+        self._patient_address_for_profile(profile)
 
         with self.captureOnCommitCallbacks(execute=True):
             r = DiagnosticOrderCreationService.create_order_from_consultation(
@@ -145,11 +149,13 @@ class RoutingServiceTests(TestCase):
 
         assign = RoutingLabOrderAssignment.objects.get(diagnostic_order=order)
         self.assertEqual(order.branch_id, assign.branch_id)
+        self.assertEqual(assign.patient_profile_id, profile.id)
 
         run = RoutingRun.objects.filter(diagnostic_order=order).order_by("-created_at").first()
         self.assertIsNotNone(run)
         self.assertEqual(run.routing_status, RoutingStatus.COMPLETED)
         self.assertEqual(run.routing_engine_version, "v1")
+        self.assertEqual(run.patient_profile_id, profile.id)
 
         self.assertTrue(RoutingLabOrderAssignment.objects.filter(diagnostic_order=order).exists())
 
@@ -159,7 +165,7 @@ class RoutingServiceTests(TestCase):
         )
         ClinicalEncounter.objects.filter(pk=encounter.pk).update(clinic=self.clinic)
         encounter.refresh_from_db()
-        self._patient_row_for_profile(profile)
+        self._patient_address_for_profile(profile)
 
         with self.captureOnCommitCallbacks(execute=True):
             r = DiagnosticOrderCreationService.create_order_from_consultation(

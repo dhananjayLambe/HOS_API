@@ -1,6 +1,4 @@
 from rest_framework import serializers
-from doctor.api.serializers import DoctorSerializer
-from patient.api.serializers import PatientSerializer
 from hospital_mgmt.models import (
     Hospital, HospitalLicensing, HospitalOperationalDetails, 
     HospitalStaffDetails, HospitalFacility, HospitalDigitalInformation,

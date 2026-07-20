@@ -13,7 +13,7 @@ class Migration(migrations.Migration):
         ('consultations_core', '0026_prescription_cancellation_audit_fields'),
         ('diagnostics_engine', '0008_diagnosticorderitem_display_order_and_more'),
         ('labs', '0004_labcollectionrequest_laborderassignment_and_more'),
-        ('patient', '0001_initial'),
+        ('patient_account', '0007_patientprofile_public_id'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
@@ -46,7 +46,7 @@ class Migration(migrations.Migration):
                 ('diagnostic_order', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='eligible_lab_snapshots', to='diagnostics_engine.diagnosticorder')),
                 ('encounter', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='eligible_lab_snapshots', to='consultations_core.clinicalencounter')),
                 ('lab', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='routing_snapshots', to='labs.laborganization')),
-                ('patient', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='eligible_lab_snapshots', to='patient.patient')),
+                ('patient_profile', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='eligible_lab_snapshots', to='patient_account.patientprofile')),
                 ('updated_by', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='%(class)s_updated_records', to=settings.AUTH_USER_MODEL)),
             ],
             options={
@@ -122,7 +122,7 @@ class Migration(migrations.Migration):
                 ('diagnostic_order', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='routing_runs', to='diagnostics_engine.diagnosticorder')),
                 ('doctor', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='doctor_routing_runs', to=settings.AUTH_USER_MODEL)),
                 ('encounter', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='routing_runs', to='consultations_core.clinicalencounter')),
-                ('patient', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='routing_runs', to='patient.patient')),
+                ('patient_profile', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='routing_runs', to='patient_account.patientprofile')),
                 ('triggered_by', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='routing_runs_triggered', to=settings.AUTH_USER_MODEL)),
                 ('updated_by', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='%(class)s_updated_records', to=settings.AUTH_USER_MODEL)),
             ],
@@ -171,7 +171,7 @@ class Migration(migrations.Migration):
                 ('doctor', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='doctor_lab_assignments', to=settings.AUTH_USER_MODEL)),
                 ('encounter', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='lab_assignments', to='consultations_core.clinicalencounter')),
                 ('lab', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='diagnostic_routing_assignments', to='labs.laborganization')),
-                ('patient', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='lab_assignments', to='patient.patient')),
+                ('patient_profile', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='lab_assignments', to='patient_account.patientprofile')),
                 ('rejected_by', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='diagnostic_assignments_rejected', to=settings.AUTH_USER_MODEL)),
                 ('selected_decision', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='assignments', to='diagnostics_engine.routingdecisionsnapshot')),
                 ('selected_snapshot', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='assignments', to='diagnostics_engine.eligiblelabsnapshot')),
@@ -241,7 +241,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name='routingrun',
-            index=models.Index(fields=['patient'], name='diagnostics_patient_91c38d_idx'),
+            index=models.Index(fields=['patient_profile'], name='diagnostics_patient_91c38d_idx'),
         ),
         migrations.AddIndex(
             model_name='routingrun',
@@ -277,7 +277,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name='routinglaborderassignment',
-            index=models.Index(fields=['patient'], name='diagnostics_patient_b7f3c5_idx'),
+            index=models.Index(fields=['patient_profile'], name='diagnostics_patient_b7f3c5_idx'),
         ),
         migrations.AddIndex(
             model_name='routinglaborderassignment',
@@ -373,7 +373,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name='eligiblelabsnapshot',
-            index=models.Index(fields=['patient'], name='diagnostics_patient_d7556a_idx'),
+            index=models.Index(fields=['patient_profile'], name='diagnostics_patient_d7556a_idx'),
         ),
         migrations.AddIndex(
             model_name='eligiblelabsnapshot',

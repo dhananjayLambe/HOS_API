@@ -38,11 +38,6 @@ def _try_reclaim_stale_helpdesk_username(mobile: str) -> None:
     if PatientAccount.objects.filter(user=existing).exists():
         return
 
-    from patient.models import patient as PatientModel
-
-    if PatientModel.objects.filter(user=existing).exists():
-        return
-
     from clinic.models import ClinicAdminProfile
 
     if ClinicAdminProfile.objects.filter(user=existing).exists():
