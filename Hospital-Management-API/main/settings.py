@@ -298,8 +298,8 @@ REST_FRAMEWORK={
 
 # SimpleJWT settings
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(days=30),  # Token valid for 1 day
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=60), # Refresh token valid for 7 days
+    'ACCESS_TOKEN_LIFETIME': timedelta(hours=12),  # Short-lived access; clients refresh via refresh token
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=30),  # Hard session cap: logout after 1 month
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
     "ALGORITHM": "HS256",

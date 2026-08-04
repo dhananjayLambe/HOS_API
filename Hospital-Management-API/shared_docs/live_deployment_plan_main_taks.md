@@ -14,10 +14,10 @@ This roadmap is ordered by **business value, dependency, and launch risk**, not 
 
 * ✅ Doctor Report Workspace  DONE
 * Complete remaining report APIs DONE
-* Remove demo providers  
-* Remove temporary code
-* Fix known UI bugs (tracked via Release UI Certification — see Phase 7)  
-* Fix backend bugs
+* Remove demo providers  DONE
+* Remove temporary code  DONE
+* Fix known UI bugs (tracked via Release UI Certification — see Phase 7)   
+* Fix backend bugs 
 * Complete validations
 * Improve error handling
 * Remove dead APIs

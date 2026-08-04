@@ -910,8 +910,13 @@ class RefreshTokenStaffView(APIView):
                 if not role:
                     return Response({"error": "User does not have a valid role"}, status=status.HTTP_403_FORBIDDEN)
 
-            # Generate new tokens
+            # Generate new tokens, then blacklist the old refresh (manual rotation)
             tokens = _generate_jwt_tokens(user, role)
+            try:
+                refresh_token.blacklist()
+            except Exception:
+                # Already blacklisted or blacklist app unavailable — still return new tokens
+                pass
 
             response_data = {
                 "status": "refresh_success",
