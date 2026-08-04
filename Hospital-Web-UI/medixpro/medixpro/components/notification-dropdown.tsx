@@ -7,49 +7,8 @@ import Link from "next/link";
 import { useState } from "react";
 import { Notification, NotificationItem } from "./notification-item";
 
-// Sample notification data
-const initialNotifications: Notification[] = [
-  // {
-  //   id: "1",
-  //   title: "New appointment request",
-  //   description: "Dr. Smith has a new appointment request from John Doe",
-  //   time: "Just now",
-  //   read: false,
-  //   type: "appointment",
-  // },
-  // {
-  //   id: "2",
-  //   title: "Prescription renewal",
-  //   description: "Patient Emily Johnson requested a prescription renewal",
-  //   time: "5 min ago",
-  //   read: false,
-  //   type: "prescription",
-  // },
-  // {
-  //   id: "3",
-  //   title: "Lab results available",
-  //   description: "New lab results are available for patient Michael Brown",
-  //   time: "1 hour ago",
-  //   read: false,
-  //   type: "system",
-  // },
-  // {
-  //   id: "4",
-  //   title: "New message",
-  //   description: "You have a new message from Dr. Williams",
-  //   time: "3 hours ago",
-  //   read: true,
-  //   type: "message",
-  // },
-  // {
-  //   id: "5",
-  //   title: "Payment received",
-  //   description: "Payment of $150 received from patient Sarah Davis",
-  //   time: "Yesterday",
-  //   read: true,
-  //   type: "billing",
-  // },
-];
+// Notifications list starts empty until wired to the notifications API.
+const initialNotifications: Notification[] = [];
 
 export function NotificationDropdown() {
   const [notifications, setNotifications] = useState<Notification[]>(initialNotifications);
@@ -103,8 +62,7 @@ export function NotificationDropdown() {
         </div>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild className="justify-center text-sm font-medium">
-          {/* <Link href="/notifications">View all notifications</Link> */}
-          <Link href="">View all notifications</Link>
+          <Link href="/notifications">View all notifications</Link>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

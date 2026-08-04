@@ -237,8 +237,6 @@ INSTALLED_APPS = [
     'consultations_core.apps.ConsultationsCoreConfig',
     'labs.apps.LabsConfig',
     'consultation_config.apps.ConsultationConfigConfig',
-    # 'consultations.apps.ConsultationsConfig',
-    # 'prescriptions.apps.PrescriptionsConfig',
     'support.apps.SupportConfig',
     'tasks.apps.TasksConfig',
     'caleder_events.apps.CalederEventsConfig',

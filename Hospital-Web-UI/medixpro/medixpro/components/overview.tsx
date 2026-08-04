@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend } from "recharts"
+import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Legend } from "recharts"
 
 const data = [
   {
@@ -95,7 +95,6 @@ export function Overview() {
       <ResponsiveContainer width={chartWidth} height={chartHeight}>
         <BarChart data={data}>
           <XAxis dataKey="name" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
-          {/* <Tooltip /> */}
           <Legend />
           <Bar dataKey="total" fill="#2563eb" radius={[4, 4, 0, 0]} className="fill-blue-600" />
           <Bar dataKey="patients" fill="#4ade80" radius={[4, 4, 0, 0]} className="fill-green-600" />

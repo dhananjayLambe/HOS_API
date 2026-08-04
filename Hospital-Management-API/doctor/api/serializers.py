@@ -652,21 +652,6 @@ class CertificationSerializer(serializers.ModelSerializer):
     # Removed validate() method - duplicate checking is now handled in CertificationViewSet.create()
     # to allow updating existing entries instead of raising errors
 
-class DoctorDashboardSummarySerializer(serializers.Serializer):
-    total_patients_today = serializers.IntegerField()
-    total_consultations = serializers.IntegerField()
-    pending_followups = serializers.IntegerField()
-    average_consultation_time_minutes = serializers.FloatField()
-    upcoming_appointments = serializers.IntegerField()
-    new_patients_today = serializers.IntegerField()
-    cancelled_appointments_today = serializers.IntegerField()
-    patients_waiting_now = serializers.IntegerField()
-    total_consultation_time_minutes = serializers.FloatField()
-    total_revenue_today = serializers.FloatField()
-    last_consultation_end_time = serializers.DateTimeField(allow_null=True)
-    average_patient_rating = serializers.FloatField()
-    total_prescriptions_issued = serializers.IntegerField()
-
 
 class RegistrationSerializer(serializers.ModelSerializer):
     class Meta:
@@ -1646,17 +1631,14 @@ class GovernmentIDPhase1Serializer(serializers.ModelSerializer):
             "aadhar_card_number": {"required": False, "allow_blank": True},
         }
 
-    # def validate(self, data):
-    #     if not data.get("pan_card_number") and not data.get("aadhar_card_number"):
-    #         raise serializers.ValidationError("Either PAN or Aadhar number must be provided.")
-    #     return data
+    # Backlog: enforce production PAN/Aadhaar format + require at least one ID at phase-1.
 
     def validate_pan_card_number(self, value):
-        # Always return the value without any validation for development
+        # Development passthrough; see backlog note above for production hardening.
         return value
 
     def validate_aadhar_card_number(self, value):
-        # Always return the value without any validation for development
+        # Development passthrough; see backlog note above for production hardening.
         return value
 
 
@@ -1670,7 +1652,7 @@ class RegistrationPhase1Serializer(serializers.ModelSerializer):
         }
 
     def validate_medical_registration_number(self, value):
-        # Always return the value without any validation for development
+        # Development passthrough; backlog with production ID validation hardening.
         return value
 
 class DoctorPhase1Serializer(serializers.ModelSerializer):

@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { usePatient } from "@/lib/patientContext";
 import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, AlertCircle, Search, Save, X, Loader2, Zap, RefreshCw } from "lucide-react";
+import { ArrowLeft, AlertCircle, Search, Save, Loader2, Zap, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { VitalsSection } from "@/components/consultations/vitals-section";
 import { HistorySection } from "@/components/consultations/history-section";
@@ -53,9 +53,7 @@ export function PreConsultationView() {
   const [isRefreshingSections, setIsRefreshingSections] = useState(false);
   const [showStartNewVisitConfirm, setShowStartNewVisitConfirm] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
-  // Cancel Visit (commented out for later use)
-  // const [showCancelVisitConfirm, setShowCancelVisitConfirm] = useState(false);
-  // const [isCancellingVisit, setIsCancellingVisit] = useState(false);
+  // Backlog: Cancel Visit control (encounter cancel API + confirm dialog).
 
   // Prevent multiple redirects when encounter is cancelled (stops infinite loop)
   const redirectingDueToCancelledRef = useRef(false);
@@ -655,29 +653,7 @@ export function PreConsultationView() {
     router.push("/doctor-dashboard");
   };
 
-  // Cancel Visit (commented out for later use)
-  // const handleCancelVisitClick = () => {
-  //   setShowCancelVisitConfirm(true);
-  // };
-
-  // const handleCancelVisitConfirmYes = async () => {
-  //   setShowCancelVisitConfirm(false);
-  //   if (encounterId) {
-  //     setIsCancellingVisit(true);
-  //     try {
-  //       await backendAxiosClient.post(`/consultations/encounter/${encounterId}/cancel/`);
-  //       toast.success("Visit cancelled successfully.");
-  //       router.push("/doctor-dashboard");
-  //     } catch (err: any) {
-  //       const msg = err.response?.data?.detail || err.response?.data?.message || err.message || "Failed to cancel visit.";
-  //       toast.error(msg);
-  //     } finally {
-  //       setIsCancellingVisit(false);
-  //     }
-  //   } else {
-  //     router.push("/doctor-dashboard");
-  //   }
-  // };
+  // Backlog: Cancel Visit handlers (POST /consultations/encounter/{id}/cancel/).
 
   const handleStartNewVisit = async (_fromActiveVisit?: boolean) => {
     if (!selectedPatient?.id) return;
@@ -1028,17 +1004,6 @@ export function PreConsultationView() {
                 />
               </div>
               <div className="flex flex-wrap gap-2">
-                {/* Cancel Visit button (commented out for later use) */}
-                {/* <Button
-                  variant="outline"
-                  onClick={handleCancelVisitClick}
-                  disabled={isCancellingVisit}
-                  className="gap-2 flex-1 sm:flex-initial"
-                >
-                  <X className="h-4 w-4" />
-                  <span className="hidden sm:inline">{isCancellingVisit ? "Cancelling..." : "Cancel Visit"}</span>
-                  <span className="sm:hidden">{isCancellingVisit ? "..." : "Cancel"}</span>
-                </Button> */}
                 <Button
                   onClick={handleCompleteAndRedirect}
                   disabled={isCompleting || multiTabLocked}
@@ -1057,15 +1022,6 @@ export function PreConsultationView() {
               </div>
             </>
           )}
-          {/* <Button
-            variant="secondary"
-            onClick={() => (preLocked || entryState === "completed" ? handleStartNewVisit(false) : setShowStartNewVisitConfirm(true))}
-            disabled={isStartingNewVisit}
-            className="gap-2 flex-1 sm:flex-initial"
-          >
-            {isStartingNewVisit ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            Start New Visit
-          </Button> */}
         </div>
       </div>
 
@@ -1125,26 +1081,6 @@ export function PreConsultationView() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      {/* Cancel Visit confirm dialog (commented out for later use) */}
-      {/* <AlertDialog open={showCancelVisitConfirm} onOpenChange={setShowCancelVisitConfirm}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Cancel Visit?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This visit will be marked as cancelled and you can start a new one. Are you sure?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <Button variant="outline" onClick={() => setShowCancelVisitConfirm(false)}>
-              No, Stay
-            </Button>
-            <Button onClick={handleCancelVisitConfirmYes} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Yes, Cancel Visit
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog> */}
 
       {/* Pre-Consultation Sections Grid */}
       {isLoadingHistory ? (

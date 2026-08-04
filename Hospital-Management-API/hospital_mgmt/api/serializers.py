@@ -5,23 +5,6 @@ from hospital_mgmt.models import (
     HospitalBillingInformation)
 
 
-# class FrontDeskUserSerializer(serializers.ModelSerializer):
-#     hospital_name = serializers.ReadOnlyField(source='hospital.name')
-#     username = serializers.ReadOnlyField(source='user.username')
-
-#     class Meta:
-#         model = FrontDeskUser
-#         fields = ['id', 'hospital', 'hospital_name', 'user', 'username', 'created_at']
-
-# class HospitalSerializer(serializers.ModelSerializer):
-#     doctors = DoctorSerializer(many=True, read_only=True)
-#     front_desk_users = FrontDeskUserSerializer(many=True, read_only=True)
-#     patients = PatientSerializer(many=True, read_only=True)
-#     class Meta:
-#         model = Hospital
-#         fields = ['id', 'name', 'address', 'contact_number', 'created_at' , \
-#                   'doctors','front_desk_users','patients']
-
 class HospitalSerializer(serializers.ModelSerializer):
     class Meta:
         model = Hospital
@@ -56,8 +39,3 @@ class HospitalBillingInformationSerializer(serializers.ModelSerializer):
     class Meta:
         model = HospitalBillingInformation
         fields = '__all__'
-
-# class FrontDeskUserSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = FrontDeskUser
-#         fields = '__all__'

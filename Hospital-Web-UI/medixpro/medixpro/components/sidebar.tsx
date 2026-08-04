@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { useMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import logo from "@/public/icon.png";
-import { Ambulance, BarChart3, Bed, Building2, Calendar, Calendar1, CheckCircle2, Droplet, FileText, Grid, HelpCircle, LayoutDashboard, Mail, MessageCircle, MessageSquare, Package, Pill, Receipt, Settings, ShieldCheck, Star, UserCog, UserRound, Users, X } from "lucide-react";
+import { BarChart3, FileText, HelpCircle, Pill, Settings, UserCog, UserRound, X } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -89,16 +89,6 @@ export function Sidebar({ isOpen, setIsOpen, alignBelowHeader }: SidebarProps) {
   const initials = getUserInitials();
 
   const sidebarItems: SidebarItem[] = [
-    // {
-    //   title: "Dashboard",
-    //   href: "/doctor-dashboard",
-    //   icon: LayoutDashboard,
-    //   submenu: [
-    //     //{ title: "Admin Dashboard", href: "/" },
-    //     { title: "Doctor Dashboard", href: "/doctor-dashboard" },
-    //     { title: "Patient Dashboard", href: "/patient-dashboard" },
-    //   ],
-    // },
     {
       title: "Consultations",
       href: "/consultations",
@@ -112,20 +102,7 @@ export function Sidebar({ isOpen, setIsOpen, alignBelowHeader }: SidebarProps) {
       title: "Patients",
       href: "/patients",
       icon: UserRound,
-      
     },
-    // {
-    //   title: "Appointments",
-    //   href: "/appointments",
-    //   icon: Calendar,
-    //   submenu: [
-    //     { title: "All Appointments", href: "/appointments" },
-    //     { title: "Add Appointment", href: "/appointments/add" },
-    //     { title: "Calendar View", href: "/appointments/calendar" },
-    //     { title: "Appointment Requests", href: "/appointments/requests" },
-    //   ],
-    // },
-
     {
       title: "Prescriptions",
       href: "/prescriptions",
@@ -133,7 +110,6 @@ export function Sidebar({ isOpen, setIsOpen, alignBelowHeader }: SidebarProps) {
       submenu: [
         { title: "All Prescriptions", href: "/prescriptions" },
         { title: "Templates", href: "/doctor/templates" },
-        //{ title: "Create Prescription", href: "/prescriptions/create" },
       ],
     },
     {
@@ -148,153 +124,6 @@ export function Sidebar({ isOpen, setIsOpen, alignBelowHeader }: SidebarProps) {
         },
       ],
     },
-    // {
-    //   title: "Billing",
-    //   href: "/billing",
-    //   icon: Receipt,
-    //   submenu: [
-    //     { title: "Invoices List", href: "/billing" },
-    //     { title: "Create Invoice", href: "/billing/create" },
-    //     { title: "Payments History", href: "/billing/payments" },
-    //     { title: "Insurance Claims", href: "/billing/insurance" },
-    //   ],
-    // },
-    // {
-    //   title: "Calendar",
-    //   href: "/calendar",
-    //   icon: Calendar1,
-    // },
-
-    // {
-    //   title: "Doctors",
-    //   href: "/doctors",
-    //   icon: Users,
-    //   submenu: [
-    //     { title: "Doctors List", href: "/doctors" },
-    //     { title: "Add Doctor", href: "/doctors/add" },
-    //     { title: "Doctor Schedule", href: "/doctors/schedule" },
-    //     { title: "Specializations", href: "/doctors/specializations" },
-    //   ],
-    // },
-
-
-
-    // {
-    //   title: "Ambulance",
-    //   href: "/ambulance",
-    //   icon: Ambulance,
-    //   submenu: [
-    //     { title: "Ambulance Call List", href: "/ambulance/calls" },
-    //     { title: "Ambulance List", href: "/ambulance/list" },
-    //     { title: "Ambulance Details", href: "/ambulance/details" },
-    //   ],
-    // },
-    // {
-    //   title: "Pharmacy",
-    //   href: "/pharmacy/medicines",
-    //   icon: Pill,
-    // },
-    // {
-    //   title: "Blood Bank",
-    //   href: "/blood-bank",
-    //   icon: Droplet,
-    //   submenu: [
-    //     { title: "Blood Stock", href: "/blood-bank/stock" },
-    //     { title: "Blood Donor", href: "/blood-bank/donors" },
-    //     { title: "Blood Issued", href: "/blood-bank/issued" },
-    //     { title: "Add Blood Unit", href: "/blood-bank/add" },
-    //     { title: "Issue Blood", href: "/blood-bank/issue" },
-    //   ],
-    // },
-    // {
-    //   title: "Billing",
-    //   href: "/billing",
-    //   icon: Receipt,
-    //   submenu: [
-    //     { title: "Invoices List", href: "/billing" },
-    //     { title: "Create Invoice", href: "/billing/create" },
-    //     { title: "Payments History", href: "/billing/payments" },
-    //     { title: "Insurance Claims", href: "/billing/insurance" },
-    //   ],
-    // },
-    // {
-    //   title: "Departments",
-    //   href: "/departments",
-    //   icon: Building2,
-    //   submenu: [
-    //     { title: "Department List", href: "/departments" },
-    //     { title: "Add Department", href: "/departments/add" },
-    //     { title: "Services Offered", href: "/departments/services" },
-    //   ],
-    // },
-    // {
-    //   title: "Inventory",
-    //   href: "/inventory",
-    //   icon: Package,
-    //   submenu: [
-    //     { title: "Inventory List", href: "/inventory" },
-    //     { title: "Add Item", href: "/inventory/add" },
-    //     { title: "Stock Alerts", href: "/inventory/alerts" },
-    //     { title: "Suppliers List", href: "/inventory/suppliers" },
-    //   ],
-    // },
-
-    // {
-    //   title: "Records",
-    //   href: "/records",
-    //   icon: FileText,
-    //   submenu: [
-    //     { title: "Birth Records", href: "/records/birth" },
-    //     { title: "Death Records", href: "/records/death" },
-    //   ],
-    // },
-    // {
-    //   title: "Room Allotment",
-    //   href: "/rooms",
-    //   icon: Bed,
-    //   submenu: [
-    //     { title: "Alloted Rooms", href: "/rooms/alloted" },
-    //     { title: "New Allotment", href: "/rooms/new" },
-    //     { title: "Rooms by Department", href: "/rooms/departments" },
-    //     { title: "Add New Room", href: "/rooms/add" },
-    //   ],
-    // },
-    // {
-    //   title: "Feedback",
-    //   href: "/feedback",
-    //   icon: MessageSquare,
-    // },
- 
-
-    // {
-    //   //title: "Authentication",
-    //   title: "Authentication",
-    //   href: "/auth",
-    //   icon: ShieldCheck,
-    //   submenu: [
-    //     { title: "Login", href: "/auth/login" },
-    //     // { title: "Register", href: "/auth/register" },
-    //     // { title: "Forgot Password", href: "/auth/forgot-password" },
-    //   ],
-    // },
-
-
-
-    // {
-    //   title: "Contacts",
-    //   href: "/contact",
-    //   icon: UserRound,
-    // },
-    // {
-    //   title: "Email",
-    //   href: "/email",
-    //   icon: Mail,
-    // },
-    // {
-    //   title: "Chat",
-    //   href: "/chat",
-    //   icon: MessageCircle,
-    // },
     {
       title: "Settings",
       href: "/settings",
@@ -302,10 +131,7 @@ export function Sidebar({ isOpen, setIsOpen, alignBelowHeader }: SidebarProps) {
       submenu: [
         { title: "Profile Settings", href: "/profile" },
         { title: "General Settings", href: "/settings" },
-        // { title: "Notifications", href: "/settings/notifications" },
         { title: "Working Hours", href: "/settings/hours" },
-        // { title: "Integrations", href: "/settings/integrations" },
-        
       ],
     },
     {
@@ -315,19 +141,8 @@ export function Sidebar({ isOpen, setIsOpen, alignBelowHeader }: SidebarProps) {
       submenu: [
         { title: "All Staff", href: "/staff" },
         { title: "Add Staff", href: "/staff/add" },
-        // { title: "Roles & Permissions", href: "/staff/roles" },
-        // { title: "Attendance", href: "/staff/attendance" },
       ],
     },
-    // {
-    //   title: "Reviews",
-    //   href: "/reviews",
-    //   icon: Star,
-    //   submenu: [
-    //     //{ title: "Doctor Reviews", href: "/reviews/doctors" },
-    //     { title: "Patient Reviews", href: "/reviews/patients" },
-    //   ],
-    // },
     {
       title: "Reports",
       href: "/reports",
@@ -335,36 +150,13 @@ export function Sidebar({ isOpen, setIsOpen, alignBelowHeader }: SidebarProps) {
       submenu: [
         { title: "Overview", href: "/reports" },
         { title: "Appointment Reports", href: "/reports/appointments" },
-        //{ title: "Financial Reports", href: "/reports/financial" },
-        //{ title: "Inventory Reports", href: "/reports/inventory" },
-        //{ title: "Patient Visit Reports", href: "/reports/patients" },
       ],
     },
-    // {
-    //   title: "Patient Reviews",
-    //   href: "/reviews/patients",
-    //   icon: Star,
-    //   // submenu: [
-    //   //   //{ title: "Doctor Reviews", href: "/reviews/doctors" },
-    //   //   { title: "Patient Reviews", href: "/reviews/patients" },
-    //   // ],
-    // },
-    // {
-    //   title: "Tasks",
-    //   href: "/tasks",
-    //   icon: CheckCircle2,
-    // },
     {
       title: "Support",
       href: "/support",
       icon: HelpCircle,
     },
-
-    // {
-    //   title: "Widgets",
-    //   href: "/widgets",
-    //   icon: Grid,
-    // },
   ];
 
   const navItems = useMemo(() => {

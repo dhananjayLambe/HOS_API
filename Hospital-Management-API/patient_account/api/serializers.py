@@ -26,9 +26,7 @@ class RegisterSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         phone_number = validated_data['phone_number']
         user = User.objects.create(username=phone_number, is_active=False)
-        # Add user to "Patient" group
-        # patient_group, created = Group.objects.get_or_create(name="patient")
-        # user.groups.add(patient_group)
+        # Backlog: assign new patient users to the "patient" group on registration.
         return user
 
 class PatientProfileSerializer(serializers.ModelSerializer):

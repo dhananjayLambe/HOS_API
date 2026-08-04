@@ -85,12 +85,8 @@ export default function EditBirthRecordPage({ params }: { params: Promise<{ id: 
   const router = useRouter()
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  // In a real application, you would fetch the record using the ID
-  // const { id } = params;
-  // const [record, setRecord] = useState(null);
-  // useEffect(() => { fetch record data }, [id]);
-
-  const record = birthRecord // Using sample data for demonstration
+  // Backlog: load birth record by `id` from API instead of sample data.
+  const record = birthRecord
 
   const form = useForm<BirthRecordFormValues>({
     resolver: zodResolver(birthRecordFormSchema),

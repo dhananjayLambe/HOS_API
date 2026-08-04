@@ -401,7 +401,6 @@ export default function DashboardPage() {
                         ))}
                       </Pie>
                       <Tooltip formatter={(value, name) => [value, name]} />
-                      {/* <Legend /> */}
                     </PieChart>
                   </ResponsiveContainer>
                 </div>

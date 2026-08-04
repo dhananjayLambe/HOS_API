@@ -682,10 +682,7 @@ class ClinicListViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
     def get_queryset(self):
         qs = Clinic.objects.select_related("address").all()
 
-        # Only approved by default
-        # if self.request.query_params.get("is_approved") is None:
-        #     qs = qs.filter(is_approved=True)
-
+        # Backlog: optionally default public clinic listing to is_approved=True.
         return qs
 
     # Cache list endpoint for 5 minutes

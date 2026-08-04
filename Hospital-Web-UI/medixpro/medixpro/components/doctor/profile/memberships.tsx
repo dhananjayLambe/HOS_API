@@ -77,10 +77,7 @@ export function MembershipsSection() {
 
     setIsLoading(true)
     try {
-      // TODO: Implement API call to save memberships
-      // For now, we'll use a placeholder
-      // await doctorAPI.updateMemberships(memberships)
-      
+      // Backlog: persist memberships via doctorAPI.updateMemberships.
       toast.success("Memberships updated successfully.", { duration: 2500 })
       setOriginalMemberships([...memberships])
       setIsEditing(false)

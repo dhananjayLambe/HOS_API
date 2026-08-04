@@ -451,7 +451,6 @@ export default function PatientVisitReportPage() {
                           <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                         ))}
                       </Pie>
-                      {/* <ChartTooltip content={<ChartTooltipContent />} /> */}
                       <Legend />
                     </PieChart>
                   </ResponsiveContainer>
@@ -780,7 +779,6 @@ export default function PatientVisitReportPage() {
                         ))}
                       </Pie>
                       <ChartTooltip content={<ChartTooltipContent />} />
-                      {/* <Legend /> */}
                     </PieChart>
                   </ResponsiveContainer>
                 </ChartContainer>
