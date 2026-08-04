@@ -5,6 +5,8 @@ from typing import Any, Dict, List
 from django.conf import settings
 from django.core.cache import cache
 
+from shared.logging import LogModule, logger
+
 
 SCHEMA_CACHE_TTL_SECONDS = 60 * 60  # 1 hour
 SCHEMA_CACHE_KEY_PATTERN = "consult_schema:{version}:{specialty}:{section}"
@@ -398,7 +400,16 @@ def clear_consultation_schema_cache() -> int:
             try:
                 cache.delete(cache_key)
                 deleted += 1
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning(
+                    "Failed to invalidate consultation schema cache key",
+                    module=LogModule.CONSULTATION,
+                    action="consultation_config.schema_cache.invalidate_failed",
+                    metadata={
+                        "specialty": specialty,
+                        "section": section,
+                        "error_type": type(exc).__name__,
+                    },
+                )
     return deleted
 

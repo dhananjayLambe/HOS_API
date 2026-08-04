@@ -56,15 +56,12 @@ def update_diagnosis_mapping() -> dict:
 # Report delivery tasks (Phase 1)
 # ---------------------------------------------------------------------------
 
-import logging
-
 from django.core.exceptions import ValidationError
 
 from diagnostics_engine.services.reports.report_delivery_service import ReportDeliveryService
 from labs.choices.tracking import DeliveryStatus
 from labs.models.lab_tracking import LabReportDeliveryLog
-
-_report_logger = logging.getLogger("diagnostics.reports")
+from shared.logging import LogModule, logger
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=30)
@@ -75,21 +72,32 @@ def deliver_report_whatsapp(self, delivery_log_id: str) -> None:
             "diagnostic_test_report",
         ).get(pk=delivery_log_id, is_deleted=False)
     except LabReportDeliveryLog.DoesNotExist:
-        _report_logger.warning("delivery_task_missing log_id=%s", delivery_log_id)
+        logger.warning(
+            "Delivery task missing delivery log",
+            module=LogModule.REPORTS,
+            action="diagnostics.reports.delivery_task_missing",
+            metadata={"delivery_log_id": str(delivery_log_id)},
+        )
         return
 
     if log.delivery_status in (DeliveryStatus.SENT, DeliveryStatus.DELIVERED, DeliveryStatus.VIEWED):
-        _report_logger.info(
-            "delivery_task_skip_terminal log_id=%s status=%s",
-            log.id,
-            log.delivery_status,
+        logger.info(
+            "Delivery task skipped terminal status",
+            module=LogModule.REPORTS,
+            action="diagnostics.reports.delivery_task_skip_terminal",
+            metadata={"delivery_log_id": str(log.id), "status": log.delivery_status},
         )
         return
 
     try:
         ReportDeliveryService.execute_delivery_send(delivery_log=log)
     except ValidationError as exc:
-        _report_logger.warning("delivery_task_failed log_id=%s err=%s", log.id, exc)
+        logger.warning(
+            "Delivery task failed validation",
+            module=LogModule.REPORTS,
+            action="diagnostics.reports.delivery_task_failed",
+            metadata={"delivery_log_id": str(log.id), "error": str(exc)},
+        )
         ReportDeliveryService.mark_delivery_failed(delivery_log=log, reason=str(exc))
         raise self.retry(exc=exc) from exc
 
@@ -103,7 +111,12 @@ def notify_doctor_report_ready(report_id: str) -> None:
         report = DiagnosticTestReport.objects.get(pk=report_id)
     except DiagnosticTestReport.DoesNotExist:
         return
-    _report_logger.info("doctor_notify_stub report_id=%s", report.id)
+    logger.info(
+        "Doctor notify stub invoked",
+        module=LogModule.REPORTS,
+        action="diagnostics.reports.doctor_notify_stub",
+        metadata={"report_id": str(report.id)},
+    )
 
 
 @shared_task
@@ -115,7 +128,6 @@ def on_report_finalized(report_id: str) -> None:
 @shared_task(name="diagnostics_engine.expire_stale_bookings")
 def expire_stale_bookings() -> int:
     """Emit booking.expired for diagnostic orders past confirmation or slot SLA."""
-    import logging
     from datetime import timedelta
 
     from django.conf import settings
@@ -126,8 +138,6 @@ def expire_stale_bookings() -> int:
     from diagnostics_engine.models.orders import DiagnosticOrder
     from labs.choices.workflow import AppointmentStatus
     from labs.models import LabVisitAppointment
-
-    logger = logging.getLogger(__name__)
     now = timezone.now()
     expired_count = 0
 
@@ -147,8 +157,10 @@ def expire_stale_bookings() -> int:
         )
         expired_count += 1
         logger.info(
-            "booking.expired booking_id=%s reason=confirmation_timeout",
-            order.pk,
+            "Booking expired after confirmation timeout",
+            module=LogModule.LABORATORY,
+            action="diagnostics.booking.expired",
+            metadata={"booking_id": str(order.pk), "reason": "confirmation_timeout"},
         )
 
     today = now.date()
@@ -176,9 +188,14 @@ def expire_stale_bookings() -> int:
         )
         expired_count += 1
         logger.info(
-            "booking.expired booking_id=%s reason=slot_timeout visit_id=%s",
-            order.pk,
-            visit.pk,
+            "Booking expired after slot timeout",
+            module=LogModule.LABORATORY,
+            action="diagnostics.booking.expired",
+            metadata={
+                "booking_id": str(order.pk),
+                "reason": "slot_timeout",
+                "visit_id": str(visit.pk),
+            },
         )
 
     return expired_count

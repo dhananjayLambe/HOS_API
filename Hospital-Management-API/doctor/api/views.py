@@ -1,5 +1,4 @@
 # Standard library imports
-import logging
 from datetime import date, datetime, timedelta
 from django.utils import timezone
 # Django imports
@@ -67,12 +66,10 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import  filters
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.decorators import action
-from shared.logging import LogModule, logger as dpc_logger
+from shared.logging import LogModule, logger
 # Constants
 CACHE_TIMEOUT = 300  # 5 minutes
 
-# Logger
-logger = logging.getLogger(__name__)
 
 class DoctorOnboardingPhase1View(GenericAPIView):
     """
@@ -84,14 +81,14 @@ class DoctorOnboardingPhase1View(GenericAPIView):
 
     def post(self, request, *args, **kwargs):
         try:
-            dpc_logger.info(
+            logger.info(
                 "Doctor phase 1 onboarding started",
                 module=LogModule.API,
                 action="doctor.onboarding.phase1",
             )
             serializer = self.get_serializer(data=request.data, context={"request": request})
             if not serializer.is_valid():
-                dpc_logger.warning(
+                logger.warning(
                     "Doctor phase 1 onboarding validation failed",
                     module=LogModule.API,
                     action="doctor.onboarding.phase1",
@@ -103,7 +100,7 @@ class DoctorOnboardingPhase1View(GenericAPIView):
                 doctor_obj = serializer.save()
             return Response(self.get_serializer(doctor_obj).data, status=status.HTTP_201_CREATED)
         except Exception as e:
-            dpc_logger.exception(
+            logger.exception(
                 "Doctor phase 1 onboarding failed",
                 module=LogModule.API,
                 action="doctor.onboarding.phase1",
@@ -293,7 +290,12 @@ class DoctorFullProfileAPIView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
         except Exception as e:
-            logger.error(f"Error fetching doctor profile: {str(e)}", exc_info=True)
+            logger.exception(
+                "Error fetching doctor profile",
+                module=LogModule.API,
+                action="doctor.profile.fetch",
+                exc=e,
+            )
             return Response(
                 {"error": "An error occurred while fetching doctor profile", "detail": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -307,7 +309,12 @@ class DoctorFullProfileAPIView(APIView):
                 status=status.HTTP_200_OK
             )
         except Exception as e:
-            logger.error(f"Error serializing doctor profile: {str(e)}", exc_info=True)
+            logger.exception(
+                "Error serializing doctor profile",
+                module=LogModule.API,
+                action="doctor.profile.serialize",
+                exc=e,
+            )
             return Response(
                 {"error": "An error occurred while serializing doctor profile", "detail": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -327,7 +334,7 @@ class DoctorFullProfileAPIView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        dpc_logger.info(
+        logger.info(
             "Doctor profile patch requested",
             module=LogModule.API,
             action="doctor.profile.patch",
@@ -347,7 +354,7 @@ class DoctorFullProfileAPIView(APIView):
             
             # Refresh from database to get updated values
             doctor_instance.refresh_from_db()
-            dpc_logger.info(
+            logger.info(
                 "Doctor profile patch completed",
                 module=LogModule.API,
                 action="doctor.profile.patch",
@@ -361,7 +368,7 @@ class DoctorFullProfileAPIView(APIView):
                 status=status.HTTP_200_OK
             )
         
-        dpc_logger.warning(
+        logger.warning(
             "Doctor profile patch validation failed",
             module=LogModule.API,
             action="doctor.profile.patch",
@@ -583,7 +590,12 @@ class DoctorAddressViewSet(viewsets.ViewSet):
             serializer = DoctorAddressSerializer(address)
             return Response({"status": "success", "data": serializer.data})
         except Exception as e:
-            logger.error(f"Error serializing address: {str(e)}")
+            logger.error(
+                "Error serializing doctor address",
+                module=LogModule.API,
+                action="doctor.address.serialize",
+                metadata={"detail": str(e)},
+            )
             return Response({"status": "error", "message": "Failed to retrieve address data"}, status=500)
 
     @transaction.atomic
@@ -625,7 +637,12 @@ class DoctorAddressViewSet(viewsets.ViewSet):
                 return Response({"status": "success", "message": message, "data": serializer.data})
             return Response({"status": "error", "message": "Validation failed", "errors": serializer.errors}, status=400)
         except Exception as e:
-            logger.error(f"Error updating address: {str(e)}")
+            logger.error(
+                "Error updating doctor address",
+                module=LogModule.API,
+                action="doctor.address.update",
+                metadata={"detail": str(e)},
+            )
             return Response({"status": "error", "message": f"Failed to update address: {str(e)}"}, status=500)
 
     @transaction.atomic
@@ -647,7 +664,12 @@ class DoctorAddressViewSet(viewsets.ViewSet):
                 return Response({"status": "success", "message": "Address updated", "data": serializer.data})
             return Response({"status": "error", "message": "Validation failed", "errors": serializer.errors}, status=400)
         except Exception as e:
-            logger.error(f"Error updating address: {str(e)}")
+            logger.error(
+                "Error updating doctor address",
+                module=LogModule.API,
+                action="doctor.address.update",
+                metadata={"detail": str(e)},
+            )
             return Response({"status": "error", "message": f"Failed to update address: {str(e)}"}, status=500)
 
     @transaction.atomic
@@ -669,7 +691,12 @@ class DoctorAddressViewSet(viewsets.ViewSet):
                 return Response({"status": "success", "message": "Address partially updated", "data": serializer.data})
             return Response({"status": "error", "message": "Validation failed", "errors": serializer.errors}, status=400)
         except Exception as e:
-            logger.error(f"Error updating address: {str(e)}")
+            logger.error(
+                "Error updating doctor address",
+                module=LogModule.API,
+                action="doctor.address.update",
+                metadata={"detail": str(e)},
+            )
             return Response({"status": "error", "message": f"Failed to update address: {str(e)}"}, status=500)
 
     @transaction.atomic
@@ -687,7 +714,12 @@ class DoctorAddressViewSet(viewsets.ViewSet):
             address.delete()
             return Response({"status": "success", "message": "Address deleted"}, status=204)
         except Exception as e:
-            logger.error(f"Error deleting address: {str(e)}")
+            logger.error(
+                "Error deleting doctor address",
+                module=LogModule.API,
+                action="doctor.address.delete",
+                metadata={"detail": str(e)},
+            )
             return Response({"status": "error", "message": f"Failed to delete address: {str(e)}"}, status=500)
    
 class RegistrationView(APIView):
@@ -1611,7 +1643,12 @@ class RegistrationViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         instance = serializer.save(doctor=self.request.user.doctor)
-        logger.info(f"Registration created by doctor {self.request.user.doctor.id}: {instance.id}")
+        logger.info(
+            "Doctor registration created",
+            module=LogModule.API,
+            action="doctor.registration.create",
+            metadata={"doctor_id": str(self.request.user.doctor.id), "registration_id": str(instance.id)},
+        )
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data, context={'request': request})
@@ -1624,7 +1661,12 @@ class RegistrationViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(instance, data=request.data, partial=False, context={'request': request})
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)
-        logger.info(f"Registration updated by doctor {self.request.user.doctor.id}: {instance.id}")
+        logger.info(
+            "Doctor registration updated",
+            module=LogModule.API,
+            action="doctor.registration.update",
+            metadata={"doctor_id": str(self.request.user.doctor.id), "registration_id": str(instance.id)},
+        )
         return Response(serializer.data)
 
     def partial_update(self, request, *args, **kwargs):
@@ -1632,13 +1674,23 @@ class RegistrationViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(instance, data=request.data, partial=True, context={'request': request})
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)
-        logger.info(f"Registration partially updated by doctor {self.request.user.doctor.id}: {instance.id}")
+        logger.info(
+            "Doctor registration partially updated",
+            module=LogModule.API,
+            action="doctor.registration.patch",
+            metadata={"doctor_id": str(self.request.user.doctor.id), "registration_id": str(instance.id)},
+        )
         return Response(serializer.data)
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
         self.perform_destroy(instance)
-        logger.info(f"Registration deleted by doctor {self.request.user.doctor.id}: {instance.id}")
+        logger.info(
+            "Doctor registration deleted",
+            module=LogModule.API,
+            action="doctor.registration.delete",
+            metadata={"doctor_id": str(self.request.user.doctor.id), "registration_id": str(instance.id)},
+        )
         return Response({"detail": "Medical license deleted successfully."}, status=status.HTTP_204_NO_CONTENT)
 
     def perform_destroy(self, instance):
@@ -1826,7 +1878,7 @@ class UploadDigitalSignatureView(APIView):
     parser_classes = [MultiPartParser, FormParser]
 
     def patch(self, request):
-        dpc_logger.info(
+        logger.info(
             "Digital signature upload requested",
             module=LogModule.API,
             action="doctor.kyc.digital_signature.upload",
@@ -1834,14 +1886,19 @@ class UploadDigitalSignatureView(APIView):
         doctor = request.user.doctor
         try:
             kyc_status, _ = KYCStatus.objects.get_or_create(doctor=doctor)
-            dpc_logger.info(
+            logger.info(
                 "KYC status ready for digital signature upload",
                 module=LogModule.API,
                 action="doctor.kyc.digital_signature.upload",
                 metadata={"doctor_id": str(doctor.id), "kyc_status_id": str(kyc_status.id)},
             )
         except Exception as e:
-            logger.error(f"Failed to get or create KYC status: {str(e)}")
+            logger.exception(
+                "Failed to get or create KYC status",
+                module=LogModule.API,
+                action="doctor.kyc.status.ensure",
+                exc=e,
+            )
             return Response({
                 "status": "error",
                 "message": f"Failed to get or create KYC status: {str(e)}"
@@ -1855,7 +1912,7 @@ class UploadDigitalSignatureView(APIView):
             }, status=status.HTTP_400_BAD_REQUEST)
 
         file = request.FILES['digital_signature']
-        dpc_logger.info(
+        logger.info(
             "Digital signature file received",
             module=LogModule.API,
             action="doctor.kyc.digital_signature.upload",
@@ -1870,7 +1927,7 @@ class UploadDigitalSignatureView(APIView):
         serializer = DigitalSignatureUploadSerializer(kyc_status, data=request.data, partial=True)
         if serializer.is_valid():
             instance = serializer.save()
-            dpc_logger.info(
+            logger.info(
                 "Digital signature uploaded",
                 module=LogModule.API,
                 action="doctor.kyc.digital_signature.upload",
@@ -1892,7 +1949,12 @@ class UploadDigitalSignatureView(APIView):
                 }
             }, status=status.HTTP_200_OK)
         
-        logger.error(f"Serializer validation failed: {serializer.errors}")
+        logger.error(
+            "Digital signature upload validation failed",
+            module=LogModule.API,
+            action="doctor.kyc.digital_signature.upload",
+            metadata={"error_count": len(serializer.errors)},
+        )
         return Response({
             "status": "error",
             "errors": serializer.errors
@@ -2092,7 +2154,12 @@ class DoctorFeeStructureViewSet(viewsets.ModelViewSet):
         try:
             instance = self.get_object()
         except Exception as e:
-            logger.error(f"Error retrieving fee structure: {str(e)}")
+            logger.error(
+                "Error retrieving doctor fee structure",
+                module=LogModule.API,
+                action="doctor.fee_structure.fetch",
+                metadata={"detail": str(e)},
+            )
             return Response({
                 "status": "error",
                 "message": "Fee structure not found or you do not have permission to access it."
@@ -2188,7 +2255,12 @@ class DoctorFeeStructureViewSet(viewsets.ModelViewSet):
                 "message": "Fee structure not found for the given doctor and clinic."
             }, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
-            logger.error(f"Error retrieving fee structure: {str(e)}")
+            logger.error(
+                "Error retrieving doctor fee structure",
+                module=LogModule.API,
+                action="doctor.fee_structure.fetch",
+                metadata={"detail": str(e)},
+            )
             return None, Response({
                 "status": "error",
                 "message": "An error occurred while retrieving the fee structure."
@@ -2200,7 +2272,12 @@ class DoctorFeeStructureViewSet(viewsets.ModelViewSet):
             return super().get_object()
         except Exception as e:
             # Log the error for debugging
-            logger.error(f"Error retrieving fee structure: {str(e)}")
+            logger.error(
+                "Error retrieving doctor fee structure",
+                module=LogModule.API,
+                action="doctor.fee_structure.fetch",
+                metadata={"detail": str(e)},
+            )
             raise
 
     @transaction.atomic
@@ -2358,7 +2435,12 @@ class DoctorFeeStructureViewSet(viewsets.ModelViewSet):
                 "message": "Fee structure not found for the given doctor and clinic."
             }, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
-            logger.error(f"Error retrieving fee structure: {str(e)}")
+            logger.error(
+                "Error retrieving doctor fee structure",
+                module=LogModule.API,
+                action="doctor.fee_structure.fetch",
+                metadata={"detail": str(e)},
+            )
             return Response({
                 "status": "error",
                 "message": "An error occurred while retrieving the fee structure."
@@ -2473,7 +2555,12 @@ class FollowUpPolicyViewSet(viewsets.ModelViewSet):
         try:
             instance = self.get_object()
         except Exception as e:
-            logger.error(f"Error retrieving follow-up policy: {str(e)}")
+            logger.error(
+                "Error retrieving doctor follow-up policy",
+                module=LogModule.API,
+                action="doctor.followup_policy.fetch",
+                metadata={"detail": str(e)},
+            )
             return Response({
                 "status": "error",
                 "message": "Follow-up policy not found or you do not have permission to access it."
@@ -2516,7 +2603,12 @@ class FollowUpPolicyViewSet(viewsets.ModelViewSet):
                 "message": "Follow-up policy not found for the given doctor and clinic."
             }, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
-            logger.error(f"Error retrieving follow-up policy: {str(e)}")
+            logger.error(
+                "Error retrieving doctor follow-up policy",
+                module=LogModule.API,
+                action="doctor.followup_policy.fetch",
+                metadata={"detail": str(e)},
+            )
             return None, Response({
                 "status": "error",
                 "message": "An error occurred while retrieving the follow-up policy."
@@ -2647,7 +2739,12 @@ class FollowUpPolicyViewSet(viewsets.ModelViewSet):
         try:
             instance = self.get_object()
         except Exception as e:
-            logger.error(f"Error retrieving follow-up policy for deletion: {str(e)}")
+            logger.error(
+                "Error retrieving doctor follow-up policy for deletion",
+                module=LogModule.API,
+                action="doctor.followup_policy.delete",
+                metadata={"detail": str(e)},
+            )
             return Response({
                 "status": "error",
                 "message": "Follow-up policy not found or you do not have permission to access it."
@@ -2824,7 +2921,12 @@ class FollowUpPolicyViewSet(viewsets.ModelViewSet):
                 "message": "Follow-up policy not found for the given doctor and clinic."
             }, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
-            logger.error(f"Error retrieving follow-up policy: {str(e)}")
+            logger.error(
+                "Error retrieving doctor follow-up policy",
+                module=LogModule.API,
+                action="doctor.followup_policy.fetch",
+                metadata={"detail": str(e)},
+            )
             return Response({
                 "status": "error",
                 "message": "An error occurred while retrieving the follow-up policy."
@@ -3015,7 +3117,12 @@ class CancellationPolicyViewSet(viewsets.ModelViewSet):
                 "message": "Cancellation policy not found for the given doctor and clinic."
             }, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
-            logger.error(f"Error retrieving cancellation policy: {str(e)}")
+            logger.error(
+                "Error retrieving doctor cancellation policy",
+                module=LogModule.API,
+                action="doctor.cancellation_policy.fetch",
+                metadata={"detail": str(e)},
+            )
             return Response({
                 "status": "error",
                 "message": "An error occurred while retrieving the cancellation policy."
@@ -3169,7 +3276,12 @@ class CancellationPolicyViewSet(viewsets.ModelViewSet):
                 "message": "Cancellation policy not found for the given doctor and clinic."
             }, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
-            logger.error(f"Error retrieving cancellation policy: {str(e)}")
+            logger.error(
+                "Error retrieving doctor cancellation policy",
+                module=LogModule.API,
+                action="doctor.cancellation_policy.fetch",
+                metadata={"detail": str(e)},
+            )
             return Response({
                 "status": "error",
                 "message": "An error occurred while retrieving the cancellation policy."
@@ -3220,7 +3332,7 @@ class DoctorAvailabilityView(APIView):
     def delete(self, request):
         doctor_id = request.query_params.get("doctor_id")
         clinic_id = request.query_params.get("clinic_id")
-        dpc_logger.info(
+        logger.info(
             "Doctor availability delete requested",
             module=LogModule.API,
             action="doctor.availability.delete",
@@ -3299,14 +3411,24 @@ class DoctorLeaveCreateView(generics.CreateAPIView):
                 "data": serializer.data
             }, status=status.HTTP_201_CREATED)
         except serializers.ValidationError as e:
-            logger.error(f"Validation error in DoctorLeaveCreateView: {str(e)}", exc_info=True)
+            logger.exception(
+                "Validation error in doctor leave create",
+                module=LogModule.API,
+                action="doctor.leave.create",
+                exc=e,
+            )
             return Response({
                 "status": "error",
                 "message": "Validation failed",
                 "errors": e.detail if hasattr(e, 'detail') else str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            logger.error(f"Error in DoctorLeaveCreateView: {str(e)}", exc_info=True)
+            logger.exception(
+                "Error in doctor leave create",
+                module=LogModule.API,
+                action="doctor.leave.create",
+                exc=e,
+            )
             return Response({
                 "status": "error",
                 "message": "An error occurred while creating leave",
@@ -3393,7 +3515,12 @@ class DoctorLeaveUpdateView(generics.UpdateAPIView):
                 "message": "Leave not found"
             }, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
-            logger.error(f"Error updating leave: {str(e)}", exc_info=True)
+            logger.exception(
+                "Error updating doctor leave",
+                module=LogModule.API,
+                action="doctor.leave.update",
+                exc=e,
+            )
             return Response({
                 "status": "error",
                 "message": "An error occurred while updating leave",
@@ -3425,7 +3552,12 @@ class DoctorLeaveDeleteView(generics.DestroyAPIView):
             # Perform the actual deletion (hard delete from database)
             self.perform_destroy(instance)
             
-            logger.info(f"Leave {leave_id} deleted by {request.user.username} for doctor {doctor_name} at clinic {clinic_name}")
+            logger.info(
+                "Doctor leave deleted",
+                module=LogModule.API,
+                action="doctor.leave.delete",
+                metadata={"leave_id": str(leave_id), "doctor_name": doctor_name, "clinic_name": clinic_name},
+            )
             
             return Response(
                 {
@@ -3443,7 +3575,12 @@ class DoctorLeaveDeleteView(generics.DestroyAPIView):
                 status=status.HTTP_404_NOT_FOUND
             )
         except Exception as e:
-            logger.error(f"Error deleting leave: {str(e)}", exc_info=True)
+            logger.exception(
+                "Error deleting doctor leave",
+                module=LogModule.API,
+                action="doctor.leave.delete",
+                exc=e,
+            )
             return Response(
                 {
                     "status": "error",
@@ -3793,7 +3930,12 @@ class DoctorWorkingHoursView(APIView):
                     "errors": serializer.errors
                 }, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            logger.error(f"Error in DoctorWorkingHoursView.post: {str(e)}", exc_info=True)
+            logger.exception(
+                "Error saving doctor working hours",
+                module=LogModule.API,
+                action="doctor.working_hours.save",
+                exc=e,
+            )
             return Response({
                 "status": "error",
                 "message": "An error occurred while saving working hours",
@@ -3844,7 +3986,12 @@ class DoctorWorkingHoursView(APIView):
                     "data": None
                 }, status=status.HTTP_200_OK)
         except Exception as e:
-            logger.error(f"Error in DoctorWorkingHoursView.get: {str(e)}", exc_info=True)
+            logger.exception(
+                "Error fetching doctor working hours",
+                module=LogModule.API,
+                action="doctor.working_hours.fetch",
+                exc=e,
+            )
             return Response({
                 "status": "error",
                 "message": "An error occurred while fetching working hours",
@@ -3903,7 +4050,12 @@ class DoctorAvailabilityPreviewView(APIView):
                     "message": "Working hours not configured. Please set up working hours first."
                 }, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
-            logger.error(f"Error in DoctorAvailabilityPreviewView: {str(e)}", exc_info=True)
+            logger.exception(
+                "Error in doctor availability preview",
+                module=LogModule.API,
+                action="doctor.availability.preview",
+                exc=e,
+            )
             return Response({
                 "status": "error",
                 "message": "An error occurred while generating slot preview",
@@ -4029,7 +4181,12 @@ class DoctorSchedulingRulesViewSet(viewsets.ModelViewSet):
             }, status=status.HTTP_400_BAD_REQUEST)
             
         except Exception as e:
-            logger.error(f"Error creating scheduling rules: {str(e)}", exc_info=True)
+            logger.exception(
+                "Error creating doctor scheduling rules",
+                module=LogModule.API,
+                action="doctor.scheduling_rules.create",
+                exc=e,
+            )
             return Response({
                 "status": "error",
                 "message": "An error occurred while creating scheduling rules",
@@ -4130,7 +4287,12 @@ class DoctorSchedulingRulesViewSet(viewsets.ModelViewSet):
                 "message": "Scheduling rules deleted successfully"
             }, status=status.HTTP_204_NO_CONTENT)
         except Exception as e:
-            logger.error(f"Error deleting scheduling rules: {str(e)}", exc_info=True)
+            logger.exception(
+                "Error deleting doctor scheduling rules",
+                module=LogModule.API,
+                action="doctor.scheduling_rules.delete",
+                exc=e,
+            )
             return Response({
                 "status": "error",
                 "message": "An error occurred while deleting scheduling rules",
@@ -4170,7 +4332,12 @@ class DoctorSchedulingRulesViewSet(viewsets.ModelViewSet):
                 "message": "Scheduling rules not found for the given doctor and clinic."
             }, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
-            logger.error(f"Error retrieving scheduling rules: {str(e)}")
+            logger.error(
+                "Error retrieving doctor scheduling rules",
+                module=LogModule.API,
+                action="doctor.scheduling_rules.fetch",
+                metadata={"detail": str(e)},
+            )
             return Response({
                 "status": "error",
                 "message": "An error occurred while retrieving the scheduling rules."
@@ -4357,7 +4524,12 @@ class DoctorOPDCheckInView(APIView):
                 "data": serializer.data
             }, status=status.HTTP_200_OK)
         except Exception as e:
-            logger.error(f"Error in DoctorOPDCheckInView: {str(e)}", exc_info=True)
+            logger.exception(
+                "Error in doctor OPD check-in",
+                module=LogModule.API,
+                action="doctor.opd.checkin",
+                exc=e,
+            )
             return Response({
                 "status": "error",
                 "message": "An error occurred while checking in",
@@ -4428,7 +4600,12 @@ class DoctorOPDCheckOutView(APIView):
                     "message": "No active OPD session found"
                 }, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
-            logger.error(f"Error in DoctorOPDCheckOutView: {str(e)}", exc_info=True)
+            logger.exception(
+                "Error in doctor OPD check-out",
+                module=LogModule.API,
+                action="doctor.opd.checkout",
+                exc=e,
+            )
             return Response({
                 "status": "error",
                 "message": "An error occurred while checking out",
@@ -4537,7 +4714,12 @@ class DoctorOPDStatusGetView(APIView):
                         "message": "doctor_id is required for non-doctor users"
                     }, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            logger.error(f"Error in DoctorOPDStatusGetView: {str(e)}", exc_info=True)
+            logger.exception(
+                "Error fetching doctor OPD status",
+                module=LogModule.API,
+                action="doctor.opd.status.fetch",
+                exc=e,
+            )
             return Response({
                 "status": "error",
                 "message": "An error occurred while fetching OPD status",

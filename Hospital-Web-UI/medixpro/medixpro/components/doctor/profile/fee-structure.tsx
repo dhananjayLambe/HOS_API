@@ -151,12 +151,9 @@ export function FeeStructureSection() {
         const storedDoctorId = localStorage.getItem("doctor_id")
         if (storedDoctorId) {
           setDoctorId(storedDoctorId)
-        } else {
-          console.warn("Could not find doctor ID in profile response or localStorage")
         }
       }
     } catch (error: any) {
-      console.error("Failed to fetch doctor ID:", error)
       // Try to get from localStorage as fallback
       const storedDoctorId = localStorage.getItem("doctor_id")
       if (storedDoctorId) {
@@ -204,7 +201,6 @@ export function FeeStructureSection() {
         setSelectedClinicId("")
       }
     } catch (error: any) {
-      console.error("Failed to fetch clinics:", error)
       const errorMessage =
         error?.response?.data?.message ||
         error?.response?.data?.error ||
@@ -237,30 +233,7 @@ export function FeeStructureSection() {
       
       // Log raw responses for debugging - FULL response to see structure
 
-      // Log errors for debugging but don't fail the entire operation
-      // Only log non-404 errors (404 means no data exists yet, which is expected)
-      if (feeStructuresResult.status === 'rejected') {
-        const error = feeStructuresResult.reason
-        const status = error?.status ?? error?.response?.status
-        if (status && status !== 404) {
-          console.warn("Failed to fetch fee structures:", error)
-        }
-      }
-      if (followUpPoliciesResult.status === 'rejected') {
-        const error = followUpPoliciesResult.reason
-        const status = error?.status ?? error?.response?.status
-        if (status && status !== 404) {
-          console.warn("Failed to fetch follow-up policies:", error)
-        }
-      }
-      if (cancellationPoliciesResult.status === 'rejected') {
-        const error = cancellationPoliciesResult.reason
-        const status = error?.status ?? error?.response?.status
-        if (status && status !== 404) {
-          console.warn("Failed to fetch cancellation policies:", error)
-        }
-      }
-
+      
       // Extract data from responses (handle null cases)
       // Django returns: { status: "success", message: "...", data: [...] }
       // Next.js API route returns this object directly
@@ -269,7 +242,6 @@ export function FeeStructureSection() {
       const extractDataArray = (response: any, name: string = "Response"): any[] => {
         
         if (!response) {
-          console.warn(`⚠️ ${name}: Response is null/undefined`)
           return []
         }
         
@@ -293,7 +265,6 @@ export function FeeStructureSection() {
           return [response]
         }
         
-        console.warn(`⚠️ ${name}: Could not extract data array from response:`, response)
         return []
       }
       
@@ -308,22 +279,6 @@ export function FeeStructureSection() {
       const followUpPolicy = Array.isArray(followUpPolicies) && followUpPolicies.length > 0 ? followUpPolicies[0] : null
       const cancellationPolicy = Array.isArray(cancellationPolicies) && cancellationPolicies.length > 0 ? cancellationPolicies[0] : null
       
-      // CRITICAL: If we have records but extraction returned empty arrays, log a warning
-      // This indicates a data extraction issue, not a missing data issue
-      if ((feeStructuresRes || followUpPoliciesRes || cancellationPoliciesRes) && 
-          feeStructures.length === 0 && followUpPolicies.length === 0 && cancellationPolicies.length === 0) {
-        console.warn("⚠️ API returned responses but data extraction returned empty arrays. This may indicate a response structure mismatch.")
-        console.warn("⚠️ Response structures:", {
-          feeStructuresRes: feeStructuresRes,
-          followUpPoliciesRes: followUpPoliciesRes,
-          cancellationPoliciesRes: cancellationPoliciesRes,
-        })
-      }
-      
-      
-      
-      // Log full records for debugging
-
       // Update IDs for update operations - ALWAYS set (null if no record exists)
       if (feeStructure?.id) {
         setFeeStructureId(feeStructure.id)
@@ -353,7 +308,6 @@ export function FeeStructureSection() {
         if (str.includes('.')) {
           const parsed = parseFloat(str)
           if (isNaN(parsed)) {
-            console.warn(`⚠️ ${fieldName}: Could not parse "${str}" as number, using default: ${defaultValue}`)
             return defaultValue
           }
           const result = parsed.toString()
@@ -423,11 +377,6 @@ export function FeeStructureSection() {
       
       
       // CRITICAL: Verify we're not using defaults when we have actual data
-      const hasActualData = feeStructure || followUpPolicy || cancellationPolicy
-      if (!hasActualData) {
-        console.warn("⚠️ No actual data found in any of the three models - using defaults")
-      } else {
-      }
       
       // Use functional update to ensure we're setting the latest data
       // CRITICAL: Use a completely new object reference to force React to detect the change
@@ -449,7 +398,6 @@ export function FeeStructureSection() {
       // Don't show error toast for 404s (no data exists yet)
       const status = error?.status ?? error?.response?.status
       if (status !== 404) {
-        console.error("Failed to fetch fee structure data:", error)
         // Only show error for non-404 errors (server errors, network issues, etc.)
         const errorMessage =
           error?.response?.data?.message ||
@@ -466,8 +414,6 @@ export function FeeStructureSection() {
       const hasExistingData = feeStructureId || followUpPolicyId || cancellationPolicyId
       if (!hasExistingData) {
         resetToDefaults()
-      } else {
-        console.warn("⚠️ Fetch failed but existing data found in state. Preserving current state to avoid data loss.")
       }
     } finally {
       setIsFetching(false)
@@ -561,7 +507,6 @@ export function FeeStructureSection() {
     // If doctorId is not available, try to fetch it first
     let currentDoctorId = doctorId
     if (!currentDoctorId) {
-      console.warn("Doctor ID not available, attempting to fetch...")
       try {
         const profileResponse = await apiClient.getProfile()
         const profile = profileResponse?.doctor_profile || profileResponse
@@ -579,7 +524,6 @@ export function FeeStructureSection() {
           localStorage.setItem("doctor_id", currentDoctorId)
         }
       } catch (error) {
-        console.error("Failed to fetch doctor ID:", error)
         // Try localStorage as last resort
         const storedDoctorId = localStorage.getItem("doctor_id")
         if (storedDoctorId) {
@@ -626,13 +570,6 @@ export function FeeStructureSection() {
         } else if (response?.data && !Array.isArray(response.data)) {
           // Single object wrapped in data
           feeData = [response.data]
-        } else {
-          console.warn("⚠️ Fee Structure: Could not extract data from response structure:", {
-            response,
-            hasData: !!response?.data,
-            dataType: response?.data ? typeof response?.data : 'undefined',
-            isDataArray: Array.isArray(response?.data)
-          })
         }
         
         
@@ -643,8 +580,6 @@ export function FeeStructureSection() {
             currentFeeStructureId = feeRecord.id
             setFeeStructureId(feeRecord.id)
           } else {
-            console.error("❌ Fee structure record found but no ID! Record:", feeRecord)
-            console.error("❌ This means the record exists but we can't update it. This is a CRITICAL issue!")
             currentFeeStructureId = null
             setFeeStructureId(null)
           }
@@ -653,15 +588,6 @@ export function FeeStructureSection() {
           setFeeStructureId(null)
         }
       } else {
-        const err = feeStructures.reason
-        const errStatus = err?.status ?? err?.response?.status
-        if (errStatus !== 404) {
-          console.warn("⚠️ Failed to fetch fee structures:", {
-            status: errStatus,
-            message: err?.message,
-            error: err
-          })
-        }
         // Don't fail - will try create/update anyway
         currentFeeStructureId = null
       }
@@ -677,13 +603,6 @@ export function FeeStructureSection() {
           followUpData = response.data
         } else if (response?.data && !Array.isArray(response.data)) {
           followUpData = [response.data]
-        } else {
-          console.warn("⚠️ Follow-up Policy: Could not extract data from response structure:", {
-            response,
-            hasData: !!response?.data,
-            dataType: response?.data ? typeof response?.data : 'undefined',
-            isDataArray: Array.isArray(response?.data)
-          })
         }
         
         
@@ -694,8 +613,6 @@ export function FeeStructureSection() {
             currentFollowUpPolicyId = followUpRecord.id
             setFollowUpPolicyId(followUpRecord.id)
           } else {
-            console.error("❌ Follow-up policy record found but no ID! Record:", followUpRecord)
-            console.error("❌ This means the record exists but we can't update it. This is a CRITICAL issue!")
             currentFollowUpPolicyId = null
             setFollowUpPolicyId(null)
           }
@@ -704,12 +621,6 @@ export function FeeStructureSection() {
           setFollowUpPolicyId(null)
         }
       } else {
-        const err = followUpPolicies.reason
-        console.warn("⚠️ Failed to fetch follow-up policies:", {
-          status: err?.response?.status || err?.status,
-          message: err?.message,
-          error: err
-        })
         // Don't fail - will try create/update anyway
         currentFollowUpPolicyId = null
       }
@@ -725,13 +636,6 @@ export function FeeStructureSection() {
           cancellationData = response.data
         } else if (response?.data && !Array.isArray(response.data)) {
           cancellationData = [response.data]
-        } else {
-          console.warn("⚠️ Cancellation Policy: Could not extract data from response structure:", {
-            response,
-            hasData: !!response?.data,
-            dataType: response?.data ? typeof response?.data : 'undefined',
-            isDataArray: Array.isArray(response?.data)
-          })
         }
         
         
@@ -742,8 +646,6 @@ export function FeeStructureSection() {
             currentCancellationPolicyId = cancellationRecord.id
             setCancellationPolicyId(cancellationRecord.id)
           } else {
-            console.error("❌ Cancellation policy record found but no ID! Record:", cancellationRecord)
-            console.error("❌ This means the record exists but we can't update it. This is a CRITICAL issue!")
             currentCancellationPolicyId = null
             setCancellationPolicyId(null)
           }
@@ -752,28 +654,13 @@ export function FeeStructureSection() {
           setCancellationPolicyId(null)
         }
       } else {
-        const err = cancellationPolicies.reason
-        console.warn("⚠️ Failed to fetch cancellation policies:", {
-          status: err?.response?.status || err?.status,
-          message: err?.message,
-          error: err
-        })
         // Don't fail - will try create/update anyway
         currentCancellationPolicyId = null
       }
       
-      
       // CRITICAL: If any ID is missing but records exist, we MUST fetch them
       // This prevents duplicate creation attempts
-      if (!currentFeeStructureId || !currentFollowUpPolicyId || !currentCancellationPolicyId) {
-        console.warn("⚠️ Some IDs are missing! This might cause duplicate creation. IDs:", {
-          feeStructure: currentFeeStructureId,
-          followUp: currentFollowUpPolicyId,
-          cancellation: currentCancellationPolicyId
-        })
-      }
     } catch (fetchError: any) {
-      console.error("❌ Error pre-fetching existing records:", fetchError)
       // Don't fail - will try create/update anyway, and createOrUpdate will handle unique constraint
       // Continue to save operation
     }
@@ -867,10 +754,8 @@ export function FeeStructureSection() {
                   setCancellationPolicyId(finalRecord.id)
                   return apiClient.patchCancellationPolicy(finalRecord.id, cancellationPolicyPayload)
                 }
-              } else {
               }
             } catch (fetchError: any) {
-              console.warn(`${name}: Final fetch check failed, will try POST (unique constraint retry will handle if record exists):`, fetchError)
               // Continue to POST attempt - unique constraint retry will handle it
             }
           }
@@ -973,15 +858,9 @@ export function FeeStructureSection() {
                       const patchResult = await apiClient.patchFeeStructure(existingRecord.id, feeStructurePayload)
                       return patchResult
                     } else {
-                      console.warn(`${name}: No record found with doctor_id=${currentDoctorId} and clinic_id=${selectedClinicId}`, {
-                        existing,
-                        existingData,
-                        existingRecord
-                      })
                       throw new Error(`${name} record exists but could not be retrieved. Please refresh the page.`)
                     }
                   } catch (fetchErr: any) {
-                    console.error(`Failed to fetch ${name} by doctor+clinic:`, fetchErr)
                     throw new Error(`${name} already exists but could not be retrieved. Please refresh the page and try again.`)
                   }
                 } else if (name === "Follow-up Policy") {
@@ -998,15 +877,9 @@ export function FeeStructureSection() {
                       const patchResult = await apiClient.patchFollowUpPolicy(existingRecord.id, followUpPolicyPayload)
                       return patchResult
                     } else {
-                      console.warn(`${name}: No record found with doctor_id=${currentDoctorId} and clinic_id=${selectedClinicId}`, {
-                        existing,
-                        existingData,
-                        existingRecord
-                      })
                       throw new Error(`${name} record exists but could not be retrieved. Please refresh the page.`)
                     }
                   } catch (fetchErr: any) {
-                    console.error(`Failed to fetch ${name} by doctor+clinic:`, fetchErr)
                     throw new Error(`${name} already exists but could not be retrieved. Please refresh the page and try again.`)
                   }
                 } else if (name === "Cancellation Policy") {
@@ -1023,20 +896,13 @@ export function FeeStructureSection() {
                       const patchResult = await apiClient.patchCancellationPolicy(existingRecord.id, cancellationPolicyPayload)
                       return patchResult
                     } else {
-                      console.warn(`${name}: No record found with doctor_id=${currentDoctorId} and clinic_id=${selectedClinicId}`, {
-                        existing,
-                        existingData,
-                        existingRecord
-                      })
                       throw new Error(`${name} record exists but could not be retrieved. Please refresh the page.`)
                     }
                   } catch (fetchErr: any) {
-                    console.error(`Failed to fetch ${name} by doctor+clinic:`, fetchErr)
                     throw new Error(`${name} already exists but could not be retrieved. Please refresh the page and try again.`)
                   }
                 }
               } catch (fetchError: any) {
-                console.error(`Failed to fetch existing ${name}:`, fetchError)
                 // If we can't fetch, re-throw the original unique constraint error with better message
                 const originalMsg = errorMessage || "Record already exists"
                 throw new Error(`${name}: ${originalMsg}. Please refresh the page and try again.`)
@@ -1135,7 +1001,6 @@ export function FeeStructureSection() {
       toast.success("Fee structure and policies saved successfully!", { duration: 2500 })
       setIsEditing(false)
     } catch (error: any) {
-      console.error("Failed to save fee structure:", error)
       
       // Extract detailed error message
       let errorMessage = "Failed to save fee structure and policies"
@@ -1239,7 +1104,6 @@ export function FeeStructureSection() {
       resetToDefaults()
       setIsEditing(false)
     } catch (error: any) {
-      console.error("Failed to delete fee structure:", error)
       
       // Extract detailed error message
       let errorMessage = "Failed to delete fee structure and policies"

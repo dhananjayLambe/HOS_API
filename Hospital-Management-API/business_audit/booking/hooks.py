@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from business_audit.booking.booking_audit_service import BookingAuditService
@@ -18,8 +17,7 @@ from business_audit.booking.constants import (
 )
 from business_audit.domain.context import apply_workflow_context
 from consultations_core.audit.commit import emit_after_commit
-
-logger = logging.getLogger(__name__)
+from shared.logging import LogModule, logger
 
 
 def _apply_booking_workflow(order) -> None:
@@ -41,10 +39,11 @@ def schedule_booking_business_created(
             request_id=request_id,
         )
     except Exception:
-        logger.warning(
-            "booking_business_created_schedule_failed",
-            exc_info=True,
-            extra={"booking_id": str(order.pk)},
+        logger.exception(
+            "Booking business created schedule failed",
+            module=LogModule.API,
+            action="booking.business.created.schedule_failed",
+            metadata={"booking_id": str(order.pk)},
         )
 
 
@@ -65,10 +64,11 @@ def schedule_booking_business_confirmed(
             request_id=request_id,
         )
     except Exception:
-        logger.warning(
-            "booking_business_confirmed_schedule_failed",
-            exc_info=True,
-            extra={"booking_id": str(order.pk)},
+        logger.exception(
+            "Booking business confirmed schedule failed",
+            module=LogModule.API,
+            action="booking.business.confirmed.schedule_failed",
+            metadata={"booking_id": str(order.pk)},
         )
 
 
@@ -97,10 +97,11 @@ def schedule_booking_business_modified(
             domain=domain,
         )
     except Exception:
-        logger.warning(
-            "booking_business_modified_schedule_failed",
-            exc_info=True,
-            extra={"booking_id": str(order.pk)},
+        logger.exception(
+            "Booking business modified schedule failed",
+            module=LogModule.API,
+            action="booking.business.modified.schedule_failed",
+            metadata={"booking_id": str(order.pk)},
         )
 
 
@@ -140,10 +141,11 @@ def schedule_booking_business_cancelled(
             prior_status=prior_status,
         )
     except Exception:
-        logger.warning(
-            "booking_business_cancelled_schedule_failed",
-            exc_info=True,
-            extra={"booking_id": str(order.pk)},
+        logger.exception(
+            "Booking business cancelled schedule failed",
+            module=LogModule.API,
+            action="booking.business.cancelled.schedule_failed",
+            metadata={"booking_id": str(order.pk)},
         )
 
 
@@ -162,10 +164,11 @@ def schedule_booking_business_expired(
             prior_status=prior_status,
         )
     except Exception:
-        logger.warning(
-            "booking_business_expired_schedule_failed",
-            exc_info=True,
-            extra={"booking_id": str(order.pk)},
+        logger.exception(
+            "Booking business expired schedule failed",
+            module=LogModule.API,
+            action="booking.business.expired.schedule_failed",
+            metadata={"booking_id": str(order.pk)},
         )
 
 
@@ -182,8 +185,9 @@ def schedule_booking_business_closed(
             prior_macro_state=prior_macro_state,
         )
     except Exception:
-        logger.warning(
-            "booking_business_closed_schedule_failed",
-            exc_info=True,
-            extra={"booking_id": str(order.pk)},
+        logger.exception(
+            "Booking business closed schedule failed",
+            module=LogModule.API,
+            action="booking.business.closed.schedule_failed",
+            metadata={"booking_id": str(order.pk)},
         )

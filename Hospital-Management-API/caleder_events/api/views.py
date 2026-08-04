@@ -1,4 +1,3 @@
-import logging
 from datetime import datetime, timedelta
 from django.db import transaction
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
@@ -19,8 +18,8 @@ from caleder_events.api.serializers import (
     CalendarEventSerializer
 )
 from caleder_events.models import CalendarEvent
+from shared.logging import LogModule, logger
 
-logger = logging.getLogger(__name__)
 
 
 def format_success_response(message, data=None, status_code=status.HTTP_200_OK):
@@ -111,8 +110,10 @@ class CreateEventAPIView(APIView):
                 }
                 
                 logger.info(
-                    f"Calendar event created: {event.id} by doctor {user.id} "
-                    f"({event.category})"
+                    "Calendar event created",
+                    module=LogModule.SCHEDULER,
+                    action="calendar.events.created",
+                    metadata={"event_id": str(event.id), "doctor_id": str(user.id), "category": event.category},
                 )
                 
                 return format_success_response(
@@ -162,9 +163,10 @@ class CreateEventAPIView(APIView):
                 status_code=status.HTTP_400_BAD_REQUEST
             )
         except Exception as e:
-            logger.error(
-                f"Error creating calendar event for doctor {request.user.id}: {str(e)}",
-                exc_info=True
+            logger.exception(
+                "Error creating calendar event",
+                module=LogModule.SCHEDULER,
+                action="calendar.events.create_failed",
             )
             return format_error_response(
                 message="An error occurred while creating the calendar event.",
@@ -287,9 +289,10 @@ class ListEventsAPIView(APIView):
             )
             
         except Exception as e:
-            logger.error(
-                f"Error listing calendar events for doctor {request.user.id}: {str(e)}",
-                exc_info=True
+            logger.exception(
+                "Error listing calendar events",
+                module=LogModule.SCHEDULER,
+                action="calendar.events.list_failed",
             )
             return format_error_response(
                 message="An error occurred while fetching calendar events.",
@@ -326,8 +329,10 @@ class ListEventsAPIView(APIView):
                 }
                 
                 logger.info(
-                    f"Calendar event created: {event.id} by doctor {user.id} "
-                    f"({event.category})"
+                    "Calendar event created",
+                    module=LogModule.SCHEDULER,
+                    action="calendar.events.created",
+                    metadata={"event_id": str(event.id), "doctor_id": str(user.id), "category": event.category},
                 )
                 
                 return format_success_response(
@@ -377,9 +382,10 @@ class ListEventsAPIView(APIView):
                 status_code=status.HTTP_400_BAD_REQUEST
             )
         except Exception as e:
-            logger.error(
-                f"Error creating calendar event for doctor {request.user.id}: {str(e)}",
-                exc_info=True
+            logger.exception(
+                "Error creating calendar event",
+                module=LogModule.SCHEDULER,
+                action="calendar.events.create_failed",
             )
             return format_error_response(
                 message="An error occurred while creating the calendar event.",
@@ -427,9 +433,11 @@ class RetrieveEventAPIView(APIView):
                 status_code=status.HTTP_400_BAD_REQUEST
             )
         except Exception as e:
-            logger.error(
-                f"Error retrieving calendar event {event_id} for doctor {request.user.id}: {str(e)}",
-                exc_info=True
+            logger.exception(
+                "Error retrieving calendar event",
+                module=LogModule.SCHEDULER,
+                action="calendar.events.retrieve_failed",
+                metadata={"event_id": str(event_id)},
             )
             return format_error_response(
                 message="An error occurred while retrieving the calendar event.",
@@ -500,8 +508,10 @@ class RetrieveEventAPIView(APIView):
                 }
                 
                 logger.info(
-                    f"Calendar event updated: {updated_event.id} by doctor {user.id} "
-                    f"({updated_event.category})"
+                    "Calendar event updated",
+                    module=LogModule.SCHEDULER,
+                    action="calendar.events.updated",
+                    metadata={"event_id": str(updated_event.id), "doctor_id": str(user.id), "category": updated_event.category},
                 )
                 
                 return format_success_response(
@@ -553,9 +563,11 @@ class RetrieveEventAPIView(APIView):
                 status_code=status.HTTP_400_BAD_REQUEST
             )
         except Exception as e:
-            logger.error(
-                f"Error updating calendar event {event_id} for doctor {request.user.id}: {str(e)}",
-                exc_info=True
+            logger.exception(
+                "Error updating calendar event",
+                module=LogModule.SCHEDULER,
+                action="calendar.events.update_failed",
+                metadata={"event_id": str(event_id)},
             )
             return format_error_response(
                 message="An error occurred while updating the calendar event.",
@@ -588,8 +600,10 @@ class RetrieveEventAPIView(APIView):
             event.save(update_fields=['is_active', 'updated_at'])
             
             logger.info(
-                f"Calendar event deleted: {event.id} by doctor {user.id} "
-                f"({event.category})"
+                "Calendar event deleted",
+                module=LogModule.SCHEDULER,
+                action="calendar.events.deleted",
+                metadata={"event_id": str(event.id), "doctor_id": str(user.id), "category": event.category},
             )
             
             return format_success_response(
@@ -608,9 +622,11 @@ class RetrieveEventAPIView(APIView):
                 status_code=status.HTTP_400_BAD_REQUEST
             )
         except Exception as e:
-            logger.error(
-                f"Error deleting calendar event {event_id} for doctor {request.user.id}: {str(e)}",
-                exc_info=True
+            logger.exception(
+                "Error deleting calendar event",
+                module=LogModule.SCHEDULER,
+                action="calendar.events.delete_failed",
+                metadata={"event_id": str(event_id)},
             )
             return format_error_response(
                 message="An error occurred while deleting the calendar event.",
@@ -690,8 +706,10 @@ class UpdateEventAPIView(APIView):
                 }
                 
                 logger.info(
-                    f"Calendar event updated: {updated_event.id} by doctor {user.id} "
-                    f"({updated_event.category})"
+                    "Calendar event updated",
+                    module=LogModule.SCHEDULER,
+                    action="calendar.events.updated",
+                    metadata={"event_id": str(updated_event.id), "doctor_id": str(user.id), "category": updated_event.category},
                 )
                 
                 return format_success_response(
@@ -743,9 +761,11 @@ class UpdateEventAPIView(APIView):
                 status_code=status.HTTP_400_BAD_REQUEST
             )
         except Exception as e:
-            logger.error(
-                f"Error updating calendar event {event_id} for doctor {request.user.id}: {str(e)}",
-                exc_info=True
+            logger.exception(
+                "Error updating calendar event",
+                module=LogModule.SCHEDULER,
+                action="calendar.events.update_failed",
+                metadata={"event_id": str(event_id)},
             )
             return format_error_response(
                 message="An error occurred while updating the calendar event.",
@@ -790,8 +810,10 @@ class DeleteEventAPIView(APIView):
             event.save(update_fields=['is_active', 'updated_at'])
             
             logger.info(
-                f"Calendar event deleted: {event.id} by doctor {user.id} "
-                f"({event.category})"
+                "Calendar event deleted",
+                module=LogModule.SCHEDULER,
+                action="calendar.events.deleted",
+                metadata={"event_id": str(event.id), "doctor_id": str(user.id), "category": event.category},
             )
             
             return format_success_response(
@@ -810,9 +832,11 @@ class DeleteEventAPIView(APIView):
                 status_code=status.HTTP_400_BAD_REQUEST
             )
         except Exception as e:
-            logger.error(
-                f"Error deleting calendar event {event_id} for doctor {request.user.id}: {str(e)}",
-                exc_info=True
+            logger.exception(
+                "Error deleting calendar event",
+                module=LogModule.SCHEDULER,
+                action="calendar.events.delete_failed",
+                metadata={"event_id": str(event_id)},
             )
             return format_error_response(
                 message="An error occurred while deleting the calendar event.",

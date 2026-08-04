@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import logging
+from shared.logging import LogModule, logger
 
 from consultations_core.audit.commit import emit_after_commit
 from consultations_core.audit.prescription.prescription_audit_service import (
     PrescriptionAuditService,
 )
-
-logger = logging.getLogger(__name__)
 
 
 def schedule_prescription_created(*, consultation, user, prescription) -> None:
@@ -23,10 +21,11 @@ def schedule_prescription_created(*, consultation, user, prescription) -> None:
             prescription=prescription,
         )
     except Exception:
-        logger.warning(
+        logger.exception(
             "prescription_audit_created_schedule_failed",
-            exc_info=True,
-            extra={"prescription_id": str(getattr(prescription, "id", ""))},
+            module=LogModule.PRESCRIPTION,
+            action="prescription.audit.created.schedule_failed",
+            metadata={"prescription_id": str(getattr(prescription, "id", ""))},
         )
 
 
@@ -41,10 +40,11 @@ def schedule_prescription_signed(*, consultation, user, prescription) -> None:
             prescription=prescription,
         )
     except Exception:
-        logger.warning(
+        logger.exception(
             "prescription_audit_signed_schedule_failed",
-            exc_info=True,
-            extra={"prescription_id": str(getattr(prescription, "id", ""))},
+            module=LogModule.PRESCRIPTION,
+            action="prescription.audit.signed.schedule_failed",
+            metadata={"prescription_id": str(getattr(prescription, "id", ""))},
         )
 
 
@@ -64,10 +64,11 @@ def schedule_prescription_downloaded(*, prescription, request) -> None:
             source=source,
         )
     except Exception:
-        logger.warning(
+        logger.exception(
             "prescription_audit_downloaded_failed",
-            exc_info=True,
-            extra={"prescription_id": str(getattr(prescription, "id", ""))},
+            module=LogModule.PRESCRIPTION,
+            action="prescription.audit.downloaded.failed",
+            metadata={"prescription_id": str(getattr(prescription, "id", ""))},
         )
 
 
@@ -89,8 +90,9 @@ def schedule_recommendation_generated(
             result=result,
         )
     except Exception:
-        logger.warning(
+        logger.exception(
             "recommendation_audit_generated_schedule_failed",
-            exc_info=True,
-            extra={"recommendation_id": str(recommendation_id)},
+            module=LogModule.PRESCRIPTION,
+            action="prescription.audit.recommendation.schedule_failed",
+            metadata={"recommendation_id": str(recommendation_id)},
         )

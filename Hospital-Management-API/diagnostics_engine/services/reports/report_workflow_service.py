@@ -11,6 +11,7 @@ from diagnostics_engine.monitoring.report_events import OUTCOME_SUCCESS, emit_re
 from diagnostics_engine.services.reports.access_control import get_report_branch_id
 from diagnostics_engine.services.reports.report_audit import emit_report_audit_event
 from diagnostics_engine.services.reports.report_validation_service import ReportValidationService
+from shared.logging import LogModule, logger
 
 
 class ReportWorkflowService:
@@ -72,7 +73,15 @@ class ReportWorkflowService:
 
             schedule_report_ready(report=report, user=user)
         except Exception:
-            pass
+            logger.warning(
+                "Report ready communication hook failed; report marked ready",
+                module=LogModule.REPORTS,
+                action="diagnostics.reports.ready_hook_failed",
+                metadata={
+                    "report_id": str(report.pk),
+                    "user_id": str(getattr(user, "pk", "")) if user is not None else None,
+                },
+            )
         return report
 
     @classmethod

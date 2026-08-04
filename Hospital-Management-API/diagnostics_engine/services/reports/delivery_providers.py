@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import logging
 import uuid
 
-logger = logging.getLogger("diagnostics.reports")
+from shared.logging import LogModule, logger
 
 
 class BaseDeliveryProvider:
@@ -21,11 +20,15 @@ class SimulatedWhatsAppProvider(BaseDeliveryProvider):
     def send(self, *, recipient: str, download_url: str, report) -> str:
         message_id = f"sim-wa-{uuid.uuid4().hex[:12]}"
         logger.info(
-            "whatsapp_simulated report_id=%s recipient=%s url=%s msg_id=%s",
-            report.id,
-            recipient,
-            download_url,
-            message_id,
+            "WhatsApp delivery simulated",
+            module=LogModule.REPORTS,
+            action="diagnostics.reports.whatsapp_simulated",
+            metadata={
+                "report_id": str(report.id),
+                "recipient": recipient,
+                "download_url": download_url,
+                "message_id": message_id,
+            },
         )
         return message_id
 
@@ -35,7 +38,16 @@ class SimulatedSmsProvider(BaseDeliveryProvider):
 
     def send(self, *, recipient: str, download_url: str, report) -> str:
         message_id = f"sim-sms-{uuid.uuid4().hex[:12]}"
-        logger.info("sms_simulated report_id=%s recipient=%s", report.id, recipient)
+        logger.info(
+            "SMS delivery simulated",
+            module=LogModule.REPORTS,
+            action="diagnostics.reports.sms_simulated",
+            metadata={
+                "report_id": str(report.id),
+                "recipient": recipient,
+                "message_id": message_id,
+            },
+        )
         return message_id
 
 
@@ -44,7 +56,16 @@ class SimulatedEmailProvider(BaseDeliveryProvider):
 
     def send(self, *, recipient: str, download_url: str, report) -> str:
         message_id = f"sim-email-{uuid.uuid4().hex[:12]}"
-        logger.info("email_simulated report_id=%s recipient=%s", report.id, recipient)
+        logger.info(
+            "Email delivery simulated",
+            module=LogModule.REPORTS,
+            action="diagnostics.reports.email_simulated",
+            metadata={
+                "report_id": str(report.id),
+                "recipient": recipient,
+                "message_id": message_id,
+            },
+        )
         return message_id
 
 

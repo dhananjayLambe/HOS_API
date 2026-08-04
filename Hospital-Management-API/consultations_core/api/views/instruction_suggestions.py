@@ -1,6 +1,4 @@
 # consultations_core/api/views/instruction_suggestions.py
-import logging
-
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -10,8 +8,7 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from account.permissions import IsDoctor
 from consultations_core.api.serializers.instructions import InstructionSuggestionQuerySerializer
 from consultations_core.services.instruction_suggestion_service import get_instruction_suggestions
-
-logger = logging.getLogger(__name__)
+from shared.logging import LogModule, logger
 
 
 def _parse_exclude_from_query(query_params) -> list:
@@ -54,7 +51,11 @@ class InstructionSuggestionsAPIView(APIView):
                 exclude=v.get("exclude") or [],
             )
         except FileNotFoundError as e:
-            logger.exception("Instruction suggestion metadata missing: %s", e)
+            logger.exception(
+                f"Instruction suggestion metadata missing: {e}",
+                module=LogModule.API,
+                action="consultation.instructions.suggestions.metadata_missing",
+            )
             return Response(
                 {"detail": "Instruction metadata not available."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,

@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 import json
-import logging
 from pathlib import Path
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
 
-from consultations_core.models.findings import FindingMaster
+from shared.logging import LogModule, logger
 
-logger = logging.getLogger(__name__)
+from consultations_core.models.findings import FindingMaster
 
 
 def _master_json_path() -> Path:
@@ -40,7 +39,12 @@ def get_or_create_finding_master_for_code(code: str, *, user=None) -> FindingMas
 
     path = _master_json_path()
     if not path.is_file():
-        logger.error("findings_master.json missing at %s", path)
+        logger.error(
+            f"findings_master.json missing at {path}",
+            module=LogModule.CONSULTATION,
+            action="consultation.findings.catalog_missing",
+            metadata={"path": str(path)},
+        )
         raise ValidationError("Finding catalog not available on server.")
 
     with open(path, encoding="utf-8") as f:
@@ -57,5 +61,10 @@ def get_or_create_finding_master_for_code(code: str, *, user=None) -> FindingMas
         is_active=bool(item.get("is_active", True)),
         created_by=user,
     )
-    logger.info("Created FindingMaster from template: %s", c)
+    logger.info(
+        f"Created FindingMaster from template: {c}",
+        module=LogModule.CONSULTATION,
+        action="consultation.findings.master_created",
+        metadata={"finding_code": c},
+    )
     return master

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 
 from django.db import IntegrityError
@@ -10,6 +9,7 @@ from diagnostics_engine.models.catalog import (
     DiagnosticPackageItem,
     DiagnosticServiceMaster,
 )
+from shared.logging import LogModule, logger
 from diagnostics_engine.services.catalog_import.exceptions import StrictImportError
 from diagnostics_engine.services.catalog_import.import_stats import ImportRunResult
 from diagnostics_engine.services.catalog_import.utils import (
@@ -21,15 +21,18 @@ from diagnostics_engine.services.catalog_import.utils import (
 )
 from diagnostics_engine.services.catalog_import.validators import duplicate_natural_keys, require_columns
 
-logger = logging.getLogger(__name__)
-
 ITEM_REQUIRED = ("package_code", "service_code", "quantity", "is_mandatory", "display_order")
 
 
 def _row_err(result: ImportRunResult, msg: str, *, strict: bool) -> None:
     result.errors.append(msg)
     result.stats.failed += 1
-    logger.warning(msg)
+    logger.warning(
+        msg,
+        module=LogModule.LABORATORY,
+        action="diagnostics.catalog_import.row_error",
+        metadata={"message": msg},
+    )
     if strict:
         raise StrictImportError(msg)
 
@@ -173,7 +176,12 @@ def sync_package_items_from_file(
                     continue
                 touched_packages.add(str(pkg.pk))
                 result.stats.updated += 1
-                logger.info("Revived package item %s / %s", pkg_code, svc_code)
+                logger.info(
+                    "Revived package item",
+                    module=LogModule.LABORATORY,
+                    action="diagnostics.catalog_import.package_item_revived",
+                    metadata={"package_code": pkg_code, "service_code": svc_code},
+                )
                 continue
             if _item_snapshot(item) == snap:
                 result.stats.skipped += 1
@@ -188,7 +196,12 @@ def sync_package_items_from_file(
                 continue
             touched_packages.add(str(pkg.pk))
             result.stats.updated += 1
-            logger.info("Updated package item %s / %s", pkg_code, svc_code)
+            logger.info(
+                "Updated package item",
+                module=LogModule.LABORATORY,
+                action="diagnostics.catalog_import.package_item_updated",
+                metadata={"package_code": pkg_code, "service_code": svc_code},
+            )
             continue
 
         new_item = DiagnosticPackageItem(
@@ -205,7 +218,12 @@ def sync_package_items_from_file(
             continue
         touched_packages.add(str(pkg.pk))
         result.stats.created += 1
-        logger.info("Created package item %s / %s", pkg_code, svc_code)
+        logger.info(
+            "Created package item",
+            module=LogModule.LABORATORY,
+            action="diagnostics.catalog_import.package_item_created",
+            metadata={"package_code": pkg_code, "service_code": svc_code},
+        )
 
     if not dry_run and touched_packages:
         for pk in touched_packages:
@@ -234,7 +252,12 @@ def sync_package_items(
             return out
 
     for path in files:
-        logger.info("Importing package items from %s", path)
+        logger.info(
+            "Importing package items",
+            module=LogModule.LABORATORY,
+            action="diagnostics.catalog_import.package_items_started",
+            metadata={"path": str(path)},
+        )
         part = sync_package_items_from_file(path, dry_run=dry_run, strict=strict)
         out.merge(part)
         if strict and part.stats.failed:

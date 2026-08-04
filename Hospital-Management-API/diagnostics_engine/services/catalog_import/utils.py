@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import csv
-import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
-logger = logging.getLogger(__name__)
+from shared.logging import LogModule, logger
 
 
 def default_data_dir() -> Path:
@@ -51,7 +50,12 @@ def read_csv_rows(path: Path) -> list[CsvRow]:
     with path.open(newline="", encoding="utf-8") as fh:
         reader = csv.DictReader(fh)
         if not reader.fieldnames:
-            logger.warning("CSV has no header: %s", path)
+            logger.warning(
+                "CSV has no header",
+                module=LogModule.LABORATORY,
+                action="diagnostics.catalog_import.csv_no_header",
+                metadata={"path": str(path)},
+            )
             return rows
         for line_no, raw in enumerate(reader, start=2):
             cells = strip_row(raw)

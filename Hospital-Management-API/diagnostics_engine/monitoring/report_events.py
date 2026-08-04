@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 import json
-import logging
 from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
 
 from diagnostics_engine.monitoring.request_context import get_request_id
-
-logger = logging.getLogger("diagnostics.reports")
+from shared.logging import LogModule, logger
 
 EVENT_VERSION = 1
 
@@ -24,10 +22,11 @@ def safe_emit(fn: Callable[..., Any], /, *args, **kwargs) -> None:
     try:
         fn(*args, **kwargs)
     except Exception:
-        logger.warning(
-            "report_safe_emit_failed fn=%s",
-            getattr(fn, "__name__", repr(fn)),
-            exc_info=True,
+        logger.exception(
+            "Report safe emit failed",
+            module=LogModule.REPORTS,
+            action="diagnostics.reports.safe_emit_failed",
+            metadata={"fn": getattr(fn, "__name__", repr(fn))},
         )
 
 
@@ -67,9 +66,19 @@ def emit_report_event(
         payload.update(extra)
 
     try:
-        logger.info("report_event %s", json.dumps(payload, default=str))
+        logger.info(
+            "Report event emitted",
+            module=LogModule.REPORTS,
+            action="diagnostics.reports.event",
+            metadata={"payload": payload},
+        )
     except Exception:
-        logger.warning("report_event_log_failed event=%s", event, exc_info=True)
+        logger.exception(
+            "Report event log failed",
+            module=LogModule.REPORTS,
+            action="diagnostics.reports.event_log_failed",
+            metadata={"event": event},
+        )
 
 
 def emit_report_metric(
@@ -81,13 +90,22 @@ def emit_report_metric(
     """Phase 1: log-line metric placeholder for future exporters."""
     try:
         logger.info(
-            "report_metric name=%s value=%s tags=%s",
-            name,
-            value,
-            json.dumps(tags or {}, default=str),
+            "Report metric emitted",
+            module=LogModule.REPORTS,
+            action="diagnostics.reports.metric",
+            metadata={
+                "name": name,
+                "value": value,
+                "tags": tags or {},
+            },
         )
     except Exception:
-        logger.warning("report_metric_failed name=%s", name, exc_info=True)
+        logger.exception(
+            "Report metric log failed",
+            module=LogModule.REPORTS,
+            action="diagnostics.reports.metric_failed",
+            metadata={"name": name},
+        )
 
 
 def emit_order_state_changed(

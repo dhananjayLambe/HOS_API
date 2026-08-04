@@ -9,12 +9,13 @@ Upload, workflow transitions, and channel delivery live in sibling services.
 
 from __future__ import annotations
 
-import logging
 from datetime import date, datetime, time
 from typing import Any
 
 from django.db.models import Exists, OuterRef, Prefetch, Q, QuerySet
 from django.utils import timezone
+
+from shared.logging import LogModule, logger
 
 from diagnostics_engine.domain.reports import (
     active_reports_queryset,
@@ -32,8 +33,6 @@ from diagnostics_engine.models.reports import DiagnosticReportArtifact, Diagnost
 from labs.choices.tracking import DeliveryStatus
 from labs.models.lab_tracking import LabReportDeliveryLog
 from labs.models.lab_workflow import LabOrderAssignment
-
-logger = logging.getLogger(__name__)
 
 _STATUS_TOKEN_MAP: dict[str, Q] = {
     "pending": Q(status=ReportLifecycleStatus.PENDING),
@@ -245,8 +244,10 @@ class ReportQueryService:
         # Delivery log must reference the active report head (superseded reports rejected).
         if not active_reports_queryset().filter(pk=report.pk).exists():
             logger.warning(
-                "Download token resolved to superseded report report_id=%s",
-                report.id,
+                "Download token resolved to superseded report",
+                module=LogModule.REPORTS,
+                action="diagnostics.reports.download_token_superseded",
+                metadata={"report_id": str(report.id)},
             )
             return None
         return cls._prefetch_report_relations(

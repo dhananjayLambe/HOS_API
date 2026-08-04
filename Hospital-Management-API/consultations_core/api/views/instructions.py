@@ -1,5 +1,4 @@
 # consultations_core/api/views/instructions.py
-import logging
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
@@ -25,8 +24,6 @@ from consultations_core.api.serializers.instructions import (
     AddInstructionSerializer,
     UpdateInstructionSerializer,
 )
-
-logger = logging.getLogger(__name__)
 
 MSG_VISIT_CANCELLED = "This visit has been cancelled. Please start a new one."
 

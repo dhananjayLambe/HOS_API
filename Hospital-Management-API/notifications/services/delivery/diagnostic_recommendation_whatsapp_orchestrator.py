@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import time
 import uuid
 from datetime import timedelta
@@ -19,8 +18,7 @@ from diagnostics_engine.domain.investigation_resolution import load_convertible_
 from diagnostics_engine.domain.recommendation import LabRecommendationService
 from notifications.models.whatsapp_notifications import WhatsAppMessageStatus
 from notifications.services.delivery.whatsapp_service import WhatsAppService
-
-logger = logging.getLogger(__name__)
+from shared.logging import LogModule, logger
 
 
 def _consultation_queryset():
@@ -59,20 +57,21 @@ def _log_recommendation_event(
     failure_reason: str | None = None,
 ) -> None:
     logger.info(
-        "%s consultation_id=%s recommendation_available=%s laboratory_id=%s branch_id=%s "
-        "quoted_price=%s collection_mode=%s template_name=%s whatsapp_message_id=%s "
-        "execution_time=%s failure_reason=%s",
-        event,
-        consultation_id,
-        recommendation_available,
-        laboratory_id,
-        branch_id,
-        quoted_price,
-        collection_mode,
-        template_name,
-        whatsapp_message_id,
-        execution_time_ms,
-        failure_reason,
+        f"Recommendation {event}",
+        module=LogModule.WHATSAPP,
+        action=f"whatsapp.{event}",
+        metadata={
+            "consultation_id": str(consultation_id),
+            "recommendation_available": recommendation_available,
+            "laboratory_id": str(laboratory_id) if laboratory_id is not None else None,
+            "branch_id": str(branch_id) if branch_id is not None else None,
+            "quoted_price": str(quoted_price) if quoted_price is not None else None,
+            "collection_mode": collection_mode,
+            "template_name": template_name,
+            "whatsapp_message_id": str(whatsapp_message_id) if whatsapp_message_id is not None else None,
+            "execution_time_ms": execution_time_ms,
+            "failure_reason": failure_reason,
+        },
     )
 
 
@@ -91,8 +90,10 @@ def run_prepare_and_enqueue(
         consultation = _consultation_queryset().filter(pk=consultation_id).first()
         if consultation is None:
             logger.warning(
-                "recommendation.skipped consultation_id=%s reason=consultation_missing",
-                consultation_id,
+                "Recommendation skipped — consultation missing",
+                module=LogModule.WHATSAPP,
+                action="whatsapp.recommendation.skipped",
+                metadata={"consultation_id": consultation_id, "reason": "consultation_missing"},
             )
             return None
 
@@ -219,7 +220,9 @@ def run_prepare_and_enqueue(
             failure_reason="PREPARE_EXCEPTION",
         )
         logger.exception(
-            "diagnostic_recommendation_whatsapp_prepare_failed consultation_id=%s",
-            consultation_id,
+            "Diagnostic recommendation WhatsApp prepare failed",
+            module=LogModule.WHATSAPP,
+            action="whatsapp.recommendation.prepare_failed",
+            metadata={"consultation_id": consultation_id},
         )
         raise

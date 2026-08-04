@@ -1,6 +1,5 @@
 import json
 import redis
-import logging
 import threading
 from django.conf import settings
 from django.utils.timezone import localdate
@@ -127,14 +126,18 @@ class CheckInQueueAPIView(APIView):
                 encounter.save(update_fields=update_fields + ["updated_by"])
 
             queue_entry = add_to_queue(encounter, request.user)
-            logging.getLogger(__name__).info(
-                "encounter.lifecycle.queue.checkin queue_id=%s encounter_id=%s visit_pnr=%s clinic_id=%s doctor_id=%s patient_profile_id=%s",
-                queue_entry.id,
-                getattr(encounter, "id", None),
-                getattr(encounter, "visit_pnr", None),
-                clinic_id,
-                doctor_id,
-                patient_profile_id,
+            logger.info(
+                "Patient checked into queue",
+                module=LogModule.BOOKING,
+                action="queue.checkin.completed",
+                metadata={
+                    "queue_id": str(queue_entry.id),
+                    "encounter_id": str(getattr(encounter, "id", "")),
+                    "visit_pnr": str(getattr(encounter, "visit_pnr", "") or ""),
+                    "clinic_id": str(clinic_id),
+                    "doctor_id": str(doctor_id),
+                    "patient_profile_id": str(patient_profile_id),
+                },
             )
 
         queue_entry = Queue.objects.select_related("patient", "appointment", "encounter").get(pk=queue_entry.pk)
@@ -343,12 +346,16 @@ class StartConsultationAPIView(APIView):
                 sync_doctor_id = str(queue_entry.doctor_id)
                 sync_clinic_id = str(queue_entry.clinic_id)
                 sync_queue_date = today
-                logging.getLogger(__name__).info(
-                    "encounter.lifecycle.queue.start queue_id=%s encounter_id=%s clinic_id=%s user_id=%s",
-                    queue_entry.id,
-                    getattr(queue_entry, "encounter_id", None),
-                    clinic_id,
-                    getattr(request.user, "id", None),
+                logger.info(
+                    "Queue consultation started",
+                    module=LogModule.BOOKING,
+                    action="queue.consultation.start",
+                    metadata={
+                        "queue_id": str(queue_entry.id),
+                        "encounter_id": str(getattr(queue_entry, "encounter_id", "")),
+                        "clinic_id": str(clinic_id),
+                        "user_id": str(getattr(request.user, "id", "")),
+                    },
                 )
 
             def _dispatch_realtime_sync():
@@ -359,8 +366,10 @@ class StartConsultationAPIView(APIView):
                         queue_date_iso=sync_queue_date.isoformat(),
                     )
                 except Exception:
-                    logging.getLogger(__name__).exception(
-                        "queue start: celery dispatch failed, falling back to thread"
+                    logger.exception(
+                        "Queue start realtime sync dispatch failed",
+                        module=LogModule.BOOKING,
+                        action="queue.consultation.start.sync_dispatch_failed",
                     )
                     threading.Thread(
                         target=_sync_queue_realtime,

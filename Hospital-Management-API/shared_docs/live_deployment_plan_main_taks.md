@@ -16,7 +16,7 @@ This roadmap is ordered by **business value, dependency, and launch risk**, not 
 * Complete remaining report APIs DONE
 * Remove demo providers  DONE
 * Remove temporary code  DONE
-* Fix known UI bugs (tracked via Release UI Certification — see Phase 7)   
+* Fix known UI bugs (tracked via Release UI Certification — see Phase 7)    we can fix some bugs now if anythiing we can found then we can fix that 
 * Fix backend bugs 
 * Complete validations
 * Improve error handling
@@ -204,6 +204,39 @@ This is a business-critical feature.
 **Exit Criteria**
 
 All WhatsApp flows work in production.
+
+---
+
+# Phase 5.5 — Production Logging & Debug Cleanup (Mandatory Gate)
+
+Mandatory **engineering gate** before Observability Validation. The logging platform (M7) is already certified; this milestone certifies **application adoption** across the backend and Web UI.
+
+**Governing document:** [`architecture/production_logging/18_Application_Logging_Certification.md`](architecture/production_logging/18_Application_Logging_Certification.md)
+
+### Objective
+
+Prepare the entire backend and Web UI for production by removing development artifacts and ensuring all runtime information flows through the centralized logger (`shared.logging` on the API; structured server logging on the BFF).
+
+### Required
+
+* Remove debug statements (`print`, `pprint`, `breakpoint`, `pdb`, `console.log`, `debugger`) from production application code
+* Standardize every Django app on `from shared.logging import logger, LogModule`
+* Assign correct log levels (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`)
+* Avoid duplicate exception logging
+* Audit logs for sensitive data (passwords, tokens, OTP, secrets, clinical note bodies)
+* Ensure Wave-1 workflows carry correlation/request IDs and business identifiers
+* Replace silent `except` / bare `except` with structured `logger.exception` where appropriate
+* Certify each backend app and the Web UI on the tracker checklist
+* Triage `TODO`/`FIXME` markers (inventory only; only production-unsafe items block the gate)
+
+### Exit Criteria
+
+* No development-only debug statements remain in production application code (CLI/scripts allowlisted)
+* Every certified module uses the centralized logging framework
+* Log levels are consistent; sensitive information is not written to logs
+* Exceptions are logged once with sufficient context
+* Each backend app and the frontend checklist rows are signed certified
+* Phase 6 Observability Validation may proceed
 
 ---
 

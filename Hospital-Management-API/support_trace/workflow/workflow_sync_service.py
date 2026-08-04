@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import logging
 from uuid import UUID
 
+from shared.logging import LogModule, logger
 from support_trace.domain.sync_event import SupportTraceSyncEvent
 from support_trace.domain.types import SupportTraceResult
 from support_trace.enums import SyncStatus, TraceSource
@@ -16,8 +16,6 @@ from support_trace.workflow.resolvers import WorkflowResolver
 from support_trace.workflow.transition_validator import WorkflowTransitionValidator
 from support_trace.workflow.types import ResolvedWorkflow
 from support_trace.workflow.workflow_state_service import WorkflowStateService
-
-logger = logging.getLogger(__name__)
 
 
 class WorkflowSyncService:
@@ -40,8 +38,10 @@ class WorkflowSyncService:
         )
         if transition is None:
             logger.debug(
-                "support_trace_sync_skipped_unmapped_action",
-                extra={
+                "Support trace sync skipped for unmapped action",
+                module=LogModule.MONITORING,
+                action="support_trace.sync.skipped_unmapped_action",
+                metadata={
                     "action": action,
                     "workflow_type": event.workflow_type,
                     "audit_id": event.audit_id,
@@ -91,14 +91,15 @@ class WorkflowSyncService:
                 existing=existing,
             )
         except WorkflowTransitionError as exc:
-            logger.warning(
-                "support_trace_transition_rejected",
-                extra={
+            logger.exception(
+                "Support trace transition rejected",
+                module=LogModule.MONITORING,
+                action="support_trace.sync.transition_rejected",
+                metadata={
                     "workflow_instance_id": resolved.workflow_instance_id,
                     "error": str(exc),
                     "action": action,
                 },
-                exc_info=True,
             )
             if raise_on_failure:
                 raise

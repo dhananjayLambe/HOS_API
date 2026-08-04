@@ -2,17 +2,15 @@
 
 from __future__ import annotations
 
-import logging
 import uuid
 from typing import Any, Callable, TypeVar
 
 from shared.audit.exceptions import AuditError
 from shared.audit.types import BaseAuditRecordResult
+from shared.logging import LogModule, logger
 
 TResult = TypeVar("TResult", bound=BaseAuditRecordResult)
 TError = TypeVar("TError", bound=AuditError)
-
-logger = logging.getLogger(__name__)
 
 
 class BaseAuditService:
@@ -38,7 +36,7 @@ class BaseAuditService:
             return record_fn()
         except error_base as exc:
             correlation_for_log = correlation_for_log or str(uuid.uuid4())
-            extra = {
+            metadata = {
                 "correlation_id": correlation_for_log,
                 "error_type": type(exc).__name__,
                 "error": str(exc),
@@ -47,8 +45,13 @@ class BaseAuditService:
                 "resource_id": str(resource_id),
             }
             if log_extra:
-                extra.update(log_extra)
-            logger.warning(cls.audit_logger_name, extra=extra, exc_info=True)
+                metadata.update(log_extra)
+            logger.warning(
+                cls.audit_logger_name,
+                module=LogModule.API,
+                action="audit.record_failed",
+                metadata=metadata,
+            )
             if raise_on_failure:
                 raise
             return cls._failure_result(

@@ -3,6 +3,8 @@
 import os
 import uuid
 
+from shared.logging import LogModule, logger
+
 def doctor_photo_upload_path(instance, filename):
     ext = filename.split('.')[-1]
     doctor_uuid = str(instance.id).replace("-", "")
@@ -39,23 +41,32 @@ def digital_signature_upload_path(instance, filename):
     Generate upload path for digital signature file.
     Pattern: govt_ids/digital_signature/{doctor_uuid}/{doctor_uuid}_DIGITAL_SIGNATURE_{uuid}.{ext}
     """
-    import logging
-    logger = logging.getLogger(__name__)
-    
     try:
         ext = filename.split('.')[-1] if '.' in filename else 'pdf'
         doctor_uuid = str(instance.doctor.id).replace("-", "")
         unique_filename = f"{doctor_uuid}_DIGITAL_SIGNATURE_{uuid.uuid4().hex}.{ext}"
         upload_path = os.path.join('govt_ids', 'digital_signature', doctor_uuid, unique_filename)
-        
-        logger.info(f"Digital signature upload path generated: {upload_path}")
-        logger.info(f"Instance type: {type(instance)}, Doctor ID: {instance.doctor.id if hasattr(instance, 'doctor') and instance.doctor else 'None'}")
-        
+
+        logger.info(
+            "Digital signature upload path generated",
+            module=LogModule.STORAGE,
+            action="doctor.upload.digital_signature_path",
+            metadata={"doctor_id": str(instance.doctor.id) if hasattr(instance, 'doctor') and instance.doctor else None},
+        )
+
         return upload_path
-    except Exception as e:
-        logger.error(f"Error generating digital signature upload path: {str(e)}")
-        # Fallback path
+    except Exception as exc:
+        logger.exception(
+            "Error generating digital signature upload path",
+            module=LogModule.STORAGE,
+            action="doctor.upload.digital_signature_path_failed",
+            exc=exc,
+        )
         ext = filename.split('.')[-1] if '.' in filename else 'pdf'
         fallback_path = os.path.join('govt_ids', 'digital_signature', f"digital_signature_{uuid.uuid4().hex}.{ext}")
-        logger.warning(f"Using fallback path: {fallback_path}")
+        logger.warning(
+            "Using fallback digital signature upload path",
+            module=LogModule.STORAGE,
+            action="doctor.upload.digital_signature_fallback_path",
+        )
         return fallback_path

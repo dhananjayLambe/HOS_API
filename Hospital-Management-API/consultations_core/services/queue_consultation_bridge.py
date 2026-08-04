@@ -4,15 +4,13 @@ Bridge queue operational actions to encounter/consultation lifecycle.
 Used by queue_management when helpdesk/doctor marks queue as in consultation.
 """
 
-import logging
-
 from django.core.exceptions import ValidationError as DjangoValidationError
+
+from shared.logging import LogModule, logger
 
 from consultations_core.services.consultation_start_service import (
     start_consultation_for_encounter,
 )
-
-logger = logging.getLogger(__name__)
 
 
 def start_consultation_from_queue_entry(queue_entry, user):
@@ -34,13 +32,15 @@ def start_consultation_from_queue_entry(queue_entry, user):
         )
     except DjangoValidationError as e:
         logger.warning(
-            "queue_consultation_bridge: consultation start failed for encounter %s: %s",
-            encounter.id,
-            e,
+            f"queue_consultation_bridge: consultation start failed for encounter {encounter.id}: {e}",
+            module=LogModule.CONSULTATION,
+            action="consultation.queue_bridge.start_failed",
+            metadata={"encounter_id": str(encounter.id)},
         )
     except Exception as e:
         logger.exception(
-            "queue_consultation_bridge: consultation create error for encounter %s: %s",
-            encounter.id,
-            e,
+            f"queue_consultation_bridge: consultation create error for encounter {encounter.id}: {e}",
+            module=LogModule.CONSULTATION,
+            action="consultation.queue_bridge.create_failed",
+            metadata={"encounter_id": str(encounter.id)},
         )

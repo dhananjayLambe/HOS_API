@@ -1,8 +1,10 @@
 from dataclasses import dataclass
-import logging
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, transaction
+
+from shared.logging import LogModule, logger
+from shared.logging.context import get_context_manager
 
 from consultations_core.domain.encounter_status import normalize_encounter_status
 from consultations_core.domain.preconsultation_clinical import preconsultation_has_meaningful_vitals
@@ -14,14 +16,28 @@ from consultations_core.services.preconsultation_lifecycle import (
 )
 from consultations_core.audit import ConsultationAuditService, emit_after_commit
 
-logger = logging.getLogger(__name__)
-
 
 @dataclass
 class StartConsultationResult:
     encounter: ClinicalEncounter
     consultation: Consultation
     already_started: bool
+
+
+def _enrich_consultation_log_context(encounter: ClinicalEncounter, consultation: Consultation | None = None) -> None:
+    """Attach Wave-1 identifiers to LogContext for CloudWatch correlation."""
+    fields: dict = {
+        "encounter_id": str(encounter.id),
+    }
+    patient_profile_id = getattr(encounter, "patient_profile_id", None)
+    if patient_profile_id:
+        fields["patient_profile_id"] = str(patient_profile_id)
+    patient_account_id = getattr(encounter, "patient_account_id", None)
+    if patient_account_id:
+        fields["patient_account_id"] = str(patient_account_id)
+    if consultation is not None:
+        fields["consultation_id"] = str(consultation.id)
+    get_context_manager().update(**fields)
 
 
 @transaction.atomic
@@ -35,13 +51,16 @@ def start_consultation_for_encounter(*, encounter_id, user=None, source: str = "
     - create consultation once when absent
     """
     encounter = ClinicalEncounter.objects.select_for_update().get(pk=encounter_id)
+    _enrich_consultation_log_context(encounter)
     logger.info(
-        "encounter.lifecycle.consultation_start.request encounter_id=%s visit_pnr=%s source=%s status=%s user_id=%s",
-        encounter.id,
-        encounter.visit_pnr,
-        source,
-        encounter.status,
-        getattr(user, "id", None),
+        (
+            f"encounter.lifecycle.consultation_start.request encounter_id={encounter.id} "
+            f"visit_pnr={encounter.visit_pnr} source={source} status={encounter.status} "
+            f"user_id={getattr(user, 'id', None)}"
+        ),
+        module=LogModule.CONSULTATION,
+        action="consultation.start.request",
+        metadata={"encounter_id": str(encounter.id), "source": source},
     )
 
     normalized_status = normalize_encounter_status(encounter.status)
@@ -55,12 +74,18 @@ def start_consultation_for_encounter(*, encounter_id, user=None, source: str = "
         if normalize_encounter_status(encounter.status) != "consultation_in_progress":
             EncounterStateMachine.start_consultation(encounter, user=user)
             encounter.refresh_from_db()
+        _enrich_consultation_log_context(encounter, consultation)
         logger.info(
-            "encounter.lifecycle.consultation_start.already_started encounter_id=%s consultation_id=%s visit_pnr=%s source=%s",
-            encounter.id,
-            consultation.id,
-            encounter.visit_pnr,
-            source,
+            (
+                f"encounter.lifecycle.consultation_start.already_started encounter_id={encounter.id} "
+                f"consultation_id={consultation.id} visit_pnr={encounter.visit_pnr} source={source}"
+            ),
+            module=LogModule.CONSULTATION,
+            action="consultation.start.already_started",
+            metadata={
+                "encounter_id": str(encounter.id),
+                "consultation_id": str(consultation.id),
+            },
         )
         return StartConsultationResult(
             encounter=encounter,
@@ -73,22 +98,30 @@ def start_consultation_for_encounter(*, encounter_id, user=None, source: str = "
         pre.is_skipped = True
         pre.save(update_fields=["is_skipped"])
         logger.info(
-            "encounter.lifecycle.preconsultation.skipped encounter_id=%s preconsultation_id=%s visit_pnr=%s source=%s",
-            encounter.id,
-            pre.id,
-            encounter.visit_pnr,
-            source,
+            (
+                f"encounter.lifecycle.preconsultation.skipped encounter_id={encounter.id} "
+                f"preconsultation_id={pre.id} visit_pnr={encounter.visit_pnr} source={source}"
+            ),
+            module=LogModule.CONSULTATION,
+            action="consultation.preconsultation.skipped",
+            metadata={"encounter_id": str(encounter.id), "preconsultation_id": str(pre.id)},
         )
 
     try:
         consultation = Consultation.objects.create(encounter=encounter)
         encounter.refresh_from_db()
+        _enrich_consultation_log_context(encounter, consultation)
         logger.info(
-            "encounter.lifecycle.consultation_start.created encounter_id=%s consultation_id=%s visit_pnr=%s source=%s",
-            encounter.id,
-            consultation.id,
-            encounter.visit_pnr,
-            source,
+            (
+                f"encounter.lifecycle.consultation_start.created encounter_id={encounter.id} "
+                f"consultation_id={consultation.id} visit_pnr={encounter.visit_pnr} source={source}"
+            ),
+            module=LogModule.CONSULTATION,
+            action="consultation.started",
+            metadata={
+                "encounter_id": str(encounter.id),
+                "consultation_id": str(consultation.id),
+            },
         )
         emit_after_commit(
             ConsultationAuditService.emit_started,
@@ -109,12 +142,18 @@ def start_consultation_for_encounter(*, encounter_id, user=None, source: str = "
         if normalize_encounter_status(encounter.status) != "consultation_in_progress":
             EncounterStateMachine.start_consultation(encounter, user=user)
             encounter.refresh_from_db()
+        _enrich_consultation_log_context(encounter, consultation)
         logger.warning(
-            "encounter.lifecycle.consultation_start.race_resolved encounter_id=%s consultation_id=%s visit_pnr=%s source=%s",
-            encounter.id,
-            consultation.id,
-            encounter.visit_pnr,
-            source,
+            (
+                f"encounter.lifecycle.consultation_start.race_resolved encounter_id={encounter.id} "
+                f"consultation_id={consultation.id} visit_pnr={encounter.visit_pnr} source={source}"
+            ),
+            module=LogModule.CONSULTATION,
+            action="consultation.start.race_resolved",
+            metadata={
+                "encounter_id": str(encounter.id),
+                "consultation_id": str(consultation.id),
+            },
         )
         return StartConsultationResult(
             encounter=encounter,

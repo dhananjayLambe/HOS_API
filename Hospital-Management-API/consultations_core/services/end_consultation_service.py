@@ -1,5 +1,4 @@
 import datetime
-import logging
 import re
 import uuid
 
@@ -54,8 +53,7 @@ from consultations_core.services.investigation_api_service import (
 )
 from diagnostics_engine.models import DiagnosticPackage, DiagnosticServiceMaster
 from medicines.models import DoseUnitMaster, DrugMaster, FrequencyMaster, RouteMaster
-
-logger = logging.getLogger(__name__)
+from shared.logging import LogModule, logger
 
 
 def _medicine_validation_error(message):
@@ -566,7 +564,12 @@ def _persist_follow_up(consultation, user, raw):
         condition_note=condition_note,
         added_by=user,
     )
-    logger.info("Follow-up saved for consultation %s", consultation.id)
+    logger.info(
+        f"Follow-up saved for consultation {consultation.id}",
+        module=LogModule.CONSULTATION,
+        action="consultation.end.follow_up_saved",
+        metadata={"consultation_id": str(consultation.id)},
+    )
 
 
 def _looks_like_uuid(token) -> bool:
@@ -799,22 +802,25 @@ def _persist_investigations(consultation, user, raw_investigations):
                 )
                 if catalog_item and str(catalog_item.pk) != str(data.get("catalog_item_id") or ""):
                     logger.info(
-                        "EndConsultation: resolved stale catalog_item_id %s to %s (%s) "
-                        "via display name %r consultation=%s",
-                        data["catalog_item_id"],
-                        catalog_item.pk,
-                        catalog_item.code,
-                        adhoc_name,
-                        consultation.id,
+                        (
+                            f"EndConsultation: resolved stale catalog_item_id {data['catalog_item_id']} "
+                            f"to {catalog_item.pk} ({catalog_item.code}) via display name {adhoc_name!r} "
+                            f"consultation={consultation.id}"
+                        ),
+                        module=LogModule.CONSULTATION,
+                        action="consultation.end.investigation_catalog_resolved",
+                        metadata={"consultation_id": str(consultation.id)},
                     )
                 if not catalog_item:
                     if adhoc_name:
                         logger.warning(
-                            "EndConsultation: catalog_item_id %s not found or inactive; "
-                            "persisting as custom investigation name=%r consultation=%s",
-                            data["catalog_item_id"],
-                            adhoc_name,
-                            consultation.id,
+                            (
+                                f"EndConsultation: catalog_item_id {data['catalog_item_id']} not found or inactive; "
+                                f"persisting as custom investigation name={adhoc_name!r} consultation={consultation.id}"
+                            ),
+                            module=LogModule.CONSULTATION,
+                            action="consultation.end.investigation_catalog_fallback",
+                            metadata={"consultation_id": str(consultation.id)},
                         )
                         adhoc_type = data.get("investigation_type") or "other"
                         try:
@@ -1109,7 +1115,11 @@ def _persist_symptoms(consultation, user, raw_symptoms):
 
 def _persist_findings(consultation, user, raw_findings):
     if not isinstance(raw_findings, list):
-        logger.info("EndConsultation findings: payload not a list, skipping")
+        logger.info(
+        "EndConsultation findings: payload not a list, skipping",
+        module=LogModule.CONSULTATION,
+        action="consultation.end.findings.skipped",
+    )
         return
 
     seen_master = set()
@@ -1132,22 +1142,32 @@ def _persist_findings(consultation, user, raw_findings):
 
         if is_custom:
             if not custom_name:
-                logger.warning("EndConsultation findings skip empty custom_name: %s", item)
+                logger.warning(
+                f"EndConsultation findings skip empty custom_name: {item}",
+                module=LogModule.CONSULTATION,
+                action="consultation.end.findings.skip_empty_custom",
+            )
                 continue
             if has_fid or finding_code:
                 logger.warning(
-                    "EndConsultation findings skip custom with master fields: %s", item
+                    f"EndConsultation findings skip custom with master fields: {item}",
+                    module=LogModule.CONSULTATION,
+                    action="consultation.end.findings.skip_custom_with_master",
                 )
                 continue
         else:
             if not has_fid and not finding_code:
                 logger.warning(
-                    "EndConsultation findings skip master without finding_id/code: %s", item
+                    f"EndConsultation findings skip master without finding_id/code: {item}",
+                    module=LogModule.CONSULTATION,
+                    action="consultation.end.findings.skip_master_without_id",
                 )
                 continue
             if custom_name:
                 logger.warning(
-                    "EndConsultation findings skip master with custom_name: %s", item
+                    f"EndConsultation findings skip master with custom_name: {item}",
+                    module=LogModule.CONSULTATION,
+                    action="consultation.end.findings.skip_master_with_custom",
                 )
                 continue
 
@@ -1201,11 +1221,13 @@ def _persist_findings(consultation, user, raw_findings):
                 )
                 row.save()
                 logger.info(
-                    "EndConsultation findings created custom row consultation=%s custom_finding=%s name=%s finding_row=%s",
-                    consultation.id,
-                    cf.id,
-                    custom_name,
-                    row.id,
+                    (
+                        f"EndConsultation findings created custom row consultation={consultation.id} "
+                        f"custom_finding={cf.id} name={custom_name} finding_row={row.id}"
+                    ),
+                    module=LogModule.CONSULTATION,
+                    action="consultation.end.findings.custom_created",
+                    metadata={"consultation_id": str(consultation.id)},
                 )
                 keeper_ids.add(row.id)
             else:
@@ -1224,7 +1246,9 @@ def _persist_findings(consultation, user, raw_findings):
                     )
                 if master is None:
                     logger.warning(
-                        "EndConsultation findings could not resolve master, skip: %s", item
+                        f"EndConsultation findings could not resolve master, skip: {item}",
+                        module=LogModule.CONSULTATION,
+                        action="consultation.end.findings.master_unresolved",
                     )
                     continue
 
@@ -1249,19 +1273,23 @@ def _persist_findings(consultation, user, raw_findings):
                     row.created_by = user
                 row.save()
                 logger.info(
-                    "EndConsultation findings upserted master row consultation=%s finding=%s finding_row=%s",
-                    consultation.id,
-                    master.id,
-                    row.id,
+                    (
+                        f"EndConsultation findings upserted master row consultation={consultation.id} "
+                        f"finding={master.id} finding_row={row.id}"
+                    ),
+                    module=LogModule.CONSULTATION,
+                    action="consultation.end.findings.master_upserted",
+                    metadata={"consultation_id": str(consultation.id)},
                 )
                 keeper_ids.add(row.id)
         except DjangoValidationError:
             raise
         except IntegrityError as e:
             logger.warning(
-                "EndConsultation finding IntegrityError consultation=%s: %s",
-                consultation.id,
-                e,
+                f"EndConsultation finding IntegrityError consultation={consultation.id}: {e}",
+                module=LogModule.CONSULTATION,
+                action="consultation.end.findings.integrity_error",
+                metadata={"consultation_id": str(consultation.id)},
             )
             raise
 
@@ -1271,21 +1299,27 @@ def _persist_findings(consultation, user, raw_findings):
     stale_n = stale_qs.update(is_active=False, updated_at=timezone.now())
     if stale_n:
         logger.info(
-            "EndConsultation findings: deactivated %s stale row(s) consultation=%s",
-            stale_n,
-            consultation.id,
+            f"EndConsultation findings: deactivated {stale_n} stale row(s) consultation={consultation.id}",
+            module=LogModule.CONSULTATION,
+            action="consultation.end.findings.deactivated_stale",
+            metadata={"consultation_id": str(consultation.id), "count": stale_n},
         )
 
     logger.info(
-        "EndConsultation findings: kept/created %s row(s) consultation=%s",
-        len(keeper_ids),
-        consultation.id,
+        f"EndConsultation findings: kept/created {len(keeper_ids)} row(s) consultation={consultation.id}",
+        module=LogModule.CONSULTATION,
+        action="consultation.end.findings.completed",
+        metadata={"consultation_id": str(consultation.id), "count": len(keeper_ids)},
     )
 
 
 def _persist_diagnoses(consultation, user, raw_diagnoses):
     if not isinstance(raw_diagnoses, list):
-        logger.info("EndConsultation diagnoses: payload not a list, skipping")
+        logger.info(
+        "EndConsultation diagnoses: payload not a list, skipping",
+        module=LogModule.CONSULTATION,
+        action="consultation.end.diagnoses.skipped",
+    )
         return
 
     keeper_ids = set()
@@ -1426,10 +1460,12 @@ def _persist_diagnoses(consultation, user, raw_diagnoses):
                 version=1,
             )
             logger.info(
-                "EndConsultation diagnoses created fallback master key=%s label=%s icd=%s",
-                master.key,
-                master.label,
-                master.icd10_code,
+                (
+                    f"EndConsultation diagnoses created fallback master key={master.key} "
+                    f"label={master.label} icd={master.icd10_code}"
+                ),
+                module=LogModule.CONSULTATION,
+                action="consultation.end.diagnoses.fallback_master_created",
             )
 
         dedup_master_key = str(master.id)

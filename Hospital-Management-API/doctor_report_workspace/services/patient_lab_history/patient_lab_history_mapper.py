@@ -20,6 +20,7 @@ from doctor_report_workspace.mappers.workspace_response_mapper import (
     _service_category_label,
     _str_id,
 )
+from shared.logging import LogModule, logger
 
 
 def _doctor_name(doctor: Any) -> str | None:
@@ -57,8 +58,13 @@ def _map_source(report_or_line: Any, *, is_awaiting: bool) -> str:
                 primary = active[0] if active else None
             if primary is not None:
                 return str(getattr(primary, "source_type", None) or ArtifactSourceType.LAB_UPLOAD)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning(
+                "Failed to resolve lab report artifact source",
+                module=LogModule.REPORTS,
+                action="doctor_report_workspace.patient_lab_history.map_source_failed",
+                metadata={"error_type": type(exc).__name__},
+            )
     source_system = getattr(report, "source_system", None)
     if source_system:
         return "IMPORTED"
@@ -83,7 +89,13 @@ def _artifact_summary(report: Any | None) -> tuple[str | None, int]:
         return None, 0
     try:
         items = list(artifacts.all() if hasattr(artifacts, "all") else artifacts)
-    except Exception:
+    except Exception as exc:
+        logger.warning(
+            "Failed to load report artifacts for summary",
+            module=LogModule.REPORTS,
+            action="doctor_report_workspace.patient_lab_history.artifact_summary_failed",
+            metadata={"error_type": type(exc).__name__},
+        )
         return None, 0
     active = [
         a
@@ -113,8 +125,13 @@ def _version_fields(report: Any | None, *, is_awaiting: bool) -> tuple[int, bool
         child = report.superseded_by_reports.filter(deleted_at__isnull=True).first()
         if child is not None:
             superseded_by = str(child.pk)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning(
+            "Failed to resolve report supersession chain",
+            module=LogModule.REPORTS,
+            action="doctor_report_workspace.patient_lab_history.version_fields_failed",
+            metadata={"error_type": type(exc).__name__},
+        )
     is_latest = superseded_by is None
     return version, is_latest, superseded_by
 

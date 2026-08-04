@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import logging
-
 from celery import shared_task
 from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist
@@ -22,8 +20,7 @@ from notifications.services.delivery.prescription_whatsapp_orchestrator import (
     run_prepare_consultation_and_enqueue,
 )
 from notifications.services.delivery.whatsapp_service import WhatsAppService
-
-logger = logging.getLogger(__name__)
+from shared.logging import LogModule, logger
 
 
 def _enqueue_diagnostic_recommendation_if_enabled(message) -> None:
@@ -45,8 +42,10 @@ def _enqueue_diagnostic_recommendation_if_enabled(message) -> None:
         )
     if consultation_id is None:
         logger.warning(
-            "recommendation_chain_skipped message_id=%s reason=no_consultation",
-            message.id,
+            "Recommendation chain skipped — no consultation",
+            module=LogModule.CELERY,
+            action="whatsapp.recommendation.chain_skipped",
+            metadata={"message_id": str(message.id), "reason": "no_consultation"},
         )
         return
 
@@ -73,7 +72,12 @@ def prepare_consultation_whatsapp(
         if message_id:
             send_prescription_whatsapp.delay(message_id)
     except Exception as exc:
-        logger.exception("prepare_consultation_whatsapp_task_error consultation_id=%s", consultation_id)
+        logger.exception(
+            "Prepare consultation WhatsApp task failed",
+            module=LogModule.CELERY,
+            action="whatsapp.task.prepare_consultation_failed",
+            metadata={"consultation_id": consultation_id},
+        )
         if self.request.retries < self.max_retries:
             raise self.retry(exc=exc) from exc
 
@@ -97,7 +101,12 @@ def prepare_prescription_whatsapp(
         if message_id:
             send_prescription_whatsapp.delay(message_id)
     except Exception as exc:
-        logger.exception("prepare_prescription_whatsapp_task_error prescription_id=%s", prescription_id)
+        logger.exception(
+            "Prepare prescription WhatsApp task failed",
+            module=LogModule.CELERY,
+            action="whatsapp.task.prepare_prescription_failed",
+            metadata={"prescription_id": prescription_id},
+        )
         if self.request.retries < self.max_retries:
             raise self.retry(exc=exc) from exc
 
@@ -108,19 +117,30 @@ def send_prescription_whatsapp(self, message_id: str) -> None:
     try:
         message = WhatsAppService().send_prescription_message(message_id=message_id)
     except ObjectDoesNotExist:
-        logger.warning("prescription_whatsapp_task_missing message_id=%s", message_id)
+        logger.warning(
+            "Prescription WhatsApp task message missing",
+            module=LogModule.CELERY,
+            action="whatsapp.task.prescription_message_missing",
+            metadata={"message_id": message_id},
+        )
         return
     except Exception as exc:
-        logger.exception("prescription_whatsapp_task_error message_id=%s", message_id)
+        logger.exception(
+            "Prescription WhatsApp task failed",
+            module=LogModule.CELERY,
+            action="whatsapp.task.prescription_send_failed",
+            metadata={"message_id": message_id},
+        )
         if self.request.retries < self.max_retries:
             raise self.retry(exc=exc) from exc
         return
 
     if message.status == WhatsAppMessageStatus.FAILED:
         logger.warning(
-            "prescription_whatsapp_task_failed message_id=%s reason=%s",
-            message_id,
-            message.failure_reason,
+            "Prescription WhatsApp task delivery failed",
+            module=LogModule.CELERY,
+            action="whatsapp.task.prescription_delivery_failed",
+            metadata={"message_id": message_id, "reason": message.failure_reason},
         )
         return
 
@@ -128,8 +148,10 @@ def send_prescription_whatsapp(self, message_id: str) -> None:
         _enqueue_diagnostic_recommendation_if_enabled(message)
     except Exception:
         logger.exception(
-            "diagnostic_recommendation_chain_failed prescription_message_id=%s",
-            message_id,
+            "Diagnostic recommendation chain failed",
+            module=LogModule.CELERY,
+            action="whatsapp.recommendation.chain_failed",
+            metadata={"prescription_message_id": message_id},
         )
 
 
@@ -149,13 +171,19 @@ def prepare_diagnostic_recommendation_whatsapp(
             send_diagnostic_recommendation_whatsapp.delay(message_id)
     except Exception as exc:
         logger.exception(
-            "prepare_diagnostic_recommendation_whatsapp_task_error consultation_id=%s",
-            consultation_id,
+            "Prepare diagnostic recommendation WhatsApp task failed",
+            module=LogModule.CELERY,
+            action="whatsapp.task.prepare_recommendation_failed",
+            metadata={"consultation_id": consultation_id},
         )
         logger.info(
-            "recommendation.retry consultation_id=%s prescription_message_id=%s",
-            consultation_id,
-            prescription_message_id,
+            "Recommendation retry scheduled after prepare failure",
+            module=LogModule.CELERY,
+            action="whatsapp.recommendation.retry",
+            metadata={
+                "consultation_id": consultation_id,
+                "prescription_message_id": prescription_message_id,
+            },
         )
         if self.request.retries < self.max_retries:
             raise self.retry(exc=exc) from exc
@@ -189,10 +217,11 @@ def _schedule_send_retry_audit(message_id: str, *, retry_count: int, retry_reaso
             max_retry=3,
         )
     except Exception:
-        logger.warning(
-            "recommendation_business_retried_schedule_failed",
-            exc_info=True,
-            extra={"message_id": message_id},
+        logger.exception(
+            "Recommendation business retried audit schedule failed",
+            module=LogModule.CELERY,
+            action="whatsapp.recommendation.retried_audit_schedule_failed",
+            metadata={"message_id": message_id},
         )
 
 
@@ -202,11 +231,26 @@ def send_diagnostic_recommendation_whatsapp(self, message_id: str) -> None:
     try:
         message = WhatsAppService().send_recommendation_message(message_id=message_id)
     except ObjectDoesNotExist:
-        logger.warning("diagnostic_recommendation_whatsapp_task_missing message_id=%s", message_id)
+        logger.warning(
+            "Diagnostic recommendation WhatsApp task message missing",
+            module=LogModule.CELERY,
+            action="whatsapp.task.recommendation_message_missing",
+            metadata={"message_id": message_id},
+        )
         return
     except Exception as exc:
-        logger.exception("diagnostic_recommendation_whatsapp_task_error message_id=%s", message_id)
-        logger.info("recommendation.retry whatsapp_message_id=%s", message_id)
+        logger.exception(
+            "Diagnostic recommendation WhatsApp task failed",
+            module=LogModule.CELERY,
+            action="whatsapp.task.recommendation_send_failed",
+            metadata={"message_id": message_id},
+        )
+        logger.info(
+            "Recommendation retry scheduled after send failure",
+            module=LogModule.CELERY,
+            action="whatsapp.recommendation.retry",
+            metadata={"whatsapp_message_id": message_id},
+        )
         _schedule_send_retry_audit(
             message_id,
             retry_count=self.request.retries + 1,
@@ -218,9 +262,10 @@ def send_diagnostic_recommendation_whatsapp(self, message_id: str) -> None:
 
     if message.status == WhatsAppMessageStatus.FAILED:
         logger.warning(
-            "diagnostic_recommendation_whatsapp_task_failed message_id=%s reason=%s",
-            message_id,
-            message.failure_reason,
+            "Diagnostic recommendation WhatsApp task delivery failed",
+            module=LogModule.CELERY,
+            action="whatsapp.task.recommendation_delivery_failed",
+            metadata={"message_id": message_id, "reason": message.failure_reason},
         )
 
 
@@ -275,10 +320,14 @@ def expire_stale_recommendations() -> int:
         )
         expired_count += 1
         logger.info(
-            "recommendation.expired recommendation_id=%s consultation_id=%s message_id=%s",
-            recommendation_id,
-            payload.get("consultation_id"),
-            message.id,
+            "Recommendation expired",
+            module=LogModule.CELERY,
+            action="whatsapp.recommendation.expired",
+            metadata={
+                "recommendation_id": recommendation_id,
+                "consultation_id": payload.get("consultation_id"),
+                "message_id": str(message.id),
+            },
         )
 
     return expired_count

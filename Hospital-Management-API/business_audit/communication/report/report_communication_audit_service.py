@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from business_audit.communication.constants import (
@@ -49,8 +48,6 @@ from business_audit.enums import (
     WorkflowType,
 )
 from business_audit.services import BusinessAuditService
-
-logger = logging.getLogger(__name__)
 
 _CHANNEL_ACTIONS: dict[str, BusinessAuditAction] = {
     CommunicationChannel.WHATSAPP: BusinessAuditAction.REPORT_WHATSAPP_DELIVERY,

@@ -8,15 +8,13 @@ is already `consultation_completed` (stale label on helpdesk).
 
 from __future__ import annotations
 
-import logging
 import uuid
 from typing import Any
 
 from django.utils import timezone
 
 from queue_management.models import Queue
-
-logger = logging.getLogger(__name__)
+from shared.logging import LogModule, logger
 
 # Row states that should leave the helpdesk "active" lane when the encounter is done.
 _STATES_TO_RECONCILE = ("waiting", "vitals_done", "in_consultation")
@@ -35,7 +33,12 @@ def mark_queue_rows_for_encounter_completed(encounter_id: Any) -> int:
         status__in=_STATES_TO_RECONCILE,
     ).update(status="completed", updated_at=timezone.now())
     if n:
-        logger.info("queue_encounter_sync.completed encounter_id=%s updated_rows=%s", eid, n)
+        logger.info(
+            "Queue rows marked completed for encounter",
+            module=LogModule.BOOKING,
+            action="queue.encounter_sync.completed",
+            metadata={"encounter_id": str(eid), "updated_rows": n},
+        )
     return n
 
 
@@ -49,7 +52,12 @@ def mark_queue_rows_for_encounter_cancelled(encounter_id: Any) -> int:
         status__in=_STATES_TO_RECONCILE,
     ).update(status="cancelled", updated_at=timezone.now())
     if n:
-        logger.info("queue_encounter_sync.cancelled encounter_id=%s updated_rows=%s", eid, n)
+        logger.info(
+            "Queue rows marked cancelled for encounter",
+            module=LogModule.BOOKING,
+            action="queue.encounter_sync.cancelled",
+            metadata={"encounter_id": str(eid), "updated_rows": n},
+        )
     return n
 
 
@@ -63,7 +71,12 @@ def mark_queue_rows_for_encounter_no_show(encounter_id: Any) -> int:
         status__in=_STATES_TO_RECONCILE,
     ).update(status="skipped", updated_at=timezone.now())
     if n:
-        logger.info("queue_encounter_sync.no_show encounter_id=%s updated_rows=%s", eid, n)
+        logger.info(
+            "Queue rows marked skipped for encounter no-show",
+            module=LogModule.BOOKING,
+            action="queue.encounter_sync.no_show",
+            metadata={"encounter_id": str(eid), "updated_rows": n},
+        )
     return n
 
 
@@ -93,11 +106,15 @@ def sync_appointment_for_encounter_terminal(encounter) -> int:
     ).update(status=appt_status, updated_at=timezone.now())
     if n:
         logger.info(
-            "appointment_encounter_sync encounter_id=%s appointment_id=%s status=%s updated=%s",
-            getattr(encounter, "id", None),
-            appointment_id,
-            appt_status,
-            n,
+            "Appointment synced from encounter terminal state",
+            module=LogModule.BOOKING,
+            action="queue.appointment_encounter_sync.updated",
+            metadata={
+                "encounter_id": str(getattr(encounter, "id", None)),
+                "appointment_id": str(appointment_id),
+                "status": appt_status,
+                "updated_rows": n,
+            },
         )
     return n
 

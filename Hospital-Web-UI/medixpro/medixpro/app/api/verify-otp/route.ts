@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { serverLogger } from "@/lib/serverLogger";
 
 const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8000/api/";
 
@@ -17,7 +18,7 @@ export async function POST(req: Request) {
     // Return response directly (tokens are in response body)
     return NextResponse.json(data, { status: res.status });
   } catch (error: any) {
-    console.error("verify-otp proxy error:", error);
+    serverLogger.error("verify-otp proxy error", error, { route: "verify-otp" });
     return NextResponse.json(
       { error: "Failed to connect to backend. Please try again." },
       { status: 500 }

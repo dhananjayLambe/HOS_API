@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -30,13 +29,12 @@ from diagnostics_engine.services.routing.routing_helpers import (
     ResolvedRoutingLocation,
     resolve_routing_location_for_context,
 )
+from shared.logging import LogModule, logger
 
 if TYPE_CHECKING:
     from consultations_core.models.encounter import ClinicalEncounter
     from labs.models.lab_auth import LabBranch, LabOrganization
     from patient_account.models import PatientProfile
-
-logger = logging.getLogger(__name__)
 
 
 class RecommendationFailureReason:
@@ -93,10 +91,14 @@ class RecommendationResult:
 
 def _log_started(consultation_id: UUID, service_count: int, collection_mode: str) -> None:
     logger.info(
-        "recommendation.started consultation_id=%s service_count=%s collection_mode=%s",
-        consultation_id,
-        service_count,
-        collection_mode,
+        "Laboratory recommendation started",
+        module=LogModule.LABORATORY,
+        action="diagnostics.recommendation.started",
+        metadata={
+            "consultation_id": str(consultation_id),
+            "service_count": service_count,
+            "collection_mode": collection_mode,
+        },
     )
 
 
@@ -108,22 +110,31 @@ def _log_completed(
     ranking_labels: list[str],
 ) -> None:
     logger.info(
-        "recommendation.completed consultation_id=%s branch_id=%s routing_estimated_price=%s "
-        "duration_ms=%s ranking_labels=%s",
-        consultation_id,
-        branch_id,
-        routing_estimated_price,
-        duration_ms,
-        ",".join(ranking_labels),
+        "Laboratory recommendation completed",
+        module=LogModule.LABORATORY,
+        action="diagnostics.recommendation.completed",
+        metadata={
+            "consultation_id": str(consultation_id),
+            "branch_id": str(branch_id) if branch_id is not None else None,
+            "routing_estimated_price": str(routing_estimated_price)
+            if routing_estimated_price is not None
+            else None,
+            "duration_ms": duration_ms,
+            "ranking_labels": ranking_labels,
+        },
     )
 
 
 def _log_failed(consultation_id: UUID, failure_reason: str, duration_ms: int) -> None:
     logger.info(
-        "recommendation.failed consultation_id=%s failure_reason=%s duration_ms=%s",
-        consultation_id,
-        failure_reason,
-        duration_ms,
+        "Laboratory recommendation failed",
+        module=LogModule.LABORATORY,
+        action="diagnostics.recommendation.failed",
+        metadata={
+            "consultation_id": str(consultation_id),
+            "failure_reason": failure_reason,
+            "duration_ms": duration_ms,
+        },
     )
 
 

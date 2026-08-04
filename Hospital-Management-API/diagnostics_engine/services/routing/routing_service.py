@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import os
 import time
 from collections import Counter
@@ -11,14 +10,14 @@ from typing import Any
 from django.db import transaction
 from django.utils import timezone
 
+from shared.logging import LogModule, logger
+
 from diagnostics_engine.choices.routing import (
     DiagnosticOrderRoutingStatus,
     RoutingEventType,
     RoutingStatus,
 )
 from diagnostics_engine.models.routing import RoutingEvent, RoutingLabOrderAssignment, RoutingRun
-
-logger = logging.getLogger(__name__)
 
 
 class RoutingService:
@@ -60,7 +59,12 @@ class RoutingService:
                 ).get(pk=order_id)
             )
         except DiagnosticOrder.DoesNotExist:
-            logger.exception("routing aborted: diagnostic order not found order_id=%s", order_id)
+            logger.exception(
+                "Routing aborted: diagnostic order not found",
+                module=LogModule.ROUTING,
+                action="diagnostics.routing.order_not_found",
+                metadata={"order_id": str(order_id)},
+            )
             return
 
         n_lines = DiagnosticOrderTestLine.objects.filter(order_id=order.pk).count()
@@ -244,18 +248,23 @@ class RoutingService:
                 routable_n = routable_lab_branches_queryset().count()
                 if routable_n == 0:
                     logger.warning(
-                        "Routing order %s: zero marketplace branches (routable pool empty). "
+                        "Routing order has zero marketplace branches (routable pool empty). "
                         "Lab org must be registration_status=APPROVED, is_verified=True, "
                         "onboarding_completed=True, is_active_for_orders=True — branch-only "
                         "enablement is not enough.",
-                        order.order_number,
+                        module=LogModule.ROUTING,
+                        action="diagnostics.routing.no_marketplace_branches",
+                        metadata={"order_number": order.order_number},
                     )
                 else:
                     logger.warning(
-                        "Routing order %s: routable pool has %s branch(es) but none were evaluated "
-                        "(check test lines on order).",
-                        order.order_number,
-                        routable_n,
+                        "Routable pool has branches but none were evaluated (check test lines on order).",
+                        module=LogModule.ROUTING,
+                        action="diagnostics.routing.no_branches_evaluated",
+                        metadata={
+                            "order_number": order.order_number,
+                            "routable_branch_count": routable_n,
+                        },
                     )
 
             if os.environ.get("DIAGNOSTIC_ROUTING_REJECT_DEBUG", "").strip().lower() in (
@@ -265,10 +274,17 @@ class RoutingService:
                 "on",
             ):
                 logger.info(
-                    "Routing eligible | order=%s | count=%s | branches=%s",
-                    order.order_number,
-                    len(eligible),
-                    [(c.branch.pk, getattr(c.branch, "branch_code", "") or "") for c in eligible],
+                    "Routing eligible branches evaluated",
+                    module=LogModule.ROUTING,
+                    action="diagnostics.routing.eligible_debug",
+                    metadata={
+                        "order_number": order.order_number,
+                        "eligible_count": len(eligible),
+                        "branches": [
+                            (c.branch.pk, getattr(c.branch, "branch_code", "") or "")
+                            for c in eligible
+                        ],
+                    },
                 )
 
             reject_hist: Counter[str] = Counter()
@@ -337,7 +353,12 @@ class RoutingService:
                 decision_ctx=decision_ctx,
             )
         except Exception:
-            logger.exception("diagnostic routing failed order_id=%s", order_id)
+            logger.exception(
+                "Diagnostic routing failed",
+                module=LogModule.ROUTING,
+                action="diagnostics.routing.failed",
+                metadata={"order_id": str(order_id)},
+            )
             from business_audit.decision.routing.hooks import schedule_routing_decision_pipeline_failed
 
             routing_journey_info(
@@ -374,4 +395,9 @@ class RoutingService:
                     user=triggered_by,
                 )
             except Exception:
-                logger.exception("diagnostic routing failure cleanup also failed order_id=%s", order_id)
+                logger.exception(
+                    "Diagnostic routing failure cleanup also failed",
+                    module=LogModule.ROUTING,
+                    action="diagnostics.routing.cleanup_failed",
+                    metadata={"order_id": str(order_id)},
+                )

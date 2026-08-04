@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-import logging
-
 from consultations_core.audit.commit import emit_after_commit
 from diagnostics_engine.audit.diagnostic_audit_service import DiagnosticAuditService
 from diagnostics_engine.audit.report_payload_builder import ReportPayloadBuilder
 from diagnostics_engine.audit.test_payload_builder import TestPayloadBuilder
-
-logger = logging.getLogger(__name__)
+from shared.logging import LogModule, logger
 
 
 def schedule_test_ordered(*, order, user, test_count: int | None = None) -> None:
@@ -27,10 +24,11 @@ def schedule_test_ordered(*, order, user, test_count: int | None = None) -> None
             source=DiagnosticAuditService.resolve_source_from_user(user),
         )
     except Exception:
-        logger.warning(
-            "diagnostic_audit_test_ordered_schedule_failed",
-            exc_info=True,
-            extra={"order_id": str(getattr(order, "id", ""))},
+        logger.exception(
+            "Failed to schedule diagnostic audit test ordered event",
+            module=LogModule.LABORATORY,
+            action="diagnostics.audit.test_ordered_schedule_failed",
+            metadata={"order_id": str(getattr(order, "id", ""))},
         )
 
 
@@ -54,10 +52,11 @@ def schedule_test_recommendation_sent(*, message, user=None) -> None:
             source="system",
         )
     except Exception:
-        logger.warning(
-            "diagnostic_audit_recommendation_sent_schedule_failed",
-            exc_info=True,
-            extra={"message_id": str(getattr(message, "id", ""))},
+        logger.exception(
+            "Failed to schedule diagnostic audit recommendation sent event",
+            module=LogModule.LABORATORY,
+            action="diagnostics.audit.recommendation_sent_schedule_failed",
+            metadata={"message_id": str(getattr(message, "id", ""))},
         )
 
 
@@ -85,10 +84,11 @@ def schedule_report_uploaded(
             source="lab",
         )
     except Exception:
-        logger.warning(
-            "diagnostic_audit_report_uploaded_schedule_failed",
-            exc_info=True,
-            extra={"report_id": str(getattr(report, "id", ""))},
+        logger.exception(
+            "Failed to schedule diagnostic audit report uploaded event",
+            module=LogModule.REPORTS,
+            action="diagnostics.audit.report_uploaded_schedule_failed",
+            metadata={"report_id": str(getattr(report, "id", ""))},
         )
 
 
@@ -113,10 +113,11 @@ def schedule_report_viewed(
             artifact_id=artifact_id,
         )
     except Exception:
-        logger.warning(
-            "diagnostic_audit_report_viewed_failed",
-            exc_info=True,
-            extra={"report_id": str(getattr(report, "id", ""))},
+        logger.exception(
+            "Failed to emit diagnostic audit report viewed event",
+            module=LogModule.REPORTS,
+            action="diagnostics.audit.report_viewed_failed",
+            metadata={"report_id": str(getattr(report, "id", ""))},
         )
 
 
@@ -143,10 +144,11 @@ def schedule_report_downloaded(
             artifact_id=artifact_id,
         )
     except Exception:
-        logger.warning(
-            "diagnostic_audit_report_downloaded_failed",
-            exc_info=True,
-            extra={"report_id": str(getattr(report, "id", ""))},
+        logger.exception(
+            "Failed to emit diagnostic audit report downloaded event",
+            module=LogModule.REPORTS,
+            action="diagnostics.audit.report_downloaded_failed",
+            metadata={"report_id": str(getattr(report, "id", ""))},
         )
 
 
@@ -172,8 +174,9 @@ def schedule_report_shared(
             source="lab",
         )
     except Exception:
-        logger.warning(
-            "diagnostic_audit_report_shared_schedule_failed",
-            exc_info=True,
-            extra={"report_id": str(getattr(report, "id", ""))},
+        logger.exception(
+            "Failed to schedule diagnostic audit report shared event",
+            module=LogModule.REPORTS,
+            action="diagnostics.audit.report_shared_schedule_failed",
+            metadata={"report_id": str(getattr(report, "id", ""))},
         )

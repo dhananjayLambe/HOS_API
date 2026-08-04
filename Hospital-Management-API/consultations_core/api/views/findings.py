@@ -1,6 +1,4 @@
 # consultations_core/api/views/findings.py
-import logging
-
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, transaction
 from django.shortcuts import get_object_or_404
@@ -22,8 +20,7 @@ from consultations_core.models.consultation import Consultation
 from consultations_core.models.encounter import ClinicalEncounter
 from consultations_core.models.findings import ConsultationFinding, CustomFinding, FindingMaster
 from consultations_core.services.finding_master_service import get_or_create_finding_master_for_code
-
-logger = logging.getLogger(__name__)
+from shared.logging import LogModule, logger
 
 MSG_VISIT_CANCELLED = "This visit has been cancelled. Please start a new one."
 
@@ -87,10 +84,13 @@ class EncounterFindingsListCreateAPIView(APIView):
         ser = CreateConsultationFindingSerializer(data=request.data)
         if not ser.is_valid():
             logger.warning(
-                "EncounterFindingsListCreateAPIView validation failed encounter=%s errors=%s body=%s",
-                encounter_id,
-                ser.errors,
-                request.data,
+                (
+                    f"EncounterFindingsListCreateAPIView validation failed encounter={encounter_id} "
+                    f"errors={ser.errors} body={request.data}"
+                ),
+                module=LogModule.API,
+                action="consultation.findings.validation_failed",
+                metadata={"encounter_id": str(encounter_id)},
             )
             return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -131,10 +131,10 @@ class EncounterFindingsListCreateAPIView(APIView):
                         msgs = getattr(e, "messages", None)
                         msg = "; ".join(str(m) for m in msgs) if msgs else str(e)
                         logger.warning(
-                            "Finding master resolve failed encounter=%s code=%s: %s",
-                            encounter_id,
-                            code,
-                            msg,
+                            f"Finding master resolve failed encounter={encounter_id} code={code}: {msg}",
+                            module=LogModule.CONSULTATION,
+                            action="consultation.findings.master_resolve_failed",
+                            metadata={"encounter_id": str(encounter_id), "finding_code": code},
                         )
                         return Response({"detail": msg}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -149,16 +149,18 @@ class EncounterFindingsListCreateAPIView(APIView):
             msgs = getattr(e, "messages", None)
             msg = "; ".join(str(m) for m in msgs) if msgs else str(e)
             logger.warning(
-                "ConsultationFinding create validation encounter=%s: %s",
-                encounter_id,
-                msg,
+                f"ConsultationFinding create validation encounter={encounter_id}: {msg}",
+                module=LogModule.CONSULTATION,
+                action="consultation.findings.create_validation_failed",
+                metadata={"encounter_id": str(encounter_id)},
             )
             return Response({"detail": msg}, status=status.HTTP_400_BAD_REQUEST)
         except IntegrityError as e:
             logger.warning(
-                "ConsultationFinding create integrity encounter=%s: %s",
-                encounter_id,
-                e,
+                f"ConsultationFinding create integrity encounter={encounter_id}: {e}",
+                module=LogModule.CONSULTATION,
+                action="consultation.findings.create_integrity_failed",
+                metadata={"encounter_id": str(encounter_id)},
             )
             return Response(
                 {"detail": "This finding is already added for this consultation."},
@@ -206,10 +208,10 @@ class ConsultationFindingUpdateDeleteAPIView(APIView):
         ser = PatchConsultationFindingSerializer(data=request.data, partial=True)
         if not ser.is_valid():
             logger.warning(
-                "PatchConsultationFindingSerializer failed id=%s errors=%s body=%s",
-                pk,
-                ser.errors,
-                request.data,
+                f"PatchConsultationFindingSerializer failed id={pk} errors={ser.errors} body={request.data}",
+                module=LogModule.API,
+                action="consultation.findings.patch_validation_failed",
+                metadata={"finding_id": str(pk)},
             )
             return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
 

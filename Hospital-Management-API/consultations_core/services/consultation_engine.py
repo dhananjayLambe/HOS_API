@@ -1,9 +1,9 @@
 
 from typing import Dict, List, Any
-import logging
-from consultations_core.services.metadata_loader import MetadataLoader
 
-logger = logging.getLogger(__name__)
+from shared.logging import LogModule, logger
+
+from consultations_core.services.metadata_loader import MetadataLoader
 
 
 class ConsultationEngine:
@@ -35,10 +35,20 @@ class ConsultationEngine:
                 section_data = ConsultationEngine._load_section(section, specialty)
                 response["sections"].append(section_data)
             except Exception as e:
-                logger.error(f"Failed to load section '{section}': {str(e)}", exc_info=True)
+                logger.exception(
+                    f"Failed to load section '{section}': {str(e)}",
+                    module=LogModule.CONSULTATION,
+                    action="consultation.preconsultation.section_load_failed",
+                    metadata={"section": section, "specialty": specialty},
+                )
                 # Continue with other sections even if one fails
 
-        logger.info(f"Returning {len(response['sections'])} sections: {[s['section'] for s in response['sections']]}")
+        logger.info(
+            f"Returning {len(response['sections'])} sections: {[s['section'] for s in response['sections']]}",
+            module=LogModule.CONSULTATION,
+            action="consultation.preconsultation.template_built",
+            metadata={"specialty": specialty, "section_count": len(response["sections"])},
+        )
         return response
 
     @staticmethod
@@ -56,10 +66,20 @@ class ConsultationEngine:
             master = MetadataLoader.get(master_path)
             details = MetadataLoader.get(details_path)
         except FileNotFoundError as e:
-            logger.error(f"Metadata file not found for section '{section}': {e}")
+            logger.error(
+                f"Metadata file not found for section '{section}': {e}",
+                module=LogModule.CONSULTATION,
+                action="consultation.preconsultation.metadata_not_found",
+                metadata={"section": section},
+            )
             raise
         except Exception as e:
-            logger.error(f"Error loading metadata files for section '{section}': {e}")
+            logger.error(
+                f"Error loading metadata files for section '{section}': {e}",
+                module=LogModule.CONSULTATION,
+                action="consultation.preconsultation.metadata_load_failed",
+                metadata={"section": section},
+            )
             raise
 
         # Load specialty-specific ranges if available (for vitals section)
@@ -69,16 +89,35 @@ class ConsultationEngine:
                 ranges_path = "pre_consultation/vitals/vitals_ranges.json"
                 all_ranges = MetadataLoader.get(ranges_path)
                 specialty_ranges = all_ranges.get(specialty) or all_ranges.get("default")
-                logger.debug(f"Loaded specialty ranges for '{specialty}': {specialty_ranges is not None}")
+                logger.debug(
+                    f"Loaded specialty ranges for '{specialty}': {specialty_ranges is not None}",
+                    module=LogModule.CONSULTATION,
+                    action="consultation.preconsultation.ranges_loaded",
+                    metadata={"specialty": specialty},
+                )
             except FileNotFoundError:
-                logger.debug(f"No specialty ranges file found, using defaults")
+                logger.debug(
+                    "No specialty ranges file found, using defaults",
+                    module=LogModule.CONSULTATION,
+                    action="consultation.preconsultation.ranges_default",
+                )
             except Exception as e:
-                logger.warning(f"Error loading specialty ranges: {e}")
+                logger.warning(
+                    f"Error loading specialty ranges: {e}",
+                    module=LogModule.CONSULTATION,
+                    action="consultation.preconsultation.ranges_load_failed",
+                    metadata={"specialty": specialty},
+                )
 
         items = []
 
         if "items" not in master:
-            logger.warning(f"Section '{section}' master.json missing 'items' key")
+            logger.warning(
+                f"Section '{section}' master.json missing 'items' key",
+                module=LogModule.CONSULTATION,
+                action="consultation.preconsultation.section_items_missing",
+                metadata={"section": section},
+            )
             return {
                 "section": section,
                 "items": []
@@ -102,7 +141,12 @@ class ConsultationEngine:
             }
             items.append(item)
 
-        logger.debug(f"Loaded {len(items)} items for section '{section}'")
+        logger.debug(
+            f"Loaded {len(items)} items for section '{section}'",
+            module=LogModule.CONSULTATION,
+            action="consultation.preconsultation.section_loaded",
+            metadata={"section": section, "item_count": len(items)},
+        )
         return {
             "section": section,
             "items": items
@@ -174,7 +218,12 @@ class ConsultationEngine:
                         error_msgs["max"] = f"{updated_field.get('label', 'Field')} cannot exceed {{max}} {{unit}}"
                 
                 merged_fields.append(updated_field)
-                logger.debug(f"Merged specialty range for {item_code}.{field_key}: {field_range_config}")
+                logger.debug(
+                    f"Merged specialty range for {item_code}.{field_key}: {field_range_config}",
+                    module=LogModule.CONSULTATION,
+                    action="consultation.preconsultation.range_merged",
+                    metadata={"item_code": item_code, "field_key": field_key},
+                )
             else:
                 # No specialty override, use field as-is
                 merged_fields.append(field)

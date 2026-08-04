@@ -6,7 +6,6 @@ Validates only — no save, upload, transition, or delivery side effects.
 
 from __future__ import annotations
 
-import logging
 import re
 from django.core.exceptions import ValidationError
 
@@ -16,8 +15,7 @@ from diagnostics_engine.models.choices import ReportLifecycleStatus
 from diagnostics_engine.models.reports import DiagnosticReportArtifact, DiagnosticTestReport
 from labs.choices.tracking import DeliveryStatus
 from labs.models.lab_tracking import LabReportDeliveryLog
-
-logger = logging.getLogger(__name__)
+from shared.logging import LogModule, logger
 
 _PHONE_DIGIT_RE = re.compile(r"\d")
 
@@ -316,10 +314,14 @@ class ReportValidationService:
         from diagnostics_engine.services.reports.report_audit import emit_report_audit_event
 
         logger.warning(
-            "report_artifact_primary_gap report_id=%s code=%s message=%s",
-            report.pk,
-            code,
-            message,
+            "Primary artifact gap detected",
+            module=LogModule.REPORTS,
+            action="diagnostics.reports.artifact_primary_gap",
+            metadata={
+                "report_id": str(report.pk),
+                "code": code,
+                "message": message,
+            },
         )
         safe_emit(
             emit_report_audit_event,

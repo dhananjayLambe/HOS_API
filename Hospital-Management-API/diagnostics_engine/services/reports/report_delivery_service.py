@@ -14,7 +14,6 @@ Phase 1: ``metadata`` stores artifact_id, download_url, delivery_token, retry_of
 
 from __future__ import annotations
 
-import logging
 import time
 import uuid
 from typing import Any
@@ -23,6 +22,8 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
+
+from shared.logging import LogModule, logger
 
 from labs.choices.tracking import DeliveryStatus
 from labs.models.lab_tracking import LabReportDeliveryLog
@@ -36,7 +37,6 @@ from diagnostics_engine.services.reports.report_validation_service import Report
 from diagnostics_engine.services.reports.report_download_service import ReportDownloadService
 from diagnostics_engine.services.reports.report_workflow_service import ReportWorkflowService
 
-logger = logging.getLogger("diagnostics.reports")
 
 class ReportDeliveryService:
     """Prepare, send, confirm, retry, and aggregate channel delivery for reports."""
@@ -93,7 +93,11 @@ class ReportDeliveryService:
                 user=initiated_by,
             )
         except Exception:
-            logger.warning("communication_audit_prepare_hook_failed", exc_info=True)
+            logger.exception(
+                "Communication audit prepare hook failed",
+                module=LogModule.REPORTS,
+                action="diagnostics.reports.communication_audit_prepare_failed",
+            )
         safe_emit(
             emit_report_audit_event,
             action="delivery_prepared",
@@ -111,10 +115,14 @@ class ReportDeliveryService:
             extra={"delivery_log_id": str(log.id), "channel": channel},
         )
         logger.info(
-            "Prepared report delivery report_id=%s log_id=%s channel=%s",
-            report.id,
-            log.id,
-            channel,
+            "Prepared report delivery",
+            module=LogModule.REPORTS,
+            action="diagnostics.reports.delivery_prepared",
+            metadata={
+                "report_id": str(report.id),
+                "delivery_log_id": str(log.id),
+                "channel": channel,
+            },
         )
         log._communication_runtime = comm_runtime  # type: ignore[attr-defined]
         return log
@@ -176,7 +184,11 @@ class ReportDeliveryService:
                 response_payload={"message_id": external_message_id or message_id},
             )
         except Exception:
-            logger.warning("communication_audit_send_hook_failed", exc_info=True)
+            logger.exception(
+                "Communication audit send hook failed",
+                module=LogModule.REPORTS,
+                action="diagnostics.reports.communication_audit_send_failed",
+            )
         return result
 
     @classmethod
@@ -207,7 +219,15 @@ class ReportDeliveryService:
             branch_id=get_report_branch_id(report),
             extra={"delivery_log_id": str(delivery_log.id)},
         )
-        logger.info("Marked delivery sent log_id=%s report_id=%s", delivery_log.id, report.id)
+        logger.info(
+            "Marked delivery sent",
+            module=LogModule.REPORTS,
+            action="diagnostics.reports.delivery_sent",
+            metadata={
+                "delivery_log_id": str(delivery_log.id),
+                "report_id": str(report.id),
+            },
+        )
         return delivery_log
 
     @classmethod
@@ -240,7 +260,15 @@ class ReportDeliveryService:
         cls.sync_report_delivery_status(report=report)
         if report.status == ReportLifecycleStatus.READY:
             ReportWorkflowService.mark_delivered(report, user=user)
-        logger.info("Marked delivery delivered log_id=%s report_id=%s", delivery_log.id, report.id)
+        logger.info(
+            "Marked delivery delivered",
+            module=LogModule.REPORTS,
+            action="diagnostics.reports.delivery_delivered",
+            metadata={
+                "delivery_log_id": str(delivery_log.id),
+                "report_id": str(report.id),
+            },
+        )
         return delivery_log
 
     @classmethod
@@ -271,7 +299,11 @@ class ReportDeliveryService:
                 reason=reason or "",
             )
         except Exception:
-            logger.warning("communication_audit_failed_hook_failed", exc_info=True)
+            logger.exception(
+                "Communication audit failed hook failed",
+                module=LogModule.REPORTS,
+                action="diagnostics.reports.communication_audit_failed_hook_failed",
+            )
         safe_emit(
             emit_report_event,
             "report_delivery_failed",
@@ -281,10 +313,14 @@ class ReportDeliveryService:
             extra={"delivery_log_id": str(delivery_log.id), "reason": reason or ""},
         )
         logger.warning(
-            "Marked delivery failed log_id=%s report_id=%s reason=%s",
-            delivery_log.id,
-            report.id,
-            reason,
+            "Marked delivery failed",
+            module=LogModule.REPORTS,
+            action="diagnostics.reports.delivery_failed",
+            metadata={
+                "delivery_log_id": str(delivery_log.id),
+                "report_id": str(report.id),
+                "reason": reason or "",
+            },
         )
         return delivery_log
 
@@ -331,7 +367,11 @@ class ReportDeliveryService:
                 user=initiated_by,
             )
         except Exception:
-            logger.warning("communication_audit_retry_hook_failed", exc_info=True)
+            logger.exception(
+                "Communication audit retry hook failed",
+                module=LogModule.REPORTS,
+                action="diagnostics.reports.communication_audit_retry_failed",
+            )
         safe_emit(
             emit_report_audit_event,
             action="delivery_retry",
@@ -355,10 +395,14 @@ class ReportDeliveryService:
             },
         )
         logger.info(
-            "Created delivery retry report_id=%s parent_log_id=%s new_log_id=%s",
-            report.id,
-            delivery_log.id,
-            new_log.id,
+            "Created delivery retry",
+            module=LogModule.REPORTS,
+            action="diagnostics.reports.delivery_retry_created",
+            metadata={
+                "report_id": str(report.id),
+                "parent_delivery_log_id": str(delivery_log.id),
+                "new_delivery_log_id": str(new_log.id),
+            },
         )
         return new_log
 

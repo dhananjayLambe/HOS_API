@@ -10,7 +10,6 @@ from django.contrib.auth.models import Group
 from django.core.cache import cache
 import random
 import time
-import logging
 from datetime import date
 from patient_account.models import OTP
 from rest_framework.views import APIView
@@ -39,13 +38,11 @@ from django.utils import timezone
 import traceback
 from patient_account.services.patient_search_service import search_patients_for_suggestions
 from patient_account.services.patient_list_service import list_patients_for_workspace
+from shared.logging import LogModule, logger
 from patient_account.services.patient_summary_service import (
     build_patient_summary,
     get_accessible_patient_profile_or_404,
 )
-
-# Set up logger
-logger = logging.getLogger(__name__)
 
 #Determines if the user is new or existing.
 class CheckUserStatusView(APIView):
@@ -488,21 +485,21 @@ class CreatePatientView(APIView):
     @transaction.atomic
     def post(self, request):
         try:
-            logger.info("=" * 80)
-            logger.info("CreatePatientView: Starting patient creation")
-            logger.info(f"Request user: {request.user} (ID: {request.user.id})")
-            logger.info(f"Request data: {request.data}")
-            logger.info(f"Request method: {request.method}")
-            
-            # Debug: Check user groups
             user_groups = list(request.user.groups.values_list('name', flat=True))
-            logger.info(f"User groups: {user_groups}")
-            
-            # Step 1: Validate serializer
-            logger.info("Step 1: Validating serializer...")
+            logger.info(
+                "Doctor-flow patient creation started",
+                module=LogModule.AUTHENTICATION,
+                action="patient_account.create.started",
+                metadata={"created_by_user_id": str(request.user.id), "user_groups": user_groups},
+            )
             serializer = CreatePatientSerializer(data=request.data)
             if not serializer.is_valid():
-                logger.error(f"Serializer validation failed: {serializer.errors}")
+                logger.warning(
+                    "Doctor-flow patient creation validation failed",
+                    module=LogModule.AUTHENTICATION,
+                    action="patient_account.create.validation_failed",
+                    metadata={"error_count": len(serializer.errors)},
+                )
                 return Response({
                     "status": "error",
                     "message": "Validation failed",
@@ -513,8 +510,11 @@ class CreatePatientView(APIView):
                     }
                 }, status=status.HTTP_400_BAD_REQUEST)
             
-            logger.info("Step 1: Serializer validation passed")
-            logger.info(f"Validated data: {serializer.validated_data}")
+            logger.info(
+                "Doctor-flow patient creation validation passed",
+                module=LogModule.AUTHENTICATION,
+                action="patient_account.create.validation_passed",
+            )
 
             mobile = serializer.validated_data['mobile']
             first_name = serializer.validated_data['first_name']
@@ -525,12 +525,6 @@ class CreatePatientView(APIView):
             age_months = serializer.validated_data.get('age_months')
             is_minor_self_override = serializer.validated_data.get('is_minor_self_override', False)
             
-            logger.info(
-                f"Extracted data - Mobile: {mobile}, Name: {first_name} {last_name}, "
-                f"Gender: {gender}, DOB: {date_of_birth}, Age: {age_years}y {age_months}m, "
-                f"MinorOverride: {is_minor_self_override}"
-            )
-
             computed_age_years = age_years
             if computed_age_years is None and date_of_birth:
                 today = date.today()
@@ -538,24 +532,40 @@ class CreatePatientView(APIView):
                 if (today.month, today.day) < (date_of_birth.month, date_of_birth.day):
                     computed_age_years -= 1
 
+            logger.info(
+                "Doctor-flow patient creation data extracted",
+                module=LogModule.AUTHENTICATION,
+                action="patient_account.create.data_extracted",
+                metadata={
+                    "has_date_of_birth": date_of_birth is not None,
+                    "age_years": computed_age_years,
+                    "is_minor_self_override": is_minor_self_override,
+                },
+            )
+
             if computed_age_years is not None and computed_age_years < 18:
                 logger.info(
-                    "Minor created as self profile | mobile=%s | age_years=%s | override=%s | created_by=%s",
-                    mobile,
-                    computed_age_years,
-                    is_minor_self_override,
-                    request.user.id,
+                    "Minor patient created as self profile",
+                    module=LogModule.AUTHENTICATION,
+                    action="patient_account.create.minor_self_profile",
+                    metadata={
+                        "age_years": computed_age_years,
+                        "is_minor_self_override": is_minor_self_override,
+                        "created_by_user_id": str(request.user.id),
+                    },
                 )
 
             # Step 2: Check/Create User
-            logger.info("Step 2: Checking/Creating User...")
             try:
                 # Try to get existing user with lock
-                logger.info(f"Attempting to get user with username: {mobile}")
                 user = User.objects.select_for_update().get(username=mobile)
-                logger.info(f"User found: {user.id} (is_active: {user.is_active})")
+                logger.info(
+                    "Existing user found for patient creation",
+                    module=LogModule.AUTHENTICATION,
+                    action="patient_account.create.user_found",
+                    metadata={"user_id": str(user.id), "is_active": user.is_active},
+                )
             except User.DoesNotExist:
-                logger.info("User does not exist, creating new user...")
                 try:
                     # Create new user
                     user = User.objects.create(
@@ -563,18 +573,29 @@ class CreatePatientView(APIView):
                         first_name="",  # Set empty first_name as required by model
                         is_active=False  # Patient needs to verify via OTP later
                     )
-                    logger.info(f"User created successfully: {user.id}")
+                    logger.info(
+                        "User created for doctor-flow patient",
+                        module=LogModule.AUTHENTICATION,
+                        action="patient_account.create.user_created",
+                        metadata={"user_id": str(user.id)},
+                    )
                     
                     # Assign to patient group
-                    logger.info("Assigning user to patient group...")
                     patient_group, created = Group.objects.get_or_create(name="patient")
-                    logger.info(f"Patient group: {patient_group.name} (created: {created})")
+                    logger.info(
+                        "Patient group resolved",
+                        module=LogModule.AUTHENTICATION,
+                        action="patient_account.create.patient_group_resolved",
+                        metadata={"group_created": created},
+                    )
                     user.groups.add(patient_group)
                     user.save()
-                    logger.info("User assigned to patient group successfully")
                 except Exception as e:
-                    logger.error(f"Error creating user: {str(e)}")
-                    logger.error(traceback.format_exc())
+                    logger.exception(
+                        "Error creating user for doctor-flow patient",
+                        module=LogModule.AUTHENTICATION,
+                        action="patient_account.create.user_create_failed",
+                    )
                     return Response({
                         "status": "error",
                         "message": f"Error creating user: {str(e)}",
@@ -585,8 +606,11 @@ class CreatePatientView(APIView):
                         }
                     }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             except Exception as e:
-                logger.error(f"Unexpected error in user lookup/creation: {str(e)}")
-                logger.error(traceback.format_exc())
+                logger.exception(
+                    "Unexpected error during user lookup or creation",
+                    module=LogModule.AUTHENTICATION,
+                    action="patient_account.create.user_lookup_failed",
+                )
                 return Response({
                     "status": "error",
                     "message": f"Unexpected error: {str(e)}",
@@ -598,7 +622,6 @@ class CreatePatientView(APIView):
                 }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
             # Step 3: Check/Create PatientAccount
-            logger.info("Step 3: Checking/Creating PatientAccount...")
             patient_account = None
             
             # Use raw SQL to check if PatientAccount exists to avoid issues with missing columns
@@ -613,26 +636,48 @@ class CreatePatientView(APIView):
                     row = cursor.fetchone()
                     if row:
                         account_id = row[0]
-                        logger.info(f"PatientAccount found via raw SQL: {account_id}")
+                        logger.info(
+                            "PatientAccount found via raw SQL",
+                            module=LogModule.AUTHENTICATION,
+                            action="patient_account.create.account_found_raw_sql",
+                            metadata={"patient_account_id": str(account_id)},
+                        )
                         # Get the account using only essential fields to avoid column issues
                         try:
                             patient_account = PatientAccount.objects.only('id', 'user').get(id=account_id)
-                            logger.info(f"PatientAccount retrieved: {patient_account.id}")
+                            logger.info(
+                                "PatientAccount retrieved",
+                                module=LogModule.AUTHENTICATION,
+                                action="patient_account.create.account_retrieved",
+                                metadata={"patient_account_id": str(patient_account.id)},
+                            )
                         except Exception as get_error:
                             # Even with only(), might fail if accessing the object triggers other field access
                             # Use raw SQL to get the account_id and create a minimal object
-                            logger.warning(f"Could not retrieve full PatientAccount object: {get_error}")
-                            logger.info("Using account_id from raw SQL query")
+                            logger.warning(
+                                "Could not retrieve full PatientAccount object",
+                                module=LogModule.AUTHENTICATION,
+                                action="patient_account.create.account_partial_retrieve",
+                                metadata={"patient_account_id": str(account_id), "error_type": type(get_error).__name__},
+                            )
                             # We'll use the account_id directly for profile checks
                             patient_account_id = account_id
                     else:
-                        logger.info("PatientAccount does not exist in database")
+                        logger.info(
+                            "PatientAccount does not exist in database",
+                            module=LogModule.AUTHENTICATION,
+                            action="patient_account.create.account_not_found",
+                        )
             except Exception as db_error:
                 # Check if it's a database schema error
                 error_str = str(db_error)
                 if 'does not exist' in error_str or 'column' in error_str.lower() or 'ProgrammingError' in str(type(db_error)):
-                    logger.error(f"Database schema error: {error_str}")
-                    logger.error("Migrations may not have been run. Please run: python manage.py migrate")
+                    logger.error(
+                        "Database schema error during patient account lookup",
+                        module=LogModule.AUTHENTICATION,
+                        action="patient_account.create.schema_error",
+                        metadata={"error_type": "DatabaseSchemaError"},
+                    )
                     return Response({
                         "status": "error",
                         "message": "Database schema is out of sync. Please run migrations.",
@@ -651,7 +696,6 @@ class CreatePatientView(APIView):
                 account_for_check = patient_account if patient_account else None
                 account_id_for_check = patient_account.id if patient_account else patient_account_id
                 
-                logger.info("Checking if self profile exists...")
                 # Use raw SQL to check for profile to avoid column issues
                 try:
                     from django.db import connection
@@ -662,7 +706,12 @@ class CreatePatientView(APIView):
                         )
                         profile_row = cursor.fetchone()
                         if profile_row:
-                            logger.warning("Self profile already exists, returning conflict")
+                            logger.warning(
+                                "Self profile already exists for patient account",
+                                module=LogModule.AUTHENTICATION,
+                                action="patient_account.create.self_profile_conflict",
+                                metadata={"patient_account_id": str(account_id_for_check)},
+                            )
                             return Response({
                                 "status": "error",
                                 "message": "Patient already exists",
@@ -674,7 +723,12 @@ class CreatePatientView(APIView):
                                 }
                             }, status=status.HTTP_409_CONFLICT)
                 except Exception as profile_check_error:
-                    logger.warning(f"Error checking profile with raw SQL: {profile_check_error}")
+                    logger.warning(
+                        "Error checking self profile with raw SQL",
+                        module=LogModule.AUTHENTICATION,
+                        action="patient_account.create.profile_check_failed",
+                        metadata={"error_type": type(profile_check_error).__name__},
+                    )
                     # Fallback to ORM if raw SQL fails
                     if account_for_check:
                         if PatientProfile.objects.filter(account=account_for_check, relation='self').exists():
@@ -684,15 +738,18 @@ class CreatePatientView(APIView):
                                 "patient_account_id": str(account_id_for_check)
                             }, status=status.HTTP_409_CONFLICT)
                 
-                logger.info("No self profile found, proceeding...")
                 # Use the existing account
                 if not patient_account:
                     # Get the account object for later use
                     try:
                         patient_account = PatientAccount.objects.only('id', 'user').get(id=account_id_for_check)
-                    except:
-                        # If we can't get it, we'll need to create a new one or handle differently
-                        logger.error("Could not retrieve PatientAccount object")
+                    except PatientAccount.DoesNotExist:
+                        logger.exception(
+                            "Could not retrieve PatientAccount object",
+                            module=LogModule.AUTHENTICATION,
+                            action="patient_account.create.account_retrieve_failed",
+                            metadata={"patient_account_id": str(account_id_for_check)},
+                        )
                         return Response({
                             "status": "error",
                             "message": "Could not retrieve patient account",
@@ -700,10 +757,14 @@ class CreatePatientView(APIView):
                         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             else:
                 # Account doesn't exist, create it
-                logger.info("PatientAccount does not exist, creating new one...")
                 try:
                     # Create PatientAccount
-                    logger.info(f"Creating PatientAccount with user: {user.id}, created_by: {request.user.id}")
+                    logger.info(
+                        "Creating PatientAccount",
+                        module=LogModule.AUTHENTICATION,
+                        action="patient_account.create.account_create_started",
+                        metadata={"user_id": str(user.id), "created_by_user_id": str(request.user.id)},
+                    )
                     
                     # Try to create with all fields first
                     try:
@@ -712,13 +773,22 @@ class CreatePatientView(APIView):
                             created_by=request.user,
                             onboarding_source='doctor'
                         )
-                        logger.info(f"PatientAccount created successfully with all fields: {patient_account.id}")
+                        logger.info(
+                            "PatientAccount created",
+                            module=LogModule.AUTHENTICATION,
+                            action="patient_account.create.account_created",
+                            metadata={"patient_account_id": str(patient_account.id)},
+                        )
                     except Exception as create_error:
                         error_str = str(create_error)
                         # If it's a column missing error, try without created_by and onboarding_source
                         if 'does not exist' in error_str or 'column' in error_str.lower() or 'ProgrammingError' in str(type(create_error)):
-                            logger.warning(f"Database schema error when creating with created_by: {error_str}")
-                            logger.warning("Attempting to create PatientAccount without created_by and onboarding_source fields")
+                            logger.warning(
+                                "Database schema mismatch creating PatientAccount; attempting fallback",
+                                module=LogModule.AUTHENTICATION,
+                                action="patient_account.create.account_schema_fallback",
+                                metadata={"error_type": type(create_error).__name__},
+                            )
                             # Try creating without those fields using raw SQL
                             try:
                                 from django.db import connection
@@ -731,19 +801,40 @@ class CreatePatientView(APIView):
                                     )
                                 # Get the created account
                                 patient_account = PatientAccount.objects.only('id', 'user').get(id=new_account_id)
-                                logger.info(f"PatientAccount created successfully via raw SQL without created_by: {patient_account.id}")
-                                logger.warning("NOTE: Please run migrations to add created_by and onboarding_source fields")
+                                logger.info(
+                                    "PatientAccount created via raw SQL fallback",
+                                    module=LogModule.AUTHENTICATION,
+                                    action="patient_account.create.account_created_raw_sql",
+                                    metadata={"patient_account_id": str(patient_account.id)},
+                                )
+                                logger.warning(
+                                    "PatientAccount created without created_by; migrations may be pending",
+                                    module=LogModule.AUTHENTICATION,
+                                    action="patient_account.create.account_migrations_pending",
+                                )
                             except Exception as raw_create_error:
-                                logger.error(f"Error creating PatientAccount via raw SQL: {raw_create_error}")
+                                logger.exception(
+                                    "Error creating PatientAccount via raw SQL",
+                                    module=LogModule.AUTHENTICATION,
+                                    action="patient_account.create.account_raw_sql_failed",
+                                )
                                 # Last resort: try ORM without optional fields
                                 patient_account = PatientAccount.objects.create(user=user)
-                                logger.info(f"PatientAccount created via ORM fallback: {patient_account.id}")
+                                logger.info(
+                                    "PatientAccount created via ORM fallback",
+                                    module=LogModule.AUTHENTICATION,
+                                    action="patient_account.create.account_created_orm_fallback",
+                                    metadata={"patient_account_id": str(patient_account.id)},
+                                )
                         else:
                             # Re-raise if it's a different error
                             raise
                 except Exception as e:
-                    logger.error(f"Error creating PatientAccount: {str(e)}")
-                    logger.error(traceback.format_exc())
+                    logger.exception(
+                        "Error creating PatientAccount",
+                        module=LogModule.AUTHENTICATION,
+                        action="patient_account.create.account_create_failed",
+                    )
                     error_str = str(e)
                     if 'does not exist' in error_str or 'column' in error_str.lower() or 'ProgrammingError' in str(type(e)):
                         return Response({
@@ -768,9 +859,13 @@ class CreatePatientView(APIView):
                     }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
             # Step 4: Create PatientProfile
-            logger.info("Step 4: Creating PatientProfile (self)...")
             try:
-                logger.info(f"Creating profile with account: {patient_account.id}, name: {first_name} {last_name}")
+                logger.info(
+                    "Creating PatientProfile",
+                    module=LogModule.AUTHENTICATION,
+                    action="patient_account.create.profile_create_started",
+                    metadata={"patient_account_id": str(patient_account.id)},
+                )
                 profile = PatientProfile.objects.create(
                     account=patient_account,
                     first_name=first_name,
@@ -781,10 +876,19 @@ class CreatePatientView(APIView):
                     age_years=age_years,
                     age_months=age_months
                 )
-                logger.info(f"PatientProfile created successfully: {profile.id}")
+                logger.info(
+                    "PatientProfile created",
+                    module=LogModule.AUTHENTICATION,
+                    action="patient_account.create.profile_created",
+                    metadata={"profile_id": str(profile.id), "patient_account_id": str(patient_account.id)},
+                )
             except Exception as e:
-                logger.error(f"Error creating PatientProfile: {str(e)}")
-                logger.error(traceback.format_exc())
+                logger.exception(
+                    "Error creating PatientProfile",
+                    module=LogModule.AUTHENTICATION,
+                    action="patient_account.create.profile_create_failed",
+                    metadata={"patient_account_id": str(patient_account.id)},
+                )
                 return Response({
                     "status": "error",
                     "message": f"Error creating patient profile: {str(e)}",
@@ -805,11 +909,15 @@ class CreatePatientView(APIView):
                 }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
             # Success response
-            logger.info("=" * 80)
-            logger.info("CreatePatientView: Patient created successfully")
-            logger.info(f"Patient Account ID: {patient_account.id}")
-            logger.info(f"Profile ID: {profile.id}")
-            logger.info("=" * 80)
+            logger.info(
+                "Doctor-flow patient created successfully",
+                module=LogModule.AUTHENTICATION,
+                action="patient_account.create.completed",
+                metadata={
+                    "patient_account_id": str(patient_account.id),
+                    "profile_id": str(profile.id),
+                },
+            )
             
             return Response({
                 "status": "success",
@@ -825,12 +933,11 @@ class CreatePatientView(APIView):
             }, status=status.HTTP_201_CREATED)
             
         except Exception as e:
-            logger.error("=" * 80)
-            logger.error("CreatePatientView: UNEXPECTED ERROR")
-            logger.error(f"Error type: {type(e).__name__}")
-            logger.error(f"Error message: {str(e)}")
-            logger.error(traceback.format_exc())
-            logger.error("=" * 80)
+            logger.exception(
+                "Unexpected error during doctor-flow patient creation",
+                module=LogModule.AUTHENTICATION,
+                action="patient_account.create.unexpected_error",
+            )
             
             return Response({
                 "status": "error",
@@ -1007,7 +1114,16 @@ class SelectPatientView(APIView):
             
             cache.set(cache_key, selection_data, timeout=86400)  # 24 hours
             
-            logger.info(f"Patient selected by doctor {doctor_id}: Profile {profile_id}, Account {patient_account.id}")
+            logger.info(
+                "Patient selected by doctor",
+                module=LogModule.AUTHENTICATION,
+                action="patient_account.selection.set",
+                metadata={
+                    "doctor_id": doctor_id,
+                    "profile_id": str(profile_id),
+                    "patient_account_id": str(patient_account.id),
+                },
+            )
             
             return Response({
                 "status": "success",
@@ -1016,8 +1132,11 @@ class SelectPatientView(APIView):
             }, status=status.HTTP_200_OK)
             
         except Exception as e:
-            logger.error(f"Error selecting patient: {str(e)}")
-            logger.error(traceback.format_exc())
+            logger.exception(
+                "Error selecting patient",
+                module=LogModule.AUTHENTICATION,
+                action="patient_account.selection.failed",
+            )
             return Response({
                 "status": "error",
                 "message": f"Error selecting patient: {str(e)}",
@@ -1078,7 +1197,12 @@ class ClearSelectedPatientView(APIView):
         # Clear the selection
         cache.delete(cache_key)
         
-        logger.info(f"Patient selection cleared by doctor {doctor_id}")
+        logger.info(
+            "Patient selection cleared by doctor",
+            module=LogModule.AUTHENTICATION,
+            action="patient_account.selection.cleared",
+            metadata={"doctor_id": doctor_id},
+        )
         
         if selected_data:
             return Response({

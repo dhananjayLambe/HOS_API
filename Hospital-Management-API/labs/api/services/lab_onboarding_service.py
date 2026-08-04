@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import base64
 import binascii
-import logging
 import re
 import uuid
 from typing import Any
@@ -30,9 +29,9 @@ from labs.models import (
     LabUserRole,
     RegistrationStatus,
 )
+from shared.logging import LogModule, logger
 
 User = get_user_model()
-logger = logging.getLogger(__name__)
 
 # Must match account/api/views.py VALID_STAFF_ROLES ("labadmin")
 LABADMIN_AUTH_GROUP = "labadmin"
@@ -301,7 +300,12 @@ def register_lab(*, validated_data: dict[str, Any]) -> dict[str, Any]:
         )
 
     except IntegrityError as exc:
-        logger.exception("Lab onboarding integrity error: %s", exc)
+        logger.exception(
+            "Lab onboarding integrity error",
+            module=LogModule.LABORATORY,
+            action="labs.onboarding.integrity_error",
+            exc=exc,
+        )
         raise ValueError("Could not complete registration (duplicate data). Please check your details.") from exc
 
     documents_uploaded = LabDocument.objects.filter(organization=organization).count()

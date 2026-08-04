@@ -2,19 +2,17 @@
 
 from __future__ import annotations
 
-import logging
-
+from shared.logging import LogModule, logger
 from support_trace.api.error_codes import INVESTIGATION_FAILED, INVALID_IDENTIFIER, VALIDATION_ERROR
 from support_trace.api.response_builder import SupportResponseBuilder
 
-logger = logging.getLogger(__name__)
-
 
 def handle_investigation_exception(exc: Exception, *, request, ctx):
-    logger.warning(
-        "support_api_investigation_failed",
-        extra={"investigation_id": ctx.investigation_id, "error": str(exc)},
-        exc_info=True,
+    logger.exception(
+        "Support API investigation failed",
+        module=LogModule.API,
+        action="support_trace.api.investigation_failed",
+        metadata={"investigation_id": ctx.investigation_id, "error": str(exc)},
     )
     return SupportResponseBuilder.investigation_failed(
         "Investigation failed",

@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any, Literal
 
 from django.conf import settings
 
-logger = logging.getLogger("diagnostics.reports")
+from shared.logging import LogModule, logger
 
 Disposition = Literal["attachment", "inline"]
 StorageBackend = Literal["local", "s3"]
@@ -29,7 +28,9 @@ def reports_storage_backend() -> StorageBackend:
     if mode == "s3":
         if not bucket:
             logger.warning(
-                "REPORT_ARTIFACT_STORAGE=s3 but AWS_REPORTS_BUCKET is unset; using local"
+                "REPORT_ARTIFACT_STORAGE=s3 but AWS_REPORTS_BUCKET is unset; using local",
+                module=LogModule.REPORTS,
+                action="diagnostics.reports.storage_backend_fallback",
             )
             return "local"
         return "s3"
@@ -93,7 +94,12 @@ def generate_presigned_download_url(
             ExpiresIn=expiry,
         )
     except Exception:
-        logger.exception("presigned_url_failed key=%s", storage_key)
+        logger.exception(
+            "Presigned URL generation failed",
+            module=LogModule.REPORTS,
+            action="diagnostics.reports.presigned_url_failed",
+            metadata={"storage_key": storage_key},
+        )
         return None
 
 
@@ -109,7 +115,12 @@ def delete_object(storage_key: str) -> bool:
             )
             return True
         except Exception:
-            logger.exception("s3_delete_failed key=%s", storage_key)
+            logger.exception(
+                "S3 delete failed",
+                module=LogModule.REPORTS,
+                action="diagnostics.reports.s3_delete_failed",
+                metadata={"storage_key": storage_key},
+            )
             return False
 
     from django.core.files.storage import default_storage
@@ -119,5 +130,10 @@ def delete_object(storage_key: str) -> bool:
             default_storage.delete(storage_key)
         return True
     except Exception:
-        logger.exception("storage_delete_failed key=%s", storage_key)
+        logger.exception(
+            "Storage delete failed",
+            module=LogModule.REPORTS,
+            action="diagnostics.reports.storage_delete_failed",
+            metadata={"storage_key": storage_key},
+        )
         return False

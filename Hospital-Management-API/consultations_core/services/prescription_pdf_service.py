@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
-import logging
 from io import BytesIO
 
 from django.core.files.base import ContentFile
 from django.template.loader import render_to_string
 
-from consultations_core.services.consultation_summary_service import build_consultation_summary
+from shared.logging import LogModule, logger
 
-logger = logging.getLogger(__name__)
+from consultations_core.services.consultation_summary_service import build_consultation_summary
 
 
 def generate_and_persist_prescription_pdf(*, prescription, base_url: str = "/") -> bool:
@@ -25,7 +24,15 @@ def generate_and_persist_prescription_pdf(*, prescription, base_url: str = "/") 
             profile="preview_pdf",
         )
         if not summary:
-            logger.warning("prescription_pdf_empty_summary prescription_id=%s", prescription.id)
+            logger.warning(
+                f"prescription_pdf_empty_summary prescription_id={prescription.id}",
+                module=LogModule.PRESCRIPTION,
+                action="prescription.pdf.empty_summary",
+                metadata={
+                    "prescription_id": str(prescription.id),
+                    "consultation_id": str(consultation_id),
+                },
+            )
             return False
 
         html = render_to_string("prescriptions/prescription.html", summary).strip()
@@ -37,15 +44,23 @@ def generate_and_persist_prescription_pdf(*, prescription, base_url: str = "/") 
         prescription.pdf_file.save(filename, ContentFile(pdf_binary), save=False)
         type(prescription).objects.filter(pk=prescription.pk).update(pdf_file=prescription.pdf_file.name)
         logger.info(
-            "prescription_pdf_persisted prescription_id=%s consultation_id=%s",
-            prescription.id,
-            consultation_id,
+            f"prescription_pdf_persisted prescription_id={prescription.id} consultation_id={consultation_id}",
+            module=LogModule.PRESCRIPTION,
+            action="prescription.pdf.persisted",
+            metadata={
+                "prescription_id": str(prescription.id),
+                "consultation_id": str(consultation_id),
+            },
         )
         return True
     except Exception:
         logger.exception(
-            "prescription_pdf_generation_failed prescription_id=%s consultation_id=%s",
-            prescription.id,
-            consultation_id,
+            f"prescription_pdf_generation_failed prescription_id={prescription.id} consultation_id={consultation_id}",
+            module=LogModule.PRESCRIPTION,
+            action="prescription.pdf.generation_failed",
+            metadata={
+                "prescription_id": str(prescription.id),
+                "consultation_id": str(consultation_id),
+            },
         )
         return False

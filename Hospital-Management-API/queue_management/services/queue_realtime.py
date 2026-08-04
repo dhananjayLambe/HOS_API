@@ -1,5 +1,4 @@
 import json
-import logging
 from contextlib import contextmanager
 from datetime import date
 from typing import Iterable
@@ -9,7 +8,7 @@ from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.conf import settings
 
-logger = logging.getLogger(__name__)
+from shared.logging import LogModule, logger
 
 QUEUE_UPDATES_CHANNEL = "queue_updates"
 
@@ -70,7 +69,11 @@ def publish_queue_update(clinic_id: str, doctor_id: str, queue_date: date, queue
         redis_client.publish(queue_updates_channel_name(clinic_id=str(clinic_id), doctor_id=str(doctor_id)), body)
         redis_client.publish(QUEUE_UPDATES_CHANNEL, body)
     except Exception:
-        logger.exception("Failed publishing queue update on Redis channel")
+        logger.exception(
+            "Failed publishing queue update on Redis channel",
+            module=LogModule.BOOKING,
+            action="queue.realtime.redis_publish_failed",
+        )
 
     channel_layer = get_channel_layer()
     if channel_layer is None:
@@ -84,7 +87,11 @@ def publish_queue_update(clinic_id: str, doctor_id: str, queue_date: date, queue
             },
         )
     except Exception:
-        logger.exception("Failed broadcasting queue update over channel layer")
+        logger.exception(
+            "Failed broadcasting queue update over channel layer",
+            module=LogModule.BOOKING,
+            action="queue.realtime.channel_broadcast_failed",
+        )
 
 
 @contextmanager
@@ -101,4 +108,8 @@ def queue_reorder_lock(doctor_id: str, timeout_seconds: int = 5):
             try:
                 lock.release()
             except Exception:
-                logger.exception("Failed releasing queue reorder lock")
+                logger.exception(
+                    "Failed releasing queue reorder lock",
+                    module=LogModule.BOOKING,
+                    action="queue.reorder.lock_release_failed",
+                )

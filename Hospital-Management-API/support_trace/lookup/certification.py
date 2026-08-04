@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-import logging
-
+from shared.logging import LogModule, logger
 from support_trace.lookup.investigation_policy import InvestigationPolicy
 from support_trace.lookup.types import TraceLookupResult
-
-logger = logging.getLogger(__name__)
 
 
 class InvestigationCertification:
@@ -29,7 +26,12 @@ class InvestigationCertification:
         warnings.extend(cls.validate_health(result))
         warnings.extend(cls.validate_identifier_collection(result))
         for warning in warnings:
-            logger.warning("investigation_certification_warning", extra={"warning": warning})
+            logger.warning(
+                "Investigation certification warning",
+                module=LogModule.MONITORING,
+                action="support_trace.investigation.certification_warning",
+                metadata={"warning": warning},
+            )
         return warnings
 
     @classmethod

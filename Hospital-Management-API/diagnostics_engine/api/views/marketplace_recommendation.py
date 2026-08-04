@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import time
 import uuid
 
@@ -32,8 +31,7 @@ from business_audit.domain.context import apply_workflow_context
 from business_audit.recommendation.hooks import schedule_recommendation_business_generated
 from consultations_core.audit import schedule_recommendation_generated
 from diagnostics_engine.services.recommendation_access import resolve_consultation_access
-
-logger = logging.getLogger(__name__)
+from shared.logging import LogModule, logger
 
 
 class MarketplaceRecommendationRateThrottle(UserRateThrottle):
@@ -148,9 +146,14 @@ class MarketplaceRecommendationView(APIView):
         if not resolve_consultation_access(request, consultation):
             duration_ms = int((time.monotonic() - started) * 1000)
             logger.info(
-                "recommendation.api.failed request_id=%s consultation_id=%s failure_reason=PERMISSION_DENIED",
-                request_id,
-                consultation_id,
+                "Marketplace recommendation API permission denied",
+                module=LogModule.LABORATORY,
+                action="diagnostics.recommendation.api_failed",
+                metadata={
+                    "request_id": request_id,
+                    "consultation_id": str(consultation_id),
+                    "failure_reason": "PERMISSION_DENIED",
+                },
             )
             payload, http_status = MarketplaceRecommendationResponseBuilder.error_envelope(
                 code="PERMISSION_DENIED",
@@ -177,10 +180,14 @@ class MarketplaceRecommendationView(APIView):
             return Response(payload, status=http_status)
 
         logger.info(
-            "recommendation.api.started request_id=%s consultation_id=%s user_id=%s",
-            request_id,
-            consultation_id,
-            getattr(request.user, "pk", None),
+            "Marketplace recommendation API started",
+            module=LogModule.LABORATORY,
+            action="diagnostics.recommendation.api_started",
+            metadata={
+                "request_id": request_id,
+                "consultation_id": str(consultation_id),
+                "user_id": str(getattr(request.user, "pk", None)),
+            },
         )
 
         try:
@@ -188,9 +195,14 @@ class MarketplaceRecommendationView(APIView):
         except Exception:
             duration_ms = int((time.monotonic() - started) * 1000)
             logger.exception(
-                "recommendation.api.failed request_id=%s consultation_id=%s failure_reason=INTERNAL_ERROR",
-                request_id,
-                consultation_id,
+                "Marketplace recommendation API internal error",
+                module=LogModule.LABORATORY,
+                action="diagnostics.recommendation.api_failed",
+                metadata={
+                    "request_id": request_id,
+                    "consultation_id": str(consultation_id),
+                    "failure_reason": "INTERNAL_ERROR",
+                },
             )
             payload, http_status = MarketplaceRecommendationResponseBuilder.error_envelope(
                 code="INTERNAL_ERROR",
@@ -245,13 +257,16 @@ class MarketplaceRecommendationView(APIView):
 
         if result.available:
             logger.info(
-                "recommendation.api.completed request_id=%s recommendation_id=%s consultation_id=%s "
-                "available=true duration_ms=%s branch_id=%s",
-                request_id,
-                recommendation_id,
-                consultation_id,
-                duration_ms,
-                branch_id,
+                "Marketplace recommendation API completed",
+                module=LogModule.LABORATORY,
+                action="diagnostics.recommendation.api_completed",
+                metadata={
+                    "request_id": request_id,
+                    "recommendation_id": str(recommendation_id),
+                    "consultation_id": str(consultation_id),
+                    "duration_ms": duration_ms,
+                    "branch_id": branch_id,
+                },
             )
             schedule_recommendation_generated(
                 consultation=consultation,
@@ -261,14 +276,17 @@ class MarketplaceRecommendationView(APIView):
             )
         else:
             logger.info(
-                "recommendation.api.failed request_id=%s recommendation_id=%s consultation_id=%s "
-                "failure_reason=%s http_status=%s duration_ms=%s",
-                request_id,
-                recommendation_id,
-                consultation_id,
-                result.failure_reason,
-                http_status,
-                duration_ms,
+                "Marketplace recommendation API returned business failure",
+                module=LogModule.LABORATORY,
+                action="diagnostics.recommendation.api_failed",
+                metadata={
+                    "request_id": request_id,
+                    "recommendation_id": str(recommendation_id),
+                    "consultation_id": str(consultation_id),
+                    "failure_reason": result.failure_reason,
+                    "http_status": http_status,
+                    "duration_ms": duration_ms,
+                },
             )
 
         emit_recommendation_metrics(

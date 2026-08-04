@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import uuid
 from dataclasses import dataclass, field
 from decimal import Decimal
@@ -18,8 +17,7 @@ from business_audit.decision.types import DecisionTimings, ProviderResponse
 from business_audit.domain.context import apply_workflow_context
 from consultations_core.audit.commit import emit_after_commit
 from diagnostics_engine.models.routing import RoutingRun
-
-logger = logging.getLogger(__name__)
+from shared.logging import LogModule, logger
 
 
 @dataclass
@@ -144,10 +142,11 @@ def schedule_routing_decision_started(
             request_id=request_id,
         )
     except Exception:
-        logger.warning(
-            "routing_decision_started_schedule_failed",
-            exc_info=True,
-            extra={"routing_id": ctx.routing_id, "decision_id": ctx.decision_id},
+        logger.exception(
+            "Routing decision started schedule failed",
+            module=LogModule.ROUTING,
+            action="routing.decision.started.schedule_failed",
+            metadata={"routing_id": ctx.routing_id, "decision_id": ctx.decision_id},
         )
     return ctx
 
@@ -207,10 +206,11 @@ def schedule_routing_decision_evaluated(
             request_id=request_id,
         )
     except Exception:
-        logger.warning(
-            "routing_decision_evaluated_schedule_failed",
-            exc_info=True,
-            extra={"routing_id": ctx.routing_id, "decision_id": ctx.decision_id},
+        logger.exception(
+            "Routing decision evaluated schedule failed",
+            module=LogModule.ROUTING,
+            action="routing.decision.evaluated.schedule_failed",
+            metadata={"routing_id": ctx.routing_id, "decision_id": ctx.decision_id},
         )
 
 
@@ -296,10 +296,11 @@ def schedule_routing_decision_outcome(
                 request_id=request_id,
             )
     except Exception:
-        logger.warning(
-            "routing_decision_outcome_schedule_failed",
-            exc_info=True,
-            extra={"routing_id": ctx.routing_id, "decision_id": ctx.decision_id},
+        logger.exception(
+            "Routing decision outcome schedule failed",
+            module=LogModule.ROUTING,
+            action="routing.decision.outcome.schedule_failed",
+            metadata={"routing_id": ctx.routing_id, "decision_id": ctx.decision_id},
         )
 
 
@@ -337,10 +338,11 @@ def schedule_routing_decision_pipeline_failed(
             request_id=request_id,
         )
     except Exception:
-        logger.warning(
-            "routing_decision_pipeline_failed_schedule_failed",
-            exc_info=True,
-            extra={"routing_id": str(routing_run.pk)},
+        logger.exception(
+            "Routing decision pipeline failed schedule failed",
+            module=LogModule.ROUTING,
+            action="routing.decision.pipeline_failed.schedule_failed",
+            metadata={"routing_id": str(routing_run.pk)},
         )
 
 
@@ -394,10 +396,11 @@ def schedule_routing_business_manual_override(
             request_id=request_id,
         )
     except Exception:
-        logger.warning(
-            "routing_business_manual_override_schedule_failed",
-            exc_info=True,
-            extra={"booking_id": str(order.pk)},
+        logger.exception(
+            "Routing business manual override schedule failed",
+            module=LogModule.ROUTING,
+            action="routing.decision.manual_override.schedule_failed",
+            metadata={"booking_id": str(order.pk)},
         )
 
 
@@ -471,8 +474,9 @@ def schedule_marketplace_routing_decision(
             request_id=request_id,
         )
     except Exception:
-        logger.warning(
-            "marketplace_routing_decision_schedule_failed",
-            exc_info=True,
-            extra={"recommendation_id": recommendation_id},
+        logger.exception(
+            "Marketplace routing decision schedule failed",
+            module=LogModule.ROUTING,
+            action="routing.decision.marketplace.schedule_failed",
+            metadata={"recommendation_id": recommendation_id},
         )

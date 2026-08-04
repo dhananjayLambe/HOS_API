@@ -1,5 +1,6 @@
 // app/api/login/route.ts
 import { NextResponse } from "next/server";
+import { serverLogger } from "@/lib/serverLogger";
 
 const BASE_URL = process.env.DJANGO_API_URL || "http://localhost:8000/api/";
 
@@ -19,7 +20,7 @@ export async function POST(req: Request) {
     // Return response directly (no cookies needed)
     return NextResponse.json(data, { status: res.status });
   } catch (err: any) {
-    console.error("login proxy error:", err);
+    serverLogger.error("login proxy error", err, { route: "login" });
     return NextResponse.json(
       { error: err.message || "Internal Server Error" },
       { status: 500 }

@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import json
-import logging
 
 from consultations_core.models.audit import AuditSource, ClinicalAuditLog
-
-logger = logging.getLogger(__name__)
+from shared.logging import LogModule, logger
 
 _AUDIT_SOURCE = AuditSource.SYSTEM
 
@@ -16,10 +14,11 @@ def safe_emit(fn, /, *args, **kwargs) -> None:
     try:
         fn(*args, **kwargs)
     except Exception:
-        logger.warning(
-            "prescription_whatsapp_safe_emit_failed fn=%s",
-            getattr(fn, "__name__", repr(fn)),
-            exc_info=True,
+        logger.exception(
+            "Prescription WhatsApp safe emit failed",
+            module=LogModule.WHATSAPP,
+            action="whatsapp.audit.safe_emit_failed",
+            metadata={"function": getattr(fn, "__name__", repr(fn))},
         )
 
 

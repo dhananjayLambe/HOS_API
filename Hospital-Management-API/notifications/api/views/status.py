@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import logging
-
 from django.conf import settings
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
@@ -14,8 +12,7 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from account.permissions import IsDoctor
 from consultations_core.models.consultation import Consultation
 from notifications.services.presentation.whatsapp_status import get_consultation_delivery_whatsapp_status
-
-logger = logging.getLogger(__name__)
+from shared.logging import LogModule, logger
 
 
 def maybe_enqueue_consultation_whatsapp(
@@ -37,9 +34,19 @@ def maybe_enqueue_consultation_whatsapp(
             initiated_by_id,
             base_url,
         )
-        logger.info("consultation_whatsapp_lazy_enqueued consultation_id=%s", consultation_id)
+        logger.info(
+            "Consultation WhatsApp lazy enqueued",
+            module=LogModule.API,
+            action="whatsapp.consultation.lazy_enqueued",
+            metadata={"consultation_id": str(consultation_id)},
+        )
     except Exception:
-        logger.exception("consultation_whatsapp_lazy_enqueue_failed consultation_id=%s", consultation_id)
+        logger.exception(
+            "Consultation WhatsApp lazy enqueue failed",
+            module=LogModule.API,
+            action="whatsapp.consultation.lazy_enqueue_failed",
+            metadata={"consultation_id": str(consultation_id)},
+        )
 
 
 class WhatsAppConsultationStatusAPIView(APIView):

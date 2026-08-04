@@ -1,9 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { serverLogger } from "@/lib/serverLogger"
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 const DJANGO_API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+const ROUTE = "doctor/doctor-fees"
 
 // GET - List all fee structures (with optional clinic filter)
 export async function GET(request: NextRequest) {
@@ -35,7 +37,7 @@ export async function GET(request: NextRequest) {
     
     // Check if response is HTML (404 page) instead of JSON
     if (contentType && contentType.includes("text/html")) {
-      console.error("[Next.js API] Django returned HTML instead of JSON - likely 404")
+      serverLogger.error("Django returned HTML instead of JSON - likely 404", undefined, { route: ROUTE, status: response.status })
       // Return empty array for 404 (no data exists yet) - match Django format
       if (response.status === 404) {
         return NextResponse.json(
@@ -72,7 +74,7 @@ export async function GET(request: NextRequest) {
         data = JSON.parse(text)
       }
     } catch (e) {
-      console.error("[Next.js API] Failed to parse response:", e)
+      serverLogger.error("Failed to parse doctor-fees response", e, { route: ROUTE, status: response.status })
       // If 404, return empty array - match Django format
       if (response.status === 404) {
         return NextResponse.json(
@@ -143,7 +145,7 @@ export async function GET(request: NextRequest) {
             previous: data.previous
           }
         } else {
-          console.warn("[Next.js API] Paginated response but results structure is unexpected:", data.results)
+          serverLogger.warn("Paginated response but results structure is unexpected", { route: ROUTE })
         }
       } else if (data.id) {
         // Single record - wrap in data array
@@ -186,7 +188,7 @@ export async function GET(request: NextRequest) {
     }
     return nextRes
   } catch (error: any) {
-    console.error("Fee structures fetch error:", error)
+    serverLogger.error("Fee structures fetch error", error, { route: ROUTE })
     return NextResponse.json(
       { error: error.message || "Internal server error" },
       { status: 500 }
@@ -221,7 +223,7 @@ export async function POST(request: NextRequest) {
         data = {}
       }
     } catch (e) {
-      console.error("[Next.js API] Failed to parse JSON:", e, "Response text:", responseText)
+      serverLogger.error("Failed to parse fee structure create JSON", e, { route: ROUTE, status: response.status })
       return NextResponse.json(
         { 
           error: "Invalid response from server", 
@@ -233,7 +235,11 @@ export async function POST(request: NextRequest) {
     }
 
     if (!response.ok) {
-      console.error("[Next.js API] Django error response:", data)
+      serverLogger.error("Django error creating fee structure", undefined, {
+        route: ROUTE,
+        status: response.status,
+        detail: typeof data?.detail === "string" ? data.detail : typeof data?.message === "string" ? data.message : typeof data?.error === "string" ? data.error : undefined,
+      })
       return NextResponse.json(
         {
           error: data.message || data.detail || data.error || "Failed to create fee structure",
@@ -255,7 +261,7 @@ export async function POST(request: NextRequest) {
     }
     return nextRes
   } catch (error: any) {
-    console.error("Fee structure create error:", error)
+    serverLogger.error("Fee structure create error", error, { route: ROUTE })
     return NextResponse.json(
       { error: error.message || "Internal server error" },
       { status: 500 }

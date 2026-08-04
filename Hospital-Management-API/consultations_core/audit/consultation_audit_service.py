@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from clinical_audit.domain.repository import ClinicalAuditRepository
@@ -15,9 +14,6 @@ from clinical_audit.services import ClinicalAuditService
 from consultations_core.audit.constants import SERVICE_NAME, SOURCE_TO_AUDIT_SOURCE
 from consultations_core.audit.payload_builder import ConsultationAuditPayloadBuilder
 from consultations_core.audit.statistics_builder import ConsultationStatisticsBuilder
-
-logger = logging.getLogger(__name__)
-
 
 class ConsultationAuditService:
     """Translate consultation events into ClinicalAuditService.record() calls."""

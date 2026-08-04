@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-import logging
-
+from shared.logging import LogModule, logger
 from support_trace.identifiers.identifier_registry import IdentifierRegistry
 from support_trace.identifiers.lookup_keys import IDENTIFIER_FIELDS
-
-logger = logging.getLogger(__name__)
 
 
 class ValidationRegistry:
@@ -25,14 +22,18 @@ class ValidationRegistry:
             error = strategy.validate(value)
             if error:
                 logger.warning(
-                    "identifier_validation_failed",
-                    extra={"field": field, "error": error},
+                    "Identifier validation failed",
+                    module=LogModule.MONITORING,
+                    action="support_trace.identifier.validation_failed",
+                    metadata={"field": field, "error": error},
                 )
                 continue
             if field in seen and seen[field] != value:
                 logger.warning(
-                    "identifier_duplicate_conflict",
-                    extra={"field": field, "existing": seen[field], "new": value},
+                    "Identifier duplicate conflict",
+                    module=LogModule.MONITORING,
+                    action="support_trace.identifier.duplicate_conflict",
+                    metadata={"field": field, "existing": seen[field], "new": value},
                 )
                 continue
             seen[field] = value

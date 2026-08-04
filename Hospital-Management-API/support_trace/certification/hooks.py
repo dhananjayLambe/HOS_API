@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Callable
 from typing import TypeVar
 
-logger = logging.getLogger(__name__)
+from shared.logging import LogModule, logger
 
 T = TypeVar("T")
 
@@ -15,5 +14,10 @@ def fail_open_certification(action: str, fn: Callable[[], T], *, default: T) -> 
     try:
         return fn()
     except Exception as exc:
-        logger.warning("certification_failed", extra={"action": action, "error": str(exc)})
+        logger.exception(
+            "Certification failed",
+            module=LogModule.MONITORING,
+            action="support_trace.certification.failed",
+            metadata={"hook_action": action, "error": str(exc)},
+        )
         return default

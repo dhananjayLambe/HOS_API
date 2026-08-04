@@ -22,14 +22,7 @@ export function trackReportEvent(
   payload: ReportMonitorPayload = {},
 ): void {
   if (process.env.NODE_ENV === "production") return;
-  const safe = {
-    event: name,
-    taskId: payload.taskId,
-    reportId: payload.reportId,
-    requestId: payload.requestId,
-    durationMs: payload.durationMs,
-    errorCode: payload.errorCode,
-  };
-  // eslint-disable-next-line no-console -- dev operational diagnostics only
-  console.debug("[report-ops]", safe);
+  // Dev-only operational telemetry is intentionally silent in the browser console.
+  void name;
+  void payload;
 }

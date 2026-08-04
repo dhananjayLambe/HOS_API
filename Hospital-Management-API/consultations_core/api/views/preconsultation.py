@@ -1,6 +1,5 @@
 # Standard Library Imports
 import io
-import logging
 import os
 import uuid
 from datetime import datetime
@@ -25,7 +24,7 @@ from django.utils import timezone
 # Local App Imports
 from account.permissions import IsDiagnosticOrderOrchestrationActor, IsDoctor
 from consultations_core.audit import ConsultationAuditService, emit_after_commit
-from shared.logging import LogModule, logger as dpc_logger
+from shared.logging import LogModule, logger
 from clinical_documentation.audit import schedule_allergy_audits, schedule_vitals_audit
 from consultations_core.domain.vitals_meaningful import vitals_data_is_meaningful
 from consultations_core.services.consultation_engine import ConsultationEngine
@@ -55,9 +54,6 @@ from consultations_core.models.pre_consultation import(
      PreConsultationMedicalHistory
 )
 from collections import OrderedDict
-
-
-logger = logging.getLogger(__name__)
 
 
 def _diagnostic_lab_branch_id_from_request(request_data):
@@ -234,12 +230,21 @@ class PreConsultationTemplateAPIView(APIView):
         specialty_key = raw_specialty.lower().strip()
         
         # Log for debugging
-        logger.info(f"Doctor specialty - Raw: '{raw_specialty}', Normalized: '{specialty_key}'")
+        logger.info(
+            f"Doctor specialty resolved: raw='{raw_specialty}', normalized='{specialty_key}'",
+            module=LogModule.CONSULTATION,
+            action="preconsultation.template.specialty_resolve",
+            metadata={"raw_specialty": raw_specialty, "specialty_key": specialty_key},
+        )
 
         try:
             specialty_cfg = MetadataLoader.get("pre_consultation/specialty_config.json")
         except FileNotFoundError:
-            logger.error("pre_consultation/specialty_config.json not found")
+            logger.error(
+                "Pre-consultation specialty config not found",
+                module=LogModule.CONSULTATION,
+                action="preconsultation.template.config_missing",
+            )
             return Response(
                 {"error": "Pre-consult configuration missing on server."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -247,10 +252,23 @@ class PreConsultationTemplateAPIView(APIView):
 
         # Log available specialties for debugging
         available_specialties = list(specialty_cfg.keys())
-        logger.info(f"Available specialties in config: {available_specialties}")
+        logger.info(
+            f"Available specialties in config: {available_specialties}",
+            module=LogModule.CONSULTATION,
+            action="preconsultation.template.specialties_list",
+            metadata={"specialty_count": len(available_specialties)},
+        )
         
         if specialty_key not in specialty_cfg:
-            logger.warning(f"Specialty '{specialty_key}' not found in config. Available: {available_specialties}")
+            logger.warning(
+                f"Specialty '{specialty_key}' not found in pre-consultation config",
+                module=LogModule.CONSULTATION,
+                action="preconsultation.template.specialty_missing",
+                metadata={
+                    "specialty_key": specialty_key,
+                    "available_specialty_count": len(available_specialties),
+                },
+            )
             return Response(
                 {
                     "error": f"Pre-consult template not configured for specialty '{specialty_key}'",
@@ -263,10 +281,20 @@ class PreConsultationTemplateAPIView(APIView):
         
         # Log the sections configured for this specialty
         specialty_sections = specialty_cfg.get(specialty_key, {}).get("sections", [])
-        logger.info(f"Specialty '{specialty_key}' has {len(specialty_sections)} sections configured: {specialty_sections}")
+        logger.info(
+            f"Specialty '{specialty_key}' has {len(specialty_sections)} sections configured",
+            module=LogModule.CONSULTATION,
+            action="preconsultation.template.specialty_sections",
+            metadata={"specialty_key": specialty_key, "section_count": len(specialty_sections)},
+        )
 
         try:
-            logger.info(f"Fetching template for specialty: '{specialty_key}' (raw: '{raw_specialty}')")
+            logger.info(
+                f"Fetching pre-consultation template for specialty '{specialty_key}'",
+                module=LogModule.CONSULTATION,
+                action="preconsultation.template.fetch",
+                metadata={"specialty_key": specialty_key, "raw_specialty": raw_specialty},
+            )
             template = ConsultationEngine.get_pre_consultation_template(specialty_key)
             version_info = MetadataLoader.get("_version.json")
             metadata_version = version_info.get("metadata_version")
@@ -279,23 +307,51 @@ class PreConsultationTemplateAPIView(APIView):
             try:
                 ranges_data = MetadataLoader.get("pre_consultation/vitals/vitals_ranges.json")
                 specialty_ranges = ranges_data.get(specialty_key) or ranges_data.get("default")
-                logger.debug(f"Loaded specialty ranges for '{specialty_key}': {specialty_ranges is not None}")
+                logger.debug(
+                    f"Loaded specialty ranges for '{specialty_key}'",
+                    module=LogModule.CONSULTATION,
+                    action="preconsultation.template.ranges_load",
+                    metadata={"specialty_key": specialty_key, "has_ranges": specialty_ranges is not None},
+                )
             except FileNotFoundError:
-                logger.debug("No vitals_ranges.json found, using field defaults")
+                logger.debug(
+                    "No vitals_ranges.json found, using field defaults",
+                    module=LogModule.CONSULTATION,
+                    action="preconsultation.template.ranges_load",
+                )
             except Exception as e:
-                logger.warning(f"Error loading specialty ranges: {e}")
+                logger.warning(
+                    f"Error loading specialty ranges for '{specialty_key}'",
+                    module=LogModule.CONSULTATION,
+                    action="preconsultation.template.ranges_load",
+                    metadata={"specialty_key": specialty_key, "detail": str(e)},
+                )
             
             # Log template sections for debugging
             template_sections = [s.get("section") for s in template.get("sections", [])]
-            logger.info(f"Template returned {len(template_sections)} sections: {template_sections}")
+            logger.info(
+                f"Pre-consultation template returned {len(template_sections)} sections",
+                module=LogModule.CONSULTATION,
+                action="preconsultation.template.fetch",
+                metadata={"specialty_key": specialty_key, "section_count": len(template_sections)},
+            )
         except FileNotFoundError as e:
-            logger.error(f"Metadata file missing: {e}")
+            logger.error(
+                f"Pre-consultation metadata file missing: {e}",
+                module=LogModule.CONSULTATION,
+                action="preconsultation.template.fetch",
+                metadata={"detail": str(e)},
+            )
             return Response(
                 {"error": "Pre-consultation metadata missing on server."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-        except Exception as e:
-            logger.exception("Failed to build pre-consultation template")
+        except Exception:
+            logger.exception(
+                "Failed to build pre-consultation template",
+                module=LogModule.CONSULTATION,
+                action="preconsultation.template.fetch",
+            )
             return Response(
                 {"error": "Failed to build pre-consultation template."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -424,7 +480,12 @@ class CreateEncounterAPIView(APIView):
             except IntegrityError as e:
                 # Idempotent: active encounter already exists (e.g. race). Return it in a fresh transaction; never 409.
                 err_str = (str(e) or "Database constraint error")[:500]
-                logger.warning("IntegrityError creating encounter (returning existing): %s", err_str)
+                logger.warning(
+                    f"IntegrityError creating encounter (returning existing): {err_str}",
+                    module=LogModule.CONSULTATION,
+                    action="encounter.create.integrity_fallback",
+                    metadata={"detail": err_str},
+                )
                 with transaction.atomic():
                     existing = EncounterService.get_active_encounter(patient_account, clinic)
                 if existing:
@@ -478,7 +539,12 @@ class CreateEncounterAPIView(APIView):
                 "error": err_msg or "Validation error."
             }, status=status.HTTP_400_BAD_REQUEST, content_type="application/json")
         except Exception as e:
-            logger.exception("Error creating encounter: %s", e)
+            logger.exception(
+                f"Error creating encounter: {e}",
+                module=LogModule.CONSULTATION,
+                action="encounter.create.failed",
+                exc=e,
+            )
             err_msg = (str(e) or "Unknown error")[:500]
             return Response({
                 "status": False,
@@ -615,7 +681,7 @@ class StartNewVisitAPIView(APIView):
 
     @transaction.atomic
     def post(self, request):
-        dpc_logger.info(
+        logger.info(
             "Start new visit requested",
             module=LogModule.CONSULTATION,
             action="consultation.visit.start",
@@ -891,7 +957,13 @@ class PreConsultationSectionAPIView(APIView):
                 "message": msg or "Validation error."
             }, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            logger.exception(f"Error saving {section_code}")
+            logger.exception(
+                f"Error saving pre-consultation section {section_code}",
+                module=LogModule.CONSULTATION,
+                action="preconsultation.section.save_failed",
+                exc=e,
+                metadata={"section_code": section_code},
+            )
             return Response({
                 "status": False,
                 "message": f"Failed to save {section_code}.",
@@ -1083,7 +1155,12 @@ class PreConsultationPreviousRecordsAPIView(APIView):
                 "message": "Patient not found."
             }, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
-            logger.exception("Error fetching previous records")
+            logger.exception(
+                "Error fetching previous pre-consultation records",
+                module=LogModule.CONSULTATION,
+                action="preconsultation.records.fetch_failed",
+                exc=e,
+            )
             err_msg = str(e) if e else "Unknown error"
             return Response({
                 "status": False,
@@ -1304,7 +1381,12 @@ class StartConsultationAPIView(APIView):
         except DjangoValidationError as e:
             return bad_request(str(e) or "Invalid state for consultation.")
         except Exception as e:
-            logger.exception("StartConsultation start service failed: %s", e)
+            logger.exception(
+                f"StartConsultation start service failed: {e}",
+                module=LogModule.CONSULTATION,
+                action="consultation.start.failed",
+                exc=e,
+            )
             return Response(
                 {"detail": str(e) or "Failed to start consultation.", "message": str(e) or "Failed to start consultation."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -1404,10 +1486,10 @@ class EndConsultationAPIView(APIView):
                     msgs = [raw]
             detail = "; ".join(msgs) if msgs else "Validation failed while ending consultation."
             logger.warning(
-                "EndConsultation validation error encounter=%s detail=%s diagnoses=%s",
-                encounter_id,
-                detail,
-                request.data.get("diagnoses", []),
+                f"EndConsultation validation error for encounter {encounter_id}",
+                module=LogModule.CONSULTATION,
+                action="consultation.end.validation_failed",
+                metadata={"encounter_id": str(encounter_id), "detail": detail},
             )
             return self._error_response(
                 "Validation failed",
@@ -1442,10 +1524,14 @@ class EndConsultationAPIView(APIView):
             except DjangoValidationError as exc:
                 reason = _format_diagnostic_order_skip_reason(exc)
                 logger.warning(
-                    "EndConsultation diagnostic order skipped encounter=%s consultation=%s reason=%s",
-                    encounter_id,
-                    consultation.pk,
-                    reason,
+                    f"EndConsultation diagnostic order skipped for encounter {encounter_id}",
+                    module=LogModule.CONSULTATION,
+                    action="consultation.end.diagnostic_order_skipped",
+                    metadata={
+                        "encounter_id": str(encounter_id),
+                        "consultation_id": str(consultation.pk),
+                        "reason": reason,
+                    },
                 )
                 diagnostic_order_response = {
                     "diagnostic_order_skipped": True,
@@ -1482,8 +1568,10 @@ class EndConsultationAPIView(APIView):
             try:
                 if not getattr(settings, "PRESCRIPTION_WHATSAPP_ASYNC", True):
                     logger.info(
-                        "prescription_whatsapp_enqueue_skipped consultation_id=%s reason=async_disabled",
-                        consultation_id,
+                        "Prescription WhatsApp enqueue skipped",
+                        module=LogModule.WHATSAPP,
+                        action="consultation.whatsapp.enqueue_skipped",
+                        metadata={"consultation_id": str(consultation_id), "reason": "async_disabled"},
                     )
                     return
                 from notifications.tasks import prepare_consultation_whatsapp
@@ -1494,13 +1582,17 @@ class EndConsultationAPIView(APIView):
                     base_url,
                 )
                 logger.info(
-                    "consultation_whatsapp_enqueued consultation_id=%s",
-                    consultation_id,
+                    "Consultation WhatsApp notification enqueued",
+                    module=LogModule.WHATSAPP,
+                    action="consultation.whatsapp.enqueued",
+                    metadata={"consultation_id": str(consultation_id)},
                 )
             except Exception:
                 logger.exception(
-                    "prescription_whatsapp_enqueue_failed consultation_id=%s",
-                    consultation_id,
+                    "Prescription WhatsApp enqueue failed",
+                    module=LogModule.WHATSAPP,
+                    action="consultation.whatsapp.enqueue_failed",
+                    metadata={"consultation_id": str(consultation_id)},
                 )
 
         transaction.on_commit(_enqueue_prescription_whatsapp)
@@ -1569,9 +1661,10 @@ class CancelEncounterAPIView(APIView):
         # Safeguard: terminal state must have is_active=False (prevents zombie active encounter / unique constraint)
         if encounter.status != "cancelled":
             logger.warning(
-                "CancelEncounterAPIView: encounter %s status after cancel was %s, expected cancelled",
-                encounter_id,
-                encounter.status,
+                f"CancelEncounter unexpected status after cancel for encounter {encounter_id}",
+                module=LogModule.CONSULTATION,
+                action="encounter.cancel.unexpected_status",
+                metadata={"encounter_id": str(encounter_id), "status": encounter.status},
             )
         if encounter.is_active:
             ClinicalEncounter.objects.filter(pk=encounter.pk).update(
@@ -1590,17 +1683,22 @@ class CancelEncounterAPIView(APIView):
                 ).delete()
             if deleted:
                 logger.info(
-                    "CancelEncounterAPIView: removed consultation row(s) count=%s encounter_id=%s prior=%s",
-                    deleted,
-                    encounter_id,
-                    prior_normalized,
+                    "Consultation rows removed after encounter cancel",
+                    module=LogModule.CONSULTATION,
+                    action="encounter.cancel.consultation_cleanup",
+                    metadata={
+                        "deleted_count": deleted,
+                        "encounter_id": str(encounter_id),
+                        "prior_status": prior_normalized,
+                    },
                 )
         except Exception as exc:
-            logger.warning(
-                "CancelEncounterAPIView: consultation cleanup failed encounter_id=%s err=%s",
-                encounter_id,
-                exc,
-                exc_info=True,
+            logger.exception(
+                "Consultation cleanup failed after encounter cancel",
+                module=LogModule.CONSULTATION,
+                action="encounter.cancel.consultation_cleanup_failed",
+                exc=exc,
+                metadata={"encounter_id": str(encounter_id)},
             )
         emit_after_commit(
             ConsultationAuditService.emit_cancelled,

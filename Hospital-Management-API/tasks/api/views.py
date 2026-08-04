@@ -1,4 +1,3 @@
-import logging
 from datetime import date, datetime
 
 from django.utils import timezone
@@ -11,6 +10,7 @@ from rest_framework.exceptions import ValidationError, NotFound, PermissionDenie
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from tasks.models import Task
+from shared.logging import LogModule, logger
 from tasks.api.serializers import (
     TaskSerializer,
     TaskCreateSerializer,
@@ -18,7 +18,6 @@ from tasks.api.serializers import (
     TaskPartialUpdateSerializer,
 )
 
-logger = logging.getLogger(__name__)
 
 
 def is_admin_user(user):
@@ -182,7 +181,11 @@ class TaskListView(APIView):
             }, status=status.HTTP_200_OK)
             
         except Exception as e:
-            logger.error(f"Error listing tasks: {str(e)}")
+            logger.exception(
+                "Error listing tasks",
+                module=LogModule.API,
+                action="tasks.list.failed",
+            )
             return format_error_response(
                 "An error occurred while fetching tasks",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -207,7 +210,10 @@ class TaskListView(APIView):
             response_serializer = TaskSerializer(task, context={'request': request})
             
             logger.info(
-                f"Task created: {task.id} by {request.user.username} (ID: {request.user.id})"
+                "Task created",
+                module=LogModule.API,
+                action="tasks.created",
+                metadata={"task_id": str(task.id), "user_id": str(request.user.id)},
             )
             
             return format_success_response(
@@ -217,13 +223,21 @@ class TaskListView(APIView):
             )
             
         except ValidationError as e:
-            logger.warning(f"Validation error creating task: {str(e)}")
+            logger.warning(
+                "Validation error creating task",
+                module=LogModule.API,
+                action="tasks.create.validation_failed",
+            )
             return format_error_response(
                 "Invalid task data",
                 e.detail if hasattr(e, 'detail') else str(e)
             )
         except Exception as e:
-            logger.error(f"Error creating task: {str(e)}")
+            logger.exception(
+                "Error creating task",
+                module=LogModule.API,
+                action="tasks.create.failed",
+            )
             return format_error_response(
                 "An error occurred while creating the task",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -278,7 +292,11 @@ class TaskDetailView(APIView):
                 status_code=status.HTTP_403_FORBIDDEN
             )
         except Exception as e:
-            logger.error(f"Error retrieving task: {str(e)}")
+            logger.exception(
+                "Error retrieving task",
+                module=LogModule.API,
+                action="tasks.retrieve.failed",
+            )
             return format_error_response(
                 "An error occurred while retrieving the task",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -307,7 +325,10 @@ class TaskDetailView(APIView):
             response_serializer = TaskSerializer(updated_task, context={'request': request})
             
             logger.info(
-                f"Task updated: {task.id} by {request.user.username}"
+                "Task updated",
+                module=LogModule.API,
+                action="tasks.updated",
+                metadata={"task_id": str(task.id), "user_id": str(request.user.id)},
             )
             
             return format_success_response(
@@ -331,7 +352,11 @@ class TaskDetailView(APIView):
                 e.detail if hasattr(e, 'detail') else str(e)
             )
         except Exception as e:
-            logger.error(f"Error updating task: {str(e)}")
+            logger.exception(
+                "Error updating task",
+                module=LogModule.API,
+                action="tasks.update.failed",
+            )
             return format_error_response(
                 "An error occurred while updating the task",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -370,7 +395,10 @@ class TaskDetailView(APIView):
                 message = "Task updated successfully"
             
             logger.info(
-                f"Task partially updated: {task.id} by {request.user.username}"
+                "Task partially updated",
+                module=LogModule.API,
+                action="tasks.partial_update.completed",
+                metadata={"task_id": str(task.id), "user_id": str(request.user.id)},
             )
             
             return format_success_response(message, response_serializer.data)
@@ -391,7 +419,11 @@ class TaskDetailView(APIView):
                 e.detail if hasattr(e, 'detail') else str(e)
             )
         except Exception as e:
-            logger.error(f"Error updating task: {str(e)}")
+            logger.exception(
+                "Error updating task",
+                module=LogModule.API,
+                action="tasks.update.failed",
+            )
             return format_error_response(
                 "An error occurred while updating the task",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -406,7 +438,10 @@ class TaskDetailView(APIView):
             task.save()
             
             logger.info(
-                f"Task deleted: {task.id} by {request.user.username}"
+                "Task deleted",
+                module=LogModule.API,
+                action="tasks.deleted",
+                metadata={"task_id": str(task.id), "user_id": str(request.user.id)},
             )
             
             return format_success_response(
@@ -424,7 +459,11 @@ class TaskDetailView(APIView):
                 status_code=status.HTTP_403_FORBIDDEN
             )
         except Exception as e:
-            logger.error(f"Error deleting task: {str(e)}")
+            logger.exception(
+                "Error deleting task",
+                module=LogModule.API,
+                action="tasks.delete.failed",
+            )
             return format_error_response(
                 "An error occurred while deleting the task",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR

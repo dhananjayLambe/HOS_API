@@ -1,5 +1,3 @@
-import logging
-
 from django.db import transaction
 
 from rest_framework import status, viewsets
@@ -46,7 +44,6 @@ from clinic.models import (
     ClinicHoliday,
 )
 from account.permissions import IsDoctor
-logger = logging.getLogger(__name__)
 from clinic.utils import api_response
 
 from django.utils.decorators import method_decorator

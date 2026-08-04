@@ -4,11 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import json
-import logging
 
+from shared.logging import LogModule, logger
 from support_trace.incident.types import IncidentReport
-
-logger = logging.getLogger(__name__)
 
 
 class IncidentCertification:
@@ -20,7 +18,12 @@ class IncidentCertification:
         warnings.extend(cls.validate_narrative_consistency(report))
         warnings.extend(cls.validate_duration_consistency(report))
         for warning in warnings:
-            logger.warning("incident_certification_warning", extra={"warning": warning})
+            logger.warning(
+                "Incident certification warning",
+                module=LogModule.MONITORING,
+                action="support_trace.incident.certification_warning",
+                metadata={"warning": warning},
+            )
         return warnings
 
     @classmethod

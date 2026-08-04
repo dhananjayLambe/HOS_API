@@ -1,5 +1,3 @@
-import logging
-
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.shortcuts import get_object_or_404
 from rest_framework import status
@@ -33,8 +31,7 @@ from consultations_core.services.investigation_api_service import (
     soft_delete_item,
 )
 from diagnostics_engine.models import DiagnosticPackage, DiagnosticServiceMaster
-
-logger = logging.getLogger(__name__)
+from shared.logging import LogModule, logger
 
 MSG_VISIT_CANCELLED = "This visit has been cancelled. Please start a new one."
 
@@ -174,7 +171,12 @@ class ConsultationInvestigationItemsListCreateAPIView(APIView):
             msg = "; ".join(e.messages) if hasattr(e, "messages") else str(e)
             return Response({"detail": msg}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            logger.exception("Investigation item create failed: %s", e)
+            logger.exception(
+                f"Investigation item create failed: {e}",
+                module=LogModule.API,
+                action="consultation.investigations.item_create_failed",
+                metadata={"consultation_id": str(consultation_id)},
+            )
             return Response(
                 {"detail": str(e) or "Failed to add investigation item."},
                 status=status.HTTP_400_BAD_REQUEST,

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from business_audit.decision.routing.constants import (
@@ -41,8 +40,6 @@ from business_audit.enums import (
     WorkflowType,
 )
 from business_audit.services import BusinessAuditService
-
-logger = logging.getLogger(__name__)
 
 
 class RoutingAuditService:

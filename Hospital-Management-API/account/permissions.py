@@ -128,9 +128,6 @@ class IsClinicAdmin(BasePermission):
 class IsLabAdmin(BasePermission):
     def has_permission(self, request, view):
         user = request.user
-        # print("User:", user)
-        # print("Is Authenticated:", user.is_authenticated)
-        # print("User Groups:", user.groups.values_list("name", flat=True))
 
         return user and user.is_authenticated and \
                user.groups.filter(name='lab-admin').exists()

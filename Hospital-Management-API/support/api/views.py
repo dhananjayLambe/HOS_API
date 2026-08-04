@@ -1,5 +1,3 @@
-import logging
-import traceback
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from django.db import transaction
 from django.shortcuts import get_object_or_404
@@ -23,6 +21,7 @@ from support.api.serializers import (
     SupportTicketCommentSerializer,
     SupportTicketFilterSerializer,
 )
+from shared.logging import LogModule, logger
 from support.permissions import (
     IsSupportTicketOwnerOrAdmin,
     CanUpdateSupportTicket,
@@ -30,7 +29,6 @@ from support.permissions import (
     IsSupportAdminOrHelpdesk,
 )
 
-logger = logging.getLogger(__name__)
 
 
 def is_admin_user(user):
@@ -159,7 +157,11 @@ class SupportTicketListView(APIView):
             )
             
         except Exception as e:
-            logger.error(f"Error listing support tickets: {str(e)}\n{traceback.format_exc()}")
+            logger.exception(
+                "Error listing support tickets",
+                module=LogModule.API,
+                action="support.tickets.list_failed",
+            )
             return format_error_response(
                 "An error occurred while fetching support tickets",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -188,7 +190,10 @@ class SupportTicketListView(APIView):
             )
             
             logger.info(
-                f"Support ticket created: {ticket.ticket_number} by {request.user.username} (ID: {request.user.id})"
+                "Support ticket created",
+                module=LogModule.API,
+                action="support.tickets.created",
+                metadata={"ticket_number": ticket.ticket_number, "user_id": str(request.user.id)},
             )
             
             return format_success_response(
@@ -198,13 +203,21 @@ class SupportTicketListView(APIView):
             )
             
         except ValidationError as e:
-            logger.warning(f"Validation error creating ticket: {str(e)}")
+            logger.warning(
+                "Validation error creating support ticket",
+                module=LogModule.API,
+                action="support.tickets.create_validation_failed",
+            )
             return format_error_response(
                 "Validation failed",
                 e.detail if hasattr(e, 'detail') else str(e)
             )
         except Exception as e:
-            logger.error(f"Error creating support ticket: {str(e)}\n{traceback.format_exc()}")
+            logger.exception(
+                "Error creating support ticket",
+                module=LogModule.API,
+                action="support.tickets.create_failed",
+            )
             return format_error_response(
                 "An error occurred while creating the support ticket",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -245,7 +258,12 @@ class SupportTicketDetailView(generics.RetrieveAPIView):
                 status_code=status.HTTP_403_FORBIDDEN
             )
         except Exception as e:
-            logger.error(f"Error retrieving ticket {kwargs.get('id')}: {str(e)}\n{traceback.format_exc()}")
+            logger.exception(
+                "Error retrieving support ticket",
+                module=LogModule.API,
+                action="support.tickets.retrieve_failed",
+                metadata={"ticket_id": str(kwargs.get("id"))},
+            )
             return format_error_response(
                 "An error occurred while fetching ticket details",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -318,7 +336,10 @@ class SupportTicketUpdateView(generics.UpdateAPIView):
                     instance.save(update_fields=['description', 'updated_at'])
                 
                 logger.info(
-                    f"Ticket {instance.ticket_number} description updated by {request.user.username}"
+                    "Support ticket description updated",
+                    module=LogModule.API,
+                    action="support.tickets.description_updated",
+                    metadata={"ticket_number": instance.ticket_number, "user_id": str(request.user.id)},
                 )
                 
                 serializer = SupportTicketSerializer(instance, context={'request': request})
@@ -339,7 +360,10 @@ class SupportTicketUpdateView(generics.UpdateAPIView):
             with transaction.atomic():
                 serializer.save()
                 logger.info(
-                    f"Support ticket {instance.ticket_number} updated by {request.user.username} (ID: {request.user.id})"
+                    "Support ticket updated",
+                    module=LogModule.API,
+                    action="support.tickets.updated",
+                    metadata={"ticket_number": instance.ticket_number, "user_id": str(request.user.id)},
                 )
             
             response_serializer = SupportTicketSerializer(
@@ -363,13 +387,22 @@ class SupportTicketUpdateView(generics.UpdateAPIView):
                 status_code=status.HTTP_403_FORBIDDEN
             )
         except ValidationError as e:
-            logger.warning(f"Validation error updating ticket: {str(e)}")
+            logger.warning(
+                "Validation error updating support ticket",
+                module=LogModule.API,
+                action="support.tickets.update_validation_failed",
+            )
             return format_error_response(
                 "Validation failed",
                 e.detail if hasattr(e, 'detail') else str(e)
             )
         except Exception as e:
-            logger.error(f"Error updating ticket {kwargs.get('id')}: {str(e)}\n{traceback.format_exc()}")
+            logger.exception(
+                "Error updating support ticket",
+                module=LogModule.API,
+                action="support.tickets.update_failed",
+                metadata={"ticket_id": str(kwargs.get("id"))},
+            )
             return format_error_response(
                 "An error occurred while updating the ticket",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -399,7 +432,10 @@ class SupportTicketDeleteView(generics.DestroyAPIView):
                 instance.delete()
             
             logger.warning(
-                f"Support ticket {ticket_number} deleted by {request.user.username} (ID: {request.user.id})"
+                "Support ticket deleted",
+                module=LogModule.API,
+                action="support.tickets.deleted",
+                metadata={"ticket_number": ticket_number, "user_id": str(request.user.id)},
             )
             
             return format_success_response(
@@ -418,7 +454,12 @@ class SupportTicketDeleteView(generics.DestroyAPIView):
                 status_code=status.HTTP_403_FORBIDDEN
             )
         except Exception as e:
-            logger.error(f"Error deleting ticket {kwargs.get('id')}: {str(e)}\n{traceback.format_exc()}")
+            logger.exception(
+                "Error deleting support ticket",
+                module=LogModule.API,
+                action="support.tickets.delete_failed",
+                metadata={"ticket_id": str(kwargs.get("id"))},
+            )
             return format_error_response(
                 "An error occurred while deleting the ticket",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -485,7 +526,10 @@ class SupportTicketAttachmentView(APIView):
                 attachment = serializer.save(ticket=ticket)
             
             logger.info(
-                f"Attachment uploaded to ticket {ticket.ticket_number} by {request.user.username}"
+                "Support ticket attachment uploaded",
+                module=LogModule.API,
+                action="support.tickets.attachment_uploaded",
+                metadata={"ticket_number": ticket.ticket_number, "user_id": str(request.user.id)},
             )
             
             return format_success_response(
@@ -513,7 +557,11 @@ class SupportTicketAttachmentView(APIView):
                 status_code=status.HTTP_404_NOT_FOUND
             )
         except Exception as e:
-            logger.error(f"Error uploading attachment: {str(e)}\n{traceback.format_exc()}")
+            logger.exception(
+                "Error uploading support ticket attachment",
+                module=LogModule.API,
+                action="support.tickets.attachment_upload_failed",
+            )
             return format_error_response(
                 "An error occurred while uploading the attachment",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -553,7 +601,11 @@ class SupportTicketAttachmentView(APIView):
                 status_code=status.HTTP_404_NOT_FOUND
             )
         except Exception as e:
-            logger.error(f"Error fetching attachments: {str(e)}\n{traceback.format_exc()}")
+            logger.exception(
+                "Error fetching support ticket attachments",
+                module=LogModule.API,
+                action="support.tickets.attachments_list_failed",
+            )
             return format_error_response(
                 "An error occurred while fetching attachments",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -593,7 +645,10 @@ class SupportTicketAttachmentDeleteView(APIView):
                 attachment.delete()
             
             logger.info(
-                f"Attachment {file_name} deleted from ticket {ticket.ticket_number} by {request.user.username}"
+                "Support ticket attachment deleted",
+                module=LogModule.API,
+                action="support.tickets.attachment_deleted",
+                metadata={"ticket_number": ticket.ticket_number, "user_id": str(request.user.id)},
             )
             
             return format_success_response(
@@ -609,7 +664,11 @@ class SupportTicketAttachmentDeleteView(APIView):
                 status_code=status.HTTP_404_NOT_FOUND
             )
         except Exception as e:
-            logger.error(f"Error deleting attachment: {str(e)}\n{traceback.format_exc()}")
+            logger.exception(
+                "Error deleting support ticket attachment",
+                module=LogModule.API,
+                action="support.tickets.attachment_delete_failed",
+            )
             return format_error_response(
                 "An error occurred while deleting the attachment",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -664,7 +723,10 @@ class SupportTicketCommentView(APIView):
                 )
             
             logger.info(
-                f"Comment added to ticket {ticket.ticket_number} by {request.user.username}"
+                "Support ticket comment added",
+                module=LogModule.API,
+                action="support.tickets.comment_added",
+                metadata={"ticket_number": ticket.ticket_number, "user_id": str(request.user.id)},
             )
             
             return format_success_response(
@@ -692,7 +754,11 @@ class SupportTicketCommentView(APIView):
                 status_code=status.HTTP_404_NOT_FOUND
             )
         except Exception as e:
-            logger.error(f"Error adding comment: {str(e)}\n{traceback.format_exc()}")
+            logger.exception(
+                "Error adding support ticket comment",
+                module=LogModule.API,
+                action="support.tickets.comment_create_failed",
+            )
             return format_error_response(
                 "An error occurred while adding the comment",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -732,7 +798,11 @@ class SupportTicketCommentView(APIView):
                 status_code=status.HTTP_404_NOT_FOUND
             )
         except Exception as e:
-            logger.error(f"Error fetching comments: {str(e)}\n{traceback.format_exc()}")
+            logger.exception(
+                "Error fetching support ticket comments",
+                module=LogModule.API,
+                action="support.tickets.comments_list_failed",
+            )
             return format_error_response(
                 "An error occurred while fetching comments",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -782,7 +852,10 @@ class SupportTicketCommentUpdateDeleteView(APIView):
                 serializer.save()
             
             logger.info(
-                f"Comment {comment_id} updated by {request.user.username}"
+                "Support ticket comment updated",
+                module=LogModule.API,
+                action="support.tickets.comment_updated",
+                metadata={"comment_id": str(comment_id), "user_id": str(request.user.id)},
             )
             
             return format_success_response(
@@ -798,7 +871,11 @@ class SupportTicketCommentUpdateDeleteView(APIView):
                 status_code=status.HTTP_404_NOT_FOUND
             )
         except Exception as e:
-            logger.error(f"Error updating comment: {str(e)}\n{traceback.format_exc()}")
+            logger.exception(
+                "Error updating support ticket comment",
+                module=LogModule.API,
+                action="support.tickets.comment_update_failed",
+            )
             return format_error_response(
                 "An error occurred while updating the comment",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -826,7 +903,10 @@ class SupportTicketCommentUpdateDeleteView(APIView):
                 comment.delete()
             
             logger.info(
-                f"Comment {comment_id} deleted from ticket {ticket.ticket_number} by {request.user.username}"
+                "Support ticket comment deleted",
+                module=LogModule.API,
+                action="support.tickets.comment_deleted",
+                metadata={"comment_id": str(comment_id), "ticket_number": ticket.ticket_number, "user_id": str(request.user.id)},
             )
             
             return format_success_response(
@@ -842,7 +922,11 @@ class SupportTicketCommentUpdateDeleteView(APIView):
                 status_code=status.HTTP_404_NOT_FOUND
             )
         except Exception as e:
-            logger.error(f"Error deleting comment: {str(e)}\n{traceback.format_exc()}")
+            logger.exception(
+                "Error deleting support ticket comment",
+                module=LogModule.API,
+                action="support.tickets.comment_delete_failed",
+            )
             return format_error_response(
                 "An error occurred while deleting the comment",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR

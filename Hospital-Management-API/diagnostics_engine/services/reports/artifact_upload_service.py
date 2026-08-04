@@ -7,7 +7,6 @@ NOT ``DiagnosticTestReport.revision_number`` (report-level correction chain).
 
 from __future__ import annotations
 
-import logging
 import mimetypes
 import time
 
@@ -42,8 +41,8 @@ from diagnostics_engine.models.reports import (
     ReportArtifactType,
     build_report_download_filename,
 )
-
-logger = logging.getLogger("diagnostics.reports")
+from shared.logging import LogModule, logger
+from shared.logging.context import get_context_manager
 
 # Re-export domain upload rules for backward compatibility.
 DEFAULT_MAX_REPORT_UPLOAD_SIZE_MB = upload_rules.DEFAULT_MAX_REPORT_UPLOAD_SIZE_MB
@@ -75,9 +74,13 @@ class ArtifactUploadService:
         existing = get_active_report_for_line(order_test_line)
         if existing is not None:
             logger.info(
-                "artifact_upload_active_report_found report_id=%s line_id=%s",
-                existing.pk,
-                order_test_line.pk,
+                "Active report found for test line",
+                module=LogModule.REPORTS,
+                action="diagnostics.reports.upload_active_report_found",
+                metadata={
+                    "report_id": str(existing.pk),
+                    "line_id": str(order_test_line.pk),
+                },
             )
             return existing
 
@@ -88,9 +91,13 @@ class ArtifactUploadService:
             uploaded_by=uploaded_by,
         )
         logger.info(
-            "artifact_upload_report_created report_id=%s line_id=%s",
-            report.pk,
-            order_test_line.pk,
+            "Report created for artifact upload",
+            module=LogModule.REPORTS,
+            action="diagnostics.reports.upload_report_created",
+            metadata={
+                "report_id": str(report.pk),
+                "line_id": str(order_test_line.pk),
+            },
         )
         return report
 
@@ -114,6 +121,14 @@ class ArtifactUploadService:
         saved_paths: list[str] = []
         started = time.monotonic()
         user_id = getattr(uploaded_by, "pk", None)
+        context_fields = {"report_id": str(report.pk)}
+        laboratory_id = getattr(report, "laboratory_id", None) or get_report_branch_id(report)
+        if laboratory_id:
+            context_fields["laboratory_id"] = str(laboratory_id)
+        encounter_id = getattr(report, "encounter_id", None)
+        if encounter_id:
+            context_fields["encounter_id"] = str(encounter_id)
+        get_context_manager().update(**context_fields)
         safe_emit(
             emit_report_event,
             "report_upload_started",
@@ -239,9 +254,10 @@ class ArtifactUploadService:
         cls._transition_report_on_upload(report, uploaded_by=uploaded_by)
 
         logger.info(
-            "artifact_upload_batch_complete report_id=%s count=%s",
-            report.pk,
-            len(created),
+            "Artifact upload batch complete",
+            module=LogModule.REPORTS,
+            action="diagnostics.reports.upload_batch_complete",
+            metadata={"report_id": str(report.pk), "artifact_count": len(created)},
         )
         return created
 
@@ -254,7 +270,12 @@ class ArtifactUploadService:
                 if ReportStorageService.delete_storage_object(path):
                     continue
             except Exception:
-                logger.warning("storage_cleanup_failed path=%s", path, exc_info=True)
+                logger.exception(
+                    "Storage cleanup failed during upload rollback",
+                    module=LogModule.REPORTS,
+                    action="diagnostics.reports.storage_cleanup_failed",
+                    metadata={"path": path},
+                )
 
     @classmethod
     def upload_artifact(
@@ -306,9 +327,10 @@ class ArtifactUploadService:
         artifact.full_clean()
         artifact.save(update_fields=["is_primary"])
         logger.info(
-            "artifact_upload_primary_replaced report_id=%s artifact_id=%s",
-            report.pk,
-            artifact.pk,
+            "Primary artifact replaced",
+            module=LogModule.REPORTS,
+            action="diagnostics.reports.upload_primary_replaced",
+            metadata={"report_id": str(report.pk), "artifact_id": str(artifact.pk)},
         )
 
     @classmethod
@@ -350,7 +372,12 @@ class ArtifactUploadService:
             report.updated_at = timezone.now()
             update_fields.append("updated_at")
             report.save(update_fields=update_fields)
-        logger.info("artifact_upload_confirmed report_id=%s", report.pk)
+        logger.info(
+            "Artifact upload confirmed",
+            module=LogModule.REPORTS,
+            action="diagnostics.reports.upload_confirmed",
+            metadata={"report_id": str(report.pk)},
+        )
         return report
 
     @classmethod
@@ -415,10 +442,14 @@ class ArtifactUploadService:
             },
         )
         logger.info(
-            "artifact_upload_replaced report_id=%s old_id=%s new_id=%s",
-            report.pk,
-            old_artifact.pk,
-            new_artifact.pk,
+            "Artifact replaced during reupload",
+            module=LogModule.REPORTS,
+            action="diagnostics.reports.upload_replaced",
+            metadata={
+                "report_id": str(report.pk),
+                "old_artifact_id": str(old_artifact.pk),
+                "new_artifact_id": str(new_artifact.pk),
+            },
         )
         return new_artifact
 
@@ -520,9 +551,10 @@ class ArtifactUploadService:
             is_active=True,
         ).exists():
             logger.warning(
-                "artifact_upload_duplicate_checksum report_id=%s checksum=%s",
-                report.pk,
-                checksum[:12],
+                "Duplicate artifact checksum rejected",
+                module=LogModule.REPORTS,
+                action="diagnostics.reports.upload_duplicate_checksum",
+                metadata={"report_id": str(report.pk), "checksum_prefix": checksum[:12]},
             )
             raise ValidationError("This file was already uploaded.")
 
@@ -611,10 +643,14 @@ class ArtifactUploadService:
         if artifact.storage_path or artifact.storage_key:
             artifact.save(update_fields=["storage_path", "storage_key"])
         logger.info(
-            "artifact_upload_created artifact_id=%s report_id=%s primary=%s",
-            artifact.pk,
-            report.pk,
-            is_primary,
+            "Artifact created",
+            module=LogModule.REPORTS,
+            action="diagnostics.reports.upload_artifact_created",
+            metadata={
+                "artifact_id": str(artifact.pk),
+                "report_id": str(report.pk),
+                "is_primary": is_primary,
+            },
         )
         return artifact
 

@@ -1,5 +1,6 @@
 from datetime import date, datetime, timedelta
 from django.contrib.auth.models import Group
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 from django.utils import timezone
 
@@ -882,24 +883,37 @@ class DigitalSignatureUploadSerializer(serializers.ModelSerializer):
         return data
 
     def update(self, instance, validated_data):
-        import logging
-        logger = logging.getLogger(__name__)
-        
         # Delete old file if exists (same as PAN/Aadhaar)
         if validated_data.get("digital_signature") and instance.digital_signature:
             old_file_path = instance.digital_signature.name
-            logger.info(f"Deleting old digital signature file: {old_file_path}")
+            logger.info(
+                "Deleting old digital signature file",
+                module=LogModule.API,
+                action="doctor.kyc.digital_signature.delete_old",
+                metadata={"doctor_id": str(instance.doctor_id) if instance.doctor_id else None},
+            )
             try:
                 instance.digital_signature.delete(save=False)
-            except Exception as e:
-                logger.warning(f"Error deleting old file (may not exist): {str(e)}")
+            except OSError as e:
+                logger.warning(
+                    "Error deleting old digital signature file",
+                    module=LogModule.STORAGE,
+                    action="doctor.kyc.digital_signature.delete_old",
+                    metadata={"doctor_id": str(instance.doctor_id) if instance.doctor_id else None, "detail": str(e)},
+                )
 
-        # Log before update
         digital_signature_file = validated_data.get("digital_signature")
         if digital_signature_file:
-            logger.info(f"Updating digital signature: {digital_signature_file.name}, Size: {digital_signature_file.size}")
-            logger.info(f"KYCStatus instance doctor: {instance.doctor.id if instance.doctor else 'None'}")
-            logger.info(f"KYCStatus instance ID: {instance.id}")
+            logger.info(
+                "Updating digital signature",
+                module=LogModule.API,
+                action="doctor.kyc.digital_signature.update",
+                metadata={
+                    "doctor_id": str(instance.doctor.id) if instance.doctor else None,
+                    "kyc_status_id": str(instance.id),
+                    "file_size": digital_signature_file.size,
+                },
+            )
         
         # Call super().update() which will handle the file upload and call upload_to
         # This should automatically use the upload_to function from the model field
@@ -908,13 +922,24 @@ class DigitalSignatureUploadSerializer(serializers.ModelSerializer):
         # Ensure the instance is saved (Django should do this automatically, but let's be explicit)
         updated_instance.save()
         
-        # Log after update
         if updated_instance.digital_signature:
-            logger.info(f"Digital signature saved successfully. Path: {updated_instance.digital_signature.name}")
-            logger.info(f"Digital signature URL: {updated_instance.digital_signature.url}")
-            logger.info(f"Digital signature file exists: {updated_instance.digital_signature.storage.exists(updated_instance.digital_signature.name) if hasattr(updated_instance.digital_signature, 'storage') else 'Unknown'}")
+            logger.info(
+                "Digital signature saved successfully",
+                module=LogModule.STORAGE,
+                action="doctor.kyc.digital_signature.update",
+                metadata={
+                    "doctor_id": str(instance.doctor.id) if instance.doctor else None,
+                    "kyc_status_id": str(instance.id),
+                    "has_signature": True,
+                },
+            )
         else:
-            logger.error("Digital signature field is None after update!")
+            logger.error(
+                "Digital signature field is None after update",
+                module=LogModule.STORAGE,
+                action="doctor.kyc.digital_signature.update",
+                metadata={"doctor_id": str(instance.doctor.id) if instance.doctor else None, "kyc_status_id": str(instance.id)},
+            )
         
         return updated_instance
 
@@ -958,8 +983,15 @@ class KYCStatusSerializer(serializers.ModelSerializer):
                 if request:
                     return request.build_absolute_uri(kyc_status.digital_signature.url)
                 return kyc_status.digital_signature.url if kyc_status.digital_signature else None
-        except:
+        except ObjectDoesNotExist:
             pass
+        except Exception:
+            logger.exception(
+                "Failed to resolve digital signature URL",
+                module=LogModule.API,
+                action="doctor.kyc.digital_signature.fetch",
+                metadata={"doctor_id": str(obj.id)},
+            )
         return None
 
     def get_detailed_status(self, obj):

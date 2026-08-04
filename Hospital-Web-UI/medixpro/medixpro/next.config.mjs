@@ -15,6 +15,14 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  // Strip accidental console.log/debug from client bundles in production.
+  // Keep error (and warn) for BFF/serverLogger and intentional diagnostics.
+  compiler: {
+    removeConsole:
+      process.env.NODE_ENV === "production"
+        ? { exclude: ["error", "warn"] }
+        : false,
+  },
   // Performance optimizations
   compress: true,
   poweredByHeader: false,

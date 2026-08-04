@@ -1,9 +1,7 @@
-import logging
+from shared.logging import LogModule, logger
 
 from consultations_core.models.encounter import ClinicalEncounter
 from consultations_core.services.encounter_state_machine import EncounterStateMachine
-
-logger = logging.getLogger(__name__)
 
 
 class EncounterService:
@@ -47,12 +45,14 @@ class EncounterService:
         existing = EncounterService.get_active_encounter(patient_account, clinic)
         if existing:
             logger.info(
-                "encounter.lifecycle.reuse_active encounter_id=%s visit_pnr=%s patient_account_id=%s clinic_id=%s status=%s",
-                existing.id,
-                existing.visit_pnr,
-                getattr(patient_account, "id", None),
-                getattr(clinic, "id", None),
-                existing.status,
+                (
+                    f"encounter.lifecycle.reuse_active encounter_id={existing.id} "
+                    f"visit_pnr={existing.visit_pnr} patient_account_id={getattr(patient_account, 'id', None)} "
+                    f"clinic_id={getattr(clinic, 'id', None)} status={existing.status}"
+                ),
+                module=LogModule.CONSULTATION,
+                action="encounter.reuse_active",
+                metadata={"encounter_id": str(existing.id)},
             )
             return existing, False
         encounter = EncounterService.create_encounter(
@@ -67,13 +67,14 @@ class EncounterService:
             consultation_type=consultation_type,
         )
         logger.info(
-            "encounter.lifecycle.created encounter_id=%s visit_pnr=%s patient_account_id=%s clinic_id=%s encounter_type=%s entry_mode=%s",
-            encounter.id,
-            encounter.visit_pnr,
-            getattr(patient_account, "id", None),
-            getattr(clinic, "id", None),
-            encounter_type,
-            entry_mode,
+            (
+                f"encounter.lifecycle.created encounter_id={encounter.id} visit_pnr={encounter.visit_pnr} "
+                f"patient_account_id={getattr(patient_account, 'id', None)} clinic_id={getattr(clinic, 'id', None)} "
+                f"encounter_type={encounter_type} entry_mode={entry_mode}"
+            ),
+            module=LogModule.CONSULTATION,
+            action="encounter.created",
+            metadata={"encounter_id": str(encounter.id)},
         )
         return encounter, True
 

@@ -1,9 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { serverLogger } from "@/lib/serverLogger"
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 const DJANGO_API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+const ROUTE = "doctor/profile/bank-details"
 
 // GET - Retrieve bank details
 export async function GET(request: NextRequest) {
@@ -73,7 +75,7 @@ export async function GET(request: NextRequest) {
     }
     return nextRes
   } catch (error: any) {
-    console.error("Bank details fetch error:", error)
+    serverLogger.error("Bank details fetch error", error, { route: ROUTE })
     return NextResponse.json(
       { 
         status: "error",
@@ -137,7 +139,7 @@ export async function POST(request: NextRequest) {
     }
     return nextRes
   } catch (error: any) {
-    console.error("Bank details create error:", error)
+    serverLogger.error("Bank details create error", error, { route: ROUTE })
     return NextResponse.json(
       { 
         status: "error",
@@ -179,7 +181,11 @@ export async function PATCH(request: NextRequest) {
         getData = {}
       }
       
-      console.error("[PATCH] Failed to fetch bank details:", getResponse.status, getData)
+      serverLogger.error("[PATCH] Failed to fetch bank details", undefined, {
+        route: ROUTE,
+        status: getResponse.status,
+        detail: typeof getData?.detail === "string" ? getData.detail : typeof getData?.message === "string" ? getData.message : undefined,
+      })
       return NextResponse.json(
         {
           status: "error",
@@ -204,12 +210,11 @@ export async function PATCH(request: NextRequest) {
     }
 
     if (!bankDetailsId) {
-      console.error("[PATCH] Bank details ID not found in response:", JSON.stringify(getData, null, 2))
-      console.error("[PATCH] Response data structure:", {
+      serverLogger.error("[PATCH] Bank details ID not found in response", undefined, {
+        route: ROUTE,
         hasData: !!getData?.data,
-        dataKeys: getData?.data ? Object.keys(getData.data) : [],
-        hasId: !!getData?.id,
-        fullResponse: getData
+        dataKeyCount: getData?.data ? Object.keys(getData.data).length : 0,
+        hasTopLevelId: !!getData?.id,
       })
       return NextResponse.json(
         {
@@ -255,7 +260,11 @@ export async function PATCH(request: NextRequest) {
     }
 
     if (!response.ok) {
-      console.error(`[PATCH] Update failed with status ${response.status}:`, JSON.stringify(data, null, 2))
+      serverLogger.error("[PATCH] Bank details update failed", undefined, {
+        route: ROUTE,
+        status: response.status,
+        detail: typeof data?.detail === "string" ? data.detail : typeof data?.message === "string" ? data.message : typeof data?.error === "string" ? data.error : undefined,
+      })
       return NextResponse.json(
         {
           status: "error",
@@ -279,7 +288,7 @@ export async function PATCH(request: NextRequest) {
     }
     return nextRes
   } catch (error: any) {
-    console.error("Bank details update error:", error)
+    serverLogger.error("Bank details update error", error, { route: ROUTE })
     return NextResponse.json(
       { 
         status: "error",
@@ -341,7 +350,11 @@ export async function DELETE(request: NextRequest) {
     }
 
     if (!bankDetailsId) {
-      console.error("[DELETE] Bank details ID not found in response:", JSON.stringify(getData, null, 2))
+      serverLogger.error("[DELETE] Bank details ID not found in response", undefined, {
+        route: ROUTE,
+        hasData: !!getData?.data,
+        hasTopLevelId: !!getData?.id,
+      })
       return NextResponse.json(
         {
           status: "error",
@@ -407,7 +420,7 @@ export async function DELETE(request: NextRequest) {
     }
     return nextRes
   } catch (error: any) {
-    console.error("Bank details delete error:", error)
+    serverLogger.error("Bank details delete error", error, { route: ROUTE })
     return NextResponse.json(
       { 
         status: "error",

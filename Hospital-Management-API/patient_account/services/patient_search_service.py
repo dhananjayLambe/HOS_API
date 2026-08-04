@@ -1,4 +1,3 @@
-import logging
 import re
 from datetime import date
 from time import perf_counter
@@ -9,8 +8,7 @@ from django.db.models.functions import Coalesce, Concat, Greatest, Lower, Replac
 from django.contrib.postgres.search import TrigramSimilarity
 
 from patient_account.models import PatientProfile
-
-logger = logging.getLogger(__name__)
+from shared.logging import LogModule, logger
 
 MAX_QUERY_LENGTH = 50
 DEFAULT_LIMIT = 10
@@ -52,7 +50,11 @@ def search_patients_for_suggestions(query: str, limit: int = DEFAULT_LIMIT):
     try:
         cached = cache.get(cache_key)
     except Exception:
-        logger.exception("Patient search cache GET failed", exc_info=True)
+        logger.exception(
+            "Patient search cache GET failed",
+            module=LogModule.AUTHENTICATION,
+            action="patient_account.search.cache_get_failed",
+        )
         cached = None
     if cached:
         return cached
@@ -153,7 +155,11 @@ def search_patients_for_suggestions(query: str, limit: int = DEFAULT_LIMIT):
         )
         ranked = list(ranked)
     except Exception:
-        logger.exception("Patient phonetic query failed, retrying without dmetaphone", exc_info=True)
+        logger.exception(
+            "Patient phonetic query failed, retrying without dmetaphone",
+            module=LogModule.AUTHENTICATION,
+            action="patient_account.search.phonetic_fallback",
+        )
         fallback_queryset = (
             PatientProfile.objects.select_related("account__user")
             .filter(is_active=True, account__is_active=True)
@@ -208,9 +214,22 @@ def search_patients_for_suggestions(query: str, limit: int = DEFAULT_LIMIT):
         if payload:
             cache.set(cache_key, payload, timeout=CACHE_TTL_SECONDS)
     except Exception:
-        logger.exception("Patient search cache SET failed", exc_info=True)
+        logger.exception(
+            "Patient search cache SET failed",
+            module=LogModule.AUTHENTICATION,
+            action="patient_account.search.cache_set_failed",
+        )
 
     elapsed_ms = (perf_counter() - started_at) * 1000
-    logger.info("Patient search query='%s' returned=%s in %.1fms", normalized_query, len(payload), elapsed_ms)
+    logger.info(
+        "Patient search completed",
+        module=LogModule.AUTHENTICATION,
+        action="patient_account.search.completed",
+        metadata={
+            "query_length": len(normalized_query),
+            "result_count": len(payload),
+            "duration_ms": round(elapsed_ms, 1),
+        },
+    )
 
     return payload

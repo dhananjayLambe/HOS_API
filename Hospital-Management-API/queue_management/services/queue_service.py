@@ -1,15 +1,12 @@
 """Single entry point for adding an encounter to the Smart Queue."""
 
-import logging
-
 from django.db import IntegrityError, transaction
 from django.db.models import Max
 from django.utils import timezone
 
 from queue_management.models import Queue
 from queue_management.services.queue_sync import _sync_queue_realtime
-
-logger = logging.getLogger(__name__)
+from shared.logging import LogModule, logger
 
 MAX_RETRIES = 3
 
@@ -33,7 +30,11 @@ def trigger_queue_realtime_update(queue):
                 queue_date=queue_date,
             )
         except Exception:
-            logger.exception("Realtime sync failed")
+            logger.exception(
+                "Realtime sync failed",
+                module=LogModule.BOOKING,
+                action="queue.realtime.sync_failed",
+            )
 
     transaction.on_commit(_run)
 
@@ -88,6 +89,11 @@ def add_to_queue(encounter, user):
             trigger_queue_realtime_update(queue)
             return queue
         except IntegrityError:
-            logger.warning("Queue conflict retry %s", attempt)
+            logger.warning(
+                "Queue conflict retry",
+                module=LogModule.BOOKING,
+                action="queue.add.conflict_retry",
+                metadata={"attempt": attempt},
+            )
             if attempt == MAX_RETRIES - 1:
                 raise

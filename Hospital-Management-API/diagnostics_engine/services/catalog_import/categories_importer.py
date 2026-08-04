@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 
 from django.db import IntegrityError
 from django.db.models import Q
 
 from diagnostics_engine.models.catalog import DiagnosticCategory
+from shared.logging import LogModule, logger
 from diagnostics_engine.services.catalog_import.exceptions import StrictImportError
 from diagnostics_engine.services.catalog_import.import_stats import ImportRunResult
 from diagnostics_engine.services.catalog_import.utils import (
@@ -17,8 +17,6 @@ from diagnostics_engine.services.catalog_import.utils import (
 )
 from diagnostics_engine.services.catalog_import.validators import duplicate_natural_keys, require_columns
 
-logger = logging.getLogger(__name__)
-
 ROOT_REQUIRED = ("ordering", "code", "name", "is_active")
 SUB_REQUIRED = ("ordering", "code", "name", "parent_code", "is_active")
 
@@ -26,7 +24,12 @@ SUB_REQUIRED = ("ordering", "code", "name", "parent_code", "is_active")
 def _row_err(result: ImportRunResult, msg: str, *, strict: bool) -> None:
     result.errors.append(msg)
     result.stats.failed += 1
-    logger.warning(msg)
+    logger.warning(
+        msg,
+        module=LogModule.LABORATORY,
+        action="diagnostics.catalog_import.row_error",
+        metadata={"message": msg},
+    )
     if strict:
         raise StrictImportError(msg)
 
@@ -124,7 +127,12 @@ def sync_categories(
                 _row_err(result, f"{row.ref()}: {exc}", strict=strict)
                 return
             result.stats.updated += 1
-            logger.info("Updated category %s", code)
+            logger.info(
+                "Updated diagnostic category",
+                module=LogModule.LABORATORY,
+                action="diagnostics.catalog_import.category_updated",
+                metadata={"code": code},
+            )
             return
 
         try:
@@ -138,7 +146,12 @@ def sync_categories(
             _row_err(result, f"{row.ref()}: {exc}", strict=strict)
             return
         result.stats.created += 1
-        logger.info("Created category %s", code)
+        logger.info(
+            "Created diagnostic category",
+            module=LogModule.LABORATORY,
+            action="diagnostics.catalog_import.category_created",
+            metadata={"code": code},
+        )
 
     for row in roots:
         upsert_root(row)
@@ -223,7 +236,12 @@ def sync_categories(
                     progressed = True
                     continue
                 result.stats.updated += 1
-                logger.info("Updated subcategory %s", code)
+                logger.info(
+                    "Updated diagnostic subcategory",
+                    module=LogModule.LABORATORY,
+                    action="diagnostics.catalog_import.subcategory_updated",
+                    metadata={"code": code},
+                )
                 simulated_codes.add(code)
             else:
                 if parent_obj is None:
@@ -247,7 +265,12 @@ def sync_categories(
                     progressed = True
                     continue
                 result.stats.created += 1
-                logger.info("Created subcategory %s", code)
+                logger.info(
+                    "Created diagnostic subcategory",
+                    module=LogModule.LABORATORY,
+                    action="diagnostics.catalog_import.subcategory_created",
+                    metadata={"code": code},
+                )
                 simulated_codes.add(code)
             progressed = True
 

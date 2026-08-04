@@ -5,7 +5,6 @@ This module owns consultation section endpoints (findings/diagnosis/etc. persist
 at end consultation), separated from pre-consultation views for clearer boundaries.
 """
 
-import logging
 import json
 import re
 from datetime import date
@@ -34,12 +33,13 @@ from consultations_core.models.prescription import (
     PrescriptionStatus,
     PrescriptionCancellationSource,
 )
+from shared.logging import LogModule, logger
 from consultations_core.services.consultation_summary_service import (
     build_consultation_summary,
     build_numeric_dose_display,
 )
 
-logger = logging.getLogger(__name__)
+
 def _as_list(value):
     return value if isinstance(value, list) else []
 
@@ -371,7 +371,12 @@ class ConsultationSummaryLiteAPIView(_BaseConsultationSummaryAPIView):
 
                     response.data = attach_whatsapp_delivery_status(payload, consultation_id)
         except Exception:
-            logger.exception("summary_lite_whatsapp_enqueue_failed consultation_id=%s", consultation_id)
+            logger.exception(
+                f"summary_lite_whatsapp_enqueue_failed consultation_id={consultation_id}",
+                module=LogModule.CONSULTATION,
+                action="consultation.summary.whatsapp_enqueue_failed",
+                metadata={"consultation_id": str(consultation_id)},
+            )
         return response
 
 
@@ -445,7 +450,12 @@ class ConsultationSummaryLitePDFAPIView(ConsultationSummaryLiteHTMLAPIView):
 
             pdf_binary = HTML(string=html, base_url=base_url).write_pdf()
         except Exception as exc:
-            logger.exception("Failed to generate prescription PDF for consultation %s", consultation_id)
+            logger.exception(
+                f"Failed to generate prescription PDF for consultation {consultation_id}",
+                module=LogModule.PRESCRIPTION,
+                action="prescription.pdf.generate_failed",
+                metadata={"consultation_id": str(consultation_id)},
+            )
             return Response(
                 {
                     "detail": "PDF generation failed. Ensure WeasyPrint and system dependencies are installed.",

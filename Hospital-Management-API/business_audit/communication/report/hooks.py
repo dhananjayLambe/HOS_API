@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -19,8 +18,7 @@ from business_audit.communication.report.report_communication_audit_service impo
 from business_audit.communication.types import CommunicationContext
 from business_audit.domain.context import apply_workflow_context
 from consultations_core.audit.commit import emit_after_commit
-
-logger = logging.getLogger(__name__)
+from shared.logging import LogModule, logger
 
 
 @dataclass
@@ -56,10 +54,11 @@ def schedule_report_ready(
             request_id=request_id,
         )
     except Exception:
-        logger.warning(
-            "report_ready_communication_schedule_failed",
-            exc_info=True,
-            extra={"communication_id": ctx.communication_id},
+        logger.exception(
+            "Report ready communication schedule failed",
+            module=LogModule.API,
+            action="communication.report.ready.schedule_failed",
+            metadata={"communication_id": ctx.communication_id},
         )
     return ctx
 
@@ -93,10 +92,11 @@ def schedule_delivery_requested(
             request_id=request_id,
         )
     except Exception:
-        logger.warning(
-            "delivery_requested_communication_schedule_failed",
-            exc_info=True,
-            extra={
+        logger.exception(
+            "Delivery requested communication schedule failed",
+            module=LogModule.API,
+            action="communication.report.delivery_requested.schedule_failed",
+            metadata={
                 "communication_id": ctx.communication_id,
                 "communication_attempt_id": ctx.communication_attempt_id,
             },
@@ -159,10 +159,11 @@ def schedule_channel_delivery_success(
             request_id=request_id,
         )
     except Exception:
-        logger.warning(
-            "channel_delivery_communication_schedule_failed",
-            exc_info=True,
-            extra={
+        logger.exception(
+            "Channel delivery communication schedule failed",
+            module=LogModule.API,
+            action="communication.report.channel_delivery.schedule_failed",
+            metadata={
                 "communication_id": ctx.communication_id,
                 "channel": channel,
             },
@@ -202,10 +203,11 @@ def schedule_delivery_failed(
             request_id=request_id,
         )
     except Exception:
-        logger.warning(
-            "delivery_failed_communication_schedule_failed",
-            exc_info=True,
-            extra={
+        logger.exception(
+            "Delivery failed communication schedule failed",
+            module=LogModule.API,
+            action="communication.report.delivery_failed.schedule_failed",
+            metadata={
                 "communication_id": ctx.communication_id,
                 "communication_attempt_id": ctx.communication_attempt_id,
             },
@@ -240,10 +242,11 @@ def schedule_delivery_retried(
             request_id=request_id,
         )
     except Exception:
-        logger.warning(
-            "delivery_retried_communication_schedule_failed",
-            exc_info=True,
-            extra={
+        logger.exception(
+            "Delivery retried communication schedule failed",
+            module=LogModule.API,
+            action="communication.report.delivery_retried.schedule_failed",
+            metadata={
                 "communication_id": ctx.communication_id,
                 "parent_attempt_id": str(parent_log.pk),
             },
@@ -269,10 +272,11 @@ def schedule_report_portal_communication(
             request_id=request_id,
         )
     except Exception:
-        logger.warning(
-            "portal_communication_schedule_failed",
-            exc_info=True,
-            extra={"communication_id": ctx.communication_id},
+        logger.exception(
+            "Portal communication schedule failed",
+            module=LogModule.API,
+            action="communication.report.portal.schedule_failed",
+            metadata={"communication_id": ctx.communication_id},
         )
 
 
@@ -302,10 +306,11 @@ def schedule_communication_webhook_received(
             request_id=request_id,
         )
     except Exception:
-        logger.warning(
-            "communication_webhook_schedule_failed",
-            exc_info=True,
-            extra={
+        logger.exception(
+            "Communication webhook schedule failed",
+            module=LogModule.API,
+            action="communication.report.webhook.schedule_failed",
+            metadata={
                 "communication_id": communication_id,
                 "provider_reference": provider_reference,
             },

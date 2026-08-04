@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import uuid
 from datetime import datetime
 from typing import Any
@@ -13,8 +12,7 @@ from clinical_audit.domain.types import AuditRecordResult
 from clinical_audit.domain.validators import AuditRequestValidator
 from clinical_audit.enums import AuditAction, AuditOutcome, AuditSource, ClinicalEntity
 from clinical_audit.exceptions import ClinicalAuditError
-
-logger = logging.getLogger(__name__)
+from shared.logging import LogModule, logger
 
 
 class ClinicalAuditService:
@@ -99,26 +97,33 @@ class ClinicalAuditService:
                         audit_id=result.audit_id
                     )
                 except Exception:
-                    pass
+                    logger.warning(
+                        "Support trace schedule from clinical audit failed",
+                        module=LogModule.API,
+                        action="clinical_audit.support_trace.schedule_failed",
+                        metadata={"audit_id": str(result.audit_id)},
+                    )
             return result
         except ClinicalAuditError as exc:
-            logger.warning(
-                "clinical_audit_record_failed",
-                extra={
-                    "correlation_id": correlation_for_log or str(uuid.uuid4()),
+            correlation_for_log = correlation_for_log or str(uuid.uuid4())
+            logger.exception(
+                "Clinical audit record failed",
+                module=LogModule.API,
+                action="clinical_audit.record.failed",
+                metadata={
+                    "correlation_id": correlation_for_log,
                     "error_type": type(exc).__name__,
                     "error": str(exc),
                     "action": str(action),
                     "resource_type": str(resource_type),
                     "resource_id": str(resource_id),
                 },
-                exc_info=True,
             )
             if raise_on_failure:
                 raise
             return AuditRecordResult(
                 success=False,
-                correlation_id=correlation_for_log or str(uuid.uuid4()),
+                correlation_id=correlation_for_log,
                 error=str(exc),
                 error_type=type(exc).__name__,
             )

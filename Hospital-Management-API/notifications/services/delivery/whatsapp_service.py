@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import time
 import uuid
 
@@ -35,8 +34,8 @@ from notifications.services.delivery.whatsapp_template_renderer import (
     build_template_components,
     render_prescription_whatsapp_body,
 )
-
-logger = logging.getLogger(__name__)
+from shared.logging import LogModule, logger
+from shared.logging.context import get_context_manager
 
 _SUCCESS_STATUSES = {
     WhatsAppMessageStatus.SENT,
@@ -223,9 +222,16 @@ class WhatsAppService:
             is_deleted=False,
         )
         if message.status != WhatsAppMessageStatus.QUEUED:
-            logger.info("whatsapp_send_skip message_id=%s status=%s", message_id, message.status)
+            get_context_manager().update(whatsapp_message_id=str(message_id))
+            logger.info(
+                "WhatsApp send skipped — message not queued",
+                module=LogModule.WHATSAPP,
+                action="whatsapp.send.skipped",
+                metadata={"message_id": str(message_id), "status": str(message.status)},
+            )
             return message
 
+        get_context_manager().update(whatsapp_message_id=str(message.id))
         payload = message.request_payload or {}
         to = self._normalize_recipient_snapshot(message.recipient_mobile_number)
         if not to:
@@ -268,7 +274,12 @@ class WhatsAppService:
         except MetaWhatsAppError as exc:
             return self._mark_failed(message, code=exc.code, reason=exc.message, response=exc.payload)
         except Exception as exc:
-            logger.exception("whatsapp_send_unexpected message_id=%s", message_id)
+            logger.exception(
+                "WhatsApp send unexpected error",
+                module=LogModule.WHATSAPP,
+                action="whatsapp.send.unexpected_error",
+                metadata={"message_id": str(message_id)},
+            )
             return self._mark_failed(message, code="SEND_ERROR", reason=str(exc))
 
         meta_message_id = (result.get("meta_message_id") or "").strip()
@@ -338,9 +349,13 @@ class WhatsAppService:
         if existing:
             if existing.status in _SUCCESS_STATUSES and (existing.meta_message_id or "").strip():
                 logger.info(
-                    "recommendation.duplicate_skipped consultation_id=%s message_id=%s",
-                    consultation.id,
-                    existing.id,
+                    "Recommendation duplicate skipped",
+                    module=LogModule.WHATSAPP,
+                    action="whatsapp.recommendation.duplicate_skipped",
+                    metadata={
+                        "consultation_id": str(consultation.id),
+                        "message_id": str(existing.id),
+                    },
                 )
                 return existing
             if existing.status == WhatsAppMessageStatus.QUEUED:
@@ -358,9 +373,13 @@ class WhatsAppService:
         )
         if retry_message and existing.status == WhatsAppMessageStatus.FAILED:
             logger.info(
-                "recommendation.retry_queue consultation_id=%s message_id=%s",
-                consultation.id,
-                existing.id,
+                "Recommendation retry queued",
+                module=LogModule.WHATSAPP,
+                action="whatsapp.recommendation.retry_queue",
+                metadata={
+                    "consultation_id": str(consultation.id),
+                    "message_id": str(existing.id),
+                },
             )
             schedule_recommendation_business_retried(
                 consultation=consultation,
@@ -553,9 +572,10 @@ class WhatsAppService:
         ).get(pk=message_id, is_deleted=False)
         if message.status != WhatsAppMessageStatus.QUEUED:
             logger.info(
-                "recommendation_send_skip message_id=%s status=%s",
-                message_id,
-                message.status,
+                "Recommendation send skipped — message not queued",
+                module=LogModule.WHATSAPP,
+                action="whatsapp.recommendation.send_skipped",
+                metadata={"message_id": str(message_id), "status": str(message.status)},
             )
             return message
 
@@ -631,7 +651,12 @@ class WhatsAppService:
                 response=exc.payload,
             )
         except Exception as exc:
-            logger.exception("recommendation_send_unexpected message_id=%s", message_id)
+            logger.exception(
+                "Recommendation send unexpected error",
+                module=LogModule.WHATSAPP,
+                action="whatsapp.recommendation.send_unexpected_error",
+                metadata={"message_id": str(message_id)},
+            )
             return self._mark_recommendation_failed(
                 message,
                 code="SEND_ERROR",
@@ -674,18 +699,20 @@ class WhatsAppService:
         )
         execution_time_ms = int((time.monotonic() - started) * 1000)
         logger.info(
-            "recommendation.sent consultation_id=%s recommendation_available=%s laboratory_id=%s "
-            "branch_id=%s quoted_price=%s collection_mode=%s template_name=%s "
-            "whatsapp_message_id=%s execution_time=%s",
-            payload.get("consultation_id"),
-            variant == "available",
-            payload.get("laboratory_id"),
-            payload.get("branch_id"),
-            payload.get("quoted_price"),
-            payload.get("collection_mode"),
-            message.template_name,
-            message.id,
-            execution_time_ms,
+            "Recommendation sent",
+            module=LogModule.WHATSAPP,
+            action="whatsapp.recommendation.sent",
+            metadata={
+                "consultation_id": payload.get("consultation_id"),
+                "recommendation_available": variant == "available",
+                "laboratory_id": payload.get("laboratory_id"),
+                "branch_id": payload.get("branch_id"),
+                "quoted_price": payload.get("quoted_price"),
+                "collection_mode": payload.get("collection_mode"),
+                "template_name": message.template_name,
+                "whatsapp_message_id": str(message.id),
+                "execution_time_ms": execution_time_ms,
+            },
         )
         safe_emit(
             emit_prescription_whatsapp_audit_event,
@@ -967,18 +994,20 @@ class WhatsAppService:
         )
         payload = message.request_payload or {}
         logger.info(
-            "recommendation.failed consultation_id=%s recommendation_available=%s laboratory_id=%s "
-            "branch_id=%s quoted_price=%s collection_mode=%s template_name=%s "
-            "whatsapp_message_id=%s failure_reason=%s",
-            payload.get("consultation_id"),
-            (payload.get("variant") or "") == "available",
-            payload.get("laboratory_id"),
-            payload.get("branch_id"),
-            payload.get("quoted_price"),
-            payload.get("collection_mode"),
-            message.template_name,
-            message.id,
-            reason,
+            "Recommendation failed",
+            module=LogModule.WHATSAPP,
+            action="whatsapp.recommendation.failed",
+            metadata={
+                "consultation_id": payload.get("consultation_id"),
+                "recommendation_available": (payload.get("variant") or "") == "available",
+                "laboratory_id": payload.get("laboratory_id"),
+                "branch_id": payload.get("branch_id"),
+                "quoted_price": payload.get("quoted_price"),
+                "collection_mode": payload.get("collection_mode"),
+                "template_name": message.template_name,
+                "whatsapp_message_id": str(message.id),
+                "failure_reason": reason,
+            },
         )
         safe_emit(
             emit_prescription_whatsapp_audit_event,
@@ -1097,10 +1126,14 @@ class WhatsAppService:
             ]
         )
         logger.info(
-            "whatsapp_message_requeued message_id=%s consultation_id=%s prescription_id=%s",
-            message.id,
-            consultation.id,
-            prescription.id if prescription is not None else None,
+            "WhatsApp message requeued",
+            module=LogModule.WHATSAPP,
+            action="whatsapp.message.requeued",
+            metadata={
+                "message_id": str(message.id),
+                "consultation_id": str(consultation.id),
+                "prescription_id": str(prescription.id) if prescription is not None else None,
+            },
         )
         return message
 

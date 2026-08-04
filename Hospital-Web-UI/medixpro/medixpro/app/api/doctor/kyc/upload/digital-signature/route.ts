@@ -1,6 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { serverLogger } from "@/lib/serverLogger"
 
 const DJANGO_API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+const ROUTE = "doctor/kyc/upload/digital-signature"
 
 export async function PATCH(request: NextRequest) {
   
@@ -25,7 +27,7 @@ export async function PATCH(request: NextRequest) {
         }
       }
     } catch (formDataError: any) {
-      console.error("[Next.js Route] Error parsing FormData:", formDataError)
+      serverLogger.error("Error parsing FormData", formDataError, { route: ROUTE })
       return NextResponse.json(
         { 
           message: "Failed to parse FormData", 
@@ -39,7 +41,7 @@ export async function PATCH(request: NextRequest) {
     // Check if digital_signature file is present
     const digitalSignatureFile = formData.get("digital_signature")
     if (!digitalSignatureFile) {
-      console.error("[Next.js Route] No digital_signature file in FormData")
+      serverLogger.error("No digital_signature file in FormData", undefined, { route: ROUTE })
       return NextResponse.json(
         { 
           message: "No file provided", 
@@ -50,7 +52,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     if (!(digitalSignatureFile instanceof File)) {
-      console.error("[Next.js Route] digital_signature is not a File object")
+      serverLogger.error("digital_signature is not a File object", undefined, { route: ROUTE })
       return NextResponse.json(
         { 
           message: "Invalid file", 
@@ -85,14 +87,17 @@ export async function PATCH(request: NextRequest) {
     }
 
     if (!response.ok) {
-      console.error("[Next.js Route] Django returned error:", data)
+      serverLogger.error("Django returned error for digital signature upload", undefined, {
+        route: ROUTE,
+        status: response.status,
+        detail: typeof data?.detail === "string" ? data.detail : typeof data?.message === "string" ? data.message : undefined,
+      })
       return NextResponse.json(data, { status: response.status })
     }
 
     return NextResponse.json(data)
   } catch (error: any) {
-    console.error("[Next.js Route] Error in PATCH digital signature upload:", error)
-    console.error("[Next.js Route] Error stack:", error.stack)
+    serverLogger.error("Error in PATCH digital signature upload", error, { route: ROUTE })
     return NextResponse.json(
       { 
         message: "Failed to upload digital signature", 

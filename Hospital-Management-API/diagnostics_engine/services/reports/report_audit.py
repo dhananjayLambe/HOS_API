@@ -3,11 +3,8 @@
 from __future__ import annotations
 
 import json
-import logging
 
 from consultations_core.models.audit import AuditSource, ClinicalAuditLog
-
-logger = logging.getLogger(__name__)
 
 _AUDIT_SOURCE = AuditSource.SYSTEM
 

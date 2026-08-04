@@ -4,6 +4,7 @@ from business_audit.booking.hooks import schedule_booking_business_closed
 from diagnostics_engine.domain.reports import get_active_report_for_line
 from diagnostics_engine.models.orders import DiagnosticOrder
 from diagnostics_engine.models.choices import OrderStatus, OrderTestLineStatus, ReportLifecycleStatus
+from shared.logging import LogModule, logger
 
 
 class OrderStatusAggregationService:
@@ -76,4 +77,13 @@ class OrderStatusAggregationService:
             if target == OrderStatus.COMPLETED:
                 schedule_booking_business_closed(order=order)
         except Exception:
-            pass
+            logger.warning(
+                "Order status transition failed; continuing without blocking aggregation",
+                module=LogModule.LABORATORY,
+                action="diagnostics.order.status_transition_failed",
+                metadata={
+                    "order_id": str(order.pk),
+                    "target_status": target,
+                    "current_status": order.status,
+                },
+            )

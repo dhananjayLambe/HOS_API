@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from consultations_core.audit.commit import emit_after_commit
@@ -12,8 +11,7 @@ from clinical_documentation.audit.clinical_documentation_audit_service import (
 )
 from clinical_documentation.audit.payload_builder import ClinicalDocumentationPayloadBuilder
 from clinical_documentation.audit.section_diff import diff_allergy_section, vitals_payloads_equal
-
-logger = logging.getLogger(__name__)
+from shared.logging import LogModule, logger
 
 
 def schedule_diagnosis_audit(
@@ -50,9 +48,10 @@ def schedule_diagnosis_audit(
         )
     except Exception:
         logger.warning(
-            "clinical_documentation_diagnosis_audit_schedule_failed",
-            exc_info=True,
-            extra={"diagnosis_id": str(getattr(diagnosis_row, "id", ""))},
+            "Clinical documentation diagnosis audit schedule failed",
+            module=LogModule.CONSULTATION,
+            action="clinical_documentation.audit.diagnosis_schedule_failed",
+            metadata={"diagnosis_id": str(getattr(diagnosis_row, "id", ""))},
         )
 
 
@@ -77,9 +76,10 @@ def schedule_symptom_audit(
         )
     except Exception:
         logger.warning(
-            "clinical_documentation_symptom_audit_schedule_failed",
-            exc_info=True,
-            extra={"symptom_id": str(getattr(symptom_row, "id", ""))},
+            "Clinical documentation symptom audit schedule failed",
+            module=LogModule.CONSULTATION,
+            action="clinical_documentation.audit.symptom_schedule_failed",
+            metadata={"symptom_id": str(getattr(symptom_row, "id", ""))},
         )
 
 
@@ -118,9 +118,10 @@ def schedule_allergy_audits(
             )
     except Exception:
         logger.warning(
-            "clinical_documentation_allergy_audit_schedule_failed",
-            exc_info=True,
-            extra={"section_id": str(getattr(section_obj, "id", ""))},
+            "Clinical documentation allergy audit schedule failed",
+            module=LogModule.CONSULTATION,
+            action="clinical_documentation.audit.allergy_schedule_failed",
+            metadata={"section_id": str(getattr(section_obj, "id", ""))},
         )
 
 
@@ -147,7 +148,8 @@ def schedule_vitals_audit(
             )
     except Exception:
         logger.warning(
-            "clinical_documentation_vitals_audit_schedule_failed",
-            exc_info=True,
-            extra={"section_id": str(getattr(section_obj, "id", ""))},
+            "Clinical documentation vitals audit schedule failed",
+            module=LogModule.CONSULTATION,
+            action="clinical_documentation.audit.vitals_schedule_failed",
+            metadata={"section_id": str(getattr(section_obj, "id", ""))},
         )

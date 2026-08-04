@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 
 from django.db import IntegrityError
 
 from diagnostics_engine.models.catalog import DiagnosticCategory, DiagnosticServiceMaster
+from shared.logging import LogModule, logger
 from diagnostics_engine.services.catalog_import.exceptions import StrictImportError
 from diagnostics_engine.services.catalog_import.import_stats import ImportRunResult
 from diagnostics_engine.services.catalog_import.utils import (
@@ -16,8 +16,6 @@ from diagnostics_engine.services.catalog_import.utils import (
     parse_positive_int,
 )
 from diagnostics_engine.services.catalog_import.validators import duplicate_natural_keys, require_columns
-
-logger = logging.getLogger(__name__)
 
 SERVICE_REQUIRED = (
     "ordering",
@@ -35,7 +33,12 @@ SERVICE_REQUIRED = (
 def _row_err(result: ImportRunResult, msg: str, *, strict: bool) -> None:
     result.errors.append(msg)
     result.stats.failed += 1
-    logger.warning(msg)
+    logger.warning(
+        msg,
+        module=LogModule.LABORATORY,
+        action="diagnostics.catalog_import.row_error",
+        metadata={"message": msg},
+    )
     if strict:
         raise StrictImportError(msg)
 
@@ -158,7 +161,12 @@ def sync_services_from_file(
                 _row_err(result, f"{row.ref()}: {exc}", strict=strict)
                 continue
             result.stats.updated += 1
-            logger.info("Updated service %s", code)
+            logger.info(
+                "Updated diagnostic service",
+                module=LogModule.LABORATORY,
+                action="diagnostics.catalog_import.service_updated",
+                metadata={"code": code},
+            )
             continue
 
         svc = DiagnosticServiceMaster(
@@ -177,7 +185,12 @@ def sync_services_from_file(
             _row_err(result, f"{row.ref()}: {exc}", strict=strict)
             continue
         result.stats.created += 1
-        logger.info("Created service %s", code)
+        logger.info(
+            "Created diagnostic service",
+            module=LogModule.LABORATORY,
+            action="diagnostics.catalog_import.service_created",
+            metadata={"code": code},
+        )
 
     return result
 
@@ -204,7 +217,12 @@ def sync_services(
 
     category_by_code = {c.code: c for c in DiagnosticCategory.objects.filter(deleted_at__isnull=True)}
     for path in files:
-        logger.info("Importing services from %s", path)
+        logger.info(
+            "Importing diagnostic services",
+            module=LogModule.LABORATORY,
+            action="diagnostics.catalog_import.services_started",
+            metadata={"path": str(path)},
+        )
         part = sync_services_from_file(
             path,
             category_by_code=category_by_code,

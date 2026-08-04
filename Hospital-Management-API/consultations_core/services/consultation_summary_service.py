@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-import logging
 import re
 from typing import Any, Iterable
 
@@ -19,8 +18,7 @@ from consultations_core.models.investigation import InvestigationItem
 from consultations_core.models.prescription import Prescription
 from consultations_core.models.prescription import PrescriptionLine
 from consultations_core.models.symptoms import ConsultationSymptom
-
-logger = logging.getLogger(__name__)
+from shared.logging import LogModule, logger
 
 FULL_SECTIONS = (
     "symptoms",
@@ -79,7 +77,12 @@ def attach_whatsapp_delivery_status(summary: dict[str, Any], consultation_id) ->
 
         whatsapp = get_consultation_delivery_whatsapp_status(consultation_id)
     except Exception:
-        logger.exception("whatsapp_status_attach_failed consultation_id=%s", consultation_id)
+        logger.exception(
+            f"whatsapp_status_attach_failed consultation_id={consultation_id}",
+            module=LogModule.CONSULTATION,
+            action="consultation.summary.whatsapp_status_attach_failed",
+            metadata={"consultation_id": str(consultation_id)},
+        )
         return summary
 
     payload = dict(summary)
@@ -319,7 +322,12 @@ def _build_prescription_header(consultation: Consultation) -> dict[str, Any]:
         if whatsapp:
             header["whatsapp"] = whatsapp
     except Exception:
-        logger.exception("whatsapp_status_header_failed consultation_id=%s", consultation.id)
+        logger.exception(
+            f"whatsapp_status_header_failed consultation_id={consultation.id}",
+            module=LogModule.CONSULTATION,
+            action="consultation.summary.whatsapp_status_header_failed",
+            metadata={"consultation_id": str(consultation.id)},
+        )
     return header
 
 
@@ -561,10 +569,13 @@ def _build_follow_up(consultation: Consultation) -> dict[str, Any]:
         follow_up_type = _follow_up_type_to_contract(follow_up.follow_up_type)
         if fallback_date and date_value and fallback_date != date_value:
             logger.warning(
-                "Consultation %s follow-up date mismatch: follow_up=%s consultation=%s",
-                consultation.id,
-                date_value,
-                fallback_date,
+                (
+                    f"Consultation {consultation.id} follow-up date mismatch: "
+                    f"follow_up={date_value} consultation={fallback_date}"
+                ),
+                module=LogModule.CONSULTATION,
+                action="consultation.follow_up.date_mismatch",
+                metadata={"consultation_id": str(consultation.id)},
             )
     else:
         date_value = fallback_date

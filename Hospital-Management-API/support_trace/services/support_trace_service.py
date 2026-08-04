@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
@@ -16,8 +15,6 @@ from support_trace.domain.types import SupportTraceResult
 from support_trace.domain.validators import SupportTraceRequestValidator
 from support_trace.enums import SyncStatus, TERMINAL_TRACE_STATUSES, TraceSource, TraceStatus, WorkflowHealth
 from support_trace.exceptions import SupportTraceConcurrencyError, SupportTraceError
-
-logger = logging.getLogger(__name__)
 
 
 class SupportTraceService(BaseAuditService):

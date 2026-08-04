@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 from uuid import UUID
 
 from consultations_core.audit.commit import emit_after_commit
+from shared.logging import LogModule, logger
 from support_trace.domain.sync_event import SupportTraceSyncEvent
 from support_trace.services.projection_engine import ProjectionEngine
-
-logger = logging.getLogger(__name__)
 
 
 def _project_business_audit(audit_id: str, **_kwargs: Any) -> None:
@@ -23,10 +21,11 @@ def _project_business_audit(audit_id: str, **_kwargs: Any) -> None:
         event = SupportTraceSyncEvent.from_business_audit(audit)
         ProjectionEngine.project(event, raise_on_failure=False)
     except Exception:
-        logger.warning(
-            "support_trace_sync_from_business_audit_failed",
-            extra={"audit_id": str(audit_id)},
-            exc_info=True,
+        logger.exception(
+            "Support trace sync from business audit failed",
+            module=LogModule.MONITORING,
+            action="support_trace.sync.business_audit_failed",
+            metadata={"audit_id": str(audit_id)},
         )
 
 
@@ -40,10 +39,11 @@ def _project_clinical_audit(audit_id: str, **_kwargs: Any) -> None:
         event = SupportTraceSyncEvent.from_clinical_audit(audit)
         ProjectionEngine.project(event, raise_on_failure=False)
     except Exception:
-        logger.warning(
-            "support_trace_sync_from_clinical_audit_failed",
-            extra={"audit_id": str(audit_id)},
-            exc_info=True,
+        logger.exception(
+            "Support trace sync from clinical audit failed",
+            module=LogModule.MONITORING,
+            action="support_trace.sync.clinical_audit_failed",
+            metadata={"audit_id": str(audit_id)},
         )
 
 
@@ -55,10 +55,11 @@ def schedule_workflow_state_update_from_business_audit(
     try:
         emit_after_commit(_project_business_audit, str(audit_id))
     except Exception:
-        logger.warning(
-            "support_trace_schedule_business_failed",
-            extra={"audit_id": str(audit_id)},
-            exc_info=True,
+        logger.exception(
+            "Support trace schedule from business audit failed",
+            module=LogModule.MONITORING,
+            action="support_trace.schedule.business_audit_failed",
+            metadata={"audit_id": str(audit_id)},
         )
 
 
@@ -70,10 +71,11 @@ def schedule_workflow_state_update_from_clinical_audit(
     try:
         emit_after_commit(_project_clinical_audit, str(audit_id))
     except Exception:
-        logger.warning(
-            "support_trace_schedule_clinical_failed",
-            extra={"audit_id": str(audit_id)},
-            exc_info=True,
+        logger.exception(
+            "Support trace schedule from clinical audit failed",
+            module=LogModule.MONITORING,
+            action="support_trace.schedule.clinical_audit_failed",
+            metadata={"audit_id": str(audit_id)},
         )
 
 

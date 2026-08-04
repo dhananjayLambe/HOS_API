@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import logging
-
 from business_audit.domain.context import apply_workflow_context
 from business_audit.recommendation.constants import (
     SOURCE_PATH_MARKETPLACE_API,
@@ -13,8 +11,7 @@ from business_audit.recommendation.recommendation_audit_service import (
     RecommendationAuditService,
 )
 from consultations_core.audit.commit import emit_after_commit
-
-logger = logging.getLogger(__name__)
+from shared.logging import LogModule, logger
 
 
 def _apply_recommendation_workflow(recommendation_id) -> None:
@@ -44,10 +41,11 @@ def schedule_recommendation_business_generated(
             request_id=request_id,
         )
     except Exception:
-        logger.warning(
-            "recommendation_business_generated_schedule_failed",
-            exc_info=True,
-            extra={"recommendation_id": str(recommendation_id)},
+        logger.exception(
+            "Recommendation business generated schedule failed",
+            module=LogModule.API,
+            action="recommendation.business.generated.schedule_failed",
+            metadata={"recommendation_id": str(recommendation_id)},
         )
 
 
@@ -66,10 +64,11 @@ def schedule_recommendation_business_queued(
             whatsapp_message=whatsapp_message,
         )
     except Exception:
-        logger.warning(
-            "recommendation_business_queued_schedule_failed",
-            exc_info=True,
-            extra={"recommendation_id": str(recommendation_id)},
+        logger.exception(
+            "Recommendation business queued schedule failed",
+            module=LogModule.API,
+            action="recommendation.business.queued.schedule_failed",
+            metadata={"recommendation_id": str(recommendation_id)},
         )
 
 
@@ -92,10 +91,11 @@ def schedule_recommendation_business_sent(
             execution_time_ms=execution_time_ms,
         )
     except Exception:
-        logger.warning(
-            "recommendation_business_sent_schedule_failed",
-            exc_info=True,
-            extra={"recommendation_id": str(recommendation_id)},
+        logger.exception(
+            "Recommendation business sent schedule failed",
+            module=LogModule.API,
+            action="recommendation.business.sent.schedule_failed",
+            metadata={"recommendation_id": str(recommendation_id)},
         )
 
 
@@ -116,10 +116,11 @@ def schedule_recommendation_business_delivered(
             meta_message_id=meta_message_id,
         )
     except Exception:
-        logger.warning(
-            "recommendation_business_delivered_schedule_failed",
-            exc_info=True,
-            extra={"recommendation_id": str(recommendation_id)},
+        logger.exception(
+            "Recommendation business delivered schedule failed",
+            module=LogModule.API,
+            action="recommendation.business.delivered.schedule_failed",
+            metadata={"recommendation_id": str(recommendation_id)},
         )
 
 
@@ -140,10 +141,11 @@ def schedule_recommendation_business_read(
             meta_message_id=meta_message_id,
         )
     except Exception:
-        logger.warning(
-            "recommendation_business_read_schedule_failed",
-            exc_info=True,
-            extra={"recommendation_id": str(recommendation_id)},
+        logger.exception(
+            "Recommendation business read schedule failed",
+            module=LogModule.API,
+            action="recommendation.business.read.schedule_failed",
+            metadata={"recommendation_id": str(recommendation_id)},
         )
 
 
@@ -173,10 +175,11 @@ def schedule_recommendation_business_failed(
             kwargs["actor_type"] = actor_type
         emit_after_commit(RecommendationAuditService.emit_failed, **kwargs)
     except Exception:
-        logger.warning(
-            "recommendation_business_failed_schedule_failed",
-            exc_info=True,
-            extra={"recommendation_id": str(recommendation_id)},
+        logger.exception(
+            "Recommendation business failed schedule failed",
+            module=LogModule.API,
+            action="recommendation.business.failed.schedule_failed",
+            metadata={"recommendation_id": str(recommendation_id)},
         )
 
 
@@ -205,10 +208,11 @@ def schedule_recommendation_business_retried(
             max_retry=max_retry,
         )
     except Exception:
-        logger.warning(
-            "recommendation_business_retried_schedule_failed",
-            exc_info=True,
-            extra={"recommendation_id": str(recommendation_id)},
+        logger.exception(
+            "Recommendation business retried schedule failed",
+            module=LogModule.API,
+            action="recommendation.business.retried.schedule_failed",
+            metadata={"recommendation_id": str(recommendation_id)},
         )
 
 
@@ -231,8 +235,9 @@ def schedule_recommendation_business_expired(
             message_status=message_status,
         )
     except Exception:
-        logger.warning(
-            "recommendation_business_expired_schedule_failed",
-            exc_info=True,
-            extra={"recommendation_id": str(recommendation_id)},
+        logger.exception(
+            "Recommendation business expired schedule failed",
+            module=LogModule.API,
+            action="recommendation.business.expired.schedule_failed",
+            metadata={"recommendation_id": str(recommendation_id)},
         )

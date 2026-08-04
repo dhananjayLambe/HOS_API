@@ -1,5 +1,4 @@
 import calendar
-import logging
 from zoneinfo import ZoneInfo
 
 from django.conf import settings
@@ -68,8 +67,9 @@ from queue_management.services.queue_service import (
     add_to_queue,
 )
 from doctor.models import DoctorLeave, doctor
+from shared.logging import LogModule, logger
+from shared.logging.context import get_context_manager
 
-logger = logging.getLogger(__name__)
 IST = ZoneInfo("Asia/Kolkata")
 CACHE_TIMEOUT = 300
 
@@ -191,12 +191,16 @@ class AppointmentListView(generics.ListCreateAPIView):
         tab = request.query_params.get("tab") or "today"
         section = request.query_params.get("section")
         logger.info(
-            "appointment_list section=%s tab=%s doctor_id=%s clinic_id=%s user_id=%s",
-            section,
-            tab,
-            request.query_params.get("doctor_id"),
-            request.query_params.get("clinic_id"),
-            getattr(request.user, "id", None),
+            "Appointment list requested",
+            module=LogModule.BOOKING,
+            action="appointments.list.requested",
+            metadata={
+                "section": section,
+                "tab": tab,
+                "doctor_id": request.query_params.get("doctor_id"),
+                "clinic_id": request.query_params.get("clinic_id"),
+                "user_id": str(getattr(request.user, "id", None)),
+            },
         )
         return super().list(request, *args, **kwargs)
 
@@ -208,12 +212,17 @@ class AppointmentListView(generics.ListCreateAPIView):
         appointment = Appointment.objects.select_related(
             "patient_profile", "doctor__user"
         ).get(pk=appointment.pk)
+        get_context_manager().update(booking_id=str(appointment.id))
         logger.info(
-            "appointment_created appointment_id=%s doctor_id=%s clinic_id=%s patient_account_id=%s",
-            appointment.id,
-            appointment.doctor_id,
-            appointment.clinic_id,
-            appointment.patient_account_id,
+            "Appointment created",
+            module=LogModule.BOOKING,
+            action="appointments.created",
+            metadata={
+                "appointment_id": str(appointment.id),
+                "doctor_id": str(appointment.doctor_id),
+                "clinic_id": str(appointment.clinic_id),
+                "patient_account_id": str(appointment.patient_account_id),
+            },
         )
         body = AppointmentCreatedResponseSerializer().to_representation(appointment)
         return Response(body, status=status.HTTP_201_CREATED)
@@ -292,7 +301,12 @@ class AppointmentCancelView(APIView):
         try:
             appointment = self._get_scoped_appointment(request, pk)
         except Appointment.DoesNotExist:
-            logger.warning("Cancel: appointment not found or out of scope pk=%s", pk)
+            logger.warning(
+                "Cancel appointment not found or out of scope",
+                module=LogModule.BOOKING,
+                action="appointments.cancel.not_found",
+                metadata={"appointment_id": str(pk)},
+            )
             return self._error_all(
                 "NOT_FOUND",
                 "Appointment not found.",
@@ -338,7 +352,12 @@ class AppointmentCancelView(APIView):
             changed_by=request.user,
             comment=cancel_reason or "Cancelled",
         )
-        logger.info("Appointment cancelled: id=%s, user=%s", appointment.id, request.user.id)
+        logger.info(
+            "Appointment cancelled",
+            module=LogModule.BOOKING,
+            action="appointments.cancelled",
+            metadata={"appointment_id": str(appointment.id), "user_id": str(request.user.id)},
+        )
 
         return Response(
             {
@@ -399,7 +418,12 @@ class AppointmentCheckInView(APIView):
         try:
             appointment = self._get_scoped_appointment(request, pk)
         except Appointment.DoesNotExist:
-            logger.warning("Check-in: appointment not found or out of scope pk=%s", pk)
+            logger.warning(
+                "Check-in appointment not found or out of scope",
+                module=LogModule.BOOKING,
+                action="appointments.check_in.not_found",
+                metadata={"appointment_id": str(pk)},
+            )
             return self._error_all(
                 "NOT_FOUND",
                 "Appointment not found.",
@@ -416,11 +440,15 @@ class AppointmentCheckInView(APIView):
         # Helpdesk may check in early (appointment scheduled for a future date).
         if appointment.appointment_date > today:
             logger.info(
-                "Check-in early arrival appointment_id=%s scheduled_date=%s today=%s user_id=%s",
-                appointment.id,
-                appointment.appointment_date,
-                today,
-                getattr(request.user, "id", None),
+                "Check-in early arrival",
+                module=LogModule.BOOKING,
+                action="appointments.check_in.early_arrival",
+                metadata={
+                    "appointment_id": str(appointment.id),
+                    "scheduled_date": str(appointment.appointment_date),
+                    "today": str(today),
+                    "user_id": str(getattr(request.user, "id", None)),
+                },
             )
 
         if appointment.status not in ("scheduled", "checked_in"):
@@ -502,11 +530,15 @@ class AppointmentCheckInView(APIView):
         )
 
         logger.info(
-            "Appointment checked-in: id=%s, encounter=%s, clinic=%s, user=%s",
-            appointment.id,
-            encounter.id,
-            appointment.clinic_id,
-            request.user.id,
+            "Appointment checked in",
+            module=LogModule.BOOKING,
+            action="appointments.checked_in",
+            metadata={
+                "appointment_id": str(appointment.id),
+                "encounter_id": str(encounter.id),
+                "clinic_id": str(appointment.clinic_id),
+                "user_id": str(request.user.id),
+            },
         )
 
         try:
@@ -562,7 +594,12 @@ class AppointmentRescheduleView(APIView):
         try:
             appointment = self._get_reschedule_appointment(request, pk)
         except Appointment.DoesNotExist:
-            logger.warning("Reschedule: appointment not found or out of scope pk=%s", pk)
+            logger.warning(
+                "Reschedule appointment not found or out of scope",
+                module=LogModule.BOOKING,
+                action="appointments.reschedule.not_found",
+                metadata={"appointment_id": str(pk)},
+            )
             return Response(
                 {"detail": "Not found."},
                 status=status.HTTP_404_NOT_FOUND,
@@ -968,13 +1005,23 @@ class AppointmentSlotView(APIView):
                 },
             }
 
-            logger.info("Slot availability fetched for doctor %s at clinic %s on %s", doctor_id, clinic_id, date_str)
+            logger.info(
+                "Slot availability fetched",
+                module=LogModule.BOOKING,
+                action="appointments.slots.fetched",
+                metadata={"doctor_id": str(doctor_id), "clinic_id": str(clinic_id), "date": date_str},
+            )
             return Response(
                 {"status": "success", "message": "Slot availability retrieved successfully.", "data": response_data},
                 status=status.HTTP_200_OK,
             )
         except Exception as exc:
-            logger.exception("Slot API error: %s", str(exc))
+            logger.exception(
+                "Slot availability API error",
+                module=LogModule.BOOKING,
+                action="appointments.slots.failed",
+                exc=exc,
+            )
             return Response(
                 {"status": "error", "message": "Internal Server Error", "data": None},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,

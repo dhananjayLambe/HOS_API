@@ -1,12 +1,9 @@
 # consultations_core/api/serializers/findings.py
-import logging
-
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
 from consultations_core.models.findings import ConsultationFinding, CustomFinding, FindingMaster
-
-logger = logging.getLogger(__name__)
+from shared.logging import LogModule, logger
 
 
 class ConsultationFindingSerializer(serializers.ModelSerializer):
@@ -67,7 +64,11 @@ class CreateConsultationFindingSerializer(serializers.Serializer):
 
         if has_master == has_custom:
             err = "Provide exactly one of: (finding_id or finding_code) OR custom_name."
-            logger.warning("CreateConsultationFindingSerializer: %s attrs=%s", err, attrs)
+            logger.warning(
+                f"CreateConsultationFindingSerializer: {err} attrs={attrs}",
+                module=LogModule.CONSULTATION,
+                action="consultation.findings.validation_failed",
+            )
             raise serializers.ValidationError(err)
 
         if has_master and fid is not None and fcode:
@@ -103,9 +104,10 @@ def apply_patch_to_instance(instance: ConsultationFinding, data: dict, *, user):
         instance.save()
     except DjangoValidationError as e:
         logger.warning(
-            "ConsultationFinding save failed id=%s: %s",
-            instance.pk,
-            getattr(e, "messages", str(e)),
+            f"ConsultationFinding save failed id={instance.pk}: {getattr(e, 'messages', str(e))}",
+            module=LogModule.CONSULTATION,
+            action="consultation.findings.save_failed",
+            metadata={"finding_id": str(instance.pk)},
         )
         raise serializers.ValidationError(
             getattr(e, "message_dict", None)

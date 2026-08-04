@@ -22,11 +22,7 @@ export class APIError extends Error {
 async function apiRequest<T>(endpoint: string, options: AxiosRequestConfig = {}): Promise<T> {
   // If sending FormData, remove Content-Type header to let axios/browser set it automatically
   const isFormDataBody = typeof FormData !== "undefined" && options.data instanceof FormData
-  
-  // Log request details for digital signature uploads
-  if (endpoint.includes("digital-signature")) {
-  }
-  
+
   // Prepare headers
   const headers: Record<string, any> = {}
   
@@ -47,9 +43,6 @@ async function apiRequest<T>(endpoint: string, options: AxiosRequestConfig = {})
     delete headers["content-type"]
   }
 
-  if (endpoint.includes("digital-signature")) {
-  }
-
   try {
     const config: AxiosRequestConfig = {
       url: endpoint,
@@ -62,13 +55,7 @@ async function apiRequest<T>(endpoint: string, options: AxiosRequestConfig = {})
       config.transformRequest = [(data) => data] // Don't transform FormData
     }
     
-    if (endpoint.includes("digital-signature")) {
-    }
-    
     const response = await axiosClient(config)
-
-    if (endpoint.includes("digital-signature")) {
-    }
 
     return response.data
   } catch (error: any) {

@@ -18,7 +18,6 @@ Usage:
 
 from __future__ import annotations
 
-import logging
 from datetime import timedelta
 
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -26,6 +25,7 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.db.models import Count, Exists, OuterRef, Q
 from django.utils import timezone
+from shared.logging import LogModule, logger
 
 from consultations_core.domain.preconsultation_clinical import preconsultation_is_clinically_empty
 from consultations_core.models.consultation import Consultation
@@ -34,7 +34,6 @@ from consultations_core.models.investigation import ConsultationInvestigations, 
 from consultations_core.models.pre_consultation import PreConsultation
 from consultations_core.services.encounter_state_machine import EncounterStateMachine
 
-logger = logging.getLogger(__name__)
 
 TERMINAL_STRANDED = ("cancelled", "no_show")
 
@@ -456,7 +455,12 @@ class Command(BaseCommand):
                     row.delete()
                     removed += 1
             except Exception as exc:
-                logger.exception("remove_orphan_consultations stranded failed consultation_id=%s", c.pk)
+                logger.exception(
+                f"remove_orphan_consultations stranded failed consultation_id={c.pk}",
+                module=LogModule.CONSULTATION,
+                action="consultation.maintenance.stranded_failed",
+                metadata={"consultation_id": str(c.pk)},
+            )
                 self.stderr.write(self.style.ERROR(f"stranded skip consultation={c.pk}: {exc}"))
                 skipped += 1
         return removed, skipped
@@ -495,7 +499,12 @@ class Command(BaseCommand):
                     Consultation.objects.filter(pk=locked.pk).delete()
                     removed += 1
             except Exception as exc:
-                logger.exception("remove_orphan_consultations empty-draft failed consultation_id=%s", c.pk)
+                logger.exception(
+                f"remove_orphan_consultations empty-draft failed consultation_id={c.pk}",
+                module=LogModule.CONSULTATION,
+                action="consultation.maintenance.empty_draft_failed",
+                metadata={"consultation_id": str(c.pk)},
+            )
                 self.stderr.write(self.style.ERROR(f"empty-draft skip consultation={c.pk}: {exc}"))
                 skipped += 1
         return removed, skipped
@@ -525,7 +534,12 @@ class Command(BaseCommand):
                     PreConsultation.objects.filter(encounter_id=locked.pk).delete()
                     removed += 1
             except Exception as exc:
-                logger.exception("remove_orphan_consultations empty-pre-phase failed encounter_id=%s", enc.pk)
+                logger.exception(
+                f"remove_orphan_consultations empty-pre-phase failed encounter_id={enc.pk}",
+                module=LogModule.CONSULTATION,
+                action="consultation.maintenance.empty_pre_phase_failed",
+                metadata={"encounter_id": str(enc.pk)},
+            )
                 self.stderr.write(self.style.ERROR(f"empty-pre-phase skip encounter={enc.pk}: {exc}"))
                 skipped += 1
         return removed, skipped
@@ -552,7 +566,10 @@ class Command(BaseCommand):
                     removed += 1
             except Exception as exc:
                 logger.exception(
-                    "remove_orphan_consultations cancelled-empty-pre failed encounter_id=%s", enc.pk
+                    f"remove_orphan_consultations cancelled-empty-pre failed encounter_id={enc.pk}",
+                    module=LogModule.CONSULTATION,
+                    action="consultation.maintenance.cancelled_empty_pre_failed",
+                    metadata={"encounter_id": str(enc.pk)},
                 )
                 self.stderr.write(
                     self.style.ERROR(f"cancelled-empty-pre skip encounter={enc.pk}: {exc}")

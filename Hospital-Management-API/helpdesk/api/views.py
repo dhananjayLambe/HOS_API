@@ -10,11 +10,9 @@ from .services import (
     list_helpdesk_users,
     remove_helpdesk_user
 )
-import logging
 
 from django.core.exceptions import ValidationError
-
-logger = logging.getLogger(__name__)
+from shared.logging import LogModule, logger
 
 
 class CreateHelpdeskAPIView(APIView):
@@ -44,7 +42,11 @@ class CreateHelpdeskAPIView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
             except Exception:
-                logger.exception("CreateHelpdeskAPIView failed")
+                logger.exception(
+                    "Create helpdesk user failed",
+                    module=LogModule.API,
+                    action="helpdesk.user.create_failed",
+                )
                 return Response(
                     {"error": "Something went wrong"},
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR,

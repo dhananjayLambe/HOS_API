@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from clinical_audit.domain.repository import ClinicalAuditRepository
@@ -14,9 +13,6 @@ from clinical_audit.services import ClinicalAuditService
 from diagnostics_engine.audit.constants import SERVICE_NAME, SOURCE_TO_AUDIT_SOURCE
 from diagnostics_engine.audit.report_payload_builder import ReportPayloadBuilder
 from diagnostics_engine.audit.test_payload_builder import TestPayloadBuilder
-
-logger = logging.getLogger(__name__)
-
 
 class DiagnosticAuditService:
     """Translate diagnostic test/report events into ClinicalAuditService.record() calls."""

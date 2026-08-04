@@ -1,10 +1,8 @@
-import logging
 from django.core.exceptions import ObjectDoesNotExist
 
 from rest_framework import serializers
 from queue_management.models import Queue
-
-logger = logging.getLogger(__name__)
+from shared.logging import LogModule, logger
 
 
 class QueueSerializer(serializers.ModelSerializer):
@@ -127,8 +125,10 @@ class HelpdeskQueueRowSerializer(serializers.ModelSerializer):
         eid = getattr(obj, "encounter_id", None)
         if not eid:
             logger.warning(
-                "HelpdeskQueueRowSerializer: queue row %s has no encounter_id; visit_id will be null.",
-                getattr(obj, "pk", obj),
+                "Queue row missing encounter_id; visit_id will be null",
+                module=LogModule.BOOKING,
+                action="queue.serializer.missing_encounter_id",
+                metadata={"queue_id": str(getattr(obj, "pk", obj))},
             )
             return None
         return str(eid)

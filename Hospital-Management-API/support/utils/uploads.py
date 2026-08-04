@@ -1,9 +1,9 @@
 import os
 import uuid
-import logging
+
 from django.utils import timezone
 
-logger = logging.getLogger(__name__)
+from shared.logging import LogModule, logger
 
 
 def support_ticket_upload_path(instance, filename):
@@ -38,15 +38,20 @@ def support_ticket_upload_path(instance, filename):
         )
 
         logger.info(
-            f"Support ticket attachment path generated: {upload_path}"
+            "Support ticket attachment path generated",
+            module=LogModule.STORAGE,
+            action="support.upload.path_generated",
+            metadata={"ticket_id": str(ticket.id)},
         )
 
         return upload_path
 
-    except Exception as e:
-        logger.error(
-            f"Error generating support ticket upload path: {str(e)}",
-            exc_info=True
+    except Exception as exc:
+        logger.exception(
+            "Error generating support ticket upload path",
+            module=LogModule.STORAGE,
+            action="support.upload.path_failed",
+            exc=exc,
         )
 
         # Fallback path (never block upload)
@@ -57,5 +62,9 @@ def support_ticket_upload_path(instance, filename):
             f"attachment_{uuid.uuid4().hex}.{ext}"
         )
 
-        logger.warning(f"Using fallback path: {fallback_path}")
+        logger.warning(
+            "Using fallback support ticket upload path",
+            module=LogModule.STORAGE,
+            action="support.upload.fallback_path",
+        )
         return fallback_path

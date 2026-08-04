@@ -22,6 +22,7 @@ from business_audit.enums import (
 )
 from business_audit.exceptions import BusinessAuditError
 from shared.audit.base_service import BaseAuditService
+from shared.logging import LogModule, logger
 
 
 class BusinessAuditService(BaseAuditService):
@@ -151,7 +152,12 @@ class BusinessAuditService(BaseAuditService):
                         audit_id=result.audit_id
                     )
                 except Exception:
-                    pass
+                    logger.warning(
+                        "Support trace schedule from business audit failed",
+                        module=LogModule.API,
+                        action="business_audit.support_trace.schedule_failed",
+                        metadata={"audit_id": str(result.audit_id)},
+                    )
             return result
         return BusinessAuditResult(
             success=False,

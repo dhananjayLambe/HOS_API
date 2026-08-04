@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from datetime import datetime, timezone
 from typing import Any
 
@@ -19,8 +18,6 @@ from support_trace.identifiers.lookup_keys import (
 from support_trace.identifiers.types import IdentifierSyncResult
 from support_trace.identifiers.validation_registry import ValidationRegistry
 from support_trace.workflow.types import ResolvedWorkflow
-
-logger = logging.getLogger(__name__)
 
 
 class IdentifierSyncService:

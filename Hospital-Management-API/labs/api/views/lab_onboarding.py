@@ -7,8 +7,6 @@ Login policy: User is created with is_active=False and status=False; Django grou
 Staff OTP (labadmin role) is blocked until admin sets is_active=True; org stays PENDING until approved.
 """
 
-import logging
-
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -16,8 +14,7 @@ from rest_framework.views import APIView
 
 from labs.api.serializers.lab_onboarding_serializer import LabOnboardingSerializer
 from labs.api.services.lab_onboarding_service import register_lab
-
-logger = logging.getLogger(__name__)
+from shared.logging import LogModule, logger
 
 
 class LabOnboardingView(APIView):
@@ -43,7 +40,11 @@ class LabOnboardingView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         except Exception:
-            logger.exception("LabOnboardingView failed")
+            logger.exception(
+                "Lab onboarding registration failed",
+                module=LogModule.LABORATORY,
+                action="labs.onboarding.register_failed",
+            )
             return Response(
                 {"success": False, "message": "Registration could not be completed. Please try again later."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import logging
 import os
 import re
 import uuid
@@ -13,7 +12,7 @@ from urllib import error, request
 
 from django.conf import settings
 
-logger = logging.getLogger(__name__)
+from shared.logging import LogModule, logger
 
 
 def _reload_whatsapp_env() -> None:
@@ -26,7 +25,12 @@ def _reload_whatsapp_env() -> None:
         base_dir = Path(getattr(settings, "BASE_DIR", ""))
         load_dotenv(base_dir / ".env", override=True)
     except Exception:
-        logger.debug("whatsapp_env_reload_skipped", exc_info=True)
+        logger.debug(
+            "WhatsApp env reload skipped",
+            module=LogModule.WHATSAPP,
+            action="whatsapp.env.reload_skipped",
+            metadata={},
+        )
 
 
 def _whatsapp_setting(name: str, default: str = "") -> str:
@@ -218,10 +222,10 @@ class MetaWhatsAppClient:
         if self.use_simulated or not self.access_token or not self.phone_number_id:
             message_id = f"sim-wa-{uuid.uuid4().hex[:12]}"
             logger.info(
-                "whatsapp_simulated_send to=%s template=%s msg_id=%s",
-                to,
-                template_name,
-                message_id,
+                "WhatsApp simulated send",
+                module=LogModule.WHATSAPP,
+                action="whatsapp.meta.simulated_send",
+                metadata={"to": to, "template": template_name, "message_id": message_id},
             )
             return {
                 "meta_message_id": message_id,
@@ -241,11 +245,15 @@ class MetaWhatsAppClient:
             for key in param_keys
         ]
         logger.info(
-            "whatsapp_template_send template=%s language=%s param_count=%s keys=%s",
-            template_name,
-            template_language_code(),
-            len(body_components),
-            param_keys,
+            "WhatsApp template send",
+            module=LogModule.WHATSAPP,
+            action="whatsapp.meta.template_send",
+            metadata={
+                "template": template_name,
+                "language": template_language_code(),
+                "param_count": len(body_components),
+                "keys": param_keys,
+            },
         )
 
         template_payload: dict[str, Any] = {
@@ -290,10 +298,10 @@ class MetaWhatsAppClient:
         if self.use_simulated or not self.access_token or not self.phone_number_id:
             message_id = f"sim-wa-{uuid.uuid4().hex[:12]}"
             logger.info(
-                "whatsapp_simulated_recommendation_send to=%s template=%s msg_id=%s",
-                to,
-                template_name,
-                message_id,
+                "WhatsApp simulated recommendation send",
+                module=LogModule.WHATSAPP,
+                action="whatsapp.meta.simulated_recommendation_send",
+                metadata={"to": to, "template": template_name, "message_id": message_id},
             )
             return {
                 "meta_message_id": message_id,
@@ -372,7 +380,12 @@ class MetaWhatsAppClient:
     def send_text_message(self, *, to: str, body: str) -> dict[str, Any]:
         if self.use_simulated or not self.access_token or not self.phone_number_id:
             message_id = f"sim-wa-{uuid.uuid4().hex[:12]}"
-            logger.info("whatsapp_simulated_text_send to=%s msg_id=%s", to, message_id)
+            logger.info(
+                "WhatsApp simulated text send",
+                module=LogModule.WHATSAPP,
+                action="whatsapp.meta.simulated_text_send",
+                metadata={"to": to, "message_id": message_id},
+            )
             return {
                 "meta_message_id": message_id,
                 "simulated": True,

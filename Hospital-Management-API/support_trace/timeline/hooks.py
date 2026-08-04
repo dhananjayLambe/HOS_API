@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Callable
 from typing import TypeVar
 
-logger = logging.getLogger(__name__)
+from shared.logging import LogModule, logger
 
 T = TypeVar("T")
 
@@ -20,9 +19,10 @@ def fail_open_timeline(
     try:
         return fn()
     except Exception as exc:
-        logger.warning(
-            "timeline_operation_failed",
-            extra={"action": action, "error": str(exc)},
-            exc_info=True,
+        logger.exception(
+            "Timeline operation failed",
+            module=LogModule.MONITORING,
+            action="support_trace.timeline.operation_failed",
+            metadata={"hook_action": action, "error": str(exc)},
         )
         return default

@@ -26,15 +26,14 @@ EncounterStateMachine.transition(encounter, "in_consultation", user=request.user
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from django.db import transaction
-import logging
+
+from shared.logging import LogModule, logger
 
 from consultations_core.models.encounter import ClinicalEncounter
 from consultations_core.models.encounter import EncounterStatusLog
 from consultations_core.domain.audit import AuditService
 from consultations_core.domain.encounter_status import normalize_encounter_status
 from account.models import User
-
-logger = logging.getLogger(__name__)
 
 
 def _sync_queue_for_encounter_terminal(encounter, kind: str) -> None:
@@ -68,12 +67,14 @@ def _sync_queue_for_encounter_terminal(encounter, kind: str) -> None:
         )
         sync_appointment_for_encounter_terminal(encounter)
     except Exception as exc:
-        logger.warning(
-            "encounter.lifecycle.queue_sync_failed kind=%s encounter_id=%s err=%s",
-            kind,
-            getattr(encounter, "id", None),
-            exc,
-            exc_info=True,
+        logger.exception(
+            (
+                f"encounter.lifecycle.queue_sync_failed kind={kind} "
+                f"encounter_id={getattr(encounter, 'id', None)} err={exc}"
+            ),
+            module=LogModule.CONSULTATION,
+            action="encounter.queue_sync.failed",
+            metadata={"kind": kind, "encounter_id": str(getattr(encounter, "id", ""))},
         )
 
 
@@ -128,12 +129,14 @@ class EncounterStateMachine:
         # Prevent no-op transitions
         if current_status == new_status:
             logger.info(
-                "encounter.lifecycle.transition.noop encounter_id=%s visit_pnr=%s status=%s source=%s user_id=%s",
-                encounter.id,
-                encounter.visit_pnr,
-                current_status,
-                source,
-                getattr(user, "id", None),
+                (
+                    f"encounter.lifecycle.transition.noop encounter_id={encounter.id} "
+                    f"visit_pnr={encounter.visit_pnr} status={current_status} source={source} "
+                    f"user_id={getattr(user, 'id', None)}"
+                ),
+                module=LogModule.CONSULTATION,
+                action="encounter.transition.noop",
+                metadata={"encounter_id": str(encounter.id), "status": current_status},
             )
             return encounter
 
@@ -145,13 +148,18 @@ class EncounterStateMachine:
                 f"Allowed: {allowed}"
             )
         logger.info(
-            "encounter.lifecycle.transition.request encounter_id=%s visit_pnr=%s from_status=%s to_status=%s source=%s user_id=%s",
-            encounter.id,
-            encounter.visit_pnr,
-            current_status,
-            new_status,
-            source,
-            getattr(user, "id", None),
+            (
+                f"encounter.lifecycle.transition.request encounter_id={encounter.id} "
+                f"visit_pnr={encounter.visit_pnr} from_status={current_status} to_status={new_status} "
+                f"source={source} user_id={getattr(user, 'id', None)}"
+            ),
+            module=LogModule.CONSULTATION,
+            action="encounter.transition.request",
+            metadata={
+                "encounter_id": str(encounter.id),
+                "from_status": current_status,
+                "to_status": new_status,
+            },
         )
 
         # Apply lifecycle rules and timestamps
@@ -229,12 +237,18 @@ class EncounterStateMachine:
             reason=reason,
         )
         logger.info(
-            "encounter.lifecycle.transition.success encounter_id=%s visit_pnr=%s from_status=%s to_status=%s is_active=%s",
-            encounter.id,
-            encounter.visit_pnr,
-            current_status,
-            new_status,
-            encounter.is_active,
+            (
+                f"encounter.lifecycle.transition.success encounter_id={encounter.id} "
+                f"visit_pnr={encounter.visit_pnr} from_status={current_status} to_status={new_status} "
+                f"is_active={encounter.is_active}"
+            ),
+            module=LogModule.CONSULTATION,
+            action="encounter.transition.success",
+            metadata={
+                "encounter_id": str(encounter.id),
+                "from_status": current_status,
+                "to_status": new_status,
+            },
         )
 
         return encounter

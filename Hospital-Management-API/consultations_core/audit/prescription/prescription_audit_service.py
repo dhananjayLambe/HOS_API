@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from clinical_audit.domain.repository import ClinicalAuditRepository
@@ -24,9 +23,6 @@ from consultations_core.audit.prescription.recommendation_payload_builder import
 from consultations_core.audit.prescription.recommendation_snapshot_builder import (
     RecommendationSnapshotBuilder,
 )
-
-logger = logging.getLogger(__name__)
-
 
 class PrescriptionAuditService:
     """Translate prescription/recommendation events into ClinicalAuditService.record() calls."""

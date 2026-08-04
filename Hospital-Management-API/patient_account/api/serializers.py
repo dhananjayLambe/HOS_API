@@ -1,11 +1,8 @@
 from rest_framework import serializers
 from account.models import User
 from datetime import datetime
-import logging
 from patient_account.models import PatientAccount, PatientProfile,PatientProfileDetails
-from shared.logging import LogModule, logger as dpc_logger
-
-logger = logging.getLogger(__name__)
+from shared.logging import LogModule, logger
 
 
 class PatientLoginSerializer(serializers.Serializer):
@@ -44,7 +41,7 @@ class PatientProfileSerializer(serializers.ModelSerializer):
         Creates a new patient profile under the authenticated user's account.
         """
         user = self.context["request"].user
-        dpc_logger.debug(
+        logger.debug(
             "Patient profile create",
             module=LogModule.API,
             action="patient.profile.create",
@@ -166,20 +163,41 @@ class CreatePatientSerializer(serializers.Serializer):
     
     def validate_mobile(self, value):
         """Validate and normalize mobile number"""
-        logger.debug(f"Validating mobile: {value} (type: {type(value)})")
+        logger.debug(
+            "Validating patient mobile number",
+            module=LogModule.API,
+            action="patient.create.validate_mobile",
+        )
         # Remove spaces and special characters
         mobile = ''.join(filter(str.isdigit, value))
-        logger.debug(f"Normalized mobile: {mobile} (length: {len(mobile)})")
+        logger.debug(
+            "Normalized patient mobile number",
+            module=LogModule.API,
+            action="patient.create.validate_mobile",
+            metadata={"mobile_length": len(mobile)},
+        )
         if len(mobile) != 10:
-            logger.error(f"Mobile validation failed: length is {len(mobile)}, expected 10")
+            logger.error(
+                "Patient mobile validation failed",
+                module=LogModule.API,
+                action="patient.create.validate_mobile",
+                metadata={"mobile_length": len(mobile), "expected_length": 10},
+            )
             raise serializers.ValidationError("Mobile number must be 10 digits")
-        logger.debug(f"Mobile validation passed: {mobile}")
+        logger.debug(
+            "Patient mobile validation passed",
+            module=LogModule.API,
+            action="patient.create.validate_mobile",
+        )
         return mobile
     
     def validate(self, attrs):
         """Additional validation"""
-        logger.debug(f"CreatePatientSerializer validate called with: {attrs}")
-        logger.debug(f"Gender choices available: {PatientProfile.GENDER_CHOICES}")
+        logger.debug(
+            "CreatePatientSerializer validation started",
+            module=LogModule.API,
+            action="patient.create.validate",
+        )
 
         date_of_birth = attrs.get("date_of_birth")
         age_years = attrs.get("age_years")

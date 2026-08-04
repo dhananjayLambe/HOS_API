@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from collections import Counter
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
@@ -39,9 +38,6 @@ if TYPE_CHECKING:
     from account.models import User
     from diagnostics_engine.services.routing.ranking_engine import RankedLab
     from diagnostics_engine.services.routing.routing_helpers import ResolvedRoutingLocation
-
-logger = logging.getLogger(__name__)
-
 
 def _reject_snapshots_sort_key(c: EligibilityCandidate) -> tuple:
     """Prefer branches that matched service area but failed later (e.g. pricing)."""

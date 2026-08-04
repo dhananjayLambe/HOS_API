@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-import logging
 from typing import TYPE_CHECKING, Any
 
 from diagnostics_engine.models.marketplace_recommendation_audit import MarketplaceRecommendationApiAudit
+from shared.logging import LogModule, logger
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
-
-logger = logging.getLogger(__name__)
 
 
 def _user_role_snapshot(user) -> str:
@@ -61,9 +59,13 @@ def record_marketplace_recommendation_audit(
         )
     except Exception:
         logger.exception(
-            "recommendation.api.audit_failed recommendation_id=%s consultation_id=%s",
-            recommendation_id,
-            consultation_id,
+            "Marketplace recommendation audit persistence failed",
+            module=LogModule.LABORATORY,
+            action="diagnostics.recommendation.api_audit_failed",
+            metadata={
+                "recommendation_id": str(recommendation_id),
+                "consultation_id": str(consultation_id),
+            },
         )
 
 
@@ -77,11 +79,14 @@ def emit_recommendation_metrics(
 ) -> None:
     """Structured metrics hook (dashboard wiring optional)."""
     logger.info(
-        "recommendation.api.metrics available=%s failure_reason=%s duration_ms=%s "
-        "quoted_price=%s branch_id=%s",
-        available,
-        failure_reason or "",
-        duration_ms,
-        quoted_price or "",
-        branch_id or "",
+        "Marketplace recommendation metrics emitted",
+        module=LogModule.LABORATORY,
+        action="diagnostics.recommendation.api_metrics",
+        metadata={
+            "available": available,
+            "failure_reason": failure_reason or "",
+            "duration_ms": duration_ms,
+            "quoted_price": quoted_price or "",
+            "branch_id": branch_id or "",
+        },
     )

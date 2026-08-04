@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { serverLogger } from "@/lib/serverLogger";
 
 /** Log-safe base URL (no path/query secrets). */
 function backendOriginForLog(baseUrl: string): string {
@@ -43,7 +44,11 @@ export async function POST(req: Request) {
         try {
           data = JSON.parse(responseText);
         } catch (jsonError) {
-          console.error("Failed to parse JSON response:", responseText.substring(0, 500));
+          serverLogger.error("Failed to parse JSON response from backend", jsonError, {
+            route: "refresh-token",
+            status: backendRes.status,
+            contentType: contentType ?? null,
+          });
           return NextResponse.json(
             { 
               error: "Backend returned invalid JSON response",
@@ -54,7 +59,11 @@ export async function POST(req: Request) {
         }
       } else {
         // Non-JSON response (likely HTML error page)
-        console.error("Backend returned non-JSON response:", responseText.substring(0, 500));
+        serverLogger.error("Backend returned non-JSON response", undefined, {
+          route: "refresh-token",
+          status: backendRes.status,
+          contentType: contentType ?? null,
+        });
         return NextResponse.json(
           { 
             error: "Backend server error",
@@ -73,12 +82,11 @@ export async function POST(req: Request) {
     } catch (fetchError: unknown) {
       // Network or connection errors (e.g. ECONNREFUSED — Django not listening on BACKEND_URL host/port)
       const err = fetchError as { message?: string; cause?: { code?: string } };
-      console.error("Error connecting to backend (refresh-token):", {
+      serverLogger.error("Error connecting to backend (refresh-token)", fetchError, {
+        route: "refresh-token",
         backendOrigin: backendOriginForLog(BACKEND_URL),
         authPath: "auth/refresh-token/",
-        message: err?.message,
         causeCode: err?.cause && typeof err.cause === "object" && "code" in err.cause ? err.cause.code : undefined,
-        hint: "Ensure Django is running and Hospital-Web-UI BACKEND_URL matches (e.g. http://127.0.0.1:8000/api/).",
       });
       return NextResponse.json(
         {
@@ -90,7 +98,7 @@ export async function POST(req: Request) {
       );
     }
   } catch (err: any) {
-    console.error("Error in refresh-token route:", err);
+    serverLogger.error("Error in refresh-token route", err, { route: "refresh-token" });
     return NextResponse.json(
       { 
         error: "Internal server error",

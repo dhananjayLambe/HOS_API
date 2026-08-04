@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-import logging
-
+from shared.logging import LogModule, logger
 from support_trace.timeline.constants import CERTIFICATION_REQUIRED_ACTIONS
 from support_trace.timeline.event_registry import EventRegistry
 from support_trace.timeline.types import TimelineEvent, TimelineGraph, TimelineResult
-
-logger = logging.getLogger(__name__)
 
 
 class TimelineCertification:
@@ -24,7 +21,12 @@ class TimelineCertification:
         warnings.extend(cls.validate_sequence_consistency(result.events))
         warnings.extend(cls.validate_event_registry_coverage(result.events))
         for warning in warnings:
-            logger.warning("timeline_certification_warning", extra={"warning": warning})
+            logger.warning(
+                "Timeline certification warning",
+                module=LogModule.MONITORING,
+                action="support_trace.timeline.certification_warning",
+                metadata={"warning": warning},
+            )
         return warnings
 
     @classmethod

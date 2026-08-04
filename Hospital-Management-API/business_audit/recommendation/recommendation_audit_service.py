@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from datetime import datetime
 from typing import Any
 
@@ -38,8 +37,6 @@ from business_audit.recommendation.payload_builder import RecommendationPayloadB
 from business_audit.recommendation.repository import RecommendationAuditRepository
 from business_audit.recommendation.snapshot_builder import RecommendationSnapshotBuilder
 from business_audit.services import BusinessAuditService
-
-logger = logging.getLogger(__name__)
 
 
 class RecommendationAuditService:

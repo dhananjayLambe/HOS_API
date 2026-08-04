@@ -1,5 +1,3 @@
-import logging
-
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.shortcuts import get_object_or_404
 from rest_framework import status
@@ -15,8 +13,7 @@ from diagnostics_engine.api.serializers.order_creation import (
     DiagnosticOrderCreationResponseSerializer,
 )
 from diagnostics_engine.domain.order_creation import DiagnosticOrderCreationService
-
-logger = logging.getLogger(__name__)
+from shared.logging import LogModule, logger
 
 
 class CreateDiagnosticOrderFromConsultationView(APIView):
@@ -46,7 +43,12 @@ class CreateDiagnosticOrderFromConsultationView(APIView):
         except DjangoValidationError as e:
             msgs = list(getattr(e, "messages", []) or [])
             detail = "; ".join(str(m) for m in msgs if str(m).strip()) or str(e)
-            logger.info("diagnostic order creation validation failed: %s", detail)
+            logger.info(
+                "Diagnostic order creation validation failed",
+                module=LogModule.LABORATORY,
+                action="diagnostics.order.creation_validation_failed",
+                metadata={"detail": detail},
+            )
             return Response({"detail": detail}, status=status.HTTP_400_BAD_REQUEST)
 
         payload = DiagnosticOrderCreationResponseSerializer.from_result(result)

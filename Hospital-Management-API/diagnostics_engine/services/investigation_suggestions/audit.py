@@ -1,15 +1,23 @@
 from __future__ import annotations
 
 import json
-import logging
 from typing import Any
 
-logger = logging.getLogger(__name__)
+from shared.logging import LogModule, logger
 
 
 def log_suggestion_event(payload: dict[str, Any]) -> None:
     try:
-        logger.info("investigation_suggestion_event=%s", json.dumps(payload, default=str))
+        logger.info(
+            "Investigation suggestion event emitted",
+            module=LogModule.LABORATORY,
+            action="diagnostics.investigation_suggestion.event",
+            metadata={"payload": payload},
+        )
     except Exception:
-        logger.exception("Failed to emit investigation suggestion audit event")
-
+        logger.exception(
+            "Failed to emit investigation suggestion audit event",
+            module=LogModule.LABORATORY,
+            action="diagnostics.investigation_suggestion.event_failed",
+            metadata={"payload": json.dumps(payload, default=str)},
+        )

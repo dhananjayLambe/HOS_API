@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import logging
 import os
 from dataclasses import dataclass, field
 from decimal import Decimal
@@ -14,8 +13,7 @@ from django.db.models.functions import Trim
 from django.utils import timezone
 
 from diagnostics_engine.services.routing.routing_helpers import haversine_km, normalize_indian_pincode
-
-logger = logging.getLogger(__name__)
+from shared.logging import LogModule, logger
 
 if TYPE_CHECKING:
     from diagnostics_engine.models.orders import DiagnosticOrder
@@ -58,7 +56,16 @@ def _record_reject(ir: list[str], branch: LabBranch, code: str) -> None:
     ir.append(code)
     if _reject_debug_enabled():
         branch_code = getattr(branch, "branch_code", "") or "—"
-        logger.info("Lab %s (%s) rejected: %s", branch.pk, branch_code, code)
+        logger.info(
+            "Lab branch rejected during routing eligibility",
+            module=LogModule.ROUTING,
+            action="diagnostics.routing.lab_rejected",
+            metadata={
+                "branch_id": str(branch.pk),
+                "branch_code": branch_code,
+                "reason_code": code,
+            },
+        )
 
 
 @dataclass
@@ -117,11 +124,15 @@ class EligibilityEngine:
         if _reject_debug_enabled():
             branch_list = list(branches_qs)
             logger.info(
-                "Routing candidates | count=%s | branch_ids=%s | branch_codes=%s | required_tests=%s",
-                len(branch_list),
-                [str(b.pk) for b in branch_list],
-                [getattr(b, "branch_code", "") or "" for b in branch_list],
-                required_tests_debug,
+                "Routing candidate branches loaded",
+                module=LogModule.ROUTING,
+                action="diagnostics.routing.candidates_debug",
+                metadata={
+                    "count": len(branch_list),
+                    "branch_ids": [str(b.pk) for b in branch_list],
+                    "branch_codes": [getattr(b, "branch_code", "") or "" for b in branch_list],
+                    "required_tests": required_tests_debug,
+                },
             )
             branches_iter: Any = branch_list
         else:
@@ -284,18 +295,13 @@ class EligibilityEngine:
             c3 = full_qs.count()
             _dbc = getattr(branch, "branch_code", "") or "—"
             logger.info(
-                "Pricing filter ladder | branch=%s (%s) | service_ids_count=%s | "
-                "deleted_false=%s +is_active=%s +is_available=%s +valid_window=%s",
-                str(branch.pk),
-                _dbc,
-                len(service_ids),
-                c0,
-                c1,
-                c2,
-                c3,
-                extra={
-                    "branch": str(branch.pk),
+                "Pricing filter ladder evaluated",
+                module=LogModule.ROUTING,
+                action="diagnostics.routing.pricing_filter_ladder",
+                metadata={
+                    "branch_id": str(branch.pk),
                     "branch_code": _dbc,
+                    "service_ids_count": len(service_ids),
                     "ladder_deleted_false": c0,
                     "ladder_plus_is_active": c1,
                     "ladder_plus_is_available": c2,
@@ -318,20 +324,24 @@ class EligibilityEngine:
                         .order_by("-valid_from")
                     )
                     logger.info(
-                        "Pricing filter ladder SQL (first service_id=%s; UUIDs may appear unquoted in str(query)) | %s",
-                        str(service_ids[0]),
-                        str(sample_qs.query),
+                        "Pricing filter ladder SQL sample",
+                        module=LogModule.ROUTING,
+                        action="diagnostics.routing.pricing_filter_sql",
+                        metadata={
+                            "service_id": str(service_ids[0]),
+                            "query": str(sample_qs.query),
+                        },
                     )
                 else:
                     logger.info(
-                        "Pricing: no BranchServicePricing for branch_id=%s branch_code=%s and "
-                        "required service_ids=%s — add rows where service_id matches the order catalog UUID, "
-                        "or run: python manage.py inspect_diagnostic_routing_order <order_uuid> "
-                        "(see --by-order-number). Seed/copy: seed_diagnostic_routing_minimal_labs / "
-                        "seed_diagnostic_routing_dummy_lab (--copy-pricing-from-branch).",
-                        str(branch.pk),
-                        _dbc,
-                        [str(s) for s in service_ids],
+                        "No branch service pricing rows for required tests",
+                        module=LogModule.ROUTING,
+                        action="diagnostics.routing.pricing_missing",
+                        metadata={
+                            "branch_id": str(branch.pk),
+                            "branch_code": _dbc,
+                            "required_service_ids": [str(s) for s in service_ids],
+                        },
                     )
 
         # Marketplace pricing is keyed by DiagnosticServiceMaster primary key (service_id), not by
@@ -370,12 +380,10 @@ class EligibilityEngine:
                 for p in priced
             ]
             logger.info(
-                "Pricing mismatch detail | branch_id=%s | required_service_ids=%s | "
-                "branch_pricing_catalog_first80=%s",
-                str(branch.pk),
-                json.dumps([str(s) for s in service_ids]),
-                json.dumps(catalog_slice, default=str),
-                extra={
+                "Pricing mismatch detail",
+                module=LogModule.ROUTING,
+                action="diagnostics.routing.pricing_mismatch_detail",
+                metadata={
                     "branch_id": str(branch.pk),
                     "required_service_ids": [str(s) for s in service_ids],
                     "branch_pricing_catalog_snippet": catalog_slice,
@@ -402,13 +410,11 @@ class EligibilityEngine:
         if _pricing_filter_ladder_debug_enabled():
             _bc = getattr(branch, "branch_code", "") or "—"
             logger.info(
-                "Pricing match debug | branch=%s (%s) | required_tests=%s | branch_pricing=%s",
-                str(branch.pk),
-                _bc,
-                json.dumps(required_tests_debug, default=str),
-                json.dumps(branch_pricing_debug, default=str),
-                extra={
-                    "branch": str(branch.pk),
+                "Pricing match debug",
+                module=LogModule.ROUTING,
+                action="diagnostics.routing.pricing_match_debug",
+                metadata={
+                    "branch_id": str(branch.pk),
                     "branch_code": _bc,
                     "required_tests": required_tests_debug,
                     "branch_pricing": branch_pricing_debug,
@@ -462,18 +468,11 @@ class EligibilityEngine:
         branch_code = getattr(branch, "branch_code", "") or ""
 
         logger.info(
-            "Eligibility evaluation | branch=%s (%s) | service_area_match=%s | pricing_match=%s | "
-            "home_collection=%s | eligible=%s | collection_mode=%s | ineligibility=%s",
-            str(branch.pk),
-            branch_code or "—",
-            service_area_match,
-            pricing_match,
-            home_collection_ok,
-            eligible,
-            mode,
-            sorted(ir_set) if ir_set else "[]",
-            extra={
-                "branch": str(branch.pk),
+            "Branch eligibility evaluation complete",
+            module=LogModule.ROUTING,
+            action="diagnostics.routing.eligibility_evaluation",
+            metadata={
+                "branch_id": str(branch.pk),
                 "branch_code": branch_code,
                 "service_area_match": service_area_match,
                 "pricing_match": pricing_match,

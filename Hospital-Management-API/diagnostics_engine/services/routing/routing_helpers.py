@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import math
 import os
 import re
@@ -12,11 +11,7 @@ from typing import TYPE_CHECKING, Any
 
 from django.db import transaction
 
-if TYPE_CHECKING:
-    from account.models import User
-    from diagnostics_engine.models.orders import DiagnosticOrder
-
-logger = logging.getLogger(__name__)
+from shared.logging import LogModule, logger
 
 # Human-readable routing pipeline (order → on_commit → location → eligibility → rank → branch).
 # Technical steps: DIAGNOSTIC_ROUTING_JOURNEY_LOG=1 or settings.DIAGNOSTICS_ROUTING_JOURNEY_LOG.
@@ -52,7 +47,12 @@ def routing_journey_human_log_enabled() -> bool:
 def routing_journey_info(msg: str, *args: Any) -> None:
     """INFO log for the routing journey; no-op unless :func:`routing_journey_log_enabled`."""
     if routing_journey_log_enabled():
-        logger.info(msg, *args)
+        message = msg % args if args else msg
+        logger.info(
+            message,
+            module=LogModule.ROUTING,
+            action="diagnostics.routing.journey_info",
+        )
 
 
 def routing_journey_human(msg: str, *args: Any) -> None:
@@ -63,7 +63,12 @@ def routing_journey_human(msg: str, *args: Any) -> None:
     or turn on DIAGNOSTIC_ROUTING_JOURNEY_LOG (technical journey) which also emits these summaries.
     """
     if routing_journey_human_log_enabled() or routing_journey_log_enabled():
-        logger.info(msg, *args)
+        message = msg % args if args else msg
+        logger.info(
+            message,
+            module=LogModule.ROUTING,
+            action="diagnostics.routing.journey_human",
+        )
 
 
 def privacy_patient_label(full_name: str | None, *, max_chars: int = 22) -> str:
@@ -377,9 +382,13 @@ def schedule_routing_after_commit(
             )
         except Exception:
             logger.exception(
-                "diagnostic routing on_commit failed order_id=%s triggered_by_id=%s",
-                order_id,
-                triggered_by_id,
+                "Diagnostic routing on_commit failed",
+                module=LogModule.ROUTING,
+                action="diagnostics.routing.on_commit_failed",
+                metadata={
+                    "order_id": str(order_id),
+                    "triggered_by_id": str(triggered_by_id) if triggered_by_id else None,
+                },
             )
 
     transaction.on_commit(_run)

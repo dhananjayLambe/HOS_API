@@ -94,7 +94,6 @@ def calculate_doctor_profile_progress(doctor):
 #     """
 #     Returns progress and pending sections as a dictionary.
 #     """
-#     print("calculate_doctor_profile_progress")
 #     sections = {}
 
 #     # Personal info: photo, dob, title, about
@@ -158,7 +157,6 @@ def calculate_doctor_profile_progress(doctor):
 #     Returns dict: {"progress": int, "pending_sections": [keys]}
 #     Sections considered: personal_info, address, professional, kyc, clinic, bank (if bank model present)
 #     """
-#     print("calculate_doctor_profile_progress")
 #     sections = {}
 
 #     # Personal info: photo, dob, title, about
@@ -218,7 +216,6 @@ def calculate_doctor_profile_progress(doctor):
 #     Returns dict: {"progress": int, "pending_sections": [keys]}
 #     Sections considered: personal_info, address, professional, kyc, clinic, bank (if bank model present)
 #     """
-#     print("calculate_doctor_profile_progress")
 #     sections = {}
 
 #     # Personal info: photo, dob, title, about

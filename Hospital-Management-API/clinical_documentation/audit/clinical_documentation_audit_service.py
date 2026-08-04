@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from clinical_audit.domain.repository import ClinicalAuditRepository
@@ -14,8 +13,6 @@ from clinical_audit.services import ClinicalAuditService
 from clinical_documentation.audit.constants import SERVICE_NAME, SOURCE_TO_AUDIT_SOURCE
 from clinical_documentation.audit.payload_builder import ClinicalDocumentationPayloadBuilder
 from clinical_documentation.audit.snapshot_builder import ClinicalDocumentationSnapshotBuilder
-
-logger = logging.getLogger(__name__)
 
 
 class ClinicalDocumentationAuditService:

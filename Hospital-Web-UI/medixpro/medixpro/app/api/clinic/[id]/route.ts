@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
+import { serverLogger } from "@/lib/serverLogger"
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 const BACKEND_URL = process.env.BACKEND_URL || process.env.DJANGO_API_URL || "http://localhost:8000/api/"
+const ROUTE = "clinic/[id]"
 
 // Helper to get headers with auth
 function getHeaders(authHeader: string | null): HeadersInit {
@@ -150,14 +152,19 @@ export async function GET(
               emergency_instructions_text: data.emergency_instructions_text || "",
             }
           } else {
-            console.warn("[Clinic API] Clinic response missing success or data:", clinicResponse)
+            serverLogger.warn("Clinic response missing success or data", {
+              route: ROUTE,
+              status: clinicRes.value.status,
+              hasSuccess: !!clinicResponse?.success,
+              hasData: !!clinicResponse?.data,
+            })
             clinicError = {
               message: clinicResponse.message || "Failed to fetch clinic data",
               status: clinicRes.value.status,
             }
           }
         } catch (parseError) {
-          console.error("[Clinic API] Error parsing clinic response:", parseError)
+          serverLogger.error("Error parsing clinic response", parseError, { route: ROUTE, status: clinicRes.value.status })
           clinicError = {
             message: "Invalid response format from clinic endpoint",
             status: clinicRes.value.status,
@@ -256,22 +263,30 @@ export async function GET(
           }
           
         } else {
-          console.warn("[Clinic API] Could not extract address data from response. addr:", addr, "type:", typeof addr)
+          serverLogger.warn("Could not extract address data from response", {
+            route: ROUTE,
+            addrType: typeof addr,
+            hasAddr: addr != null,
+          })
         }
       } catch (parseError) {
-        console.error("[Clinic API] Error parsing address response:", parseError)
+        serverLogger.error("Error parsing address response", parseError, { route: ROUTE })
         // Continue with default address data
       }
     } else if (addressRes.status === "fulfilled" && addressRes.value.status === 404) {
       // 404 is acceptable - address may not exist yet
     } else if (addressRes.status === "rejected") {
-      console.warn("[Clinic API] Error fetching address:", addressRes.reason)
+      serverLogger.warn("Error fetching address", { route: ROUTE, reason: addressRes.reason?.message ?? "unknown" })
       // Continue with default address data
     } else if (addressRes.status === "fulfilled") {
-      console.warn("[Clinic API] Address fetch returned non-OK status:", addressRes.value.status)
+      serverLogger.warn("Address fetch returned non-OK status", { route: ROUTE, status: addressRes.value.status })
       try {
         const errorData = await addressRes.value.json().catch(() => ({}))
-        console.warn("[Clinic API] Address error response:", errorData)
+        serverLogger.warn("Address error response", {
+          route: ROUTE,
+          status: addressRes.value.status,
+          detail: typeof errorData?.detail === "string" ? errorData.detail : typeof errorData?.message === "string" ? errorData.message : undefined,
+        })
       } catch (e) {
         // Ignore parse errors
       }
@@ -312,19 +327,23 @@ export async function GET(
           }]
         }
       } catch (parseError) {
-        console.error("[Clinic API] Error parsing schedules response:", parseError)
+        serverLogger.error("Error parsing schedules response", parseError, { route: ROUTE })
         // Continue with empty operating hours
       }
     } else if (schedulesRes.status === "fulfilled" && schedulesRes.value.status === 404) {
       // 404 is acceptable - schedules may not exist yet
     } else if (schedulesRes.status === "rejected") {
-      console.warn("[Clinic API] Error fetching schedules:", schedulesRes.reason)
+      serverLogger.warn("Error fetching schedules", { route: ROUTE, reason: schedulesRes.reason?.message ?? "unknown" })
       // Continue with empty operating hours
     } else if (schedulesRes.status === "fulfilled") {
-      console.warn("[Clinic API] Schedules fetch returned non-OK status:", schedulesRes.value.status)
+      serverLogger.warn("Schedules fetch returned non-OK status", { route: ROUTE, status: schedulesRes.value.status })
       try {
         const errorData = await schedulesRes.value.json().catch(() => ({}))
-        console.warn("[Clinic API] Schedules error response:", errorData)
+        serverLogger.warn("Schedules error response", {
+          route: ROUTE,
+          status: schedulesRes.value.status,
+          detail: typeof errorData?.detail === "string" ? errorData.detail : typeof errorData?.message === "string" ? errorData.message : undefined,
+        })
       } catch (e) {
         // Ignore parse errors
       }
@@ -346,7 +365,7 @@ export async function GET(
 
     return NextResponse.json(responseData, { status: 200 })
   } catch (error: any) {
-    console.error("[Clinic API] Error fetching clinic data:", error)
+    serverLogger.error("Error fetching clinic data", error, { route: ROUTE })
     return NextResponse.json(
       {
         success: false,
@@ -470,7 +489,7 @@ export async function PATCH(
             const clinicData = await clinicRes.json()
             results.clinic = clinicData
           } catch (parseError: any) {
-            console.error("[Clinic API] Error parsing clinic update response:", parseError)
+            serverLogger.error("Error parsing clinic update response", parseError, { route: ROUTE })
             errors.push("Clinic update succeeded but received invalid response")
           }
         } else {
@@ -478,17 +497,17 @@ export async function PATCH(
             const errorData = await clinicRes.json().catch(() => ({}))
             const errorMessage = extractErrorMessage(errorData, "Unknown error")
             errors.push(`Clinic update failed: ${errorMessage}`)
-            console.error("[Clinic API] Clinic update error:", {
+            serverLogger.error("Clinic update error", undefined, {
+              route: ROUTE,
               status: clinicRes.status,
               error: errorMessage,
-              details: errorData,
             })
           } catch (parseError) {
             errors.push(`Clinic update failed: HTTP ${clinicRes.status}`)
           }
         }
       } catch (error: any) {
-        console.error("[Clinic API] Clinic update network error:", error)
+        serverLogger.error("Clinic update network error", error, { route: ROUTE })
         errors.push(`Clinic update network error: ${error.message || "Connection failed"}`)
       }
     }
@@ -516,7 +535,7 @@ export async function PATCH(
             const addressData = await addressRes.json()
             results.address = addressData
           } catch (parseError: any) {
-            console.error("[Clinic API] Error parsing address update response:", parseError)
+            serverLogger.error("Error parsing address update response", parseError, { route: ROUTE })
             errors.push("Address update succeeded but received invalid response")
           }
         } else {
@@ -524,17 +543,17 @@ export async function PATCH(
             const errorData = await addressRes.json().catch(() => ({}))
             const errorMessage = extractErrorMessage(errorData, "Unknown error")
             errors.push(`Address update failed: ${errorMessage}`)
-            console.error("[Clinic API] Address update error:", {
+            serverLogger.error("Address update error", undefined, {
+              route: ROUTE,
               status: addressRes.status,
               error: errorMessage,
-              details: errorData,
             })
           } catch (parseError) {
             errors.push(`Address update failed: HTTP ${addressRes.status}`)
           }
         }
       } catch (error: any) {
-        console.error("[Clinic API] Address update network error:", error)
+        serverLogger.error("Address update network error", error, { route: ROUTE })
         errors.push(`Address update network error: ${error.message || "Connection failed"}`)
       }
     }
@@ -584,10 +603,11 @@ export async function PATCH(
             try {
               const errorData = await scheduleRes.json().catch(() => ({}))
               const errorMessage = extractErrorMessage(errorData, "Unknown error")
-              console.error(`[Clinic API] Schedule update error for ${dayOfWeek}:`, {
+              serverLogger.error(`Schedule update error for ${dayOfWeek}`, undefined, {
+                route: ROUTE,
                 status: scheduleRes.status,
                 error: errorMessage,
-                details: errorData,
+                dayOfWeek,
               })
               return { 
                 error: errorMessage || `Schedule update failed for ${dayOfWeek}`,
@@ -605,14 +625,14 @@ export async function PATCH(
             const scheduleData = await scheduleRes.json()
             return { success: true, data: scheduleData, day: dayOfWeek }
           } catch (parseError: any) {
-            console.error(`[Clinic API] Error parsing schedule response for ${dayOfWeek}:`, parseError)
+            serverLogger.error(`Error parsing schedule response for ${dayOfWeek}`, parseError, { route: ROUTE, dayOfWeek })
             return { 
               error: `Schedule update succeeded for ${dayOfWeek} but received invalid response`,
               day: dayOfWeek
             }
           }
         } catch (error: any) {
-          console.error(`[Clinic API] Schedule update network error for ${dayOfWeek}:`, error)
+          serverLogger.error(`Schedule update network error for ${dayOfWeek}`, error, { route: ROUTE, dayOfWeek })
           return { 
             error: `Network error for ${dayOfWeek}: ${error.message || "Connection failed"}`,
             day: dayOfWeek
@@ -669,7 +689,7 @@ export async function PATCH(
       { status: 200 }
     )
   } catch (error: any) {
-    console.error("[Clinic API] Unexpected error updating clinic data:", error)
+    serverLogger.error("Unexpected error updating clinic data", error, { route: ROUTE })
     return NextResponse.json(
       {
         success: false,

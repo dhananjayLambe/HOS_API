@@ -5,7 +5,6 @@ Persists to PreConsultationVitals JSON (single source of truth with doctor pre-c
 """
 
 from __future__ import annotations
-import logging
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
@@ -30,8 +29,7 @@ from consultations_core.services.preconsultation_service import (
 from consultations_core.services.encounter_state_machine import EncounterStateMachine
 from clinical_documentation.audit import schedule_vitals_audit
 from queue_management.models import Queue
-
-logger = logging.getLogger(__name__)
+from shared.logging import LogModule, logger
 
 
 class VisitVitalsWriteSerializer(serializers.Serializer):
@@ -217,12 +215,15 @@ class VisitVitalsAPIView(APIView):
         if not encounter:
             return Response({"detail": "Visit not found."}, status=status.HTTP_404_NOT_FOUND)
         logger.info(
-            "encounter.lifecycle.vitals.request encounter_id=%s visit_pnr=%s status=%s user_id=%s payload_keys=%s",
-            encounter.id,
-            encounter.visit_pnr,
-            encounter.status,
-            getattr(request.user, "id", None),
-            ",".join(sorted(request.data.keys())),
+            (
+                f"encounter.lifecycle.vitals.request encounter_id={encounter.id} "
+                f"visit_pnr={encounter.visit_pnr} status={encounter.status} "
+                f"user_id={getattr(request.user, 'id', None)} "
+                f"payload_keys={','.join(sorted(request.data.keys()))}"
+            ),
+            module=LogModule.CONSULTATION,
+            action="consultation.vitals.request",
+            metadata={"encounter_id": str(encounter.id)},
         )
         normalized_status = normalize_encounter_status(encounter.status)
         if normalized_status in ("cancelled", "no_show"):
@@ -256,9 +257,13 @@ class VisitVitalsAPIView(APIView):
         preconsultation.refresh_from_db(fields=["is_locked", "locked_at", "lock_reason"])
         if preconsultation.is_locked and not has_consultation:
             logger.warning(
-                "encounter.lifecycle.vitals.clear_orphan_preconsult_lock encounter_id=%s visit_pnr=%s",
-                encounter.id,
-                encounter.visit_pnr,
+                (
+                    f"encounter.lifecycle.vitals.clear_orphan_preconsult_lock encounter_id={encounter.id} "
+                    f"visit_pnr={encounter.visit_pnr}"
+                ),
+                module=LogModule.CONSULTATION,
+                action="consultation.vitals.clear_orphan_lock",
+                metadata={"encounter_id": str(encounter.id)},
             )
             PreConsultation.objects.filter(pk=preconsultation.pk, is_locked=True).update(
                 is_locked=False,
@@ -267,10 +272,16 @@ class VisitVitalsAPIView(APIView):
             )
             preconsultation.refresh_from_db(fields=["is_locked", "locked_at", "lock_reason"])
         logger.info(
-            "encounter.lifecycle.vitals.preconsultation_ready encounter_id=%s preconsultation_id=%s visit_pnr=%s",
-            encounter.id,
-            preconsultation.id,
-            encounter.visit_pnr,
+            (
+                f"encounter.lifecycle.vitals.preconsultation_ready encounter_id={encounter.id} "
+                f"preconsultation_id={preconsultation.id} visit_pnr={encounter.visit_pnr}"
+            ),
+            module=LogModule.CONSULTATION,
+            action="consultation.vitals.preconsultation_ready",
+            metadata={
+                "encounter_id": str(encounter.id),
+                "preconsultation_id": str(preconsultation.id),
+            },
         )
 
         existing = _existing_vitals_data(preconsultation)
@@ -305,10 +316,13 @@ class VisitVitalsAPIView(APIView):
             )
             updated_count = queue_rows.update(status="vitals_done")
             logger.info(
-                "encounter.lifecycle.vitals.mark_queue_done encounter_id=%s visit_pnr=%s updated_rows=%s",
-                encounter.id,
-                encounter.visit_pnr,
-                updated_count,
+                (
+                    f"encounter.lifecycle.vitals.mark_queue_done encounter_id={encounter.id} "
+                    f"visit_pnr={encounter.visit_pnr} updated_rows={updated_count}"
+                ),
+                module=LogModule.CONSULTATION,
+                action="consultation.vitals.queue_marked_done",
+                metadata={"encounter_id": str(encounter.id), "updated_rows": updated_count},
             )
 
             enc = ClinicalEncounter.objects.select_for_update().get(pk=encounter.pk)
@@ -318,21 +332,25 @@ class VisitVitalsAPIView(APIView):
                 except DjangoValidationError:
                     pass
             logger.info(
-                "encounter.lifecycle.vitals.saved encounter_id=%s preconsultation_id=%s visit_pnr=%s status=%s meaningful=%s",
-                encounter.id,
-                preconsultation.id,
-                encounter.visit_pnr,
-                enc.status,
-                True,
+                (
+                    f"encounter.lifecycle.vitals.saved encounter_id={encounter.id} "
+                    f"preconsultation_id={preconsultation.id} visit_pnr={encounter.visit_pnr} "
+                    f"status={enc.status} meaningful=True"
+                ),
+                module=LogModule.CONSULTATION,
+                action="consultation.vitals.saved",
+                metadata={"encounter_id": str(encounter.id), "meaningful": True},
             )
         else:
             logger.info(
-                "encounter.lifecycle.vitals.saved encounter_id=%s preconsultation_id=%s visit_pnr=%s status=%s meaningful=%s",
-                encounter.id,
-                preconsultation.id,
-                encounter.visit_pnr,
-                encounter.status,
-                False,
+                (
+                    f"encounter.lifecycle.vitals.saved encounter_id={encounter.id} "
+                    f"preconsultation_id={preconsultation.id} visit_pnr={encounter.visit_pnr} "
+                    f"status={encounter.status} meaningful=False"
+                ),
+                module=LogModule.CONSULTATION,
+                action="consultation.vitals.saved",
+                metadata={"encounter_id": str(encounter.id), "meaningful": False},
             )
 
         body = _flatten_response(encounter.id, merged)

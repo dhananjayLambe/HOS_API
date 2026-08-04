@@ -1,9 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { serverLogger } from "@/lib/serverLogger"
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 const DJANGO_API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+const ROUTE = "doctor/cancellation-policies"
 
 // GET - List all cancellation policies (with optional clinic filter)
 export async function GET(request: NextRequest) {
@@ -35,7 +37,7 @@ export async function GET(request: NextRequest) {
     
     // Check if response is HTML (404 page) instead of JSON
     if (contentType && contentType.includes("text/html")) {
-      console.error("[Next.js API] Django returned HTML instead of JSON - likely 404")
+      serverLogger.error("Django returned HTML instead of JSON - likely 404", undefined, { route: ROUTE, status: response.status })
       // Return empty array for 404 (no data exists yet) - match Django format
       if (response.status === 404) {
         return NextResponse.json(
@@ -72,7 +74,7 @@ export async function GET(request: NextRequest) {
         data = JSON.parse(text)
       }
     } catch (e) {
-      console.error("[Next.js API] Failed to parse response:", e)
+      serverLogger.error("Failed to parse cancellation policies response", e, { route: ROUTE, status: response.status })
       // If 404, return empty array - match Django format
       if (response.status === 404) {
         return NextResponse.json(
@@ -171,7 +173,7 @@ export async function GET(request: NextRequest) {
     }
     return nextRes
   } catch (error: any) {
-    console.error("Cancellation policies fetch error:", error)
+    serverLogger.error("Cancellation policies fetch error", error, { route: ROUTE })
     return NextResponse.json(
       { error: error.message || "Internal server error" },
       { status: 500 }
@@ -206,7 +208,7 @@ export async function POST(request: NextRequest) {
         data = {}
       }
     } catch (e) {
-      console.error("[Next.js API] Failed to parse JSON:", e, "Response text:", responseText)
+      serverLogger.error("Failed to parse cancellation policy create JSON", e, { route: ROUTE, status: response.status })
       return NextResponse.json(
         { 
           error: "Invalid response from server", 
@@ -218,7 +220,11 @@ export async function POST(request: NextRequest) {
     }
 
     if (!response.ok) {
-      console.error("[Next.js API] Django error response:", data)
+      serverLogger.error("Django error creating cancellation policy", undefined, {
+        route: ROUTE,
+        status: response.status,
+        detail: typeof data?.detail === "string" ? data.detail : typeof data?.message === "string" ? data.message : typeof data?.error === "string" ? data.error : undefined,
+      })
       return NextResponse.json(
         {
           error: data.message || data.detail || data.error || "Failed to create cancellation policy",
@@ -240,7 +246,7 @@ export async function POST(request: NextRequest) {
     }
     return nextRes
   } catch (error: any) {
-    console.error("Cancellation policy create error:", error)
+    serverLogger.error("Cancellation policy create error", error, { route: ROUTE })
     return NextResponse.json(
       { error: error.message || "Internal server error" },
       { status: 500 }

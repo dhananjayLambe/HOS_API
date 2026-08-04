@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import logging
 
 from django.conf import settings
 from django.http import HttpResponse
@@ -25,8 +24,7 @@ from notifications.services.audit.prescription_whatsapp_audit import (
     emit_prescription_whatsapp_audit_event,
     safe_emit,
 )
-
-logger = logging.getLogger(__name__)
+from shared.logging import LogModule, logger
 
 _META_STATUS_MAP = {
     "sent": WhatsAppMessageStatus.SENT,
@@ -70,7 +68,12 @@ class WhatsAppWebhookAPIView(APIView):
 
         message = WhatsAppMessage.objects.filter(meta_message_id=meta_message_id, is_deleted=False).first()
         if message is None:
-            logger.info("whatsapp_webhook_unknown_message meta_message_id=%s", meta_message_id)
+            logger.info(
+                "WhatsApp webhook unknown message",
+                module=LogModule.API,
+                action="whatsapp.webhook.unknown_message",
+                metadata={"meta_message_id": meta_message_id},
+            )
             return
 
         provider_status = (status_item.get("status") or "").strip().lower()
@@ -118,12 +121,15 @@ class WhatsAppWebhookAPIView(APIView):
         if message.message_type == "TEST_BOOKING" and mapped == WhatsAppMessageStatus.DELIVERED:
             payload = message.request_payload or {}
             logger.info(
-                "recommendation.delivered consultation_id=%s recommendation_id=%s "
-                "whatsapp_message_id=%s template_name=%s",
-                payload.get("consultation_id"),
-                payload.get("recommendation_id"),
-                message.id,
-                message.template_name,
+                "Recommendation delivered via webhook",
+                module=LogModule.API,
+                action="whatsapp.recommendation.delivered",
+                metadata={
+                    "consultation_id": payload.get("consultation_id"),
+                    "recommendation_id": payload.get("recommendation_id"),
+                    "whatsapp_message_id": str(message.id),
+                    "template_name": message.template_name,
+                },
             )
 
         audit_action = {

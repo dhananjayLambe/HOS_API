@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 
 from django.db import IntegrityError
 
 from diagnostics_engine.models.catalog import DiagnosticCategory, DiagnosticPackage
+from shared.logging import LogModule, logger
 from diagnostics_engine.services.catalog_import.exceptions import StrictImportError
 from diagnostics_engine.services.catalog_import.import_stats import ImportRunResult
 from diagnostics_engine.services.catalog_import.utils import (
@@ -21,8 +21,6 @@ from diagnostics_engine.services.catalog_import.validators import (
     validate_collection_type,
     validate_package_type,
 )
-
-logger = logging.getLogger(__name__)
 
 PACKAGE_REQUIRED = (
     "ordering",
@@ -40,7 +38,12 @@ PACKAGE_REQUIRED = (
 def _row_err(result: ImportRunResult, msg: str, *, strict: bool) -> None:
     result.errors.append(msg)
     result.stats.failed += 1
-    logger.warning(msg)
+    logger.warning(
+        msg,
+        module=LogModule.LABORATORY,
+        action="diagnostics.catalog_import.row_error",
+        metadata={"message": msg},
+    )
     if strict:
         raise StrictImportError(msg)
 
@@ -215,7 +218,12 @@ def sync_packages_from_file(
             if is_latest:
                 _demote_other_latest(lineage, existing.pk)
             result.stats.updated += 1
-            logger.info("Updated package %s v%s", lineage, version)
+            logger.info(
+                "Updated diagnostic package",
+                module=LogModule.LABORATORY,
+                action="diagnostics.catalog_import.package_updated",
+                metadata={"lineage": lineage, "version": version},
+            )
             continue
 
         pkg = DiagnosticPackage(
@@ -236,7 +244,12 @@ def sync_packages_from_file(
         if is_latest:
             _demote_other_latest(lineage, pkg.pk)
         result.stats.created += 1
-        logger.info("Created package %s v%s", lineage, version)
+        logger.info(
+            "Created diagnostic package",
+            module=LogModule.LABORATORY,
+            action="diagnostics.catalog_import.package_created",
+            metadata={"lineage": lineage, "version": version},
+        )
 
     return result
 
@@ -260,7 +273,12 @@ def sync_packages(
 
     category_by_code = {c.code: c for c in DiagnosticCategory.objects.filter(deleted_at__isnull=True)}
     for path in files:
-        logger.info("Importing packages from %s", path)
+        logger.info(
+            "Importing diagnostic packages",
+            module=LogModule.LABORATORY,
+            action="diagnostics.catalog_import.packages_started",
+            metadata={"path": str(path)},
+        )
         part = sync_packages_from_file(
             path,
             category_by_code=category_by_code,

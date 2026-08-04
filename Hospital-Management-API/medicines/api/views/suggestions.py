@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import uuid
 
 from django.http import QueryDict
@@ -21,8 +20,7 @@ from medicines.services.cache import (
     suggestion_cache_key,
 )
 from medicines.services.suggestion_engine import MedicineSuggestionEngine
-
-logger = logging.getLogger(__name__)
+from shared.logging import LogModule, logger
 
 
 def _collect_drugs_from_buckets(buckets: dict[str, list[dict]]) -> dict[uuid.UUID, DrugMaster]:
@@ -115,7 +113,12 @@ class MedicineSuggestionsAPIView(APIView):
         if cached is not None:
             return Response(cached)
 
-        logger.info("Medicine suggestions cache miss doctor_id=%s", doctor_id)
+        logger.info(
+            "Medicine suggestions cache miss",
+            module=LogModule.PRESCRIPTION,
+            action="medicines.suggestions.cache_miss",
+            metadata={"doctor_id": str(doctor_id)},
+        )
 
         engine = MedicineSuggestionEngine(
             doctor_id=doctor_id,

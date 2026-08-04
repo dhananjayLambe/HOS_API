@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import time
 import uuid
 from typing import Any
@@ -16,8 +15,7 @@ from medicines.services.cache import (
 from medicines.services.ranking import MedicineRanker
 from medicines.services.search_engine import search_medicines
 from medicines.services.suggestion_engine import MedicineSuggestionEngine
-
-logger = logging.getLogger(__name__)
+from shared.logging import LogModule, logger
 
 DEADLINE_SKIP_FTS_S = 0.15
 DEADLINE_NO_COLD_SUGGEST_S = 0.2
@@ -181,7 +179,11 @@ def run_hybrid(
         try:
             return search_medicines(q_norm, include_fts=include_fts)
         except Exception:
-            logger.exception("hybrid search failed; using suggestions merge only")
+            logger.exception(
+                "Hybrid medicine search failed; using suggestions merge only",
+                module=LogModule.PRESCRIPTION,
+                action="medicines.hybrid.search_failed",
+            )
             return []
 
     def task_suggestions() -> list[HybridSuggestionEntry]:

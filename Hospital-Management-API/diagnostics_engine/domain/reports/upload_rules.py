@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import logging
 import mimetypes
 from pathlib import Path
 
@@ -11,8 +10,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 
 from diagnostics_engine.models.reports import ReportArtifactType
-
-logger = logging.getLogger(__name__)
+from shared.logging import LogModule, logger
 
 DEFAULT_MAX_REPORT_UPLOAD_SIZE_MB = 25
 DEFAULT_MAX_REPORT_BATCH_UPLOAD_SIZE_MB = 100
@@ -209,18 +207,26 @@ def validate_mime_consistency(file, extension: str, *, file_index: int = 0) -> N
     if expected and content_type not in expected:
         if content_type in _SPOOFING_MIME_HINTS:
             logger.warning(
-                "artifact_upload_mime_spoofing index=%s ext=%s content_type=%s",
-                file_index,
-                extension,
-                content_type,
+                "Artifact upload MIME spoofing detected",
+                module=LogModule.REPORTS,
+                action="diagnostics.reports.upload_mime_spoofing",
+                metadata={
+                    "file_index": file_index,
+                    "extension": extension,
+                    "content_type": content_type,
+                },
             )
             return
         logger.debug(
-            "artifact_upload_mime_mismatch index=%s ext=%s content_type=%s expected=%s",
-            file_index,
-            extension,
-            content_type,
-            sorted(expected),
+            "Artifact upload MIME mismatch",
+            module=LogModule.REPORTS,
+            action="diagnostics.reports.upload_mime_mismatch",
+            metadata={
+                "file_index": file_index,
+                "extension": extension,
+                "content_type": content_type,
+                "expected": sorted(expected),
+            },
         )
 
 
@@ -235,9 +241,10 @@ def validate_uploaded_file(file, *, file_index: int = 0) -> None:
     extension = normalized_extension(name)
     if extension in BLOCKED_EXTENSIONS:
         logger.warning(
-            "artifact_upload_blocked_extension ext=%s index=%s",
-            extension,
-            file_index,
+            "Artifact upload blocked extension",
+            module=LogModule.REPORTS,
+            action="diagnostics.reports.upload_blocked_extension",
+            metadata={"extension": extension, "file_index": file_index},
         )
         raise ValidationError(f"File type '.{extension}' is not allowed.")
     if extension not in ALLOWED_EXTENSIONS:

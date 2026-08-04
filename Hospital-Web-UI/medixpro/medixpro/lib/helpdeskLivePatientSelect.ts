@@ -1,7 +1,6 @@
 import { toast } from "sonner";
 
 import axiosClient from "@/lib/axiosClient";
-import { debugSessionLog } from "@/lib/debugSessionLog";
 import { helpdeskCheckInOnServer, HELPDESK_DUPLICATE_NO_SYNCED_ROW } from "@/lib/helpdeskCheckIn";
 import { useHelpdeskQueueStore, type QueueEntry } from "@/lib/helpdeskQueueStore";
 import type { PatientSearchRow } from "@/lib/patientSearchDisplay";
@@ -38,17 +37,6 @@ export async function runHelpdeskLivePatientSelect(
   }
   const existing = findEntryByPatient({ id: patient.id, mobile: patient.mobile });
   const hasSyncedEncounter = Boolean(existing?.visitId && existing?.clinicId);
-  debugSessionLog({
-    runId: "post-fix-verify",
-    hypothesisId: "H3",
-    location: "helpdeskLivePatientSelect.ts:runHelpdeskLivePatientSelect",
-    message: "add-from-search after fetchTodayQueue",
-    data: {
-      hasExisting: Boolean(existing),
-      hasSyncedEncounter,
-      willShortCircuitAlready: Boolean(existing && hasSyncedEncounter),
-    },
-  });
   if (existing && hasSyncedEncounter) {
     setHighlightQueueEntryId(existing.id);
     toast.message(`Already in queue${existing.name ? ` (${existing.name})` : ""} — see highlighted row.`);

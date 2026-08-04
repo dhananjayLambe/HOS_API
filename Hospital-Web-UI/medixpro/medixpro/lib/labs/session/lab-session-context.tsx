@@ -71,12 +71,6 @@ function LabSessionQueryInner({ children }: { children: ReactNode }) {
     }
   }, [query.isError, query.error, logout]);
 
-  useEffect(() => {
-    if (process.env.NODE_ENV === "development" && query.isSuccess && query.data) {
-      console.debug("[lab-session]", query.data.organization?.display_name, query.data.branch?.branch_name);
-    }
-  }, [query.isSuccess, query.data]);
-
   const value = useMemo<LabSessionContextValue>(
     () => ({
       data: query.data,

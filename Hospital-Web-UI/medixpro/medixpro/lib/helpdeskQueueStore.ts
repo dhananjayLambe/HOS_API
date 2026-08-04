@@ -4,7 +4,6 @@ import { create } from "zustand";
 import { useMemo } from "react";
 import { toast } from "sonner";
 import axiosClient, { backendAxiosClient } from "@/lib/axiosClient";
-import { debugSessionLog } from "@/lib/debugSessionLog";
 
 export type QueueStatus = "waiting" | "vitals_done" | "in_consultation" | "completed";
 export const DRAGGABLE_STATUSES: ReadonlyArray<QueueStatus> = ["waiting", "vitals_done"];
@@ -449,19 +448,6 @@ export const useHelpdeskQueueStore = create<HelpdeskQueueState>((set, get) => ({
 
       const mapped = mapHelpdeskQueueApiResponse(data);
       get().hydrateFromServer(mapped);
-      // #region agent log
-      {
-        const n = get().entries.length;
-        const locals = get().entries.filter((e) => e.id.startsWith("hq-")).length;
-        debugSessionLog({
-          runId: "add-queue-debug",
-          hypothesisId: "H1_H3",
-          location: "helpdeskQueueStore.ts:fetchTodayQueue",
-          message: "after hydrateFromServer",
-          data: { serverRowCount: mapped.length, storeEntryCount: n, localHqCount: locals },
-        });
-      }
-      // #endregion
       if (rolledOver && typeof window !== "undefined") {
         toast.message("New day — today's queue was refreshed; yesterday's list was cleared.");
       }
@@ -534,33 +520,12 @@ export const useHelpdeskQueueStore = create<HelpdeskQueueState>((set, get) => ({
   findEntryByPatient: (patient) => {
     const targetMobile = normalizeMobile(patient.mobile);
     const entries = get().entries;
-    // #region agent log
     const byProfile = entries.find(
       (entry) => entry.patientProfileId && profileIdsEqual(entry.patientProfileId, patient.id)
     );
     const byMobile =
       !patient.id ? entries.find((entry) => normalizeMobile(entry.mobile) === targetMobile) : null;
-    const result = byProfile ?? byMobile ?? null;
-    debugSessionLog({
-      runId: "add-queue-debug",
-      hypothesisId: "H1_H2",
-      location: "helpdeskQueueStore.ts:findEntryByPatient",
-      message: "queue duplicate lookup",
-      data: {
-        profileMatchNormalized: true,
-        entryCount: entries.length,
-        hasPatientId: Boolean(patient.id),
-        hasMobileDigits: targetMobile.length > 0,
-        matchedBy: byProfile ? "profileId" : byMobile ? "mobile" : "none",
-        hasMatch: Boolean(result),
-        matchIdPrefix: result ? (result.id.startsWith("hq-") ? "hq" : "srv") : "none",
-        matchStatus: result?.status ?? null,
-        hasVisitId: Boolean(result?.visitId),
-        hasClinicId: Boolean(result?.clinicId),
-      },
-    });
-    // #endregion
-    return result;
+    return byProfile ?? byMobile ?? null;
   },
 
   moveToTop: async (id) => {

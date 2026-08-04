@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
@@ -13,8 +12,6 @@ from support_trace.domain.types import SupportTraceResult
 from support_trace.enums import TERMINAL_TRACE_STATUSES, TraceSource, TraceStatus
 from support_trace.services.support_trace_service import SupportTraceService
 from support_trace.workflow.types import WorkflowStateTransition, ResolvedWorkflow
-
-logger = logging.getLogger(__name__)
 
 
 class WorkflowStateService:

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import logging
-
 from django.contrib.auth import get_user_model
 
 from consultations_core.models.consultation import Consultation
@@ -11,8 +9,8 @@ from consultations_core.models.prescription import Prescription, PrescriptionSta
 from consultations_core.services.prescription_pdf_service import generate_and_persist_prescription_pdf
 from notifications.models.whatsapp_notifications import WhatsAppMessageStatus
 from notifications.services.delivery.whatsapp_service import WhatsAppService
+from shared.logging import LogModule, logger
 
-logger = logging.getLogger(__name__)
 User = get_user_model()
 
 
@@ -47,7 +45,12 @@ def run_prepare_consultation_and_enqueue(
     try:
         consultation = _consultation_queryset().filter(pk=consultation_id).first()
         if consultation is None:
-            logger.warning("consultation_whatsapp_prepare_missing consultation_id=%s", consultation_id)
+            logger.warning(
+                "Consultation WhatsApp prepare missing consultation",
+                module=LogModule.WHATSAPP,
+                action="whatsapp.consultation.prepare_missing",
+                metadata={"consultation_id": consultation_id},
+            )
             return None
 
         prescription = (
@@ -79,8 +82,10 @@ def run_prepare_consultation_and_enqueue(
         return None
     except Exception:
         logger.exception(
-            "consultation_whatsapp_prepare_failed consultation_id=%s",
-            consultation_id,
+            "Consultation WhatsApp prepare failed",
+            module=LogModule.WHATSAPP,
+            action="whatsapp.consultation.prepare_failed",
+            metadata={"consultation_id": consultation_id},
         )
         return None
 
@@ -102,7 +107,12 @@ def run_prepare_and_enqueue(
         .first()
     )
     if prescription is None:
-        logger.warning("prescription_whatsapp_prepare_missing prescription_id=%s", prescription_id)
+        logger.warning(
+            "Prescription WhatsApp prepare missing prescription",
+            module=LogModule.WHATSAPP,
+            action="whatsapp.prescription.prepare_missing",
+            metadata={"prescription_id": prescription_id},
+        )
         return None
     return run_prepare_consultation_and_enqueue(
         consultation_id=str(prescription),
