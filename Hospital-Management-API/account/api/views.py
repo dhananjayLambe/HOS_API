@@ -45,7 +45,7 @@ JWT_ALGORITHM = getattr(settings, "JWT_ALGORITHM", "HS256")
 JWT_ISSUER = getattr(settings, "JWT_ISSUER", "doctorpro")  # optional
 
 # OTP config
-OTP_TTL_SECONDS = 300  # 5 minutes
+OTP_TTL_SECONDS = 300  # 5 minutes — keep long enough to enter OTP from logs in DEBUG
 OTP_LENGTH = 6
 OTP_CACHE_PREFIX = "staff_otp"  # full key: staff_otp:{role}:{phone}
 
@@ -54,10 +54,12 @@ PHONE_REGEX = re.compile(r"^\d{10,15}$")
 
 MAX_RESEND_COUNT = 3
 RESEND_COOLDOWN_SECONDS = 30  # 30 seconds cooldown
-OTP_TTL_SECONDS = 60  # 1 min OTP validity
 COOLDOWN =  30
 RESEND_LIMIT = 5
 RESEND_WINDOW = 60
+
+# Same-process fallback when Redis SET/GET is swallowed (IGNORE_EXCEPTIONS=True)
+_OTP_MEMORY: dict[str, tuple[str, float]] = {}
 # -------------------
 # Helper functions
 # -------------------
@@ -75,8 +77,24 @@ def _otp_cache_key(role: str, phone: str) -> str:
     return f"{OTP_CACHE_PREFIX}:{role}:{phone}"
 
 # -------------------
-# OTP Redis Helpers Production 
+# OTP Redis Helpers Production
 # -------------------
+
+def _mem_get_otp(cache_key: str):
+    item = _OTP_MEMORY.get(cache_key)
+    if not item:
+        return None
+    otp, expires_at = item
+    if time.time() >= expires_at:
+        _OTP_MEMORY.pop(cache_key, None)
+        return None
+    return otp
+
+def _mem_set_otp(cache_key: str, otp: str, ttl: int):
+    _OTP_MEMORY[cache_key] = (str(otp), time.time() + ttl)
+
+def _mem_delete_otp(cache_key: str):
+    _OTP_MEMORY.pop(cache_key, None)
 
 def _store_or_get_otp(role: str, phone: str, otp: str = None):
     """
@@ -84,45 +102,62 @@ def _store_or_get_otp(role: str, phone: str, otp: str = None):
     - If OTP already exists (not expired), return it.
     - If no OTP exists and `otp` is provided, store that OTP.
     - If no OTP exists and no `otp` provided, generate a new one.
+    Redis IGNORE_EXCEPTIONS can swallow SET failures; always keep a same-process
+    memory copy so verify still works in local/debug.
     """
     cache_key = _otp_cache_key(role, phone)
     try:
-        existing_otp = cache.get(cache_key)
+        existing_otp = cache.get(cache_key) or _mem_get_otp(cache_key)
         if existing_otp:
-            return existing_otp  # reuse until TTL expires
+            return str(existing_otp)
 
-        # store provided OTP or generate new one
         if otp is None:
             otp = _generate_otp()
+        otp = str(otp)
 
-        cache.set(cache_key, otp, timeout=OTP_TTL_SECONDS)
+        saved = cache.set(cache_key, otp, timeout=OTP_TTL_SECONDS)
+        _mem_set_otp(cache_key, otp, OTP_TTL_SECONDS)
+        if saved is False:
+            logger.warning(
+                "Redis OTP store returned False; using in-memory fallback",
+                module=LogModule.AUTHENTICATION,
+                action="auth.otp.store",
+                metadata={"role": role, "phone": phone},
+            )
         return otp
     except Exception:
+        if otp is None:
+            otp = _generate_otp()
+        otp = str(otp)
+        _mem_set_otp(cache_key, otp, OTP_TTL_SECONDS)
         logger.exception(
-            "Redis OTP store/get failed",
+            "Redis OTP store/get failed; using in-memory fallback",
             module=LogModule.AUTHENTICATION,
             action="auth.otp.store",
-            metadata={"role": role},
+            metadata={"role": role, "phone": phone},
         )
-        raise
+        return otp
 
 def _get_otp(role: str, phone: str):
-    """Fetch OTP from Redis"""
+    """Fetch OTP from Redis, then same-process fallback."""
     cache_key = _otp_cache_key(role, phone)
     try:
-        return cache.get(cache_key)
+        cached = cache.get(cache_key)
+        if cached:
+            return str(cached)
     except Exception:
         logger.exception(
             "Redis OTP fetch failed",
             module=LogModule.AUTHENTICATION,
             action="auth.otp.fetch",
-            metadata={"role": role},
+            metadata={"role": role, "phone": phone},
         )
-        return None
+    return _mem_get_otp(cache_key)
 
 def _delete_otp(role: str, phone: str):
-    """Delete OTP from Redis"""
+    """Delete OTP from Redis and memory fallback."""
     cache_key = _otp_cache_key(role, phone)
+    _mem_delete_otp(cache_key)
     try:
         cache.delete(cache_key)
     except Exception:
@@ -130,7 +165,7 @@ def _delete_otp(role: str, phone: str):
             "Redis OTP delete failed",
             module=LogModule.AUTHENTICATION,
             action="auth.otp.delete",
-            metadata={"role": role},
+            metadata={"role": role, "phone": phone},
         )
 
 #FOR RESEND OTP Helper function
@@ -501,7 +536,7 @@ class StaffSendOTPView(APIView):
             "Staff OTP send requested",
             module=LogModule.AUTHENTICATION,
             action="auth.otp.send",
-            metadata={"role": role},
+            metadata={"role": role, "phone": phone},
         )
 
         # Input validation
@@ -575,11 +610,14 @@ class StaffSendOTPView(APIView):
         otp = _store_or_get_otp(role, phone, otp)
 
         # TODO: Integrate with external SMS gateway in production
+        otp_log_metadata = {"role": role, "phone": phone, "status": "otp_sent"}
+        if settings.DEBUG:
+            otp_log_metadata["otp"] = otp  # debug only — do not log OTP in production
         logger.info(
             "Staff OTP generated",
             module=LogModule.AUTHENTICATION,
             action="auth.otp.send",
-            metadata={"role": role, "status": "otp_sent"},
+            metadata=otp_log_metadata,
         )
 
         # Response
@@ -603,9 +641,9 @@ class VerifyOTPStaffView(APIView):
     authentication_classes = []
 
     def post(self, request):
-        phone = (request.data.get("phone_number") or "").strip()
-        role = (request.data.get("role") or "").lower().strip()
-        otp = (request.data.get("otp") or "").strip()
+        phone = str(request.data.get("phone_number") or "").strip()
+        role = str(request.data.get("role") or "").lower().strip()
+        otp = str(request.data.get("otp") or "").strip()
 
         # Input validation
         if not phone or not role or not otp:
@@ -627,9 +665,14 @@ class VerifyOTPStaffView(APIView):
                 "Staff OTP expired or missing",
                 module=LogModule.AUTHENTICATION,
                 action="auth.otp.verify",
-                metadata={"role": role, "status": "otp_expired"},
+                metadata={
+                    "role": role,
+                    "phone": phone,
+                    "status": "otp_expired",
+                    "submitted_otp": otp if settings.DEBUG else None,
+                },
             )
-            return Response({"status": "otp_expired", "message": "OTP expired or not found."},
+            return Response({"status": "otp_expired", "message": "OTP expired or not found. Please request a new OTP."},
                             status=status.HTTP_401_UNAUTHORIZED)
 
         if str(cached_otp) != str(otp):
@@ -637,7 +680,13 @@ class VerifyOTPStaffView(APIView):
                 "Staff OTP mismatch",
                 module=LogModule.AUTHENTICATION,
                 action="auth.otp.verify",
-                metadata={"role": role, "status": "otp_mismatch"},
+                metadata={
+                    "role": role,
+                    "phone": phone,
+                    "status": "otp_mismatch",
+                    "submitted_otp": otp if settings.DEBUG else None,
+                    "cached_otp": str(cached_otp) if settings.DEBUG else None,
+                },
             )
             return Response(
                 {"status": "otp_mismatch", "message": "OTP mismatched."},
@@ -657,18 +706,27 @@ class VerifyOTPStaffView(APIView):
             return Response({"status": "not_approved", "message": "User not approved by admin."},
                             status=status.HTTP_403_FORBIDDEN)
 
-        # OTP passed → consume OTP
+        # Generate tokens before consuming OTP so a logging failure cannot
+        # leave the client with a 500 after the OTP was already deleted.
+        tokens = _generate_jwt_tokens(user, role)
         with transaction.atomic():
             _delete_otp(role, phone)
 
-        # Generate JWT tokens
-        tokens = _generate_jwt_tokens(user, role)
-        logger.info(
-            "Staff OTP verified; tokens issued",
-            module=LogModule.AUTHENTICATION,
-            action="auth.otp.verify",
-            metadata={"role": role, "user_id": str(user.id), "status": "login_success"},
-        )
+        try:
+            logger.info(
+                "Staff OTP verified; tokens issued",
+                module=LogModule.AUTHENTICATION,
+                action="auth.otp.verify",
+                metadata={
+                    "role": role,
+                    "staff_user_id": str(user.id),
+                    "phone": phone,
+                    "status": "login_success",
+                },
+            )
+        except Exception:
+            # Never fail login because structured logging rejected metadata.
+            pass
 
         # Return tokens in response body for Authorization header usage
         response = Response({
@@ -755,11 +813,14 @@ class ResendOTPStaffView(APIView):
         # Update resend info
         update_resend_counters(role, phone)
 
+        otp_log_metadata = {"role": role, "phone": phone, "status": "otp_resent"}
+        if settings.DEBUG:
+            otp_log_metadata["otp"] = otp  # debug only — do not log OTP in production
         logger.info(
             "Staff OTP resent",
             module=LogModule.AUTHENTICATION,
             action="auth.otp.resend",
-            metadata={"role": role, "status": "otp_resent"},
+            metadata=otp_log_metadata,
         )
 
         response = {

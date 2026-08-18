@@ -21,6 +21,39 @@ export function resolveDjangoApiBase(): string {
 }
 
 /**
+ * Parse a Django/BFF upstream body as JSON. Django DEBUG 500s are HTML
+ * (`<!DOCTYPE html>...`); calling `res.json()` on those throws SyntaxError.
+ */
+export async function readDjangoJson(
+  res: Response,
+): Promise<{ status: number; data: Record<string, unknown> }> {
+  const contentType = res.headers.get("content-type") || ""
+  const text = await res.text()
+  const looksJson = contentType.includes("application/json") || text.trim().startsWith("{")
+  if (!looksJson) {
+    return {
+      status: res.status >= 400 ? res.status : 502,
+      data: {
+        error: "Backend returned an HTML error instead of JSON. Check the Django server log.",
+        status: "backend_error",
+      },
+    }
+  }
+  try {
+    const data = JSON.parse(text) as Record<string, unknown>
+    return { status: res.status, data }
+  } catch {
+    return {
+      status: 502,
+      data: {
+        error: "Backend returned invalid JSON.",
+        status: "backend_error",
+      },
+    }
+  }
+}
+
+/**
  * Normalize any Django/DRF failure to `{ error: string }` for the browser.
  */
 export function nextJsonErrorFromDjango(res: Response, raw: unknown): NextResponse {

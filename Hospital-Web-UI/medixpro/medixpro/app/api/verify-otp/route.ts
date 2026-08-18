@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { readDjangoJson } from "@/lib/djangoBffBase";
 import { serverLogger } from "@/lib/serverLogger";
 
 const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8000/api/";
@@ -13,10 +14,8 @@ export async function POST(req: Request) {
       body: JSON.stringify(body),
     });
 
-    const data = await res.json();
-
-    // Return response directly (tokens are in response body)
-    return NextResponse.json(data, { status: res.status });
+    const { status, data } = await readDjangoJson(res);
+    return NextResponse.json(data, { status });
   } catch (error: any) {
     serverLogger.error("verify-otp proxy error", error, { route: "verify-otp" });
     return NextResponse.json(
