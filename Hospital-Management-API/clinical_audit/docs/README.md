@@ -165,7 +165,7 @@ schedule_report_shared(report=report, user=request.user, channel="WHATSAPP")
 ## Tests
 
 ```bash
-DJANGO_SETTINGS_MODULE=main.settings_test python -m pytest clinical_audit/tests -v
+DJANGO_SETTINGS_MODULE=main.settings.test python -m pytest clinical_audit/tests -v
 ```
 
 178 tests including consultation, clinical documentation, prescription, and diagnostic audit coverage.

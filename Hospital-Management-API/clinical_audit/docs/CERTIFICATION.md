@@ -58,13 +58,13 @@ Thirteen wired production events:
 ### Full test suite (release gate)
 
 ```bash
-DJANGO_SETTINGS_MODULE=main.settings_test .venv/bin/python -m pytest clinical_audit/tests -v
+DJANGO_SETTINGS_MODULE=main.settings.test .venv/bin/python -m pytest clinical_audit/tests -v
 ```
 
 ### Certification tests only
 
 ```bash
-DJANGO_SETTINGS_MODULE=main.settings_test .venv/bin/python -m pytest \
+DJANGO_SETTINGS_MODULE=main.settings.test .venv/bin/python -m pytest \
   clinical_audit/tests/test_patient_workflow.py \
   clinical_audit/tests/test_certification.py \
   clinical_audit/tests/test_timeline_validation.py \

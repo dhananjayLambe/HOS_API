@@ -180,7 +180,7 @@ Payloads are sanitized via `sanitize_audit_payload` / `sanitize_audit_snapshot`.
 ## Tests
 
 ```bash
-DJANGO_SETTINGS_MODULE=main.settings_test python -m pytest \
+DJANGO_SETTINGS_MODULE=main.settings.test python -m pytest \
   clinical_audit/tests/test_clinical_documentation_audit.py \
   clinical_audit/tests/test_clinical_documentation_audit_integration.py -v
 ```

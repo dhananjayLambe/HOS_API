@@ -66,7 +66,7 @@ Use this checklist as the release gate before wider rollout of the Clinical Audi
 ## Pre-release verification
 
 ```bash
-DJANGO_SETTINGS_MODULE=main.settings_test .venv/bin/python -m pytest clinical_audit/tests -v
+DJANGO_SETTINGS_MODULE=main.settings.test .venv/bin/python -m pytest clinical_audit/tests -v
 ```
 
 All tests must pass. Certification E2E must produce exactly 13 journey events with a single `correlation_id`.

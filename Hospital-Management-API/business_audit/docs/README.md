@@ -79,5 +79,5 @@ BusinessAuditService.record(
 ## Test gate
 
 ```bash
-DJANGO_SETTINGS_MODULE=main.settings_test .venv/bin/python -m pytest clinical_audit/tests business_audit/tests -v
+DJANGO_SETTINGS_MODULE=main.settings.test .venv/bin/python -m pytest clinical_audit/tests business_audit/tests -v
 ```

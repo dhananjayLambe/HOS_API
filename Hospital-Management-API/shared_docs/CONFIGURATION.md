@@ -9,14 +9,38 @@ status: approved
 
 # Configuration Reference
 
-Operational settings from `main/settings.py` and environment variables.
+Operational settings from `main/settings/` and per-environment env files.
+
+How to run each environment: [Backend runbook](../../docs/backend-runbook.md).
+
+| Environment | Settings | Env file | Requirements |
+|---|---|---|---|
+| Development | `main.settings.development` | `.env.development` | `requirements/development.txt` |
+| UAT | `main.settings.uat` | `.env.uat` | `requirements/uat.txt` |
+| Production | `main.settings.production` | `.env.production` | `requirements/production.txt` |
+| Tests | `main.settings.test` | optional `.env` / `.env.development` | `requirements/test.txt` |
+
+Copy the matching `.env.*.example` file. Never commit filled env files.
+
+## Core
+
+| Setting | Env | Default | Notes |
+|---|---|---|---|
+| `SECRET_KEY` | `SECRET_KEY` or `DJANGO_SECRET_KEY` | required (except tests) | JWT signing key |
+| `DEBUG` | `DEBUG` or `DJANGO_DEBUG` | forced per settings module | Must be false in UAT and production |
+| `ALLOWED_HOSTS` | comma-separated | localhost in development | Required in UAT and production |
+| `ENVIRONMENT` | env | `development` | `development`, `uat`, `production`, `test` |
+| `DJANGO_TIME_ZONE` | env | `Asia/Kolkata` | Display timezone |
 
 ## Database
 
 | Setting | Env | Default | Notes |
 |---|---|---|---|
-| PostgreSQL | `DB_*` / `.env` | — | Primary database |
-| `DJANGO_TIME_ZONE` | env | `Asia/Kolkata` | Display timezone |
+| Database name | `DB_NAME` | `demo5_db` | PostgreSQL |
+| User | `DB_USER` | `postgres` | |
+| Password | `DB_PASSWORD` | empty | Set in the env file; not stored in source |
+| Host | `DB_HOST` | `localhost` | |
+| Port | `DB_PORT` | `5432` | |
 
 ## Redis / Channels / Celery
 

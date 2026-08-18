@@ -132,5 +132,5 @@ Query/timeline APIs for external consumers are planned in M3.6.
 ## Tests
 
 ```bash
-DJANGO_SETTINGS_MODULE=main.settings_test python -m pytest clinical_audit/tests -v
+DJANGO_SETTINGS_MODULE=main.settings.test python -m pytest clinical_audit/tests -v
 ```

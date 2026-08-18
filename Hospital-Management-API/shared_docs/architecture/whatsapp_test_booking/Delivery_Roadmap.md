@@ -166,7 +166,7 @@ Testing
 | Parity with routing pipeline | Same branch, price, score, labels as post-order routing |
 
 ```bash
-DJANGO_SETTINGS_MODULE=main.settings_test .venv/bin/python manage.py test \
+DJANGO_SETTINGS_MODULE=main.settings.test .venv/bin/python manage.py test \
   diagnostics_engine.tests.test_lab_recommendation_service \
   diagnostics_engine.tests.test_order_creation_service
 ```
@@ -223,8 +223,8 @@ Docs
 Testing
 
 ```bash
-DJANGO_SETTINGS_MODULE=main.settings_test .venv/bin/python manage.py migrate
-DJANGO_SETTINGS_MODULE=main.settings_test .venv/bin/python manage.py test \
+DJANGO_SETTINGS_MODULE=main.settings.test .venv/bin/python manage.py migrate
+DJANGO_SETTINGS_MODULE=main.settings.test .venv/bin/python manage.py test \
   diagnostics_engine.tests.test_marketplace_recommendation_api \
   diagnostics_engine.tests.test_lab_recommendation_service
 ```

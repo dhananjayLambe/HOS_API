@@ -103,7 +103,7 @@ Do **not** call `SupportTraceService.record()` from production modules.
 ## Test gate
 
 ```bash
-DJANGO_SETTINGS_MODULE=main.settings_test .venv/bin/python -m pytest clinical_audit/tests business_audit/tests support_trace/tests -v
+DJANGO_SETTINGS_MODULE=main.settings.test .venv/bin/python -m pytest clinical_audit/tests business_audit/tests support_trace/tests -v
 ```
 
 Current baseline: **649 passed**.

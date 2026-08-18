@@ -9,7 +9,9 @@ status: approved
 
 # Backend Architecture Overview
 
-DoctorProCare EMR backend — Django 3.x + DRF + SimpleJWT + Channels + Celery + PostgreSQL + Redis.
+DoctorProCare EMR backend — Python 3.11, Django 5.0.7 + DRF + SimpleJWT + Channels + Celery + PostgreSQL + Redis.
+
+Runtime configuration is split by environment (`main.settings.development`, `main.settings.uat`, `main.settings.production`). See [the backend runbook](../../../docs/backend-runbook.md).
 
 ## App tiers
 

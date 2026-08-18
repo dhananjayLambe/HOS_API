@@ -13,16 +13,25 @@ Django + DRF backend for DoctorPro EMR: consultations, diagnostics, labs, appoin
 
 ## Stack
 
-- Django 3.x, DRF, SimpleJWT
+- Python 3.11, Django 5.0.7, DRF, SimpleJWT
 - PostgreSQL, Redis, Celery, Channels
 - drf-yasg (`/swagger/`, `/redoc/`)
 - Optional S3 for reports
 
+Supported versions and install files: Python 3.11 (see `.python-version`), runtime packages in `requirements/base.txt`, environment overlays in `requirements/development.txt`, `requirements/uat.txt`, and `requirements/production.txt`.
+
 ## Quick start
 
+Follow the copy-paste guide: [Backend runbook](../docs/backend-runbook.md).
+
 ```bash
-pip install -r requirements.txt
-cp .env.example .env   # if available
+cd Hospital-Management-API
+python3.11 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements/development.txt
+cp .env.development.example .env.development
+# set SECRET_KEY and DB_* in .env.development
+python manage.py check
 python manage.py migrate
 python manage.py runserver
 ```

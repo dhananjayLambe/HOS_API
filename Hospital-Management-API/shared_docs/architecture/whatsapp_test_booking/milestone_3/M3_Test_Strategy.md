@@ -37,7 +37,7 @@
 Run with M2:
 
 ```bash
-DJANGO_SETTINGS_MODULE=main.settings_test .venv/bin/python manage.py test \
+DJANGO_SETTINGS_MODULE=main.settings.test .venv/bin/python manage.py test \
   diagnostics_engine.tests.test_marketplace_recommendation_api \
   diagnostics_engine.tests.test_lab_recommendation_service
 ```

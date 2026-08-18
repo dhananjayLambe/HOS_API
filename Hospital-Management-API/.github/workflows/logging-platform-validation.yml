@@ -6,12 +6,14 @@ on:
       - "shared/logging/**"
       - "pytest.ini"
       - "requirements*.txt"
+      - "requirements/**"
       - ".github/workflows/logging-platform-validation.yml"
   pull_request:
     paths:
       - "shared/logging/**"
       - "pytest.ini"
       - "requirements*.txt"
+      - "requirements/**"
       - ".github/workflows/logging-platform-validation.yml"
 
 jobs:
@@ -26,17 +28,18 @@ jobs:
           python-version: "3.11"
           cache: pip
           cache-dependency-path: |
-            requirements.txt
-            requirements-dev.txt
+            requirements/base.txt
+            requirements/development.txt
+            requirements/test.txt
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt -r requirements-dev.txt
+          pip install -r requirements/test.txt
 
       - name: Run logging certification suite
         env:
-          DJANGO_SETTINGS_MODULE: main.settings_test
+          DJANGO_SETTINGS_MODULE: main.settings.test
         run: |
           pytest shared/logging/tests/unit \
             shared/logging/tests/integration \
@@ -49,6 +52,6 @@ jobs:
       - name: Run performance benchmarks
         continue-on-error: true
         env:
-          DJANGO_SETTINGS_MODULE: main.settings_test
+          DJANGO_SETTINGS_MODULE: main.settings.test
         run: |
           pytest shared/logging/tests/performance -m slow -v

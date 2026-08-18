@@ -25,7 +25,7 @@ Golden scenarios in `support_trace/tests/certification/test_end_to_end.py`.
 ## Running tests
 
 ```bash
-DJANGO_SETTINGS_MODULE=main.settings_test .venv/bin/python -m pytest support_trace/tests/certification/test_end_to_end.py -v
+DJANGO_SETTINGS_MODULE=main.settings.test .venv/bin/python -m pytest support_trace/tests/certification/test_end_to_end.py -v
 ```
 
 ## Programmatic certification

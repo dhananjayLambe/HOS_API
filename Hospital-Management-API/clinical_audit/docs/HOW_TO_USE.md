@@ -341,7 +341,7 @@ Add new actions to `AuditAction` when introducing a new module event type, then 
 Validate production readiness without modifying business data:
 
 ```bash
-DJANGO_SETTINGS_MODULE=main.settings_test .venv/bin/python -m pytest clinical_audit/tests/test_patient_workflow.py -v
+DJANGO_SETTINGS_MODULE=main.settings.test .venv/bin/python -m pytest clinical_audit/tests/test_patient_workflow.py -v
 ```
 
 Programmatic check:

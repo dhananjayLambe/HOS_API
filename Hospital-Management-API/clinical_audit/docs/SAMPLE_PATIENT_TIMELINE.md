@@ -77,7 +77,7 @@ Each row in `clinical_audit` should include:
 See `clinical_audit/tests/support/certification_workflow.py` and `test_patient_workflow.py`.
 
 ```bash
-DJANGO_SETTINGS_MODULE=main.settings_test .venv/bin/python -m pytest \
+DJANGO_SETTINGS_MODULE=main.settings.test .venv/bin/python -m pytest \
   clinical_audit/tests/test_patient_workflow.py -v
 ```
 

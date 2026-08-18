@@ -103,7 +103,7 @@ Legacy `consultations_core.domain.audit.AuditService` → `ClinicalAuditLog` rem
 ## Tests
 
 ```bash
-DJANGO_SETTINGS_MODULE=main.settings_test python -m pytest \
+DJANGO_SETTINGS_MODULE=main.settings.test python -m pytest \
   clinical_audit/tests/test_consultation_audit.py \
   clinical_audit/tests/test_consultation_audit_integration.py -v
 ```

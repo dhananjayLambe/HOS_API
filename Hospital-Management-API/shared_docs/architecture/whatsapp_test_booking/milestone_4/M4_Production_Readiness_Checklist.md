@@ -149,7 +149,7 @@ Django Admin: filter `WhatsAppMessage` by `message_type=TEST_BOOKING`.
 
 ```bash
 cd HOS_API/Hospital-Management-API
-DJANGO_SETTINGS_MODULE=main.settings_test .venv/bin/python manage.py test \
+DJANGO_SETTINGS_MODULE=main.settings.test .venv/bin/python manage.py test \
   notifications.tests.test_diagnostic_recommendation_production_readiness \
   notifications.tests.test_diagnostic_recommendation_whatsapp \
   notifications.tests.test_whatsapp_template_renderer.RecommendationTemplateRendererTests \

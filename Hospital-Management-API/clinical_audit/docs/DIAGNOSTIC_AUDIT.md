@@ -166,7 +166,7 @@ Never store PDF bytes, DICOM, signed URLs, JWT tokens, or base64 blobs. Payloads
 ## Tests
 
 ```bash
-DJANGO_SETTINGS_MODULE=main.settings_test python -m pytest \
+DJANGO_SETTINGS_MODULE=main.settings.test python -m pytest \
   clinical_audit/tests/test_diagnostic_audit.py \
   clinical_audit/tests/test_diagnostic_audit_integration.py -v
 ```

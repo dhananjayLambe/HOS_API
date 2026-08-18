@@ -55,10 +55,16 @@ cover/
 
 # Django stuff:
 *.log
+logs/
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
+*.sqlite3
+media/
+staticfiles/
 Hospital-Management-API/media/
+Hospital-Management-API/logs/
+Hospital-Management-API/staticfiles/
 
 # Flask stuff:
 instance/
@@ -122,6 +128,9 @@ celerybeat.pid
 
 # Environments
 .env
+.env.*
+!.env.example
+!.env.*.example
 .venv
 env/
 venv/
