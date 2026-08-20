@@ -27,6 +27,15 @@ def _env_first(*names, default=""):
     return default
 
 
+def _require_environment_values(*names):
+    """Raise at startup when a deployment-only environment variable is absent."""
+    missing = [name for name in names if not os.getenv(name, "").strip()]
+    if missing:
+        raise ImproperlyConfigured(
+            "Missing required environment variable(s): " + ", ".join(missing)
+        )
+
+
 SECRET_KEY = _env_first("SECRET_KEY", "DJANGO_SECRET_KEY")
 DEBUG = _env_bool("DEBUG", os.getenv("DJANGO_DEBUG", "false"))
 ALLOWED_HOSTS = _env_list("ALLOWED_HOSTS")
