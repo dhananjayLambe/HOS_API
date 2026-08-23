@@ -4,6 +4,8 @@ Copy-paste guide for running the Django backend in [Hospital-Management-API](../
 
 Working directory is always `Hospital-Management-API/`. Do not commit filled `.env.development`, `.env.uat`, or `.env.production` files.
 
+This runbook is the **virtualenv** path (`runserver` / local Celery). To run the same environments as Docker Compose (API, Celery, Redis, Nginx, and local Postgres), use [docker-compose-runbook.md](docker-compose-runbook.md).
+
 | Git branch | Settings module | Env file | Requirements |
 | --- | --- | --- | --- |
 | `hos-development` | `main.settings.development` | `.env.development` | `requirements/development.txt` |

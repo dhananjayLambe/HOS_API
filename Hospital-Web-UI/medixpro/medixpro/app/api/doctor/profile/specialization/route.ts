@@ -1,13 +1,14 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { getDjangoApiBase } from "@/lib/get-django-api-base"
 
-const DJANGO_API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+const DJANGO_API_URL = getDjangoApiBase()
 
 export async function POST(request: NextRequest) {
   try {
     const token = request.headers.get("Authorization")
     const body = await request.json()
 
-    const response = await fetch(`${DJANGO_API_URL}/api/doctor/specializations/`, {
+    const response = await fetch(`${DJANGO_API_URL}doctor/specializations/`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -53,7 +54,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ message: "Specialization ID is required" }, { status: 400 })
     }
 
-    const response = await fetch(`${DJANGO_API_URL}/api/doctor/specializations/${id}/`, {
+    const response = await fetch(`${DJANGO_API_URL}doctor/specializations/${id}/`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
@@ -94,7 +95,7 @@ export async function DELETE(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const id = searchParams.get("id")
 
-    const response = await fetch(`${DJANGO_API_URL}/api/doctor/specializations/${id}/`, {
+    const response = await fetch(`${DJANGO_API_URL}doctor/specializations/${id}/`, {
       method: "DELETE",
       headers: {
         Authorization: token || "",

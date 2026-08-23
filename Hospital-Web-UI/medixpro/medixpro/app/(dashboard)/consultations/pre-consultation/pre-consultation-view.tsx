@@ -20,7 +20,7 @@ import { useEncounter } from "@/lib/encounterContext";
 import { useEncounterMultiTabLeader } from "@/hooks/useEncounterMultiTabLeader";
 
 export function PreConsultationView() {
-  const { selectedPatient, triggerSearchHighlight } = usePatient();
+  const { selectedPatient, clearPatient, triggerSearchHighlight } = usePatient();
   const { fetchEncounterById, getEncounterById } = useEncounter();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -45,8 +45,8 @@ export function PreConsultationView() {
 
   const [isCompleting, setIsCompleting] = useState(false);
   const [preConsultationStarted, setPreConsultationStarted] = useState(false);
-  // Entry flow: "active" | "completed" | "none" | null (null = not resolved or has encounter_id in URL)
-  const [entryState, setEntryState] = useState<"active" | "completed" | "none" | null>(null);
+  // Entry flow: "active" | "completed" | "none" | "patient_missing" | null
+  const [entryState, setEntryState] = useState<"active" | "completed" | "none" | "patient_missing" | null>(null);
   const [isResolvingEntry, setIsResolvingEntry] = useState(false);
   const [encounterStatus, setEncounterStatus] = useState<string | null>(null);
   const [isStartingNewVisit, setIsStartingNewVisit] = useState(false);
@@ -58,6 +58,7 @@ export function PreConsultationView() {
   // Prevent multiple redirects when encounter is cancelled (stops infinite loop)
   const redirectingDueToCancelledRef = useRef(false);
   const redirectedForEncounterIdRef = useRef<string | null>(null);
+  const resolvedEntryForPatientRef = useRef<string | null>(null);
 
   // Template store for checking enabled sections
   const { template, fetchTemplate, isSectionEnabled } = usePreConsultationTemplateStore();
@@ -240,7 +241,13 @@ export function PreConsultationView() {
 
   // Entry flow: when no encounter_id in URL and patient selected, resolve (active / completed / none)
   useEffect(() => {
-    if (encounterId || !selectedPatient?.id || isResolvingEntry) return;
+    if (!selectedPatient?.id) {
+      resolvedEntryForPatientRef.current = null;
+      return;
+    }
+    if (encounterId) return;
+    if (resolvedEntryForPatientRef.current === selectedPatient.id) return;
+    resolvedEntryForPatientRef.current = selectedPatient.id;
 
     const resolveEntry = async () => {
       setIsResolvingEntry(true);
@@ -269,15 +276,22 @@ export function PreConsultationView() {
           setEntryState("completed");
         }
       } catch (error: any) {
-        const msg = error.response?.data?.detail || error.response?.data?.message || error.message || "Failed to resolve entry.";
-        toast.error(msg);
+        const status = error?.response?.status;
+        const detail = String(error?.response?.data?.detail || error?.response?.data?.message || "");
+        if (status === 404) {
+          // Patient profile is not in this database (stale localStorage / recents), not "no visit yet".
+          setEntryState("patient_missing");
+          toast.error(detail || "This patient is not in the current database. Search or add the patient again.");
+          return;
+        }
+        toast.error(detail || error.message || "Failed to resolve entry.");
       } finally {
         setIsResolvingEntry(false);
       }
     };
 
     resolveEntry();
-  }, [selectedPatient?.id, encounterId, isResolvingEntry, router]);
+  }, [selectedPatient?.id, encounterId, router, toast]);
 
   // When encounter_id in URL, fetch encounter detail (cancelled → dashboard only; no auto-redirect to consultation on mount)
   useEffect(() => {
@@ -330,7 +344,11 @@ export function PreConsultationView() {
         );
         setPreConsultationStarted(true);
       } catch (e: any) {
-        if (e?.response?.status === 400) setPreConsultationStarted(true);
+        // 400 = cancelled / wrong status; treat as handled so the effect does not retry.
+        const status = e?.response?.status;
+        if (status === 400 || status === 409) {
+          setPreConsultationStarted(true);
+        }
       }
     };
     startPreConsultation();
@@ -475,10 +493,19 @@ export function PreConsultationView() {
 
         setPreviousRecords(records);
       }
-    } catch (error) {
+    } catch (error: any) {
+      const empty = {
+        vitals: [] as any[],
+        history: [] as any[],
+        allergies: [] as any[],
+        chiefComplaint: [] as any[],
+      };
+      setPreviousRecords(empty);
+      // 404 = patient not in this DB (common after switching to Docker) or no history yet.
+      if (error?.response?.status === 404) {
+        return;
+      }
       console.error("Error fetching previous records:", error);
-      // Fallback to sample data for UI development
-      setPreviousRecords(getSampleHistoryData());
     } finally {
       setIsLoadingHistory(false);
     }
@@ -669,7 +696,11 @@ export function PreConsultationView() {
       toast.success("New visit started.");
       router.push(url);
     } catch (error: any) {
+      const status = error.response?.status;
       const msg = error.response?.data?.detail || error.response?.data?.message || error.message || "Failed to start new visit.";
+      if (status === 404) {
+        setEntryState("patient_missing");
+      }
       toast.error(msg);
     } finally {
       setIsStartingNewVisit(false);
@@ -833,7 +864,45 @@ export function PreConsultationView() {
       });
   };
 
-  // Start New Visit page (commented out for later use): no active visit — user clicks to start a new encounter
+  if (entryState === "patient_missing" && !encounterId) {
+    const patientLabel = selectedPatient?.full_name || "This patient";
+    return (
+      <div className="flex flex-col gap-6 pb-8">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <Link href="/doctor-dashboard">
+              <Button variant="ghost" size="icon">
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+            </Link>
+            <div>
+              <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">Pre-Consultation</h1>
+              <p className="text-muted-foreground">{patientLabel} is not in this database.</p>
+            </div>
+          </div>
+        </div>
+        <div className="rounded-lg border bg-muted/30 p-6 text-center max-w-md mx-auto">
+          <p className="text-muted-foreground mb-4">
+            Search for the patient again, or add them from the header search. Browser recents from another database will not start a visit here.
+          </p>
+          <Button
+            onClick={() => {
+              resolvedEntryForPatientRef.current = null;
+              setEntryState(null);
+              clearPatient();
+              triggerSearchHighlight();
+            }}
+            className="gap-2 bg-purple-600 hover:bg-purple-700"
+          >
+            <Search className="h-4 w-4" />
+            Search or add patient
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // Start New Visit page: no active visit — user clicks to start a new encounter
   if (entryState === "completed" && !encounterId) {
     return (
       <div className="flex flex-col gap-6 pb-8">

@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
+import { getDjangoApiBase } from "@/lib/get-django-api-base"
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-const BACKEND_URL = process.env.BACKEND_URL || process.env.DJANGO_API_URL || "http://localhost:8000/api/"
+const BACKEND_URL = getDjangoApiBase()
 
 export async function GET(request: NextRequest) {
   try {

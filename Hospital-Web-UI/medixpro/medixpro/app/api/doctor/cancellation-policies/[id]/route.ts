@@ -1,9 +1,10 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { resolveDjangoApiBase } from "@/lib/djangoBffBase"
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-const DJANGO_API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+const DJANGO_API_URL = resolveDjangoApiBase()
 
 // GET - Retrieve a specific cancellation policy
 export async function GET(

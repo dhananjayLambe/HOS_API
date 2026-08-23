@@ -10,9 +10,8 @@ export function isLabDashboardPath(pathname: string) {
 }
 
 /**
- * Blocks helpdesk users from the doctor `(dashboard)` shell — redirect to helpdesk queue.
- * Lab routes under `app/lab-dashboard/` (`/lab-dashboard/*`) are allowed only for labadmin; other roles are redirected away.
- * Labadmin may only use `/lab-dashboard/*` — not doctor `(dashboard)` routes (including `/profile`).
+ * Blocks unauthenticated users from every `(dashboard)` / lab shell route.
+ * Also keeps helpdesk users on the helpdesk queue and labadmin on `/lab-dashboard/*`.
  */
 export function DashboardRoleGate({ children }: { children: React.ReactNode }) {
   const { role, sessionChecked, isAuthenticated } = useAuth();
@@ -29,31 +28,31 @@ export function DashboardRoleGate({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!sessionChecked) return;
+    if (!isAuthenticated) {
+      router.replace("/auth/login");
+    }
+  }, [sessionChecked, isAuthenticated, router]);
+
+  useEffect(() => {
+    if (!sessionChecked || !isAuthenticated) return;
     if (role?.toLowerCase() === "helpdesk" && !allowHelpdeskHere) {
       router.replace("/helpdesk/queue");
     }
-  }, [role, sessionChecked, router, allowHelpdeskHere]);
+  }, [role, sessionChecked, isAuthenticated, router, allowHelpdeskHere]);
 
   useEffect(() => {
-    if (!sessionChecked) return;
+    if (!sessionChecked || !isAuthenticated) return;
     if (isLabAdminRole(role) && !allowLabadminOnDashboard) {
       router.replace("/lab-dashboard/");
     }
-  }, [role, sessionChecked, router, allowLabadminOnDashboard]);
+  }, [role, sessionChecked, isAuthenticated, router, allowLabadminOnDashboard]);
 
   useEffect(() => {
-    if (!sessionChecked || !role) return;
+    if (!sessionChecked || !isAuthenticated || !role) return;
     if (onLabPath && !isLabAdminRole(role)) {
       router.replace(getRoleRedirectPath(role));
     }
-  }, [role, sessionChecked, router, onLabPath]);
-
-  useEffect(() => {
-    if (!sessionChecked) return;
-    if (onLabPath && !isAuthenticated) {
-      router.replace("/auth/login");
-    }
-  }, [sessionChecked, onLabPath, isAuthenticated, router]);
+  }, [role, sessionChecked, isAuthenticated, router, onLabPath]);
 
   if (!sessionChecked) {
     return (
@@ -61,15 +60,15 @@ export function DashboardRoleGate({ children }: { children: React.ReactNode }) {
     );
   }
 
+  if (!isAuthenticated) {
+    return null;
+  }
+
   if (role?.toLowerCase() === "helpdesk" && !allowHelpdeskHere) {
     return null;
   }
 
   if (isLabAdminRole(role) && !allowLabadminOnDashboard) {
-    return null;
-  }
-
-  if (onLabPath && !isAuthenticated) {
     return null;
   }
 

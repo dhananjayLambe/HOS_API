@@ -1,13 +1,14 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { getDjangoApiBase } from "@/lib/get-django-api-base"
 
-const DJANGO_API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+const DJANGO_API_URL = getDjangoApiBase()
 
 export async function POST(request: NextRequest) {
   try {
     const token = request.headers.get("Authorization")
     const body = await request.json()
 
-    const response = await fetch(`${DJANGO_API_URL}/api/doctor/education/`, {
+    const response = await fetch(`${DJANGO_API_URL}doctor/education/`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -32,7 +33,7 @@ export async function GET(request: NextRequest) {
   try {
     const token = request.headers.get("Authorization")
 
-    const response = await fetch(`${DJANGO_API_URL}/api/doctor/education/`, {
+    const response = await fetch(`${DJANGO_API_URL}doctor/education/`, {
       method: "GET",
       headers: {
         Authorization: token || "",
@@ -68,7 +69,7 @@ export async function PATCH(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const id = searchParams.get("id")
 
-    const response = await fetch(`${DJANGO_API_URL}/api/doctor/education/${id}/`, {
+    const response = await fetch(`${DJANGO_API_URL}doctor/education/${id}/`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
@@ -95,7 +96,7 @@ export async function DELETE(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const id = searchParams.get("id")
 
-    const response = await fetch(`${DJANGO_API_URL}/api/doctor/education/${id}/`, {
+    const response = await fetch(`${DJANGO_API_URL}doctor/education/${id}/`, {
       method: "DELETE",
       headers: {
         Authorization: token || "",

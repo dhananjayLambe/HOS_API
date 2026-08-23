@@ -13,7 +13,8 @@ export async function POST(req: Request) {
       );
     }
 
-    const BASE_URL = process.env.DJANGO_API_URL || process.env.BACKEND_URL || "http://localhost:8000/api/";
+    const { getDjangoApiBase } = await import("@/lib/get-django-api-base");
+    const BASE_URL = getDjangoApiBase();
     
     // Call Django backend logout API
     const res = await fetch(`${BASE_URL}auth/logout/`, {

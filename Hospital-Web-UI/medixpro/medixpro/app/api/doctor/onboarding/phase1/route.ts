@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server"
+import { getDjangoApiBase } from "@/lib/get-django-api-base"
 
 export async function POST(request: Request) {
   try {
     const body = await request.json()
 
-    const res = await fetch("http://localhost:8000/api/doctor/onboarding/phase1/", {
+    const res = await fetch(`${getDjangoApiBase()}doctor/onboarding/phase1/`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

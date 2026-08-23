@@ -29,6 +29,8 @@ export function getDjangoApiBase(): string {
     return ensureTrailingSlashAfterOrigin(pub);
   }
 
+  // 127.0.0.1, not localhost: Node resolves localhost to ::1 first, and
+  // Colima/Docker often only forwards IPv4 :8000 → fetch failed / ECONNREFUSED.
   return "http://127.0.0.1:8000/api/";
 }
 

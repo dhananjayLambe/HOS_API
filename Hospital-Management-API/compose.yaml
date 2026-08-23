@@ -1,0 +1,134 @@
+name: hos-api
+
+x-django-environment: &django-environment
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  REDIS_URL: redis://redis:6379/1
+
+x-django-service: &django-service
+  image: ${HOS_IMAGE:-hos-api}:${HOS_IMAGE_TAG:-local}
+  build:
+    context: .
+    dockerfile: Dockerfile
+  init: true
+  environment:
+    <<: *django-environment
+  volumes:
+    - staticfiles:/app/staticfiles
+  depends_on:
+    redis:
+      condition: service_healthy
+
+services:
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    expose:
+      - "6379"
+
+  api:
+    <<: *django-service
+    command:
+      - gunicorn
+      - main.asgi:application
+      - --bind
+      - 0.0.0.0:8000
+      - --worker-class
+      - uvicorn.workers.UvicornWorker
+      - --workers
+      - ${GUNICORN_WORKERS:-3}
+      - --timeout
+      - "120"
+      - --access-logfile
+      - "-"
+      - --error-logfile
+      - "-"
+      - --capture-output
+    expose:
+      - "8000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/', timeout=5)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+
+  celery-worker:
+    <<: *django-service
+    command:
+      - celery
+      - -A
+      - main
+      - worker
+      - -l
+      - info
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "celery -A main inspect ping -d celery@$$HOSTNAME --timeout 10",
+        ]
+      interval: 20s
+      timeout: 15s
+      retries: 5
+      start_period: 40s
+
+  celery-beat:
+    <<: *django-service
+    command:
+      - celery
+      - -A
+      - main
+      - beat
+      - -l
+      - info
+      - --pidfile=/tmp/celerybeat.pid
+      - --schedule=/tmp/celerybeat-schedule
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "test -f /tmp/celerybeat.pid && kill -0 $$(cat /tmp/celerybeat.pid)",
+        ]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  nginx:
+    image: nginx:1.27-alpine
+    depends_on:
+      api:
+        condition: service_healthy
+    volumes:
+      - staticfiles:/app/staticfiles:ro
+      - nginx-certificates:/etc/nginx/certs:ro
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://127.0.0.1/health/ | grep -q '\"status\": \"ok\"'",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  staticfiles:
+  redis-data:
+  nginx-certificates:

@@ -43,7 +43,7 @@ class PatientProfileSerializer(serializers.ModelSerializer):
             "Patient profile create",
             module=LogModule.API,
             action="patient.profile.create",
-            metadata={"user_id": str(user.id)},
+            metadata={"patient_user_id": str(user.id)},
         )
         account, _ = PatientAccount.objects.get_or_create(user=user)
         validated_data["account"] = account  # Assign the patient account

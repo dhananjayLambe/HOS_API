@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { resolveDjangoApiBase } from "@/lib/djangoBffBase";
 
-const DJANGO_API_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+const DJANGO_API_URL = resolveDjangoApiBase();
 const CACHE_CONTROL_VALUE = "private, max-age=60, stale-while-revalidate=120";
 
 export async function GET(request: NextRequest) {

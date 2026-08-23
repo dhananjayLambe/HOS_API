@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { getDjangoApiBase } from "@/lib/get-django-api-base"
 
-const DJANGO_API_URL = process.env.DJANGO_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/";
+const DJANGO_API_URL = getDjangoApiBase();
 
 function djangoUrl(visitId: string) {
   const base = DJANGO_API_URL.replace(/\/+$/, "");

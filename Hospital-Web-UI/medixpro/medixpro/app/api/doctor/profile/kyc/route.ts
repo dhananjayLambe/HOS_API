@@ -1,13 +1,14 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { getDjangoApiBase } from "@/lib/get-django-api-base"
 
-const DJANGO_API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+const DJANGO_API_URL = getDjangoApiBase()
 
 export async function POST(request: NextRequest) {
   try {
     const token = request.headers.get("Authorization")
     const formData = await request.formData()
 
-    const response = await fetch(`${DJANGO_API_URL}/api/doctor/kyc/`, {
+    const response = await fetch(`${DJANGO_API_URL}doctor/kyc/status/`, {
       method: "POST",
       headers: {
         Authorization: token || "",
@@ -31,7 +32,7 @@ export async function GET(request: NextRequest) {
   try {
     const token = request.headers.get("Authorization")
 
-    const response = await fetch(`${DJANGO_API_URL}/api/doctor/kyc/`, {
+    const response = await fetch(`${DJANGO_API_URL}doctor/kyc/status/`, {
       method: "GET",
       headers: {
         Authorization: token || "",

@@ -35,12 +35,12 @@ def start_consultation_from_queue_entry(queue_entry, user):
             f"queue_consultation_bridge: consultation start failed for encounter {encounter.id}: {e}",
             module=LogModule.CONSULTATION,
             action="consultation.queue_bridge.start_failed",
-            metadata={"encounter_id": str(encounter.id)},
+            metadata={"source": "helpdesk"},
         )
     except Exception as e:
         logger.exception(
             f"queue_consultation_bridge: consultation create error for encounter {encounter.id}: {e}",
             module=LogModule.CONSULTATION,
             action="consultation.queue_bridge.create_failed",
-            metadata={"encounter_id": str(encounter.id)},
+            metadata={"source": "helpdesk"},
         )

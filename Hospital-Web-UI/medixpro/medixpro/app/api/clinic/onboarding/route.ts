@@ -1,5 +1,6 @@
 // api/clinic/onboarding/route.ts
 import { NextResponse } from "next/server"
+import { getDjangoApiBase } from "@/lib/get-django-api-base"
 
 export async function POST(req: Request) {
   try {
@@ -41,7 +42,7 @@ export async function POST(req: Request) {
     }
 
     // Backend API URL
-    const base = process.env.DJANGO_API_URL || "http://localhost:8000/api/"
+    const base = getDjangoApiBase()
     const endpoint = `${base.replace(/\/$/, "")}/clinic/clinics/onboarding/`
 
     // Send request to Django

@@ -29,6 +29,10 @@ if not SECRET_KEY:
     raise ImproperlyConfigured("SECRET_KEY must be set in .env.uat")
 if not ALLOWED_HOSTS:
     raise ImproperlyConfigured("ALLOWED_HOSTS must be set in .env.uat")
+# Container healthchecks call http://127.0.0.1:8000/health/ from inside the API container.
+for _healthcheck_host in ("127.0.0.1", "localhost"):
+    if _healthcheck_host not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(_healthcheck_host)
 _require_environment_values("DB_NAME", "DB_USER", "DB_PASSWORD", "DB_HOST")
 if not CORS_ALLOWED_ORIGINS:
     raise ImproperlyConfigured("CORS_ALLOWED_ORIGINS must be set in .env.uat")
@@ -43,6 +47,7 @@ SESSION_COOKIE_SAMESITE = "Lax"
 CSRF_COOKIE_SAMESITE = "Lax"
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SECURE_SSL_REDIRECT = _env_bool("SECURE_SSL_REDIRECT", "false")
+SECURE_REDIRECT_EXEMPT = [r"^health/$"]
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_REFERRER_POLICY = "same-origin"
 SECURE_CROSS_ORIGIN_OPENER_POLICY = "same-origin"

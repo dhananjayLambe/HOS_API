@@ -1,7 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { serverLogger } from "@/lib/serverLogger"
+import { resolveDjangoApiBase } from "@/lib/djangoBffBase"
 
-const DJANGO_API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+const DJANGO_API_URL = resolveDjangoApiBase()
 const ROUTE = "doctor/kyc/upload/digital-signature"
 
 export async function PATCH(request: NextRequest) {

@@ -1,10 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { serverLogger } from "@/lib/serverLogger"
+import { resolveDjangoApiBase } from "@/lib/djangoBffBase"
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-const DJANGO_API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+const DJANGO_API_URL = resolveDjangoApiBase()
 const ROUTE = "doctor/cancellation-policies"
 
 // GET - List all cancellation policies (with optional clinic filter)

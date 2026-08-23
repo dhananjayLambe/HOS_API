@@ -1,15 +1,15 @@
 // app/api/resend-otp/route.ts
 import { NextResponse } from "next/server";
 import { readDjangoJson } from "@/lib/djangoBffBase";
+import { getDjangoApiBase } from "@/lib/get-django-api-base";
 import { serverLogger } from "@/lib/serverLogger";
-
-const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8000/api/";
 
 export async function POST(req: Request) {
   try {
     const body = await req.json(); // { phone_number, role }
+    const backendUrl = getDjangoApiBase();
 
-    const res = await fetch(`${BACKEND_URL}auth/resend-otp/`, {
+    const res = await fetch(`${backendUrl}auth/resend-otp/`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

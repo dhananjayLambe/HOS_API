@@ -563,7 +563,7 @@ class CreatePatientView(APIView):
                     "Existing user found for patient creation",
                     module=LogModule.AUTHENTICATION,
                     action="patient_account.create.user_found",
-                    metadata={"user_id": str(user.id), "is_active": user.is_active},
+                    metadata={"patient_user_id": str(user.id), "is_active": user.is_active},
                 )
             except User.DoesNotExist:
                 try:
@@ -577,7 +577,7 @@ class CreatePatientView(APIView):
                         "User created for doctor-flow patient",
                         module=LogModule.AUTHENTICATION,
                         action="patient_account.create.user_created",
-                        metadata={"user_id": str(user.id)},
+                        metadata={"patient_user_id": str(user.id)},
                     )
                     
                     # Assign to patient group
@@ -640,7 +640,7 @@ class CreatePatientView(APIView):
                             "PatientAccount found via raw SQL",
                             module=LogModule.AUTHENTICATION,
                             action="patient_account.create.account_found_raw_sql",
-                            metadata={"patient_account_id": str(account_id)},
+                            metadata={"created_patient_account_id": str(account_id)},
                         )
                         # Get the account using only essential fields to avoid column issues
                         try:
@@ -649,7 +649,7 @@ class CreatePatientView(APIView):
                                 "PatientAccount retrieved",
                                 module=LogModule.AUTHENTICATION,
                                 action="patient_account.create.account_retrieved",
-                                metadata={"patient_account_id": str(patient_account.id)},
+                                metadata={"created_patient_account_id": str(patient_account.id)},
                             )
                         except Exception as get_error:
                             # Even with only(), might fail if accessing the object triggers other field access
@@ -658,7 +658,7 @@ class CreatePatientView(APIView):
                                 "Could not retrieve full PatientAccount object",
                                 module=LogModule.AUTHENTICATION,
                                 action="patient_account.create.account_partial_retrieve",
-                                metadata={"patient_account_id": str(account_id), "error_type": type(get_error).__name__},
+                                metadata={"created_patient_account_id": str(account_id), "error_type": type(get_error).__name__},
                             )
                             # We'll use the account_id directly for profile checks
                             patient_account_id = account_id
@@ -710,7 +710,7 @@ class CreatePatientView(APIView):
                                 "Self profile already exists for patient account",
                                 module=LogModule.AUTHENTICATION,
                                 action="patient_account.create.self_profile_conflict",
-                                metadata={"patient_account_id": str(account_id_for_check)},
+                                metadata={"created_patient_account_id": str(account_id_for_check)},
                             )
                             return Response({
                                 "status": "error",
@@ -748,7 +748,7 @@ class CreatePatientView(APIView):
                             "Could not retrieve PatientAccount object",
                             module=LogModule.AUTHENTICATION,
                             action="patient_account.create.account_retrieve_failed",
-                            metadata={"patient_account_id": str(account_id_for_check)},
+                            metadata={"created_patient_account_id": str(account_id_for_check)},
                         )
                         return Response({
                             "status": "error",
@@ -763,7 +763,7 @@ class CreatePatientView(APIView):
                         "Creating PatientAccount",
                         module=LogModule.AUTHENTICATION,
                         action="patient_account.create.account_create_started",
-                        metadata={"user_id": str(user.id), "created_by_user_id": str(request.user.id)},
+                        metadata={"patient_user_id": str(user.id), "created_by_user_id": str(request.user.id)},
                     )
                     
                     # Try to create with all fields first
@@ -777,7 +777,7 @@ class CreatePatientView(APIView):
                             "PatientAccount created",
                             module=LogModule.AUTHENTICATION,
                             action="patient_account.create.account_created",
-                            metadata={"patient_account_id": str(patient_account.id)},
+                            metadata={"created_patient_account_id": str(patient_account.id)},
                         )
                     except Exception as create_error:
                         error_str = str(create_error)
@@ -805,7 +805,7 @@ class CreatePatientView(APIView):
                                     "PatientAccount created via raw SQL fallback",
                                     module=LogModule.AUTHENTICATION,
                                     action="patient_account.create.account_created_raw_sql",
-                                    metadata={"patient_account_id": str(patient_account.id)},
+                                    metadata={"created_patient_account_id": str(patient_account.id)},
                                 )
                                 logger.warning(
                                     "PatientAccount created without created_by; migrations may be pending",
@@ -824,7 +824,7 @@ class CreatePatientView(APIView):
                                     "PatientAccount created via ORM fallback",
                                     module=LogModule.AUTHENTICATION,
                                     action="patient_account.create.account_created_orm_fallback",
-                                    metadata={"patient_account_id": str(patient_account.id)},
+                                    metadata={"created_patient_account_id": str(patient_account.id)},
                                 )
                         else:
                             # Re-raise if it's a different error
@@ -864,7 +864,7 @@ class CreatePatientView(APIView):
                     "Creating PatientProfile",
                     module=LogModule.AUTHENTICATION,
                     action="patient_account.create.profile_create_started",
-                    metadata={"patient_account_id": str(patient_account.id)},
+                    metadata={"created_patient_account_id": str(patient_account.id)},
                 )
                 profile = PatientProfile.objects.create(
                     account=patient_account,
@@ -880,14 +880,14 @@ class CreatePatientView(APIView):
                     "PatientProfile created",
                     module=LogModule.AUTHENTICATION,
                     action="patient_account.create.profile_created",
-                    metadata={"profile_id": str(profile.id), "patient_account_id": str(patient_account.id)},
+                    metadata={"profile_id": str(profile.id), "created_patient_account_id": str(patient_account.id)},
                 )
             except Exception as e:
                 logger.exception(
                     "Error creating PatientProfile",
                     module=LogModule.AUTHENTICATION,
                     action="patient_account.create.profile_create_failed",
-                    metadata={"patient_account_id": str(patient_account.id)},
+                    metadata={"created_patient_account_id": str(patient_account.id)},
                 )
                 return Response({
                     "status": "error",
@@ -914,7 +914,7 @@ class CreatePatientView(APIView):
                 module=LogModule.AUTHENTICATION,
                 action="patient_account.create.completed",
                 metadata={
-                    "patient_account_id": str(patient_account.id),
+                    "created_patient_account_id": str(patient_account.id),
                     "profile_id": str(profile.id),
                 },
             )
@@ -1121,7 +1121,7 @@ class SelectPatientView(APIView):
                 metadata={
                     "doctor_id": doctor_id,
                     "profile_id": str(profile_id),
-                    "patient_account_id": str(patient_account.id),
+                    "created_patient_account_id": str(patient_account.id),
                 },
             )
             

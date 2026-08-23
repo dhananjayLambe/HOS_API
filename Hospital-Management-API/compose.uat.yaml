@@ -1,0 +1,51 @@
+services:
+  api:
+    image: ${HOS_IMAGE:?Set HOS_IMAGE}:${HOS_IMAGE_TAG:?Set HOS_IMAGE_TAG to the Git commit SHA}
+    pull_policy: ${HOS_PULL_POLICY:-always}
+    env_file:
+      - /etc/hos/uat.env
+    environment:
+      DJANGO_SETTINGS_MODULE: main.settings.uat
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_URL: redis://redis:6379/1
+    restart: unless-stopped
+
+  celery-worker:
+    image: ${HOS_IMAGE:?Set HOS_IMAGE}:${HOS_IMAGE_TAG:?Set HOS_IMAGE_TAG to the Git commit SHA}
+    pull_policy: ${HOS_PULL_POLICY:-always}
+    env_file:
+      - /etc/hos/uat.env
+    environment:
+      DJANGO_SETTINGS_MODULE: main.settings.uat
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_URL: redis://redis:6379/1
+    restart: unless-stopped
+
+  celery-beat:
+    image: ${HOS_IMAGE:?Set HOS_IMAGE}:${HOS_IMAGE_TAG:?Set HOS_IMAGE_TAG to the Git commit SHA}
+    pull_policy: ${HOS_PULL_POLICY:-always}
+    env_file:
+      - /etc/hos/uat.env
+    environment:
+      DJANGO_SETTINGS_MODULE: main.settings.uat
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_URL: redis://redis:6379/1
+    restart: unless-stopped
+
+  redis:
+    restart: unless-stopped
+
+  nginx:
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      NGINX_SERVER_NAME: ${NGINX_SERVER_NAME:?Set NGINX_SERVER_NAME}
+    volumes:
+      - ./docker/nginx/uat.conf:/etc/nginx/templates/default.conf.template:ro
+      - staticfiles:/app/staticfiles:ro
+      - nginx-certificates:/etc/nginx/certs:ro
+    restart: unless-stopped

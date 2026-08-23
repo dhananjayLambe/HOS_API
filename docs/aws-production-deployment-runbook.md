@@ -11,7 +11,7 @@ This first release deliberately avoids application refactoring, Kubernetes, ECS,
 | Area | Decision |
 | --- | --- |
 | Application runtime | One Amazon EC2 instance running Docker Compose. |
-| API server | ASGI server (Daphne or Gunicorn with Uvicorn worker) behind Nginx. ASGI must be retained because the backend uses Django Channels. |
+| API server | Gunicorn with Uvicorn worker behind Nginx. ASGI is required because the backend uses Django Channels. |
 | Background work | Celery worker and Celery Beat containers on the same EC2 instance. |
 | Cache and task broker | Redis container on the EC2 instance; no public Redis access. |
 | Database | Amazon RDS for PostgreSQL, private and reachable only from the application EC2 security group. |
@@ -36,7 +36,7 @@ flowchart TB
 
         subgraph Compose["Docker Compose on EC2"]
             Nginx["Nginx\nHTTPS + reverse proxy"]
-            API["Django ASGI API\nDaphne or Gunicorn/Uvicorn"]
+            API["Django ASGI API\nGunicorn + Uvicorn worker"]
             Worker["Celery worker"]
             Beat["Celery Beat"]
             Redis["Redis\ncache, Channels, task broker"]
@@ -135,10 +135,10 @@ main.settings.production
 main.settings.test
 ```
 
-Before deployment, complete only the following deployment items:
+Before deployment, complete only the following deployment items. Commands and file layout are in [docker-compose-runbook.md](docker-compose-runbook.md).
 
-1. Add a production container runtime dependency for the selected ASGI server (`daphne`, or `gunicorn` plus `uvicorn`).
-2. Add a `Dockerfile`, production `docker-compose.yml`, Nginx configuration, and deployment script/runbook commands.
+1. Pin Gunicorn and Uvicorn in `requirements/production.txt` and run Gunicorn with `uvicorn.workers.UvicornWorker`.
+2. Add `Dockerfile`, shared `compose.yaml` plus environment overrides, Nginx configuration, and `scripts/deploy-*.sh`.
 3. Add a non-sensitive `/health/` endpoint for load/startup validation.
 4. Ensure the production URL configuration does not serve `MEDIA_URL` through Django; media must use S3 or protected application download endpoints.
 5. Confirm the production settings module loads only `.env.production`/process values and refuses to start when secrets, hosts, or database values are missing.

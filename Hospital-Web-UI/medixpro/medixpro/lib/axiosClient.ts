@@ -214,6 +214,17 @@ backendAxiosClient.interceptors.response.use(
         "/diagnostics/investigations/suggestions/",
       );
       const is404 = error.response?.status === 404;
+      const isPreviousRecords404 =
+        is404 &&
+        fullUrl.includes("/pre-consult/patient/") &&
+        fullUrl.includes("/previous-records");
+      const isEntryResolve404 =
+        is404 && fullUrl.includes("/consultations/entry/resolve");
+      const responseDetail = String((error.response?.data as any)?.detail ?? "").toLowerCase();
+      const isStartNewVisitPatient404 =
+        is404 &&
+        fullUrl.includes("/entry/start-new-visit") &&
+        responseDetail.includes("patient not found");
       /** Lab session: expected 403/404 during permission or onboarding handling — avoid noisy logs. */
       const isLabsMeExpected =
         fullUrl.includes("labs/me") &&
@@ -236,7 +247,12 @@ backendAxiosClient.interceptors.response.use(
       // - skip expected 400s on preview endpoint (e.g. cancelled/no-show encounters)
       // - skip expected already-completed 400 on consultation complete endpoint
       if (
-        (!is404 || (!isSectionEndpoint && !isTemplateEndpoint)) &&
+        (!is404 ||
+          (!isSectionEndpoint &&
+            !isTemplateEndpoint &&
+            !isPreviousRecords404 &&
+            !isEntryResolve404 &&
+            !isStartNewVisitPatient404)) &&
         !isExpectedPreview400 &&
         !isAlreadyCompleted400 &&
         !isSuppressedSuggestionsNetwork &&

@@ -24,7 +24,8 @@ export async function POST(req: Request) {
       );
     }
 
-    const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8000/api/";
+    const { getDjangoApiBase } = await import("@/lib/get-django-api-base");
+    const BACKEND_URL = getDjangoApiBase();
     const refreshUrl = `${BACKEND_URL}auth/refresh-token/`;
 
     try {

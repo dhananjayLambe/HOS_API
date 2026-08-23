@@ -1,10 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { serverLogger } from "@/lib/serverLogger"
+import { getDjangoApiBase } from "@/lib/get-django-api-base"
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-const DJANGO_API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+const DJANGO_API_URL = getDjangoApiBase()
 const ROUTE = "doctor/profile/bank-details"
 
 // GET - Retrieve bank details
@@ -12,7 +13,7 @@ export async function GET(request: NextRequest) {
   try {
     const token = request.headers.get("Authorization") || request.headers.get("authorization")
 
-    const response = await fetch(`${DJANGO_API_URL}/api/doctor/bank-details/`, {
+    const response = await fetch(`${DJANGO_API_URL}doctor/bank-details/`, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
@@ -92,7 +93,7 @@ export async function POST(request: NextRequest) {
     const token = request.headers.get("Authorization") || request.headers.get("authorization")
     const body = await request.json()
 
-    const response = await fetch(`${DJANGO_API_URL}/api/doctor/bank-details/`, {
+    const response = await fetch(`${DJANGO_API_URL}doctor/bank-details/`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -163,7 +164,7 @@ export async function PATCH(request: NextRequest) {
     let bankDetailsId: string | null = null
 
     // Fetch current bank details to get the ID
-    const getResponse = await fetch(`${DJANGO_API_URL}/api/doctor/bank-details/`, {
+    const getResponse = await fetch(`${DJANGO_API_URL}doctor/bank-details/`, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
@@ -233,7 +234,7 @@ export async function PATCH(request: NextRequest) {
       )
     }
 
-    const updateUrl = `${DJANGO_API_URL}/api/doctor/bank-details/${bankDetailsId}/`
+    const updateUrl = `${DJANGO_API_URL}doctor/bank-details/${bankDetailsId}/`
     
     const response = await fetch(updateUrl, {
       method: "PATCH",
@@ -310,7 +311,7 @@ export async function DELETE(request: NextRequest) {
     let bankDetailsId = id
 
     // Fetch current bank details to get the ID
-    const getResponse = await fetch(`${DJANGO_API_URL}/api/doctor/bank-details/`, {
+    const getResponse = await fetch(`${DJANGO_API_URL}doctor/bank-details/`, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
@@ -365,9 +366,9 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    const deleteUrl = `${DJANGO_API_URL}/api/doctor/bank-details/${bankDetailsId}/`
+    const deleteUrl = `${DJANGO_API_URL}doctor/bank-details/${bankDetailsId}/`
 
-    const response = await fetch(`${DJANGO_API_URL}/api/doctor/bank-details/${bankDetailsId}/`, {
+    const response = await fetch(`${DJANGO_API_URL}doctor/bank-details/${bankDetailsId}/`, {
       method: "DELETE",
       headers: {
         "Content-Type": "application/json",

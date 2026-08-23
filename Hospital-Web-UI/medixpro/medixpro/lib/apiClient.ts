@@ -79,7 +79,9 @@ async function apiRequest<T>(endpoint: string, options: AxiosRequestConfig = {})
       const isExpectedEmpty404 =
         status === 404 &&
         (endpoint.includes('/doctor/address') ||
-          endpoint.includes('/doctor/profile/bank-details') ||
+          endpoint.includes('/doctor/bank-details') ||
+          endpoint.includes('/doctor/education') ||
+          endpoint.includes('/doctor/certifications') ||
           endpoint.includes('/doctor-fees/') ||
           endpoint.includes('/follow-up-policies/') ||
           endpoint.includes('/cancellation-policies/'))
@@ -213,49 +215,49 @@ export const doctorAPI = {
     })
   },
 
-  // Education
+  // Education — Django: /api/doctor/education/
   getEducation: () =>
-    apiRequest<any>("/doctor/profile/education", {
+    apiRequest<any>("/doctor/education/", {
       method: "GET",
     }),
 
   addEducation: (data: any) =>
-    apiRequest<any>("/doctor/profile/education", {
+    apiRequest<any>("/doctor/education/", {
       method: "POST",
       data,
     }),
 
   updateEducation: (id: string, data: any) =>
-    apiRequest<any>(`/doctor/profile/education?id=${id}`, {
+    apiRequest<any>(`/doctor/education/${id}/`, {
       method: "PATCH",
       data,
     }),
 
   deleteEducation: (id: string) =>
-    apiRequest<any>(`/doctor/profile/education?id=${id}`, {
+    apiRequest<any>(`/doctor/education/${id}/`, {
       method: "DELETE",
     }),
 
-  // Certifications
+  // Certifications — Django: /api/doctor/certifications/
   getCertifications: () =>
-    apiRequest<any>("/doctor/profile/certification", {
+    apiRequest<any>("/doctor/certifications/", {
       method: "GET",
     }),
 
   addCertification: (data: any) =>
-    apiRequest<any>("/doctor/profile/certification", {
+    apiRequest<any>("/doctor/certifications/", {
       method: "POST",
       data,
     }),
 
   updateCertification: (id: string, data: any) =>
-    apiRequest<any>(`/doctor/profile/certification?id=${id}`, {
+    apiRequest<any>(`/doctor/certifications/${id}/`, {
       method: "PATCH",
       data,
     }),
 
   deleteCertification: (id: string) =>
-    apiRequest<any>(`/doctor/profile/certification?id=${id}`, {
+    apiRequest<any>(`/doctor/certifications/${id}/`, {
       method: "DELETE",
     }),
 
@@ -272,13 +274,13 @@ export const doctorAPI = {
     }),
 
   updateSpecialization: (id: string, data: any) =>
-    apiRequest<any>(`/doctor/specializations?id=${id}`, {
+    apiRequest<any>(`/doctor/specializations/${id}/`, {
       method: "PATCH",
       data,
     }),
 
   deleteSpecialization: (id: string) =>
-    apiRequest<any>(`/doctor/specializations?id=${id}`, {
+    apiRequest<any>(`/doctor/specializations/${id}/`, {
       method: "DELETE",
     }),
 
@@ -456,7 +458,7 @@ export const doctorAPI = {
 
   // Services
   updateServices: (data: any) =>
-    apiRequest<any>("/doctor/profile/services", {
+    apiRequest<any>("/doctor/services/", {
       method: "POST",
       data,
     }),
@@ -464,7 +466,7 @@ export const doctorAPI = {
   // Bank Details (404 on GET = not submitted yet — return null data so UI shows empty form)
   getBankDetails: async () => {
     try {
-      return await apiRequest<any>("/doctor/profile/bank-details", {
+      return await apiRequest<any>("/doctor/bank-details/", {
         method: "GET",
       })
     } catch (e: any) {
@@ -475,17 +477,17 @@ export const doctorAPI = {
     }
   },
   createBankDetails: (data: any) =>
-    apiRequest<any>("/doctor/profile/bank-details", {
+    apiRequest<any>("/doctor/bank-details/", {
       method: "POST",
       data,
     }),
   updateBankDetails: (data: any, id?: string) =>
-    apiRequest<any>(`/doctor/profile/bank-details${id ? `?id=${id}` : ""}`, {
+    apiRequest<any>(id ? `/doctor/bank-details/${id}/` : "/doctor/bank-details/", {
       method: "PATCH",
       data,
     }),
   deleteBankDetails: (id?: string) =>
-    apiRequest<any>(`/doctor/profile/bank-details${id ? `?id=${id}` : ""}`, {
+    apiRequest<any>(id ? `/doctor/bank-details/${id}/` : "/doctor/bank-details/", {
       method: "DELETE",
     }),
 

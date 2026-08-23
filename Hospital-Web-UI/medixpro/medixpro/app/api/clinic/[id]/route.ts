@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { serverLogger } from "@/lib/serverLogger"
+import { getDjangoApiBase } from "@/lib/get-django-api-base"
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-const BACKEND_URL = process.env.BACKEND_URL || process.env.DJANGO_API_URL || "http://localhost:8000/api/"
+const BACKEND_URL = getDjangoApiBase()
 const ROUTE = "clinic/[id]"
 
 // Helper to get headers with auth

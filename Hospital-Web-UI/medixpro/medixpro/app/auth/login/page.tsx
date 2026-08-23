@@ -125,6 +125,13 @@ export default function OTPLoginPage() {
     { name: "LabAdmin", icon: FlaskConical },
     { name: "SuperUser", icon: Shield },
   ];
+  const ROLE_API: Record<string, string> = {
+    Doctor: "doctor",
+    HelpDesk: "helpdesk",
+    LabAdmin: "labadmin",
+    SuperUser: "superadmin",
+  };
+  const apiRole = (name: string) => ROLE_API[name] || name.toLowerCase();
   const [resendCooldown, setResendCooldown] = useState(0);
   // Timer effect
   React.useEffect(() => {
@@ -302,7 +309,7 @@ export default function OTPLoginPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           phone_number: phoneNumber,
-          role: selectedRole,
+          role: apiRole(selectedRole),
         }),
       });
 
@@ -346,7 +353,7 @@ export default function OTPLoginPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           phone_number: phoneNumber,
-          role: selectedRole,
+          role: apiRole(selectedRole),
           otp: otp,
         }),
       });
@@ -435,7 +442,7 @@ export default function OTPLoginPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           phone_number: phoneNumber,
-          role: selectedRole,
+          role: apiRole(selectedRole),
         }),
       });
 

@@ -182,12 +182,28 @@ def test_logger_auto_includes_context_from_enricher(capture_dispatcher) -> None:
     assert record.booking_id == "BK123"
 
 
-def test_logger_rejects_correlation_id_in_metadata(test_logger) -> None:
-    logger_instance, _ = test_logger
-    with pytest.raises(LoggingError, match="reserved key"):
-        logger_instance.info(
-            "msg",
-            module=LogModule.API,
-            action="api.request",
-            metadata={"correlation_id": "manual-id"},
-        )
+def test_logger_strips_reserved_keys_from_metadata(test_logger) -> None:
+    logger_instance, (_, handler) = test_logger
+    logger_instance.info(
+        "msg",
+        module=LogModule.API,
+        action="api.request",
+        metadata={"correlation_id": "manual-id", "source": "ui"},
+    )
+    record = handler.emit_record.call_args[0][0]
+    assert "correlation_id" not in record.metadata
+    assert record.metadata["source"] == "ui"
+
+
+def test_logger_exception_does_not_raise_on_consultation_id(test_logger) -> None:
+    logger_instance, (_, handler) = test_logger
+    logger_instance.exception(
+        "Prepare consultation WhatsApp task failed",
+        module=LogModule.CELERY,
+        action="whatsapp.task.prepare_consultation_failed",
+        exc=RuntimeError("prepare failed"),
+        metadata={"consultation_id": "cons-1"},
+    )
+    record = handler.emit_record.call_args[0][0]
+    assert "consultation_id" not in record.metadata
+    assert record.exception_type == "RuntimeError"

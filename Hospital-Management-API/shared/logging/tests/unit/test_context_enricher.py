@@ -12,7 +12,6 @@ from shared.logging.context_enricher import (
     DefaultContextEnricher,
     validate_framework_metadata,
 )
-from shared.logging.exceptions import LoggingError
 
 
 class _StubContextProvider:
@@ -62,9 +61,20 @@ def test_context_enrichment_is_immutable() -> None:
 
 
 @pytest.mark.parametrize("key", ["correlation_id", "request_id", "booking_id"])
-def test_validate_framework_metadata_rejects_reserved_keys(key: str) -> None:
-    with pytest.raises(LoggingError, match="reserved key"):
-        validate_framework_metadata({key: "value"})
+def test_validate_framework_metadata_strips_reserved_keys(key: str) -> None:
+    metadata = {key: "value", "laboratory": "ABC Diagnostics"}
+    assert validate_framework_metadata(metadata) == {"laboratory": "ABC Diagnostics"}
+
+
+def test_validate_framework_metadata_copies_encounter_id_to_context() -> None:
+    from shared.logging.context import get_context_manager
+
+    manager = get_context_manager()
+    manager.clear()
+    metadata = {"encounter_id": "enc-1", "source": "doctor"}
+    assert validate_framework_metadata(metadata) == {"source": "doctor"}
+    assert manager.get().encounter_id == "enc-1"
+    manager.clear()
 
 
 def test_validate_framework_metadata_accepts_business_keys() -> None:

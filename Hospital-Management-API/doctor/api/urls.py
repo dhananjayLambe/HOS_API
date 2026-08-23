@@ -73,7 +73,63 @@ urlpatterns = [
     # Doctor Authentication Endpoints
     path('check-doctor-user/', CheckUserStatusView.as_view(), name='check-doctor-user'),
     path("onboarding/phase1/", DoctorOnboardingPhase1View.as_view(), name="doctor-onboarding-phase1"),
-     path("profile/", DoctorFullProfileAPIView.as_view(), name="doctor-full-profile"),
+    # UI calls /api/doctor/profile/<resource>/; DRF registers the same viewsets at /api/doctor/<resource>/.
+    path(
+        "profile/education/",
+        EducationViewSet.as_view({"get": "list", "post": "create"}),
+        name="profile-education-list",
+    ),
+    path(
+        "profile/education/<pk>/",
+        EducationViewSet.as_view({
+            "get": "retrieve",
+            "put": "update",
+            "patch": "partial_update",
+            "delete": "destroy",
+        }),
+        name="profile-education-detail",
+    ),
+    path(
+        "profile/certification/",
+        CertificationViewSet.as_view({"get": "list", "post": "create"}),
+        name="profile-certification-list",
+    ),
+    path(
+        "profile/certification/<pk>/",
+        CertificationViewSet.as_view({
+            "get": "retrieve",
+            "put": "update",
+            "patch": "partial_update",
+            "delete": "destroy",
+        }),
+        name="profile-certification-detail",
+    ),
+    path(
+        "profile/specialization/",
+        SpecializationViewSet.as_view({"get": "list", "post": "create"}),
+        name="profile-specialization-list",
+    ),
+    path(
+        "profile/specialization/<pk>/",
+        SpecializationViewSet.as_view({
+            "get": "retrieve",
+            "put": "update",
+            "patch": "partial_update",
+            "delete": "destroy",
+        }),
+        name="profile-specialization-detail",
+    ),
+    path(
+        "profile/services/",
+        DoctorServiceViewSet.as_view({"get": "list", "post": "create"}),
+        name="profile-services-list",
+    ),
+    path("profile/address/", address_view, name="profile-address"),
+    path("profile/bank-details/", bank_details_view, name="profile-bank-details"),
+    path("profile/bank-details/<int:pk>/", bank_details_detail_view, name="profile-bank-details-detail"),
+    path("profile/photo/", UploadDoctorPhotoView.as_view(), name="profile-upload-photo"),
+    path("profile/kyc/", DoctorKYCStatusView.as_view(), name="profile-kyc"),
+    path("profile/", DoctorFullProfileAPIView.as_view(), name="doctor-full-profile"),
     path('login/', DoctorLoginView.as_view(), name='doctor_login'),
     path('logout/', DoctorLogoutView.as_view(), name='doctor_logout'),
     path('token/refresh/', DoctorTokenRefreshView.as_view(), name='doctor_token_refresh'),

@@ -28,6 +28,11 @@ VALID_ROLES = ["doctor", "helpdesk", "superadmin","labadmin"]
 # Configuration / constants
 # ----------------------
 VALID_STAFF_ROLES = {"doctor", "helpdesk", "superadmin","labadmin"}
+# UI sends SuperUser; Django group is often "admin"
+ROLE_ALIASES = {"superuser": "superadmin", "admin": "superadmin"}
+STAFF_GROUP_NAMES = {
+    "superadmin": ("superadmin", "admin"),
+}
 
 # Access token lifetime (common short-lived token)
 ACCESS_TOKEN_LIFETIME = datetime.timedelta(hours=1)
@@ -66,8 +71,16 @@ _OTP_MEMORY: dict[str, tuple[str, float]] = {}
 def _phone_is_valid(phone: str) -> bool:
     return bool(phone and PHONE_REGEX.match(phone))
 
+def _normalize_staff_role(role: str) -> str:
+    return ROLE_ALIASES.get((role or "").lower().strip(), (role or "").lower().strip())
+
 def _role_is_valid(role: str) -> bool:
-    return bool(role and role in VALID_STAFF_ROLES)
+    return _normalize_staff_role(role) in VALID_STAFF_ROLES
+
+def _user_has_staff_role(user, role: str) -> bool:
+    role = _normalize_staff_role(role)
+    names = STAFF_GROUP_NAMES.get(role, (role,))
+    return user.groups.filter(name__in=names).exists()
 
 def _generate_otp() -> str:
     start = 10 ** (OTP_LENGTH - 1)
@@ -75,6 +88,22 @@ def _generate_otp() -> str:
 
 def _otp_cache_key(role: str, phone: str) -> str:
     return f"{OTP_CACHE_PREFIX}:{role}:{phone}"
+
+
+def _log_dev_otp(*, action: str, phone: str, role: str, otp: str) -> None:
+    """Print OTP to the console for local/Docker debug.
+
+    REMOVE this helper (and its send/resend call sites) once the SMS gateway
+    is wired and OTPs are delivered to the phone.
+    """
+    line = f"[DEV OTP] {action} phone={phone} role={role} otp={otp}"
+    print(line, flush=True)
+    logger.info(
+        line,
+        module=LogModule.AUTHENTICATION,
+        action=f"auth.otp.{action}",
+        metadata={"role": role, "phone": phone, "otp": otp, "status": f"otp_{action}"},
+    )
 
 # -------------------
 # OTP Redis Helpers Production
@@ -531,7 +560,7 @@ class StaffSendOTPView(APIView):
 
     def post(self, request):
         phone = str(request.data.get("phone_number", "")).strip()
-        role = str(request.data.get("role", "")).lower().strip()
+        role = _normalize_staff_role(str(request.data.get("role", "")))
         logger.info(
             "Staff OTP send requested",
             module=LogModule.AUTHENTICATION,
@@ -554,7 +583,7 @@ class StaffSendOTPView(APIView):
             user = User.objects.get(username=phone)
 
             # Role check
-            if not user.groups.filter(name=role).exists():
+            if not _user_has_staff_role(user, role):
                 return Response({
                     "exists": True,
                     "status": "role_mismatch",
@@ -609,16 +638,8 @@ class StaffSendOTPView(APIView):
         # Store OTP in Redis or DB
         otp = _store_or_get_otp(role, phone, otp)
 
-        # TODO: Integrate with external SMS gateway in production
-        otp_log_metadata = {"role": role, "phone": phone, "status": "otp_sent"}
-        if settings.DEBUG:
-            otp_log_metadata["otp"] = otp  # debug only — do not log OTP in production
-        logger.info(
-            "Staff OTP generated",
-            module=LogModule.AUTHENTICATION,
-            action="auth.otp.send",
-            metadata=otp_log_metadata,
-        )
+        # TODO: Integrate with external SMS gateway in production, then remove _log_dev_otp
+        _log_dev_otp(action="send", phone=phone, role=role, otp=otp)
 
         # Response
         response = {
@@ -642,7 +663,7 @@ class VerifyOTPStaffView(APIView):
 
     def post(self, request):
         phone = str(request.data.get("phone_number") or "").strip()
-        role = str(request.data.get("role") or "").lower().strip()
+        role = _normalize_staff_role(str(request.data.get("role") or ""))
         otp = str(request.data.get("otp") or "").strip()
 
         # Input validation
@@ -699,7 +720,7 @@ class VerifyOTPStaffView(APIView):
             return Response({"status": "user_not_found", "message": "User not found. Contact admin."},
                             status=status.HTTP_404_NOT_FOUND)
 
-        if not user.groups.filter(name=role).exists():
+        if not _user_has_staff_role(user, role):
             return Response({"status": "role_mismatch", "message": "User does not belong to the requested role."},
                             status=status.HTTP_403_FORBIDDEN)
         if not user.is_active:
@@ -757,7 +778,7 @@ class ResendOTPStaffView(APIView):
 
     def post(self, request):
         phone = str(request.data.get("phone_number", "")).strip()
-        role = str(request.data.get("role", "")).lower().strip()
+        role = _normalize_staff_role(str(request.data.get("role", "")))
 
         # Input validation
         if not phone or not role:
@@ -773,7 +794,7 @@ class ResendOTPStaffView(APIView):
         # Check if user exists and role is valid
         try:
             user = User.objects.get(username=phone)
-            if not user.groups.filter(name=role).exists():
+            if not _user_has_staff_role(user, role):
                 return Response({
                     "exists": True,
                     "status": "role_mismatch",
@@ -813,15 +834,8 @@ class ResendOTPStaffView(APIView):
         # Update resend info
         update_resend_counters(role, phone)
 
-        otp_log_metadata = {"role": role, "phone": phone, "status": "otp_resent"}
-        if settings.DEBUG:
-            otp_log_metadata["otp"] = otp  # debug only — do not log OTP in production
-        logger.info(
-            "Staff OTP resent",
-            module=LogModule.AUTHENTICATION,
-            action="auth.otp.resend",
-            metadata=otp_log_metadata,
-        )
+        # TODO: remove _log_dev_otp once SMS gateway is wired
+        _log_dev_otp(action="resend", phone=phone, role=role, otp=otp)
 
         response = {
             "exists": True,
@@ -872,7 +886,7 @@ class RefreshTokenStaffView(APIView):
                 return Response({"error": "User not active"}, status=status.HTTP_403_FORBIDDEN)
 
             # Get role from token (added in _generate_jwt_tokens)
-            role = refresh_token.get("role")
+            role = _normalize_staff_role(refresh_token.get("role") or "")
             
             # Validate role if present
             if role and role not in VALID_STAFF_ROLES:
@@ -880,8 +894,11 @@ class RefreshTokenStaffView(APIView):
             
             # If role not in token, try to get it from user's groups
             if not role:
-                user_groups = user.groups.values_list("name", flat=True)
-                role = next((r for r in VALID_STAFF_ROLES if r in user_groups), None)
+                user_groups = set(user.groups.values_list("name", flat=True))
+                if user_groups & {"admin", "superadmin"}:
+                    role = "superadmin"
+                else:
+                    role = next((r for r in VALID_STAFF_ROLES if r in user_groups), None)
                 if not role:
                     return Response({"error": "User does not have a valid role"}, status=status.HTTP_403_FORBIDDEN)
 

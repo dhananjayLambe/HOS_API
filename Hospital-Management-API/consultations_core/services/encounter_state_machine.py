@@ -28,6 +28,7 @@ from django.utils import timezone
 from django.db import transaction
 
 from shared.logging import LogModule, logger
+from shared.logging.context import get_context_manager
 
 from consultations_core.models.encounter import ClinicalEncounter
 from consultations_core.models.encounter import EncounterStatusLog
@@ -74,7 +75,7 @@ def _sync_queue_for_encounter_terminal(encounter, kind: str) -> None:
             ),
             module=LogModule.CONSULTATION,
             action="encounter.queue_sync.failed",
-            metadata={"kind": kind, "encounter_id": str(getattr(encounter, "id", ""))},
+            metadata={"kind": kind},
         )
 
 
@@ -125,6 +126,7 @@ class EncounterStateMachine:
 
         current_status = normalize_encounter_status(encounter.status)
         new_status = normalize_encounter_status(new_status)
+        get_context_manager().update(encounter_id=str(encounter.id))
 
         # Prevent no-op transitions
         if current_status == new_status:
@@ -136,7 +138,7 @@ class EncounterStateMachine:
                 ),
                 module=LogModule.CONSULTATION,
                 action="encounter.transition.noop",
-                metadata={"encounter_id": str(encounter.id), "status": current_status},
+                metadata={"status": current_status, "source": source},
             )
             return encounter
 
@@ -156,7 +158,6 @@ class EncounterStateMachine:
             module=LogModule.CONSULTATION,
             action="encounter.transition.request",
             metadata={
-                "encounter_id": str(encounter.id),
                 "from_status": current_status,
                 "to_status": new_status,
             },
@@ -245,7 +246,6 @@ class EncounterStateMachine:
             module=LogModule.CONSULTATION,
             action="encounter.transition.success",
             metadata={
-                "encounter_id": str(encounter.id),
                 "from_status": current_status,
                 "to_status": new_status,
             },

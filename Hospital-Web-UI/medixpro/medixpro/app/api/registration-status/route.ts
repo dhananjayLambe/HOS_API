@@ -5,7 +5,8 @@ export async function GET(request: Request) {
   const username = searchParams.get("username")?.trim() || ""
 
   try {
-    const base = process.env.DJANGO_API_URL || "http://localhost:8000/api/"
+    const { getDjangoApiBase } = await import("@/lib/get-django-api-base")
+    const base = getDjangoApiBase()
     const res = await fetch(`${base}auth/check-user-status/`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

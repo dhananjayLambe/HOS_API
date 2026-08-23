@@ -17,12 +17,19 @@ from __future__ import annotations
 
 from typing import Any
 
-from shared.logging.constants import EventType, LogLevel, LogModule, LogStatus
+from shared.logging.constants import (
+    EventType,
+    FRAMEWORK_CONTEXT_FIELDS,
+    LogLevel,
+    LogModule,
+    LogStatus,
+)
 from shared.logging.context_enricher import (
     ContextEnricher,
     get_default_context_enricher,
     validate_framework_metadata,
 )
+from shared.logging.exceptions import LoggingError
 from shared.logging.dispatcher import LogDispatcher, get_default_dispatcher
 from shared.logging.exception_builder import capture_exception, validate_exception_metadata
 from shared.logging.record import LogRecord, build_record, enrich_record
@@ -69,6 +76,28 @@ class Logger:
             dispatcher: Dispatcher with configured handlers.
         """
         self._dispatcher = dispatcher
+
+    def _safe_metadata(self, metadata: dict[str, Any] | None) -> dict[str, Any]:
+        """Copy caller metadata without raising on reserved context keys.
+
+        Reserved keys (encounter_id, consultation_id, ...) are stripped onto
+        LogContext. Logging must never crash an API request or Celery task.
+        """
+        raw: dict[str, Any]
+        if metadata is None:
+            raw = {}
+        elif isinstance(metadata, dict):
+            raw = dict(metadata)
+        else:
+            raise LoggingError("metadata must be a dictionary")
+        try:
+            safe = dict(validate_metadata(raw))
+        except LoggingError:
+            safe = {str(key): value for key, value in raw.items()}
+        validate_framework_metadata(safe)
+        for key in ("stack_trace", "exception", "exception_type", "exception_message"):
+            safe.pop(key, None)
+        return {key: value for key, value in safe.items() if key not in FRAMEWORK_CONTEXT_FIELDS}
 
     def _ensure_ready(self) -> None:
         """Lazily configure logging when a pending config was registered."""
@@ -253,8 +282,7 @@ class Logger:
         validated_message = validate_message(message)
         validated_module = validate_module(module)
         validated_action = validate_action(action)
-        safe_metadata = dict(validate_metadata(metadata))
-        validate_framework_metadata(safe_metadata)
+        safe_metadata = self._safe_metadata(metadata)
         validate_exception_metadata(safe_metadata)
 
         captured = capture_exception(exc=exc)
@@ -301,8 +329,7 @@ class Logger:
         self._ensure_ready()
         validated_event = validate_audit_event(event)
         validated_audit_type = validate_audit_type(audit_type)
-        safe_metadata = dict(validate_metadata(metadata))
-        validate_framework_metadata(safe_metadata)
+        safe_metadata = self._safe_metadata(metadata)
 
         record = build_record(
             level=LogLevel.INFO,
@@ -335,8 +362,7 @@ class Logger:
         self._ensure_ready()
         validated_action = validate_action(action)
         validated_duration = validate_duration_ms(duration_ms)
-        safe_metadata = dict(validate_metadata(metadata))
-        validate_framework_metadata(safe_metadata)
+        safe_metadata = self._safe_metadata(metadata)
         safe_metadata["event_type"] = EventType.PERFORMANCE
 
         record = build_record(
@@ -379,8 +405,7 @@ class Logger:
         validated_message = validate_message(message)
         validated_module = validate_module(module)
         validated_action = validate_action(action)
-        safe_metadata = dict(validate_metadata(metadata))
-        validate_framework_metadata(safe_metadata)
+        safe_metadata = self._safe_metadata(metadata)
 
         record = build_record(
             level=level,

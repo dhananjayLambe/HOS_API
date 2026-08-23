@@ -21,6 +21,7 @@ from notifications.services.delivery.prescription_whatsapp_orchestrator import (
 )
 from notifications.services.delivery.whatsapp_service import WhatsAppService
 from shared.logging import LogModule, logger
+from shared.logging.context import get_context_manager
 
 
 def _enqueue_diagnostic_recommendation_if_enabled(message) -> None:
@@ -72,11 +73,11 @@ def prepare_consultation_whatsapp(
         if message_id:
             send_prescription_whatsapp.delay(message_id)
     except Exception as exc:
+        get_context_manager().update(consultation_id=str(consultation_id))
         logger.exception(
             "Prepare consultation WhatsApp task failed",
             module=LogModule.CELERY,
             action="whatsapp.task.prepare_consultation_failed",
-            metadata={"consultation_id": consultation_id},
         )
         if self.request.retries < self.max_retries:
             raise self.retry(exc=exc) from exc
@@ -170,20 +171,17 @@ def prepare_diagnostic_recommendation_whatsapp(
         if message_id:
             send_diagnostic_recommendation_whatsapp.delay(message_id)
     except Exception as exc:
+        get_context_manager().update(consultation_id=str(consultation_id))
         logger.exception(
             "Prepare diagnostic recommendation WhatsApp task failed",
             module=LogModule.CELERY,
             action="whatsapp.task.prepare_recommendation_failed",
-            metadata={"consultation_id": consultation_id},
         )
         logger.info(
             "Recommendation retry scheduled after prepare failure",
             module=LogModule.CELERY,
             action="whatsapp.recommendation.retry",
-            metadata={
-                "consultation_id": consultation_id,
-                "prescription_message_id": prescription_message_id,
-            },
+            metadata={"prescription_message_id": prescription_message_id},
         )
         if self.request.retries < self.max_retries:
             raise self.retry(exc=exc) from exc

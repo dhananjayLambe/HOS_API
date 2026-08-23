@@ -60,7 +60,7 @@ def start_consultation_for_encounter(*, encounter_id, user=None, source: str = "
         ),
         module=LogModule.CONSULTATION,
         action="consultation.start.request",
-        metadata={"encounter_id": str(encounter.id), "source": source},
+        metadata={"source": source},
     )
 
     normalized_status = normalize_encounter_status(encounter.status)
@@ -82,10 +82,7 @@ def start_consultation_for_encounter(*, encounter_id, user=None, source: str = "
             ),
             module=LogModule.CONSULTATION,
             action="consultation.start.already_started",
-            metadata={
-                "encounter_id": str(encounter.id),
-                "consultation_id": str(consultation.id),
-            },
+            metadata={"source": source},
         )
         return StartConsultationResult(
             encounter=encounter,
@@ -104,7 +101,7 @@ def start_consultation_for_encounter(*, encounter_id, user=None, source: str = "
             ),
             module=LogModule.CONSULTATION,
             action="consultation.preconsultation.skipped",
-            metadata={"encounter_id": str(encounter.id), "preconsultation_id": str(pre.id)},
+            metadata={"preconsultation_id": str(pre.id), "source": source},
         )
 
     try:
@@ -118,10 +115,7 @@ def start_consultation_for_encounter(*, encounter_id, user=None, source: str = "
             ),
             module=LogModule.CONSULTATION,
             action="consultation.started",
-            metadata={
-                "encounter_id": str(encounter.id),
-                "consultation_id": str(consultation.id),
-            },
+            metadata={"source": source},
         )
         emit_after_commit(
             ConsultationAuditService.emit_started,
@@ -150,10 +144,7 @@ def start_consultation_for_encounter(*, encounter_id, user=None, source: str = "
             ),
             module=LogModule.CONSULTATION,
             action="consultation.start.race_resolved",
-            metadata={
-                "encounter_id": str(encounter.id),
-                "consultation_id": str(consultation.id),
-            },
+            metadata={"source": source},
         )
         return StartConsultationResult(
             encounter=encounter,

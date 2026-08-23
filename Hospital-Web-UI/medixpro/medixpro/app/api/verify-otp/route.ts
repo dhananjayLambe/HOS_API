@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
 import { readDjangoJson } from "@/lib/djangoBffBase";
+import { getDjangoApiBase } from "@/lib/get-django-api-base";
 import { serverLogger } from "@/lib/serverLogger";
-
-const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8000/api/";
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
+    const backendUrl = getDjangoApiBase();
 
-    const res = await fetch(`${BACKEND_URL}auth/verify-otp/`, {
+    const res = await fetch(`${backendUrl}auth/verify-otp/`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),

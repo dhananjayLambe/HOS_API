@@ -1,13 +1,14 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { getDjangoApiBase } from "@/lib/get-django-api-base"
 
-const DJANGO_API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+const DJANGO_API_URL = getDjangoApiBase()
 
 export async function POST(request: NextRequest) {
   try {
     const token = request.headers.get("Authorization")
     const body = await request.json()
 
-    const response = await fetch(`${DJANGO_API_URL}/api/doctor/address/`, {
+    const response = await fetch(`${DJANGO_API_URL}doctor/address/`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -41,7 +42,7 @@ export async function GET(request: NextRequest) {
   try {
     const token = request.headers.get("Authorization")
 
-    const response = await fetch(`${DJANGO_API_URL}/api/doctor/address/`, {
+    const response = await fetch(`${DJANGO_API_URL}doctor/address/`, {
       method: "GET",
       headers: {
         Authorization: token || "",
@@ -74,7 +75,7 @@ export async function PUT(request: NextRequest) {
     const token = request.headers.get("Authorization")
     const body = await request.json()
 
-    const response = await fetch(`${DJANGO_API_URL}/api/doctor/address/`, {
+    const response = await fetch(`${DJANGO_API_URL}doctor/address/`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
@@ -109,7 +110,7 @@ export async function PATCH(request: NextRequest) {
     const token = request.headers.get("Authorization")
     const body = await request.json()
 
-    const response = await fetch(`${DJANGO_API_URL}/api/doctor/address/`, {
+    const response = await fetch(`${DJANGO_API_URL}doctor/address/`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",

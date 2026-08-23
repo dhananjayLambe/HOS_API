@@ -6,7 +6,7 @@ This is the copy-paste runbook for moving HOS API code from development to UAT a
 
 Run every command block from the `HOS_API` repository root. Replace placeholders such as `Your commit message` and `v0.1.0` before you run a block.
 
-To install and run the Django backend in development, UAT, or production, use [backend-runbook.md](backend-runbook.md).
+To install and run the Django backend in a virtualenv, use [backend-runbook.md](backend-runbook.md). To deploy with Docker Compose, use [docker-compose-runbook.md](docker-compose-runbook.md).
 
 ```text
 hos-development (daily work) → hos-uat → main → production tag
@@ -40,7 +40,12 @@ git commit -m "Your commit message"
 git push origin hos-development
 ```
 
-Deploy the development server from `hos-development` when that environment exists.
+Deploy the development server from `hos-development` when that environment exists:
+
+```bash
+cd /path/to/HOS_API/Hospital-Management-API
+./scripts/deploy-development.sh
+```
 
 ---
 
@@ -58,11 +63,20 @@ git push origin hos-uat
 
 Deploy UAT from `hos-uat`. Do not promote to production until UAT is approved.
 
+```bash
+cd /path/to/HOS_API/Hospital-Management-API
+export AWS_REGION=ap-south-1
+export ECR_REGISTRY=123456789012.dkr.ecr.ap-south-1.amazonaws.com
+export ECR_REPOSITORY=hos-api
+export NGINX_SERVER_NAME=uat.example.com
+./scripts/deploy-uat.sh
+```
+
 ---
 
 ## 3. Promote UAT to production
 
-After UAT approval, merge `hos-uat` into `main`, deploy production from `main`, then tag. Copy, replace `v0.1.0` with the real semantic version, then paste:
+After UAT approval, merge `hos-uat` into `main`, deploy production from `main` using the **same UAT image SHA**, then tag. Copy, replace `v0.1.0` and `<uat-validated-git-sha>` with the real values, then paste:
 
 ```bash
 cd /path/to/HOS_API
@@ -70,8 +84,21 @@ git checkout main
 git pull origin main
 git merge hos-uat
 git push origin main
-git tag -a v0.1.0 -m "Release v0.1.0"
-git push origin v0.1.0
+git tag -a v0.1.1 -m "Release v0.1.1"
+git push origin v0.1.1
+```
+
+Deploy production from `main` with the UAT-validated image tag (do not rebuild):
+
+```bash
+cd /path/to/HOS_API/Hospital-Management-API
+export AWS_REGION=ap-south-1
+export ECR_REGISTRY=123456789012.dkr.ecr.ap-south-1.amazonaws.com
+export ECR_REPOSITORY=hos-api
+export NGINX_SERVER_NAME=api.example.com
+export RDS_INSTANCE_ID=hos-prod-postgres
+export HOS_IMAGE_TAG=<uat-validated-git-sha>
+./scripts/deploy-production.sh
 ```
 
 Tag only code that was deployed to production. Use `vMAJOR.MINOR.PATCH`. Create a GitHub Release with changes, migration actions, and rollback notes.
