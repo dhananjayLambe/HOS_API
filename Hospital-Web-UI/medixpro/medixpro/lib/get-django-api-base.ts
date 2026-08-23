@@ -13,18 +13,21 @@
  */
 export function getDjangoApiBase(): string {
   const trim = (s: string) => s.trim();
-
-  const django = trim(process.env.DJANGO_API_URL || "");
+  // Bracket access so Next does not inline these as undefined at image build.
+  const django = trim(process.env["DJANGO_API_URL"] || "");
   if (django) {
     return ensureTrailingSlashAfterOrigin(django);
   }
 
-  const proxy = trim(process.env.BACKEND_PROXY_TARGET || "");
+  const proxy = trim(
+    process.env["BACKEND_PROXY_TARGET"] || process.env["BACKEND_URL"] || "",
+  );
   if (proxy) {
-    return `${proxy.replace(/\/+$/, "")}/api/`;
+    const origin = proxy.replace(/\/+$/, "").replace(/\/api$/, "");
+    return `${origin}/api/`;
   }
 
-  const pub = trim(process.env.NEXT_PUBLIC_API_URL || "");
+  const pub = trim(process.env["NEXT_PUBLIC_API_URL"] || "");
   if (pub.startsWith("http://") || pub.startsWith("https://")) {
     return ensureTrailingSlashAfterOrigin(pub);
   }

@@ -1,0 +1,50 @@
+name: hos-web
+
+services:
+  web:
+    image: ${HOS_WEB_IMAGE:-hos-web}:${HOS_WEB_IMAGE_TAG:-local}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BACKEND_PROXY_TARGET: ${BACKEND_PROXY_TARGET:?Set BACKEND_PROXY_TARGET to the Django origin without /api}
+    init: true
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      HOSTNAME: 0.0.0.0
+      # Used by Next route handlers at runtime. Keep the trailing /api/.
+      DJANGO_API_URL: ${DJANGO_API_URL:?Set DJANGO_API_URL to the Django API base URL ending in /api/}
+      BACKEND_URL: ${DJANGO_API_URL}
+    expose:
+      - "3000"
+    healthcheck:
+      test:
+        ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/', { redirect: 'manual' }).then(r => process.exit(r.status < 500 ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:1.27-alpine
+    depends_on:
+      web:
+        condition: service_healthy
+    environment:
+      NGINX_SERVER_NAME: ${NGINX_SERVER_NAME:?Set NGINX_SERVER_NAME to the frontend hostname}
+    volumes:
+      - ./docker/nginx/production.conf:/etc/nginx/templates/default.conf.template:ro
+      - nginx-certificates:/etc/nginx/certs:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/health/ | grep -q '\"status\": \"ok\"'"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  nginx-certificates:
+

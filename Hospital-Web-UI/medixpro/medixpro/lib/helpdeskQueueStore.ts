@@ -265,6 +265,19 @@ function mapHelpdeskQueueApiResponse(rows: unknown): QueueEntry[] {
   return rows.map((r) => mapHelpdeskQueueRowToEntry(r as HelpdeskQueueRowApi));
 }
 
+function resolveWebsocketBaseUrl(): string | null {
+  const explicit = process.env.NEXT_PUBLIC_WS_URL?.trim();
+  if (explicit) {
+    return explicit.replace(/\/+$/, "");
+  }
+  if (typeof window === "undefined") {
+    return null;
+  }
+  const { protocol, host } = window.location;
+  const wsProto = protocol === "https:" ? "wss:" : "ws:";
+  return `${wsProto}//${host}`;
+}
+
 interface HelpdeskQueueState {
   entries: QueueEntry[];
   headerSearch: string;
@@ -307,12 +320,11 @@ export const useHelpdeskQueueStore = create<HelpdeskQueueState>((set, get) => ({
 
   startRealtimeSync: () => {
     if (typeof window === "undefined" || queueUpdatesWs) return;
-    const explicit = process.env.NEXT_PUBLIC_WS_URL?.trim();
-    if (!explicit) return;
     const first = get().entries.find((entry) => !!entry.clinicId && !!entry.doctorId);
     if (!first?.clinicId || !first?.doctorId) return;
     const date = helpdeskQueueCalendarDayLocal();
-    const wsBase = explicit.replace(/\/+$/, "");
+    const wsBase = resolveWebsocketBaseUrl();
+    if (!wsBase) return;
     const wsUrl = `${wsBase}/ws/queue-updates/${first.clinicId}/${first.doctorId}/${date}/`;
     try {
       queueUpdatesWs = new WebSocket(wsUrl);

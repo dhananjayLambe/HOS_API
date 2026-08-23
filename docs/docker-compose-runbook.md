@@ -1,8 +1,8 @@
 # Docker Compose runbook — development, UAT, and production
 
-Copy-paste guide for running the HOS Django API as containers. Working directory is always `Hospital-Management-API/`. Replace `/path/to/HOS_API` with your clone path.
+Copy-paste guide for running the HOS Django API and Next.js frontend as containers. Backend commands run from `Hospital-Management-API/`. Frontend commands run from `Hospital-Web-UI/medixpro/medixpro/`. Replace `/path/to/HOS_API` with your clone path.
 
-This is the container runtime. To run the same code in a local virtualenv instead, use [backend-runbook.md](backend-runbook.md). AWS account, RDS, S3, and Parameter Store setup is in [aws-production-deployment-runbook.md](aws-production-deployment-runbook.md). Branch promotion is in [git-workflow.md](git-workflow.md).
+This is the container runtime. To run the Django backend in a local virtualenv instead, use [backend-runbook.md](backend-runbook.md). Daily UI coding can still use `pnpm dev`. AWS account, RDS, S3, and Parameter Store setup is in [aws-production-deployment-runbook.md](aws-production-deployment-runbook.md). Branch promotion is in [git-workflow.md](git-workflow.md).
 
 Do not commit filled `.env.development`, `.env.uat`, or `.env.production` files. Do not put secrets in the Docker image or in named volumes.
 
@@ -104,6 +104,54 @@ docker compose --env-file .env.development -f compose.yaml -f compose.developmen
 docker volume rm hos-api_postgres-development-data
 ```
 
+## Frontend (local Docker)
+
+The browser always talks to the frontend origin. Next.js rewrites and BFF routes call Django. Do not set `NEXT_PUBLIC_BACKEND_URL` in Docker, or the browser will call Django directly.
+
+| Env | Frontend | Backend | `BACKEND_PROXY_TARGET` (build) | `DJANGO_API_URL` (runtime) |
+| --- | --- | --- | --- | --- |
+| Local Docker | http://127.0.0.1:3000 | http://127.0.0.1:8000 | `http://host.docker.internal:8000` | `http://host.docker.internal:8000/api/` |
+| UAT | `https://uat-app.<domain>` | `https://uat-api.<domain>` | `https://uat-api.<domain>` | `https://uat-api.<domain>/api/` |
+| Production | `https://app.<domain>` | `https://api.<domain>` | `https://api.<domain>` | `https://api.<domain>/api/` |
+
+`BACKEND_PROXY_TARGET` is the Django origin with **no** `/api`. `DJANGO_API_URL` must end in `/api/`. If `BACKEND_PROXY_TARGET` changes, rebuild the frontend image. Runtime-only `DJANGO_API_URL` can be recreated without a full rebuild.
+
+Host PostgreSQL 16 on port 5432 must already be up. Start the backend stack first, then the frontend.
+
+```bash
+cd /path/to/HOS_API/Hospital-Web-UI/medixpro/medixpro
+cp .env.development.example .env.development
+# Keep BACKEND_PROXY_TARGET=http://host.docker.internal:8000
+# Keep DJANGO_API_URL=http://host.docker.internal:8000/api/
+# Keep NGINX_SERVER_NAME=localhost
+./scripts/deploy-development.sh
+```
+
+The script checks that you are on `hos-development`, builds `hos-web:<git-sha>` with `BACKEND_PROXY_TARGET`, starts only `web` (Nginx stays off), and waits until it is healthy. Frontend is then at http://127.0.0.1:3000/ and expects the backend at http://127.0.0.1:8000/.
+
+To skip the branch check on a throwaway local branch:
+
+```bash
+SKIP_BRANCH_CHECK=1 ./scripts/deploy-development.sh
+```
+
+Checks after both stacks are up:
+
+- http://127.0.0.1:8000/health/ returns 200
+- http://127.0.0.1:3000/ loads (not a Next 500)
+- Login in the browser on `:3000`, not `:8000`
+- DevTools Network: API calls are `http://127.0.0.1:3000/api/...`, not `localhost:8000`
+- Queue WebSocket connects to `ws://127.0.0.1:3000/ws/...`
+
+```bash
+cd /path/to/HOS_API/Hospital-Web-UI/medixpro/medixpro
+COMPOSE="docker compose --env-file .env.development -f compose.yaml -f compose.development.yaml"
+
+$COMPOSE ps
+$COMPOSE logs -f --tail=200 web
+$COMPOSE down
+```
+
 ## UAT
 
 Run on the UAT EC2 host from `hos-uat`. The instance role must read `/hos/uat/*` and push/pull the ECR repository.
@@ -115,11 +163,23 @@ git pull origin hos-uat
 export AWS_REGION=ap-south-1
 export ECR_REGISTRY=123456789012.dkr.ecr.ap-south-1.amazonaws.com
 export ECR_REPOSITORY=hos-api
-export NGINX_SERVER_NAME=uat.example.com
+export NGINX_SERVER_NAME=uat-api.example.com
 ./scripts/deploy-uat.sh
 ```
 
-The script writes `/etc/hos/uat.env` from Parameter Store, builds and pushes `ECR_REGISTRY/hos-api:<git-sha>`, starts Redis, runs `check --deploy`, `migrate --plan`, `migrate`, and `collectstatic`, then starts API, Celery, and Nginx. Only ports 80 and 443 are published. Django, Celery, Redis, and RDS are not public.
+Then on the UAT frontend host:
+
+```bash
+cd /path/to/HOS_API/Hospital-Web-UI/medixpro/medixpro
+export AWS_REGION=ap-south-1
+export ECR_REGISTRY=123456789012.dkr.ecr.ap-south-1.amazonaws.com
+export ECR_REPOSITORY=hos-web
+./scripts/deploy-uat.sh
+```
+
+The backend script writes `/etc/hos/uat.env` from Parameter Store, builds and pushes `ECR_REGISTRY/hos-api:<git-sha>`, starts Redis, runs `check --deploy`, `migrate --plan`, `migrate`, and `collectstatic`, then starts API, Celery, and Nginx. Only ports 80 and 443 are published. Django, Celery, Redis, and RDS are not public.
+
+The frontend script writes `/etc/hos-web/uat.env` from `/hos/uat/frontend`, builds and pushes `ECR_REGISTRY/hos-web:<git-sha>-uat` with the UAT `BACKEND_PROXY_TARGET`, then starts `web` and Nginx.
 
 Place Let’s Encrypt files into the `nginx-certificates` volume before HTTPS will serve:
 
@@ -147,18 +207,31 @@ export HOS_IMAGE_TAG=<uat-validated-git-sha>
 ./scripts/deploy-production.sh
 ```
 
-The script writes `/etc/hos/production.env`, pulls the image, starts Redis, creates an RDS snapshot, then runs checks, migrations, `collectstatic`, and health checks. Only ports 80 and 443 are public.
+The backend script writes `/etc/hos/production.env`, pulls the image, starts Redis, creates an RDS snapshot, then runs checks, migrations, `collectstatic`, and health checks. Only ports 80 and 443 are public.
 
-Rollback an application release by setting `HOS_IMAGE_TAG` to the previous known-good SHA and running the production script again. Do not reverse a migration blindly; restore the RDS snapshot only after assessing data loss and obtaining approval.
+Then on the production frontend host, rebuild that same approved source SHA with the production API hostname (do not pull the UAT frontend image):
+
+```bash
+cd /path/to/HOS_API/Hospital-Web-UI/medixpro/medixpro
+export AWS_REGION=ap-south-1
+export ECR_REGISTRY=123456789012.dkr.ecr.ap-south-1.amazonaws.com
+export ECR_REPOSITORY=hos-web
+export APPROVED_SHA=<uat-validated-git-sha>
+./scripts/deploy-production.sh
+```
+
+Rollback a backend release by setting `HOS_IMAGE_TAG` to the previous known-good SHA and running the production script again. Rollback a frontend release by redeploying the previous known-good production image tag. Do not reverse a migration blindly; restore the RDS snapshot only after assessing data loss and obtaining approval.
 
 ## Parameter Store
 
 | Environment | Path | Server file |
 | --- | --- | --- |
-| UAT | `/hos/uat/*` | `/etc/hos/uat.env` |
-| Production | `/hos/production/*` | `/etc/hos/production.env` |
+| UAT backend | `/hos/uat/*` | `/etc/hos/uat.env` |
+| UAT frontend | `/hos/uat/frontend` | `/etc/hos-web/uat.env` |
+| Production backend | `/hos/production/*` | `/etc/hos/production.env` |
+| Production frontend | `/hos/production/frontend` | `/etc/hos-web/production.env` |
 
-Give each EC2 instance access only to its own path. Include at least:
+Give each EC2 instance access only to its own path. Backend hosts need at least:
 
 ```text
 DJANGO_SETTINGS_MODULE
@@ -175,6 +248,14 @@ REDIS_URL
 AWS_REPORTS_BUCKET
 AWS_REGION
 SECURE_SSL_REDIRECT
+NGINX_SERVER_NAME
+```
+
+Frontend hosts need at least:
+
+```text
+BACKEND_PROXY_TARGET
+DJANGO_API_URL
 NGINX_SERVER_NAME
 ```
 

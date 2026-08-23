@@ -1,23 +1,12 @@
 import { NextResponse } from "next/server"
+import { getDjangoApiBase } from "@/lib/get-django-api-base"
+import { serverLogger } from "@/lib/serverLogger"
 
+/** Django origin (no trailing /api) for BFF routes that append `/api/...` themselves. */
 export function resolveDjangoApiBase(): string {
-  const fallback = "http://127.0.0.1:8000"
-  const raw =
-    process.env.DJANGO_API_URL ||
-    process.env.BACKEND_URL ||
-    process.env.NEXT_PUBLIC_BACKEND_URL ||
-    process.env.NEXT_PUBLIC_API_URL ||
-    fallback
-
-  let base = raw.replace(/\/+$/, "")
-  if (base.endsWith("/api")) {
-    base = base.slice(0, -4)
-  }
-
-  if (/^https?:\/\/(localhost|127\.0\.0\.1):3000$/i.test(base)) {
-    return fallback
-  }
-  return base || fallback
+  const withApi = getDjangoApiBase().replace(/\/+$/, "")
+  const origin = withApi.endsWith("/api") ? withApi.slice(0, -4) : withApi
+  return origin.replace(/\/+$/, "") || "http://127.0.0.1:8000"
 }
 
 /**
@@ -31,6 +20,13 @@ export async function readDjangoJson(
   const text = await res.text()
   const looksJson = contentType.includes("application/json") || text.trim().startsWith("{")
   if (!looksJson) {
+    const prefix = text.replace(/\s+/g, " ").slice(0, 180)
+    serverLogger.error("Django BFF upstream returned HTML instead of JSON", undefined, {
+      status: res.status,
+      contentType,
+      bodyPrefix: prefix,
+      upstream: res.url || null,
+    })
     return {
       status: res.status >= 400 ? res.status : 502,
       data: {

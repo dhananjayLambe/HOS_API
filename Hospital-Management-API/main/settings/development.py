@@ -13,7 +13,9 @@ from .base import *  # noqa: E402, F401, F403
 from .base import SECRET_KEY, _env_list, LOGGING  # noqa: E402
 
 DEBUG = True
-ALLOWED_HOSTS = _env_list("ALLOWED_HOSTS", "localhost,127.0.0.1,[::1]")
+ALLOWED_HOSTS = _env_list(
+    "ALLOWED_HOSTS", "localhost,127.0.0.1,[::1],host.docker.internal"
+)
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_HEADERS = ["*"]
 CORS_ALLOW_METHODS = ["*"]

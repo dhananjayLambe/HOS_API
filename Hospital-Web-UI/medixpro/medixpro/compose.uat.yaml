@@ -1,0 +1,11 @@
+services:
+  web:
+    image: ${HOS_WEB_IMAGE:?Set HOS_WEB_IMAGE}:${HOS_WEB_IMAGE_TAG:?Set HOS_WEB_IMAGE_TAG}
+    pull_policy: always
+    env_file:
+      - /etc/hos-web/uat.env
+
+  nginx:
+    ports:
+      - "80:80"
+      - "443:443"

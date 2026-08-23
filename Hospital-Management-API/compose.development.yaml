@@ -31,6 +31,8 @@ services:
       - .env.development
     environment:
       DJANGO_SETTINGS_MODULE: main.settings.development
+      # Frontend container BFF calls http://host.docker.internal:8000 (Host not 127.0.0.1).
+      ALLOWED_HOSTS: localhost,127.0.0.1,[::1],host.docker.internal
       DB_HOST: host.docker.internal
       DB_PORT: "5432"
       REDIS_HOST: redis
@@ -70,6 +72,7 @@ services:
       - .env.development
     environment:
       DJANGO_SETTINGS_MODULE: main.settings.development
+      ALLOWED_HOSTS: localhost,127.0.0.1,[::1],host.docker.internal
       DB_HOST: host.docker.internal
       DB_PORT: "5432"
       REDIS_HOST: redis
@@ -91,6 +94,7 @@ services:
       - .env.development
     environment:
       DJANGO_SETTINGS_MODULE: main.settings.development
+      ALLOWED_HOSTS: localhost,127.0.0.1,[::1],host.docker.internal
       DB_HOST: host.docker.internal
       DB_PORT: "5432"
       REDIS_HOST: redis

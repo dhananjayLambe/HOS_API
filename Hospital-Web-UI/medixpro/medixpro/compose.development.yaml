@@ -1,0 +1,14 @@
+services:
+  web:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      # Docker Desktop and Colima expose the host backend at this address.
+      DJANGO_API_URL: ${DJANGO_API_URL:-http://host.docker.internal:8000/api/}
+      BACKEND_URL: ${DJANGO_API_URL:-http://host.docker.internal:8000/api/}
+    ports:
+      - "127.0.0.1:3000:3000"
+
+  nginx:
+    profiles: ["server"]
+

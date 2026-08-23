@@ -40,10 +40,13 @@ git commit -m "Your commit message"
 git push origin hos-development
 ```
 
-Deploy the development server from `hos-development` when that environment exists:
+Deploy the development server from `hos-development` when that environment exists. Backend first, then frontend:
 
 ```bash
 cd /path/to/HOS_API/Hospital-Management-API
+./scripts/deploy-development.sh
+
+cd /path/to/HOS_API/Hospital-Web-UI/medixpro/medixpro
 ./scripts/deploy-development.sh
 ```
 
@@ -68,7 +71,13 @@ cd /path/to/HOS_API/Hospital-Management-API
 export AWS_REGION=ap-south-1
 export ECR_REGISTRY=123456789012.dkr.ecr.ap-south-1.amazonaws.com
 export ECR_REPOSITORY=hos-api
-export NGINX_SERVER_NAME=uat.example.com
+export NGINX_SERVER_NAME=uat-api.example.com
+./scripts/deploy-uat.sh
+
+cd /path/to/HOS_API/Hospital-Web-UI/medixpro/medixpro
+export AWS_REGION=ap-south-1
+export ECR_REGISTRY=123456789012.dkr.ecr.ap-south-1.amazonaws.com
+export ECR_REPOSITORY=hos-web
 ./scripts/deploy-uat.sh
 ```
 
@@ -98,6 +107,13 @@ export ECR_REPOSITORY=hos-api
 export NGINX_SERVER_NAME=api.example.com
 export RDS_INSTANCE_ID=hos-prod-postgres
 export HOS_IMAGE_TAG=<uat-validated-git-sha>
+./scripts/deploy-production.sh
+
+cd /path/to/HOS_API/Hospital-Web-UI/medixpro/medixpro
+export AWS_REGION=ap-south-1
+export ECR_REGISTRY=123456789012.dkr.ecr.ap-south-1.amazonaws.com
+export ECR_REPOSITORY=hos-web
+export APPROVED_SHA=<uat-validated-git-sha>
 ./scripts/deploy-production.sh
 ```
 

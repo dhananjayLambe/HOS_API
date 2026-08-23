@@ -26,7 +26,12 @@ function useDebounce<T>(value: T, delay: number): T {
 
 // Helper to build API URLs without double slashes
 function buildApiUrl(path: string): string {
-  const baseUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000/api/";
+  // Keep browser traffic on the frontend origin. Next rewrites proxy `/api/`
+  // and `/ws/` to the environment's Django backend, avoiding a production-only
+  // localhost URL and preventing cross-origin token/CORS issues.
+  const baseUrl =
+    process.env.NEXT_PUBLIC_BACKEND_URL ||
+    (typeof window !== "undefined" ? `${window.location.origin}/api/` : "/api/");
   // Remove trailing slash from baseUrl and leading slash from path, then join
   const cleanBase = baseUrl.replace(/\/+$/, "");
   const cleanPath = path.replace(/^\/+/, "");
@@ -316,4 +321,3 @@ export function DynamicPreConsultation() {
     </div>
   );
 }
-

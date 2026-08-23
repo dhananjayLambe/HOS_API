@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getDjangoApiBase } from "@/lib/get-django-api-base"
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
@@ -7,7 +8,7 @@ export async function GET(request: Request) {
 
   try {
     const res = await fetch(
-      `http://127.0.0.1:8000/api/clinic/clinic-list-ui/?page=${page}&page_size=${pageSize}`,
+      `${getDjangoApiBase().replace(/\/+$/, "")}/clinic/clinic-list-ui/?page=${page}&page_size=${pageSize}`,
       {
         method: "GET",
         headers: { "Content-Type": "application/json" },
