@@ -40,8 +40,9 @@ if not CSRF_TRUSTED_ORIGINS:
     raise ImproperlyConfigured("CSRF_TRUSTED_ORIGINS must be set in .env.uat")
 
 CORS_ALLOW_ALL_ORIGINS = False
-SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SECURE = True
+# HTTP UAT (Elastic IPs) cannot set Secure cookies. Set both true in SSM when TLS exists.
+SESSION_COOKIE_SECURE = _env_bool("SESSION_COOKIE_SECURE", "false")
+CSRF_COOKIE_SECURE = _env_bool("CSRF_COOKIE_SECURE", "false")
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
 CSRF_COOKIE_SAMESITE = "Lax"
