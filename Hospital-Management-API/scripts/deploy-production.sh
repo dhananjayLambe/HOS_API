@@ -37,8 +37,8 @@ COMPOSE=(
   -f compose.production.yaml
 )
 
-echo "Retrieving production parameters from /hos/production/"
-write_env_from_ssm "/hos/production" "$PROD_ENV_FILE"
+echo "Retrieving production parameters from /hos/production/backend"
+write_env_from_ssm "/hos/production/backend" "$PROD_ENV_FILE"
 
 echo "Logging in to ECR and pulling ${HOS_IMAGE}:${HOS_IMAGE_TAG}"
 ecr_login "$ECR_REGISTRY"

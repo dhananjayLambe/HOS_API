@@ -37,8 +37,8 @@ COMPOSE=(
   -f compose.uat.yaml
 )
 
-echo "Retrieving UAT parameters from /hos/uat/"
-write_env_from_ssm "/hos/uat" "$UAT_ENV_FILE"
+echo "Retrieving UAT parameters from /hos/uat/backend"
+write_env_from_ssm "/hos/uat/backend" "$UAT_ENV_FILE"
 
 echo "Logging in to ECR and building ${HOS_IMAGE}:${HOS_IMAGE_TAG}"
 ecr_login "$ECR_REGISTRY"
