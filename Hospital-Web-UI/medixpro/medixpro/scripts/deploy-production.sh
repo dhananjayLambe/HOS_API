@@ -23,8 +23,8 @@ APPROVED_SHA="${APPROVED_SHA:?Set APPROVED_SHA to the UAT-approved Git commit SH
 }
 
 ECR_REGISTRY="${ECR_REGISTRY:?Set ECR_REGISTRY}"
-ECR_REPOSITORY="${ECR_REPOSITORY:-hos-web}"
-export HOS_WEB_IMAGE="${HOS_WEB_IMAGE:-${ECR_REGISTRY}/${ECR_REPOSITORY}}"
+ECR_REPOSITORY="hos-web"
+export HOS_WEB_IMAGE="${ECR_REGISTRY}/${ECR_REPOSITORY}"
 export HOS_WEB_IMAGE_TAG="${HOS_WEB_IMAGE_TAG:-${APPROVED_SHA}-production}"
 PROD_ENV_FILE="${PROD_ENV_FILE:-/etc/hos-web/production.env}"
 COMPOSE=(docker compose --env-file "$PROD_ENV_FILE" -f compose.yaml -f compose.production.yaml)

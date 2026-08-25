@@ -8,4 +8,5 @@ services:
   nginx:
     ports:
       - "80:80"
-      - "443:443"
+    volumes: !override
+      - ./docker/nginx/uat.conf:/etc/nginx/templates/default.conf.template:ro

@@ -35,7 +35,7 @@ services:
     environment:
       NGINX_SERVER_NAME: ${NGINX_SERVER_NAME:?Set NGINX_SERVER_NAME to the frontend hostname}
     volumes:
-      - ./docker/nginx/production.conf:/etc/nginx/templates/default.conf.template:ro
+      - ./docker/nginx/${NGINX_CONF:-production.conf}:/etc/nginx/templates/default.conf.template:ro
       - nginx-certificates:/etc/nginx/certs:ro
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/health/ | grep -q '\"status\": \"ok\"'"]

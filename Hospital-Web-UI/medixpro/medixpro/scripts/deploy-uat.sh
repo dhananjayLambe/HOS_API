@@ -17,15 +17,19 @@ assert_branch "$REPOSITORY_ROOT" hos-uat
 
 SHA="$(current_sha "$REPOSITORY_ROOT")"
 ECR_REGISTRY="${ECR_REGISTRY:?Set ECR_REGISTRY}"
-ECR_REPOSITORY="${ECR_REPOSITORY:-hos-web}"
-export HOS_WEB_IMAGE="${HOS_WEB_IMAGE:-${ECR_REGISTRY}/${ECR_REPOSITORY}}"
+# Always hos-web. Do not read ECR_REPOSITORY from the shell; SSM pastes like
+# `export ECR_REPOSITORY=hos-web` + `clear` become hos-webclear and ECR 403s.
+ECR_REPOSITORY="hos-web"
+export HOS_WEB_IMAGE="${ECR_REGISTRY}/${ECR_REPOSITORY}"
 export HOS_WEB_IMAGE_TAG="${HOS_WEB_IMAGE_TAG:-${SHA}-uat}"
+export NGINX_CONF="${NGINX_CONF:-uat.conf}"
 UAT_ENV_FILE="${UAT_ENV_FILE:-/etc/hos-web/uat.env}"
 COMPOSE=(docker compose --env-file "$UAT_ENV_FILE" -f compose.yaml -f compose.uat.yaml)
 
 write_env_from_ssm /hos/uat/frontend "$UAT_ENV_FILE"
 ecr_login "$ECR_REGISTRY"
 "${COMPOSE[@]}" build web
+echo "Pushing ${HOS_WEB_IMAGE}:${HOS_WEB_IMAGE_TAG}"
 docker push "${HOS_WEB_IMAGE}:${HOS_WEB_IMAGE_TAG}"
 
 "${COMPOSE[@]}" up -d --no-build web

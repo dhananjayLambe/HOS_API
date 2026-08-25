@@ -26,6 +26,9 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # Public API calls stay same-origin; the target above is used only by Next's
 # server-side rewrites and is deliberately different in development/UAT/prod.
 ENV NEXT_PUBLIC_API_URL=/api
+# t3.small (~2 GiB) OOMs a default Next 15 multi-worker build.
+ENV NODE_OPTIONS="--max-old-space-size=1536"
+ENV NEXT_CPU_COUNT=1
 RUN pnpm build
 
 FROM node:20-alpine AS runtime

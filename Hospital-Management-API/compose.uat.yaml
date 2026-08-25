@@ -41,7 +41,6 @@ services:
   nginx:
     ports:
       - "80:80"
-      - "443:443"
     environment:
       NGINX_SERVER_NAME: ${NGINX_SERVER_NAME:?Set NGINX_SERVER_NAME}
     volumes:
