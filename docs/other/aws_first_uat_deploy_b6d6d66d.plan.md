@@ -310,6 +310,7 @@ Rollback: API = previous image tag + same script. Frontend = previous `*-product
 - CloudWatch log groups `/hos/uat/backend`, `/hos/uat/frontend` (and prod equivalents).
 - Alarms: EC2 status, disk, CPU, RDS storage, 5xx.
 - Daily: errors + failed Celery. Weekly: backups. Monthly: OS/Docker patches.
+- To keep UAT cheap when testers are not working, stop (do not delete) UAT EC2 + RDS from a laptop using [UAT_AWS_ENV_ENABLE_DISABLE_PLAN.md](UAT_AWS_ENV_ENABLE_DISABLE_PLAN.md) and `scripts/aws/uat-env.sh`. Never point that script at production.
 
 **Out of scope for first launch:** ALB, ACM, ECS, ElastiCache, CloudFront, Multi-AZ RDS. Add after UAT+prod are stable.
 

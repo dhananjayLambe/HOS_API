@@ -131,6 +131,7 @@ celerybeat.pid
 .env.*
 !.env.example
 !.env.*.example
+scripts/aws/uat-env.env
 .venv
 env/
 venv/
